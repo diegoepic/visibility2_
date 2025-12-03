@@ -57,6 +57,57 @@
     badge.style.display = val ? 'inline-block' : 'none';
   }
 
+  function absoluteFrom(url, base) {
+    try {
+      return new URL(url, base || location.origin).toString();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function normalizeForCache(rawUrl, base) {
+    const full = absoluteFrom(rawUrl, base);
+    if (!full) return '';
+    const url = new URL(full);
+    if (url.origin !== location.origin) return '';
+    // Guardamos sólo ruta+query para evitar duplicados por hash
+    return url.pathname + url.search;
+  }
+
+  async function fetchGestionarAssets(url) {
+    const assets = new Set();
+    const target = normalizeGestionarUrl(url);
+    if (target) assets.add(target);
+
+    try {
+      const resp = await fetch(target, { credentials: 'include' });
+      if (!resp.ok) return Array.from(assets);
+
+      const html = await resp.text();
+      const doc  = new DOMParser().parseFromString(html, 'text/html');
+      const push = (val) => {
+        const normalized = normalizeForCache(val, target);
+        if (normalized) assets.add(normalized);
+      };
+
+      doc.querySelectorAll('img[src]').forEach((el) => push(el.getAttribute('src')));
+      doc.querySelectorAll('source[src]').forEach((el) => push(el.getAttribute('src')));
+      doc.querySelectorAll('img[srcset], source[srcset]').forEach((el) => {
+        const srcset = el.getAttribute('srcset') || '';
+        srcset.split(',').forEach((entry) => {
+          const [u] = entry.trim().split(/\s+/);
+          if (u) push(u);
+        });
+      });
+      doc.querySelectorAll('link[rel="stylesheet"][href]').forEach((el) => push(el.getAttribute('href')));
+      doc.querySelectorAll('script[src]').forEach((el) => push(el.getAttribute('src')));
+
+      return Array.from(assets);
+    } catch (_) {
+      return Array.from(assets);
+    }
+  }
+
   function normalizeGestionarUrl(rawUrl) {
     if (!rawUrl || typeof rawUrl !== 'string') return '';
     if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
@@ -117,15 +168,47 @@
     }
   }
 
+  async function registerSW() {
+    if (!('serviceWorker' in navigator)) return null;
+    try {
+      const reg = await navigator.serviceWorker.register(`${APP_SCOPE}/sw.js`, { scope: `${APP_SCOPE}/` });
+      const sw = reg && (reg.active || reg.waiting || reg.installing);
+      if (sw) {
+        try {
+          sw.postMessage({ type: 'SKIP_WAITING' });
+          sw.postMessage({ type: 'CLIENTS_CLAIM' });
+        } catch (_) { /* ignore */ }
+      }
+      return reg;
+    } catch (_) {
+      return null;
+    }
+  }
+
   async function ensureSW() {
     if (!('serviceWorker' in navigator)) return { worker: null, controlled: false, reason: 'unsupported' };
     try {
-      const reg = await navigator.serviceWorker.getRegistration(APP_SCOPE + '/');
-      const worker = reg && (reg.active || reg.waiting || reg.installing);
-      return { worker, controlled: !!navigator.serviceWorker.controller, reason: worker ? null : 'no-registration' };
+      let reg = await navigator.serviceWorker.getRegistration(APP_SCOPE + '/');
+      if (!reg) reg = await registerSW();
+
+      const ready = await navigator.serviceWorker.ready.catch(() => null);
+      const worker = ready?.active || reg && (reg.active || reg.waiting || reg.installing);
+      const controlled = !!navigator.serviceWorker.controller;
+
+      return { worker: worker || null, controlled, reason: worker ? null : 'no-registration' };
     } catch (_) {
       return { worker: null, controlled: false, reason: 'error' };
     }
+  }
+
+  async function waitForController(timeoutMs = 2000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (navigator.serviceWorker.controller) return true;
+      try { await navigator.serviceWorker.ready; } catch (_) { /* ignore */ }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return !!navigator.serviceWorker.controller;
   }
 
   function markInlinePrecached(btn) {
@@ -149,18 +232,14 @@
       }
       setStatus(`Enviando ${urls.length} páginas a la caché…`, 'info');
       btnDo.disabled = true;
-      const { worker, controlled } = await ensureSW();
+      const { worker } = await ensureSW();
       if (!worker) {
         setStatus('No hay un Service Worker registrado para esta página. Refresca o verifica tu conexión.', 'danger');
         btnDo.disabled = false;
         return;
       }
-      if (!controlled) {
-        setStatus('El Service Worker aún no controla esta pestaña. Recarga la página e inténtalo nuevamente.', 'warning');
-        btnDo.disabled = false;
-        return;
-      }
       try {
+        await waitForController();
         worker.postMessage({ type: 'PRECACHE_GESTIONAR_PAGES', urls, max: limit });
         setStatus('Precarga solicitada. Las páginas quedarán disponibles offline al completarse.', 'success');
       } catch (e) {
@@ -208,20 +287,23 @@
       btn.disabled = true;
       setStatus('Enviando la página a la caché offline…', 'info');
 
-      const { worker, controlled } = await ensureSW();
+      const { worker } = await ensureSW();
       if (!worker) {
         setStatus('No hay Service Worker registrado. Refresca e inténtalo nuevamente.', 'danger');
         btn.disabled = false;
         return;
       }
-      if (!controlled) {
-        setStatus('El Service Worker aún no controla esta pestaña. Recarga la página e inténtalo de nuevo.', 'warning');
-        btn.disabled = false;
-        return;
-      }
 
       try {
+        await waitForController();
         worker.postMessage({ type: 'PRECACHE_GESTIONAR_PAGES', urls: [url], max: 1 });
+
+        // Traer y cachear los assets igual que al abrir la página directamente
+        const assets = await fetchGestionarAssets(url);
+        if (assets.length) {
+          worker.postMessage({ type: 'PRECACHE_ASSETS', assets });
+        }
+
         manualSet.add(url);
         persistManualPrecached(manualSet);
         markInlinePrecached(btn);
