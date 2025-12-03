@@ -1,0 +1,123 @@
+.ekko-lightbox {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 0 !important;
+}
+
+
+
+.ekko-lightbox-nav-overlay {
+  z-index: 1;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+}
+
+.ekko-lightbox-nav-overlay a {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  opacity: 1;
+  transition: opacity 0.5s, color 0.3s;
+  color: #000;
+  font-size: 60px;
+  z-index: 1;
+  margin: 0 -15px; 
+}
+
+.ekko-lightbox-nav-overlay a > * {
+  flex-grow: 1;
+}
+
+.ekko-lightbox-nav-overlay a:focus {
+  outline: none;
+}
+
+.ekko-lightbox-nav-overlay a span {
+  padding: 0 1px;
+}
+
+.ekko-lightbox-nav-overlay a:first-child span {
+  text-align: left;
+}
+
+.ekko-lightbox-nav-overlay a:last-child span {
+  text-align: right;
+}
+
+.ekko-lightbox a:hover {
+  opacity: 1;
+  text-decoration: none;
+}
+
+.ekko-lightbox .modal-dialog {
+  display: none;
+}
+
+.ekko-lightbox .modal-footer {
+  text-align: left;
+}
+
+.ekko-lightbox-loader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.ekko-lightbox-loader > div {
+  width: 40px;
+  height: 40px;
+  position: relative;
+  text-align: center;
+}
+
+.ekko-lightbox-loader > div > div {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background-color: #fff;
+  opacity: 0.6;
+  position: absolute;
+  top: 0;
+  left: 0;
+  animation: a 2s infinite ease-in-out;
+}
+
+.ekko-lightbox-loader > div > div:last-child {
+  animation-delay: -1s;
+}
+
+.modal-dialog .ekko-lightbox-loader > div > div {
+  background-color: #333;
+}
+
+@keyframes a {
+  0%,
+  to {
+    transform: scale(0);
+    -webkit-transform: scale(0);
+  }
+  50% {
+    transform: scale(1);
+    -webkit-transform: scale(1);
+  }
+}
+
+.ekko-lightbox-nav-overlay a:hover {
+  color: #1c7b06 !important;
+}
+
+.ekko-lightbox-nav-overlay a:not(:hover) {
+  color: #000 !important;
+}

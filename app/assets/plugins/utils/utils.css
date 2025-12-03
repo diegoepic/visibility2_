@@ -1,0 +1,15 @@
+.left{
+    margin-right: 97px !important;   
+}
+
+.divckeckbox {
+    position: relative;    
+    display: inline-block;
+}
+
+.mt-3 {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    vertical-align: middle;
+}

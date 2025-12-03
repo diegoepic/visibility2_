@@ -1,0 +1,285 @@
+/* /visibility2/app/assets/css/journal.css */
+
+/* Lista principal (hoy / semana) */
+.jr-list{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.jr-item{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px;
+  border:1px solid #e6e9ef;
+  border-radius:8px;
+  background:#fff;
+}
+.jr-left{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  flex:1 1 auto;
+}
+.jr-time{
+  min-width:48px;
+  font-weight:700;
+  color:#64748b;
+}
+.jr-what{
+  flex:1 1 auto;
+  min-width:0;
+}
+.jr-title{
+  font-weight:700;
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:4px;
+}
+.jr-title small{
+  margin-left:4px;
+  color:#6b7280;
+  font-weight:400;
+}
+.jr-sub{
+  color:#6b7280;
+  font-size:.92em;
+}
+.jr-subline{
+  color:#475569;
+  font-size:.9em;
+}
+.jr-right{
+  text-align:right;
+  min-width:260px;
+  flex:0 0 auto;
+}
+.jr-actions{
+  margin-top:6px;
+  display:flex;
+  gap:6px;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+}
+.jr-error{
+  margin-top:6px;
+  color:#b91c1c;
+  font-size:.9em;
+}
+.jr-empty{
+  padding:18px;
+  color:#6b7280;
+  text-align:center;
+  border:1px dashed #d1d5db;
+  border-radius:8px;
+}
+.jr-date{
+  margin:18px 0 8px;
+  color:#374151;
+}
+.jr-day{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+/* Chips de estado */
+.jr-chip{
+  display:inline-block;
+  padding:2px 8px;
+  border-radius:999px;
+  font-size:.85em;
+  border:1px solid transparent;
+}
+.jr-chip--ok{
+  background:#e9f7ef;
+  color:#0f8a3b;
+  border-color:#b8e6c7;
+}
+.jr-chip--run{
+  background:#eef2ff;
+  color:#4338ca;
+  border-color:#c7d2fe;
+}
+.jr-chip--pend{
+  background:#f1f5f9;
+  color:#334155;
+  border-color:#e2e8f0;
+}
+.jr-chip--err{
+  background:#fef2f2;
+  color:#b91c1c;
+  border-color:#fecaca;
+}
+.jr-chip--offline{
+  background:#fff7ed;
+  color:#c05621;
+  border-color:#fed7aa;
+  margin-left:4px;
+}
+
+.jr-progress{
+  margin:6px 0 0;
+  height:8px;
+}
+
+/* Detalle desplegable de tareas del grupo */
+.jr-details{
+  margin:6px 0 14px;
+  padding:10px;
+  border-left:3px solid #e5e7eb;
+  background:#f8fafc;
+  border-radius:6px;
+}
+.jr-detail-row{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  padding:6px 0;
+  border-bottom:1px dashed #e5e7eb;
+}
+.jr-detail-row:last-child{
+  border-bottom:none;
+}
+.jr-d-left{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.jr-d-kind{
+  color:#334155;
+}
+.jr-help{
+  margin-left:6px;
+  color:#6b7280;
+  cursor:pointer;
+}
+.jr-help:hover{
+  color:#111827;
+}
+
+/* Secciones "Subido al servidor" / "Pendiente por subir" */
+.jr-section{
+  margin-bottom:12px;
+}
+.jr-section-title{
+  font-size:13px;
+  font-weight:600;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+  margin:4px 0 6px;
+  opacity:.8;
+}
+
+.jr-item--server{
+  border-left:3px solid #3c763d;
+}
+.jr-item--server .jr-chip--ok{
+  background-color:#3c763d;
+  border-color:#3c763d;
+  color:#fff;
+}
+
+/* Detalle en modal */
+.jr-detail-section{
+  margin-bottom:18px;
+}
+.jr-detail-section h4{
+  margin-top:0;
+  margin-bottom:8px;
+  font-size:16px;
+}
+.jr-detail-material .panel-body,
+.jr-detail-question .panel-body{
+  font-size:.92em;
+}
+.jr-detail-photos{
+  margin-top:6px;
+}
+.jr-detail-photo-inline img{
+  display:block;
+}
+
+/* Encabezado de cada pregunta */
+.jr-q-heading{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.jr-q-title{
+  font-weight:600;
+}
+.jr-q-tags{
+  display:flex;
+  flex-wrap:wrap;
+  gap:4px;
+}
+.jr-q-tags .label{
+  font-size:.75em;
+}
+
+/* Modal responsive */
+#jr-detail-modal .modal-dialog{
+  width:100%;
+  max-width:900px;
+  margin:10px auto;
+}
+#jr-detail-modal .modal-body{
+  max-height:calc(100vh - 180px);
+  overflow-y:auto;
+}
+
+/* Responsive */
+@media (max-width: 991px){
+  .jr-item{
+    flex-direction:column;
+    align-items:stretch;
+    gap:8px;
+  }
+  .jr-left{
+    flex-wrap:wrap;
+  }
+  .jr-time{
+    min-width:auto;
+    margin-right:6px;
+    font-weight:600;
+  }
+  .jr-right{
+    min-width:0 !important;
+    width:100%;
+    text-align:left;
+    margin-top:2px;
+  }
+  .jr-actions{
+    justify-content:flex-start;
+  }
+  .jr-actions .btn,
+  .jr-actions button{
+    padding:6px 10px;
+    font-size:.9rem;
+  }
+  .jr-progress{
+    height:6px;
+  }
+
+  #jr-detail-modal .modal-dialog{
+    max-width:none;
+    margin:10px;
+  }
+}
+
+@media (max-width: 360px){
+  .jr-item{
+    padding:8px;
+  }
+  .jr-chip{
+    padding:2px 6px;
+    font-size:.8em;
+  }
+  .jr-actions .btn,
+  .jr-actions button{
+    padding:5px 8px;
+    font-size:.85rem;
+  }
+}

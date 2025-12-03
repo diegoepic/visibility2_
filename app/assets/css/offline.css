@@ -1,0 +1,283 @@
+/* ===========================================================
+   Visibility 2 – offline.css (alineado a main.css)
+   Ubicación: /visibility2/app/assets/css/offline.css
+   Propósito: Estilos de UI para el trabajo offline del index
+   =========================================================== */
+
+.offline-shell { box-sizing: border-box; }
+.offline-shell *, .offline-shell *::before, .offline-shell *::after { box-sizing: inherit; }
+
+/* -----------------------------------------------------------
+   Contenedor principal de la vista offline (opcional)
+   Añade class="offline-shell" al wrapper de la página o <main>
+   ----------------------------------------------------------- */
+.offline-shell{
+  background: #ffffff;
+  color: #000;
+  font-family: 'Open Sans', Arial, sans-serif; /* consistente con main.css */
+}
+
+/* -----------------------------------------------------------
+   Sección de encabezado donde van Programados / Reagendados
+   ----------------------------------------------------------- */
+.route-wrap{
+  margin-top: 6px;
+}
+
+.route-wrap h3{
+  margin: 10px 0 6px;
+  font-family: 'Raleway', sans-serif;
+  color: #666666;
+}
+.route-wrap h3 small{ color: #888888; }
+
+/* -----------------------------------------------------------
+   Badges de red/sincronización (compatibles con .label de main.css)
+   ----------------------------------------------------------- */
+#netBadge{
+  display: inline-block;
+  border-radius: 999px !important;
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  background: #E4E5E6;
+  color: #555;
+  border: 1px solid #D5D5D5;
+}
+#netBadge.is-online{
+  background: #3D9400;     /* green */
+  color: #fff;
+  border-color: #3D9400;
+}
+#netBadge.is-offline{
+  background: #666;        /* gris consistente con btn-med-grey */
+  color: #fff;
+  border-color: #666;
+  animation: offlinePulse 1.6s ease-in-out infinite;
+}
+@keyframes offlinePulse{
+  0%{ box-shadow: 0 0 0 0 rgba(102,102,102,0.45); }
+  70%{ box-shadow: 0 0 0 10px rgba(102,102,102,0); }
+  100%{ box-shadow: 0 0 0 0 rgba(102,102,102,0); }
+}
+
+#lastSyncBadge{
+  font-weight: 600;
+  color: #757575;
+}
+
+/* -----------------------------------------------------------
+   Listas y contenedores (Programados / Reagendados)
+   ----------------------------------------------------------- */
+.route-list{
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+@media (min-width: 992px){
+  .route-list{ grid-template-columns: 1fr; }
+}
+
+/* Scroll opcional cuando hay muchos locales */
+.route-scroll{
+  max-height: 65vh;
+  overflow: auto;
+  padding-right: 4px;
+}
+.route-scroll::-webkit-scrollbar{ width: 8px; }
+.route-scroll::-webkit-scrollbar-thumb{
+  background: rgba(0,0,0,.15);
+  border-radius: 6px;
+}
+
+/* -----------------------------------------------------------
+   Tarjeta de local (visual coherente con .panel-box)
+   ----------------------------------------------------------- */
+.route-card{
+  position: relative;
+  display: block;
+  background: #fff;
+  border: 1px solid #CDCDCD;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.1);
+  padding: 12px 12px 10px;
+  text-decoration: none;
+  color: #333;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .06s ease;
+}
+.route-card:hover{
+  border-color: #364F6A;              /* blue */
+  box-shadow: 0 6px 18px rgba(54,79,106,.18);
+  transform: translateY(-1px);
+}
+.route-card:focus{
+  outline: 2px solid rgba(54,79,106,.35);
+  outline-offset: 2px;
+}
+.route-card__title{
+  margin: 0 0 4px;
+  font-weight: 700;
+  font-size: 14px;
+  color: #333333;
+  line-height: 1.2;
+}
+.route-card__subtitle{
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: #757575;
+}
+.route-card__meta{
+  display:flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items:center;
+}
+
+/* -----------------------------------------------------------
+   Chips (píldoras de estado) usando paleta de main.css
+   ----------------------------------------------------------- */
+.chip{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid #DDDDDD;
+  background: #F9F9F9;
+  color: #555;
+  line-height: 1;
+}
+.chip i{ font-size: 12px; }
+
+.chip--programado{ background:#F3F5F6; color:#364F6A; border-color:#C8C7CC; } /* blue */
+.chip--reagendado{ background:#FBEEEC; color:#C83A2A; border-color:#E4E6EB; } /* bricky */
+.chip--pendiente{  background:#FDF8F7; color:#C83A2A; border-color:#E4E6EB; }
+.chip--hoy{        background:#EFFBEC; color:#3D9400; border-color:#D9EAD1; } /* green */
+.chip--teal{       background:#F3F8F8; color:#569099; border-color:#D8E4E7; }  /* teal */
+.chip--geo{        background:#E5F1FF; color:#0362FD; border-color:#C7DBFF; }  /* info */
+
+.badge-dot{
+  width:8px; height:8px; border-radius:50%;
+  display:inline-block; vertical-align: middle; margin-right:6px;
+}
+.badge-dot--cached{ background:#3D9400; }
+.badge-dot--new{    background:#007AFF; }
+
+/* -----------------------------------------------------------
+   Botón de sincronización con indicador
+   ----------------------------------------------------------- */
+.btn-sync{ position: relative; overflow: hidden; }
+.btn-sync .sync-dot{
+  width:8px; height:8px; border-radius: 50%;
+  background: #5BC0DE; /* info */
+  display:inline-block; margin-left:6px;
+  animation: blinkDot 1s linear infinite;
+}
+@keyframes blinkDot{ 50%{ opacity:.25 } }
+
+/* -----------------------------------------------------------
+   Skeleton loaders (coherentes con grises de main.css)
+   ----------------------------------------------------------- */
+.skeleton{
+  background: #ECEAF3;
+  border-radius: 6px;
+  position: relative; overflow: hidden;
+}
+.skeleton::after{
+  content:"";
+  position:absolute; inset:0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent);
+  animation: shimmer 1.25s infinite;
+}
+@keyframes shimmer{ 100%{ transform: translateX(100%); } }
+
+.route-card.skeleton{
+  height: 88px;
+  border: 1px solid #CDCDCD;
+  box-shadow: none;
+}
+.skeleton-line{ height: 10px; margin: 8px 0; background:#E4E6EB; }
+.skeleton-line--sm{ width: 40%; }
+.skeleton-line--md{ width: 70%; }
+.skeleton-line--lg{ width: 90%; }
+
+/* -----------------------------------------------------------
+   Estados vacíos
+   ----------------------------------------------------------- */
+.empty-state{
+  background: #FAFAFA;
+  border: 1px dashed #CDCDCD;
+  border-radius: 6px;
+  padding: 16px;
+  text-align: center;
+  color: #909090;
+  font-size: 12px;
+}
+.empty-state i{ font-size: 20px; display:block; margin-bottom: 6px; }
+
+#routeProgramados .route-list,
+#routeReagendados .route-list{ margin-top: 6px; }
+#routeProgramados .empty-state,
+#routeReagendados .empty-state{ margin-top: 6px; }
+
+/* -----------------------------------------------------------
+   Barra de herramientas sticky (opcional)
+   ----------------------------------------------------------- */
+.offline-toolbar{
+  position: sticky;
+  top: 52px; /* bajo la navbar de tu tema */
+  z-index: 998;
+  background: #FFFFFF;
+  border-top: 1px solid #C8C7CC;
+  border-bottom: 1px solid #C8C7CC;
+  padding: 8px 12px;
+}
+
+/* -----------------------------------------------------------
+   Mapa fallback si no carga Maps offline
+   ----------------------------------------------------------- */
+.map-fallback{
+  background: repeating-linear-gradient(-45deg, #ECEAF3, #ECEAF3 8px, #F5F4F9 8px, #F5F4F9 16px);
+  border: 1px solid #CDCDCD;
+  border-radius: 6px;
+  height: 200px;
+  display:flex; align-items:center; justify-content:center;
+  color: #909090; font-size: 12px;
+}
+
+/* -----------------------------------------------------------
+   Toasts compatibles (si usas mc-toasts)
+   ----------------------------------------------------------- */
+.mc-toasts{ position: fixed; right: 16px; top: 70px; z-index:1060; pointer-events:none; }
+.mc-toast{
+  pointer-events: all;
+  min-width: 280px; max-width: 360px;
+  border-radius: 6px;
+  box-shadow: 0 10px 24px rgba(0,0,0,.2);
+}
+
+/* -----------------------------------------------------------
+   Utilidades pequeñas para layout
+   ----------------------------------------------------------- */
+.mt-8{ margin-top:8px; } .mb-8{ margin-bottom:8px; }
+.mt-12{ margin-top:12px; } .mb-12{ margin-bottom:12px; }
+.gap-6{ gap:6px; }
+.flex{ display:flex; } .flex-wrap{ flex-wrap: wrap; }
+.items-center{ align-items:center; } .justify-between{ justify-content: space-between; }
+
+/* -----------------------------------------------------------
+   Etiqueta pequeña “Offline Ready”
+   ----------------------------------------------------------- */
+.offline-ready{
+  font-size: 11px;
+  color: #757575;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid #D5D5D5;
+  background: #fff;
+}
+
+/* -----------------------------------------------------------
+   Compatibilidad con enlaces en tarjetas
+   ----------------------------------------------------------- */
+.route-card, .route-card:hover, .route-card:focus{ text-decoration: none; color: inherit; }

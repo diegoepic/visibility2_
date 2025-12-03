@@ -1,0 +1,14 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /visibility2/app/
+
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  RewriteCond %{REQUEST_FILENAME}\.php -f
+  RewriteRule ^([^/]+)/?$ $1.php [L]
+
+  RewriteCond %{REQUEST_URI} !^/visibility2/app/index\.php$
+  RewriteRule ^ index.php [L]
+</IfModule>

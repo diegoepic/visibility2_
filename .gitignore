@@ -1,0 +1,42 @@
+# === Carpetas de fotos / uploads ===
+/portal/
+/app/uploads/
+/app/uploads/*
+/app/uploads_material/
+/app/uploads_*/*
+/uploads/
+/uploads/*
+
+# Si guardas fotos de reportes en otro lado:
+*/fotos/*
+*/photos/*
+*/imagenes/*
+
+# === Tipos de archivo pesados (por si se cuelan) ===
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.heic
+*.bmp
+*.tiff
+
+# === Backups, dumps grandes, zips, etc. ===
+*.zip
+*.tar
+*.tar.gz
+*.sql
+*.bak
+*.tmp
+*.log
+
+# === Cosas de IDE / sistema ===
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# === Vendor/composer (si algún día lo usas) ===
+/vendor/
+composer.lock

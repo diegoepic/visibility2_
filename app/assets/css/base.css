@@ -1,0 +1,325 @@
+/* ==========================================================================
+   BASE.CSS — Tema pulido para Visibility 2 (Bootstrap 3 compatible)
+   Por defecto: claro. Dark: añade .theme-dark al <body> (o usa prefers-color).
+   ========================================================================== */
+
+/* ---------- Fuentes ---------- */
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap');
+
+/* ---------- Tokens ---------- */
+:root{
+  --brand: #4c8fbd;
+  --brand-600:#3b79a3;
+  --brand-700:#2f6488;
+
+  --accent:#6c7f92;
+
+  --ok:#3d9400;
+  --warn:#ffa722;
+  --danger:#d74d3a;
+
+  --bg:#f6f8fb;
+  --surface:#ffffff;
+  --ink-900:#0f1720;
+  --ink-800:#1f2833;
+  --ink-700:#354254;
+  --ink-600:#58657a;
+  --ink-500:#7b879a;
+  --ink-300:#dfe3ea;
+  --ink-200:#eaedf2;
+
+  --radii:12px;
+  --shadow-1:0 2px 6px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.06);
+  --shadow-2:0 10px 30px rgba(16,24,40,.12);
+
+  --focus: 0 0 0 3px rgba(76,143,189,.25);
+}
+
+/* Dark opcional */
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f1216; --surface:#141a21;
+    --ink-900:#f2f4f7; --ink-800:#e7e9ee; --ink-700:#c9d0da; --ink-600:#aab3bf; --ink-500:#8f99a8;
+    --ink-300:#2a303a; --ink-200:#1b2129;
+    --shadow-1:0 2px 6px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.35);
+    --shadow-2:0 14px 40px rgba(0,0,0,.5);
+  }
+}
+.theme-dark{
+  --bg:#0f1216; --surface:#141a21;
+  --ink-900:#f2f4f7; --ink-800:#e7e9ee; --ink-700:#c9d0da; --ink-600:#aab3bf; --ink-500:#8f99a8;
+  --ink-300:#2a303a; --ink-200:#1b2129;
+  --shadow-1:0 2px 6px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.35);
+  --shadow-2:0 14px 40px rgba(0,0,0,.5);
+}
+
+/* ---------- Reset suave ---------- */
+*,
+*::before,*::after{ box-sizing:border-box; }
+html{ -webkit-text-size-adjust:100%; }
+body{
+  background:var(--bg);
+  color:var(--ink-700);
+  font: 14px/1.45 "Open Sans", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+/* ---------- Accesibilidad ---------- */
+:focus{ outline: none; }
+:focus-visible{ box-shadow: var(--focus); border-radius:8px; }
+
+/* ==========================================================================
+   NAVBAR
+   ========================================================================== */
+.navbar{
+  border:0; box-shadow: var(--shadow-1);
+}
+.navbar-inverse{
+  background:#fff; /* navbar clara */
+}
+.navbar-inverse .navbar-brand{
+  color:var(--ink-800); font-weight:700; letter-spacing:.2px;
+}
+.navbar-inverse .navbar-nav>li>a,
+.navbar-inverse .navbar-brand{ color:var(--ink-700) !important; }
+.navbar-inverse .navbar-nav>li>a:hover{ color:var(--brand) !important; }
+.navbar-inverse .navbar-toggle{ border:0; }
+.navbar-inverse .navbar-toggle .icon-bar{ background:var(--brand); }
+
+.navbar-tools{
+  display:flex; align-items:center; gap:.75rem;
+}
+.navbar-tools .nickname{
+  font-weight:600; color:var(--ink-600); padding: 15px 10px;
+}
+
+/* Separación del contenido */
+.main-container{ margin-top: 64px; }
+@media (max-width:767px){ .main-container{ margin-top: 70px; } }
+
+/* ==========================================================================
+   TITULARES / PAGE HEADER
+   ========================================================================== */
+.page-header{
+  border:0; margin: 0 0 14px; padding: 6px 0;
+}
+.page-header h1{
+  color:var(--ink-800); font-size:22px; margin:0;
+}
+.page-header h1 small{
+  color:var(--ink-500); font-weight:600; margin-left:8px;
+}
+
+/* ==========================================================================
+   BOTONES (override Bootstrap 3)
+   ========================================================================== */
+.btn{
+  border-radius: 10px; border:1px solid transparent;
+  font-weight:700; letter-spacing:.2px;
+  padding:.55rem .9rem; box-shadow: var(--shadow-1);
+  transition: transform .06s ease, box-shadow .2s ease, background .2s ease;
+}
+.btn:active{ transform: translateY(1px); }
+.btn-default{
+  background: #fff; border-color: var(--ink-300); color: var(--ink-700);
+}
+.btn-default:hover{ background:#f7f9fc; border-color:#d8dee7; }
+
+.btn-primary{
+  background: var(--brand); border-color: var(--brand-600);
+}
+.btn-primary:hover{ background: var(--brand-600); border-color: var(--brand-700); }
+
+.btn-info   { background:#6ea7cf; border-color:#5b92bb; }
+.btn-info:hover{ background:#5b92bb; }
+.btn-warning{ background:var(--warn); border-color:#f59300; color:#2a1b00; }
+.btn-danger { background:var(--danger); border-color:#bb3f2f; }
+.btn-success{ background:var(--ok); border-color:#347d00; }
+
+/* Botoncitos */
+.btn-xs{ padding:.3rem .5rem; border-radius:9px; }
+.btn-sm{ padding:.45rem .75rem; border-radius:10px; }
+
+/* Dropdowns */
+.dropdown-menu{
+  border:1px solid var(--ink-300); border-radius:12px; box-shadow:var(--shadow-2);
+}
+.dropdown-menu>li>a{ padding:.45rem .9rem; }
+
+/* ==========================================================================
+   FORM CONTROLS
+   ========================================================================== */
+.form-control{
+  border-radius:10px; border:1px solid #d7dde6; box-shadow:none;
+  color:var(--ink-700); background:#fff; transition:border-color .15s, box-shadow .15s;
+}
+.form-control:focus{
+  border-color:#9cbbd3; box-shadow: var(--focus);
+}
+label{ font-weight:700; color:var(--ink-600); }
+
+/* ==========================================================================
+   PANELS (cards)
+   ========================================================================== */
+.panel{
+  border:1px solid var(--ink-300) !important;
+  border-radius: var(--radii) !important;
+  box-shadow: var(--shadow-1); background: var(--surface);
+}
+.panel-heading{
+  border-bottom:1px solid var(--ink-300) !important;
+  background: var(--surface) !important; color: var(--ink-800) !important;
+  font-weight:700; display:flex; align-items:center; gap:.5rem; height:auto; padding:10px 12px;
+  border-top-left-radius: var(--radii); border-top-right-radius: var(--radii);
+}
+.panel-heading .fa{ color: var(--brand); }
+.panel-tools{ position:static; margin-left:auto; }
+.panel-body{ padding:12px; }
+.panel-default>.panel-heading+.panel-collapse .panel-body{ border-top:1px solid var(--ink-300); }
+
+/* Scroll interno si lo usas */
+.panel-scroll{ max-height: 320px; overflow:auto; }
+
+/* ==========================================================================
+   LISTAS (Campañas Programadas / Complementarias)
+   ========================================================================== */
+.list-group-item{
+  border-color: var(--ink-300);
+  display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+}
+.todo .todo-actions{
+  color: var(--ink-700);
+}
+.todo .todo-actions .fa{ margin-right:.5rem; color: var(--ink-600); }
+.todo .completed .desc{ text-decoration: line-through; color: var(--ink-500); }
+.todo .completed .fa{ color: var(--ok); }
+
+/* Botón “Gestionar” al lado derecho en items complementarios */
+.list-group-item .btn{ box-shadow:none; }
+
+/* ==========================================================================
+   TABLAS
+   ========================================================================== */
+.table{ margin-bottom: 8px; }
+.table>thead>tr>th{
+  color: var(--ink-600); border-bottom:1px solid var(--ink-300);
+  font-weight:700;
+}
+.table>tbody>tr>td, .table>thead>tr>th{
+  padding: 8px 10px; vertical-align: middle;
+}
+.table.table-striped>tbody>tr:nth-child(odd){ background: rgba(0,0,0,.015); }
+.table-hover>tbody>tr:hover{ background: rgba(76,143,189,.08); }
+
+.center{ text-align:center !important; }
+
+/* Prioridad: menos “amarillo chillón” y más señal por borde */
+.priority-row{
+  background: rgba(255,167,34,.08) !important;
+  box-shadow: inset 4px 0 0 0 var(--warn);
+}
+.priority-icon{ color: var(--warn); margin-right: 6px; }
+
+/* “Visitado” sutil */
+.visitado{ background: rgba(61,148,0,.12) !important; }
+
+/* Contadores circulares (total campañas) */
+.circulo{
+  display:inline-flex; align-items:center; justify-content:center;
+  width: 28px; height: 28px; border-radius:999px;
+  background: var(--ok); color:#fff; font-weight:700; font-size:13px;
+  box-shadow: var(--shadow-1);
+}
+
+/* ==========================================================================
+   MAPA / TOOLBAR / DRAWER
+   ========================================================================== */
+#panelInfoRuta{
+  position:absolute; left:10px; top:10px;
+  border-radius: 10px; box-shadow: var(--shadow-1);
+  border:1px solid var(--ink-300);
+}
+#panelInfoRuta .btn{ margin-right:6px; box-shadow:none; }
+#panelInfoRuta .label{ background:#eef3f8; color:var(--ink-700); border-radius:999px; }
+
+.route-drawer{
+  position:absolute; top:60px; right:10px; width:320px; max-height:75%;
+  overflow:auto; background:var(--surface); border-radius: 12px;
+  border:1px solid var(--ink-300); box-shadow: var(--shadow-2); z-index:1002; display:none;
+}
+.route-drawer.open{ display:block; }
+.route-drawer .drawer-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 12px; border-bottom:1px solid var(--ink-300);
+}
+.route-drawer .drawer-title{ margin:0; font-weight:700; color:var(--ink-800); }
+.route-drawer .drawer-body{ padding:10px 12px; }
+.steps-list{ counter-reset:step; margin:0; padding:0; list-style:none; }
+.steps-list li{ margin:8px 0; padding-left:28px; position:relative; font-size:13px; line-height:1.35; }
+.steps-list li::before{
+  counter-increment:step; content: counter(step) ".";
+  position:absolute; left:0; top:0; font-weight:700; color:var(--brand);
+}
+#loadingIndicator{
+  display:none; position:absolute; top:10px; left:10px; background:var(--surface);
+  padding:6px 10px; border-radius:8px; border:1px solid var(--ink-300); box-shadow:var(--shadow-1);
+}
+
+/* ==========================================================================
+   LABELS / BADGES
+   ========================================================================== */
+.label{ border-radius:999px; font-weight:700; }
+.label-default{ background:#eef3f8; color:var(--ink-700); }
+
+/* ==========================================================================
+   MODALS / FOOTER
+   ========================================================================== */
+.modal-content{
+  border-radius: 14px; border:1px solid var(--ink-300); box-shadow: var(--shadow-2);
+  background: var(--surface);
+}
+.modal-header{ border-bottom:1px solid var(--ink-300); }
+.modal-footer{ border-top:1px solid var(--ink-300); }
+
+.footer{
+  border-top: 1px solid var(--ink-300);
+  background: var(--surface); color: var(--ink-600);
+  padding: 10px 16px;
+}
+
+/* ==========================================================================
+   UTILIDADES
+   ========================================================================== */
+.text-muted{ color: var(--ink-500) !important; }
+
+/* Contadores de la barra central */
+#contadorLocales small{ color: var(--ink-600); }
+
+/* ==========================================================================
+   RESPONSIVE
+   ========================================================================== */
+@media (max-width: 992px){
+  .navbar-tools .nickname{ display:none; }
+}
+@media (max-width: 768px){
+  .panel-body .form-group{ margin-bottom:10px; }
+  .route-drawer{ left:5%; right:5%; width:auto; top:auto; bottom:65px; max-height:50%; }
+}
+
+/* Compactación de tablas en móviles sin romper columnas */
+@media (max-width: 480px){
+  .table>thead>tr>th, .table>tbody>tr>td{ padding:4px 6px; font-size:12.5px; }
+  .page-header h1{ font-size:18px; }
+  .btn{ font-weight:600; }
+}
+
+/* ==========================================================================
+   THEMING FINO PARA BOOTSTRAP 3
+   ========================================================================== */
+a{ color: var(--brand); }
+a:hover, a:focus{ color: var(--brand-600); text-decoration:none; }
+hr{ border-color: var(--ink-300); }
+.well{ border-radius:12px; border-color: var(--ink-300); background:#fff; }
+
+/* Dropdown caret más visible */
+.caret{ border-top-color:#fff; border-bottom-color:#fff; }
+.btn-primary .caret{ border-top-color:#fff !important; }
