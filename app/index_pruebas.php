@@ -10,6 +10,7 @@ $apellido       = htmlspecialchars($_SESSION['usuario_apellido'], ENT_QUOTES, 'U
 $empresa_id     = intval($_SESSION['empresa_id']);
 $usuario_id     = intval($_SESSION['usuario_id']);
 $division_id    = intval($_SESSION['division_id']);
+$appScope       = '/visibility2/app';
 $precacheLimit  = isset($_ENV['GESTIONAR_PRECACHE_LIMIT']) ? (int)$_ENV['GESTIONAR_PRECACHE_LIMIT'] : 10;
 $precacheLimit  = $precacheLimit > 0 ? $precacheLimit : 10;
 
@@ -1038,15 +1039,21 @@ $sql_campanas = "
                 <tbody>
     ";
 
-    if ($result_campanas->num_rows > 0) {
-        while ($campana = $result_campanas->fetch_assoc()) {
-            $idCampana     = (int)$campana['idCampana'];
-            $nombreCampana = htmlspecialchars($campana['nombreCampana'], ENT_QUOTES, 'UTF-8');
+        if ($result_campanas->num_rows > 0) {
+            while ($campana = $result_campanas->fetch_assoc()) {
+                $idCampana     = (int)$campana['idCampana'];
+                $nombreCampana = htmlspecialchars($campana['nombreCampana'], ENT_QUOTES, 'UTF-8');
+                $gestionarUrl  = $appScope . '/gestionarPruebas.php'
+                    . '?idCampana=' . urlencode($idCampana)
+                    . '&nombreCampana=' . urlencode($nombreCampana)
+                    . '&idLocal=' . urlencode($idLocal)
+                    . '&idUsuario=' . urlencode($usuario_id);
+                $gestionarUrlAttr = htmlspecialchars($gestionarUrl, ENT_QUOTES, 'UTF-8');
 
-            $precacheKey = $idLocal . '|' . $idCampana;
-            if (!isset($precacheTargetsId[$precacheKey])) {
-                $precacheTargetsId[$precacheKey] = true;
-                $precacheTargets[] = [
+                $precacheKey = $idLocal . '|' . $idCampana;
+                if (!isset($precacheTargetsId[$precacheKey])) {
+                    $precacheTargetsId[$precacheKey] = true;
+                    $precacheTargets[] = [
                     'idLocal'        => $idLocal,
                     'nombreLocal'    => $nombreLocal,
                     'direccionLocal' => $direccionLocal,
@@ -1059,10 +1066,14 @@ $sql_campanas = "
                 <tr data-idcampana='{$idCampana}'>
                     <td>{$nombreCampana}</td>
                     <td class='center'>
-                      <a href='gestionarPruebas.php?idCampana=" . urlencode($idCampana) . "&nombreCampana=" . urlencode($nombreCampana) . "&idLocal=" . urlencode($idLocal) . "&idUsuario=" . urlencode($usuario_id) . "'
-                         class='btn btn-info btn-sm'>
-                        <i class='fa fa-pencil'></i> Gestionar
-                      </a>
+                      <div class='btn-group btn-group-sm'>
+                        <a href='{$gestionarUrlAttr}' class='btn btn-info'>
+                          <i class='fa fa-pencil'></i> Gestionar
+                        </a>
+                        <button type='button' class='btn btn-default btn-precache-gestion' data-precache-url='{$gestionarUrlAttr}' title='Guardar esta página para trabajar offline'>
+                          <i class='fa fa-cloud-download'></i>
+                        </button>
+                      </div>
                     </td>
                 </tr>
             ";
