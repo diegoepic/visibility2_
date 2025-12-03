@@ -516,6 +516,9 @@ if (isset($_SESSION['success'])) {
             <button type="button" class="btn btn-info" style="margin-left: 3.5%;" onclick="window.location.reload();">
                 <i class="fa fa-refresh"></i> Actualizar
             </button>
+            <button type="button" class="btn btn-success" style="margin-left: 10px;" data-toggle="modal" data-target="#modalAyuda">
+                <i class="fa fa-question-circle"></i> ¿Cómo funciona?
+            </button>
             <!-- Sidebar: Campañas Programadas -->
             <div class="col-sm-5">
                 <div class="panel panel-default">
@@ -868,8 +871,59 @@ if (isset($_SESSION['success'])) {
          
          
       </div><!-- /.container -->
-   </div><!-- /.main-content -->
+      </div><!-- /.main-content -->
 </div><!-- /.main-container -->
+
+<!-- Modal de Ayuda / Cómo funciona -->
+<div id="modalAyuda" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="modalAyudaLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+        <h4 class="modal-title" id="modalAyudaLabel">¿Cómo funciona Visibility 2?</h4>
+      </div>
+      <div class="modal-body">
+        <p>Este panel reúne todas las herramientas para planificar, gestionar y completar campañas.</p>
+        <h4>Armado de ruta inteligente</h4>
+        <ul>
+          <li>El mapa muestra los locales visibles en la tabla activa (programados o reagendados) y actualiza los marcadores al filtrar por fecha, texto o campañas tachadas.</li>
+          <li>El botón <strong>Ver Mapa</strong> abre la vista de navegación con geolocalización en vivo, botón para centrar tu posición y cálculo de ruta optimizada con instrucciones paso a paso para los puntos visibles.</li>
+          <li>La ruta se recalcula automáticamente cuando cambias la fecha, el panel de locales o aplicas filtros, manteniendo sincronizados tabla, marcadores y contadores.</li>
+        </ul>
+        <h4>Locales programados y reagendados</h4>
+        <ul>
+          <li>El selector de fecha limita la tabla a la agenda del día elegido y actualiza el conteo de locales en tabla y mapa.</li>
+          <li>El filtro de texto busca por código, cadena, comuna o dirección y respeta las campañas tachadas para ocultar locales sin tareas pendientes.</li>
+          <li>Los locales prioritarios se resaltan y cada fila indica cuántas campañas tiene, con accesos directos para gestionar cada una.</li>
+          <li>El botón <strong>Ver Locales Reagendados</strong> cambia al panel de reagendados conservando filtros, marcadores y contadores.</li>
+        </ul>
+        <h4>Campañas programadas y complementarias</h4>
+        <ul>
+          <li>La lista de <em>Campañas Programadas</em> permite tachar campañas; al hacerlo se excluyen de tablas, mapa y ruta para concentrarte solo en pendientes.</li>
+          <li>Las <em>Actividades complementarias</em> se muestran en su propio panel para acceder a formularios adicionales sin mezclar la ruta diaria.</li>
+        </ul>
+        <h4>Gestión de locales</h4>
+        <ul>
+          <li>Desde cada local puedes abrir el modal de campañas asociadas y acceder a <strong>Gestionar</strong> para completar estado, materiales y encuesta de cada campaña.</li>
+          <li>El contador por local y la insignia de prioridad ayudan a decidir la siguiente visita dentro de la ruta optimizada.</li>
+        </ul>
+        <h4>Trabajo offline y precacheo</h4>
+        <ul>
+          <li>El service worker precarga los assets principales (Bootstrap, fuentes, scripts offline) y la versión SPA de gestión para trabajar sin conexión.</li>
+          <li>Al gestionar un local, el sistema puede precachear páginas de locales vecinos de la misma campaña y limpiar entradas antiguas al salir, para que sigas trabajando offline con las visitas más cercanas.</li>
+        </ul>
+        <h4>Panel de gestiones (Journal)</h4>
+        <ul>
+          <li>El journal almacena y sincroniza gestiones en IndexedDB, permitiendo revisar avances y detalle histórico incluso si la red está inestable.</li>
+          <li>Las pestañas del panel organizan vistas por tipo de dato y mantienen estilos responsivos para escritorio y móvil.</li>
+        </ul>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Modal Mapa -->
 <div id="modalMapa" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="modalMapaLabel" aria-hidden="true">
