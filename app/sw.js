@@ -18,7 +18,6 @@ const STATIC_ASSETS = [
   `${APP_SCOPE}/assets/js/v2_cache.js`,
   `${APP_SCOPE}/assets/js/offline-queue.js`,
   `${APP_SCOPE}/assets/js/bootstrap_index_cache.js`,
-  `${APP_SCOPE}/assets/js/index_precache.js`,
   `${APP_SCOPE}/assets/js/gestionar_precache.js`,
   `${APP_SCOPE}/assets/js/gestionar_spa.js`,
 ];
