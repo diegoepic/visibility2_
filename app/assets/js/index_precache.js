@@ -57,6 +57,57 @@
     badge.style.display = val ? 'inline-block' : 'none';
   }
 
+  function absoluteFrom(url, base) {
+    try {
+      return new URL(url, base || location.origin).toString();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function normalizeForCache(rawUrl, base) {
+    const full = absoluteFrom(rawUrl, base);
+    if (!full) return '';
+    const url = new URL(full);
+    if (url.origin !== location.origin) return '';
+    // Guardamos sólo ruta+query para evitar duplicados por hash
+    return url.pathname + url.search;
+  }
+
+  async function fetchGestionarAssets(url) {
+    const assets = new Set();
+    const target = normalizeGestionarUrl(url);
+    if (target) assets.add(target);
+
+    try {
+      const resp = await fetch(target, { credentials: 'include' });
+      if (!resp.ok) return Array.from(assets);
+
+      const html = await resp.text();
+      const doc  = new DOMParser().parseFromString(html, 'text/html');
+      const push = (val) => {
+        const normalized = normalizeForCache(val, target);
+        if (normalized) assets.add(normalized);
+      };
+
+      doc.querySelectorAll('img[src]').forEach((el) => push(el.getAttribute('src')));
+      doc.querySelectorAll('source[src]').forEach((el) => push(el.getAttribute('src')));
+      doc.querySelectorAll('img[srcset], source[srcset]').forEach((el) => {
+        const srcset = el.getAttribute('srcset') || '';
+        srcset.split(',').forEach((entry) => {
+          const [u] = entry.trim().split(/\s+/);
+          if (u) push(u);
+        });
+      });
+      doc.querySelectorAll('link[rel="stylesheet"][href]').forEach((el) => push(el.getAttribute('href')));
+      doc.querySelectorAll('script[src]').forEach((el) => push(el.getAttribute('src')));
+
+      return Array.from(assets);
+    } catch (_) {
+      return Array.from(assets);
+    }
+  }
+
   function normalizeGestionarUrl(rawUrl) {
     if (!rawUrl || typeof rawUrl !== 'string') return '';
     if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
@@ -222,6 +273,13 @@
 
       try {
         worker.postMessage({ type: 'PRECACHE_GESTIONAR_PAGES', urls: [url], max: 1 });
+
+        // Traer y cachear los assets igual que al abrir la página directamente
+        const assets = await fetchGestionarAssets(url);
+        if (assets.length) {
+          worker.postMessage({ type: 'PRECACHE_ASSETS', assets });
+        }
+
         manualSet.add(url);
         persistManualPrecached(manualSet);
         markInlinePrecached(btn);
