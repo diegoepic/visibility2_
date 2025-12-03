@@ -201,6 +201,16 @@
     }
   }
 
+  async function waitForController(timeoutMs = 2000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (navigator.serviceWorker.controller) return true;
+      try { await navigator.serviceWorker.ready; } catch (_) { /* ignore */ }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return !!navigator.serviceWorker.controller;
+  }
+
   function markInlinePrecached(btn) {
     if (!btn) return;
     btn.dataset.precached = '1';
@@ -222,18 +232,14 @@
       }
       setStatus(`Enviando ${urls.length} páginas a la caché…`, 'info');
       btnDo.disabled = true;
-      const { worker, controlled } = await ensureSW();
+      const { worker } = await ensureSW();
       if (!worker) {
         setStatus('No hay un Service Worker registrado para esta página. Refresca o verifica tu conexión.', 'danger');
         btnDo.disabled = false;
         return;
       }
-      if (!controlled) {
-        setStatus('El Service Worker aún no controla esta pestaña. Recarga la página e inténtalo nuevamente.', 'warning');
-        btnDo.disabled = false;
-        return;
-      }
       try {
+        await waitForController();
         worker.postMessage({ type: 'PRECACHE_GESTIONAR_PAGES', urls, max: limit });
         setStatus('Precarga solicitada. Las páginas quedarán disponibles offline al completarse.', 'success');
       } catch (e) {
@@ -281,19 +287,15 @@
       btn.disabled = true;
       setStatus('Enviando la página a la caché offline…', 'info');
 
-      const { worker, controlled } = await ensureSW();
+      const { worker } = await ensureSW();
       if (!worker) {
         setStatus('No hay Service Worker registrado. Refresca e inténtalo nuevamente.', 'danger');
         btn.disabled = false;
         return;
       }
-      if (!controlled) {
-        setStatus('El Service Worker aún no controla esta pestaña. Recarga la página e inténtalo de nuevo.', 'warning');
-        btn.disabled = false;
-        return;
-      }
 
       try {
+        await waitForController();
         worker.postMessage({ type: 'PRECACHE_GESTIONAR_PAGES', urls: [url], max: 1 });
 
         // Traer y cachear los assets igual que al abrir la página directamente
