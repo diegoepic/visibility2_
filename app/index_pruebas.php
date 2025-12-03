@@ -10,8 +10,7 @@ $apellido       = htmlspecialchars($_SESSION['usuario_apellido'], ENT_QUOTES, 'U
 $empresa_id     = intval($_SESSION['empresa_id']);
 $usuario_id     = intval($_SESSION['usuario_id']);
 $division_id    = intval($_SESSION['division_id']);
-$precacheLimit  = isset($_ENV['GESTIONAR_PRECACHE_LIMIT']) ? (int)$_ENV['GESTIONAR_PRECACHE_LIMIT'] : 10;
-$precacheLimit  = $precacheLimit > 0 ? $precacheLimit : 10;
+$appScope       = '/visibility2/app';
 
 $sql_campaigns = "
     SELECT DISTINCT 
@@ -306,24 +305,12 @@ foreach ($locales_reag as $local) {
       #panelInfoRuta { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; z-index: 1001; }
       #panelInstruccionesModal { right: 50%; transform: translateX(50%); width: 90%; left: 5%; top: auto; bottom: 60px; }
     }
-    .custom-map-control-button {
+    .custom-map-control-button { 
       background-color: #fff; border: 2px solid #fff; border-radius: 3px; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
       cursor: pointer; margin: 10px; padding: 10px; font-size: 16px; font-family: 'Roboto, Arial, sans-serif';
       display: flex; align-items: center; transition: background-color 0.3s;
     }
     .custom-map-control-button:hover { background-color: #e6e6e6; }
-    .precache-fab {
-      position: fixed;
-      right: 16px;
-      bottom: 82px;
-      z-index: 1050;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.2);
-    }
-    .precache-fab .badge {
-      background: #fff;
-      color: #c0392b;
-      margin-left: 6px;
-    }
     #loadingIndicator {
       position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background-color: rgba(255, 255, 255, 0.8);
       padding: 5px 10px; border-radius: 3px; display: none; z-index: 1001;
@@ -528,6 +515,9 @@ if (isset($_SESSION['success'])) {
          <div class="row" style="margin-bottom: 15px;">
             <button type="button" class="btn btn-info" style="margin-left: 3.5%;" onclick="window.location.reload();">
                 <i class="fa fa-refresh"></i> Actualizar
+            </button>
+            <button type="button" class="btn btn-success" style="margin-left: 10px;" data-toggle="modal" data-target="#modalAyuda">
+                <i class="fa fa-question-circle"></i> ¿Cómo funciona?
             </button>
             <!-- Sidebar: Campañas Programadas -->
             <div class="col-sm-5">
@@ -881,8 +871,73 @@ if (isset($_SESSION['success'])) {
          
          
       </div><!-- /.container -->
-   </div><!-- /.main-content -->
+      </div><!-- /.main-content -->
 </div><!-- /.main-container -->
+
+<!-- Modal de Ayuda / Cómo funciona -->
+<div id="modalAyuda" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="modalAyudaLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+        <h4 class="modal-title" id="modalAyudaLabel">¿Cómo funciona Visibility 2?</h4>
+      </div>
+      <div class="modal-body">
+        <p>Este panel reúne todas las herramientas para planificar, gestionar y completar campañas.</p>
+        <h4>Armado de ruta inteligente</h4>
+        <ul>
+          <li>El mapa muestra los locales visibles en la tabla activa (programados o reagendados) y actualiza los marcadores al filtrar por fecha, texto o campañas tachadas.</li>
+          <li>El botón <strong>Ver Mapa</strong> abre la vista de navegación con geolocalización en vivo, botón para centrar tu posición y cálculo de ruta optimizada con instrucciones paso a paso para los puntos visibles.</li>
+          <li>La ruta se recalcula automáticamente cuando cambias la fecha, el panel de locales o aplicas filtros, manteniendo sincronizados tabla, marcadores y contadores. Tambien existe la opcion de exportar a Google Maps </li>
+          
+        </ul>
+        <h4>Locales programados y reagendados</h4>
+        <ul>
+          <li>El selector de fecha muestra los locales programados para el dia elegido y actualiza el conteo de locales en tabla y mapa.</li>
+          <li>El filtro de texto busca por código, cadena, comuna o dirección y respeta las campañas tachadas para ocultar locales sin tareas pendientes.</li>
+          <li>El botón <strong>Ver Locales Reagendados</strong> cambia al panel de reagendados conservando filtros, marcadores y contadores.</li>
+        </ul>
+        <ul>
+        </ul>
+        <h4>Gestión de locales</h4>
+        <ul>
+          <li>Desde cada local puedes abrir el modal de campañas asociadas y acceder a <strong>Gestionar</strong> para completar estado, materiales y/o encuesta de cada campaña.</li>
+
+        </ul>
+        
+        
+        <h4>Trabajo resistente a caidas de red, gestion full offline y precarga de locales</h4>
+                <p>
+          La aplicación está pensada para trabajar siempre con los datos móviles encendidos,
+          pero es <strong>tolerante a caídas de señal</strong>. Si durante una gestión se corta
+          Internet, puedes seguir trabajando normalmente: las respuestas y fotos se guardan en
+          el dispositivo y se ponen en cola de envío. Cuando vuelva la conexión, la app
+          sincroniza automáticamente todo lo pendiente sin que tengas que repetir la visita.
+        </p>
+        <ul>
+          <li>Para poder gestionar un local sin conexión, primero debes abrirlo al menos una vez con Internet y llegar a <strong>Gestionar</strong>.</li>
+          <li>Al abrir ese paso online, la aplicación guarda en el dispositivo toda la información necesaria del local: datos del local, campañas, preguntas de auditoría y materiales asociados.</li>
+          <li>Desde ese momento, ese local queda listo para trabajar completamente <strong>offline</strong>: podrás avanzar por los 3 pasos, responder preguntas y tomar fotos, aunque no tengas señal.</li>
+         
+          <li>Cuando vuelvas a tener conexión, la aplicación enviará automáticamente las gestiones pendientes en el orden correcto. No necesitas repetir la visita ni volver a cargar los datos.</li>
+        </ul>
+
+        <h4>Panel de gestiones (Journal)</h4>
+        <ul>
+          <li>El panel<strong>Gestiones</strong> muestra, ordenado por día, todas las gestiones realizadas desde el dispositivo, tanto online como offline.</li>
+          <li>Cada tarjeta indica el local, la campaña y el estado de la tarea:
+            <strong>En cola</strong> (pendiente de enviar), <strong>Subiendo</strong>,
+            <strong>Completada</strong> o <strong>Error</strong> si hubo algún problema.</li>
+          <li>Si trabajas sin conexión, las gestiones quedan en estado <strong>En cola</strong>. Al volver a tener Internet, la app las sincroniza automáticamente y, al terminar, cambian a <strong>Completada</strong>.</li>
+          <li>En la parte superior se muestra una barra de avance que resume cuántas gestiones del día ya se sincronizaron y cuántas siguen en cola.</li>
+        </ul>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Modal Mapa -->
 <div id="modalMapa" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="modalMapaLabel" aria-hidden="true">
@@ -979,10 +1034,8 @@ if (isset($_SESSION['success'])) {
 
 <?php
 // Modales de gestión por local (programados + reagendados)
-$localesTotales    = array_merge($locales, $locales_reag);
-$idsGenerados      = [];
-$precacheTargets   = [];
-$precacheTargetsId = [];
+$localesTotales = array_merge($locales, $locales_reag);
+$idsGenerados   = [];
 foreach ($localesTotales as $row) {
     if (in_array($row['idLocal'], $idsGenerados)) continue;
     $idsGenerados[] = $row['idLocal'];
@@ -1038,31 +1091,26 @@ $sql_campanas = "
                 <tbody>
     ";
 
-    if ($result_campanas->num_rows > 0) {
-        while ($campana = $result_campanas->fetch_assoc()) {
-            $idCampana     = (int)$campana['idCampana'];
-            $nombreCampana = htmlspecialchars($campana['nombreCampana'], ENT_QUOTES, 'UTF-8');
+        if ($result_campanas->num_rows > 0) {
+            while ($campana = $result_campanas->fetch_assoc()) {
+                $idCampana     = (int)$campana['idCampana'];
+                $nombreCampana = htmlspecialchars($campana['nombreCampana'], ENT_QUOTES, 'UTF-8');
+                $gestionarUrl  = $appScope . '/gestionarPruebas.php'
+                    . '?idCampana=' . urlencode($idCampana)
+                    . '&nombreCampana=' . urlencode($nombreCampana)
+                    . '&idLocal=' . urlencode($idLocal)
+                    . '&idUsuario=' . urlencode($usuario_id);
+                $gestionarUrlAttr = htmlspecialchars($gestionarUrl, ENT_QUOTES, 'UTF-8');
 
-            $precacheKey = $idLocal . '|' . $idCampana;
-            if (!isset($precacheTargetsId[$precacheKey])) {
-                $precacheTargetsId[$precacheKey] = true;
-                $precacheTargets[] = [
-                    'idLocal'        => $idLocal,
-                    'nombreLocal'    => $nombreLocal,
-                    'direccionLocal' => $direccionLocal,
-                    'idUsuario'      => $usuario_id,
-                    'idCampana'      => $idCampana,
-                    'nombreCampana'  => $nombreCampana
-                ];
-            }
             echo "
                 <tr data-idcampana='{$idCampana}'>
                     <td>{$nombreCampana}</td>
                     <td class='center'>
-                      <a href='gestionarPruebas.php?idCampana=" . urlencode($idCampana) . "&nombreCampana=" . urlencode($nombreCampana) . "&idLocal=" . urlencode($idLocal) . "&idUsuario=" . urlencode($usuario_id) . "'
-                         class='btn btn-info btn-sm'>
-                        <i class='fa fa-pencil'></i> Gestionar
-                      </a>
+                      <div class='btn-group btn-group-sm'>
+                        <a href='{$gestionarUrlAttr}' class='btn btn-info'>
+                          <i class='fa fa-pencil'></i> Gestionar
+                        </a>
+                      </div>
                     </td>
                 </tr>
             ";
@@ -1097,47 +1145,6 @@ $sql_campanas = "
    <div class="footer-items">
       <span class="go-top"><i class='fa fa-chevron-up'></i></span>
    </div>
-</div>
-
-<!-- Precarga de gestionarPruebas offline -->
-<button id="btnOpenPrecache" type="button" class="btn btn-warning precache-fab" title="Precargar gestionarPruebas offline">
-  <i class="fa fa-cloud-download"></i> Precargar gestionar
-  <span class="badge" id="precacheBadge" aria-live="polite"></span>
-</button>
-
-<div id="modalPrecacheGestionar" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="precacheLabel">
-  <div class="modal-dialog modal-lg" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-        <h4 class="modal-title" id="precacheLabel">Precargar gestionarPruebas para trabajar offline</h4>
-      </div>
-      <div class="modal-body">
-        <p class="text-muted">Selecciona hasta <strong id="precacheLimitLabel">10</strong> locales/campañas para cachear sus páginas de gestión. Esto permite abrirlas sin conexión simulando haber navegado online.</p>
-        <div class="table-responsive" style="max-height:320px; overflow-y:auto;">
-          <table class="table table-striped table-condensed">
-            <thead>
-              <tr>
-                <th style="width:50px;">#</th>
-                <th>Campaña</th>
-                <th>Local</th>
-                <th>Dirección</th>
-              </tr>
-            </thead>
-            <tbody id="precacheList"></tbody>
-          </table>
-        </div>
-        <div class="alert alert-info" id="precacheStatus" style="display:none;"></div>
-      </div>
-      <div class="modal-footer">
-        <div class="pull-left text-muted" id="precacheCounter">0 seleccionados</div>
-        <button type="button" class="btn btn-default" data-dismiss="modal">Cerrar</button>
-        <button type="button" class="btn btn-primary" id="btnDoPrecache" disabled>
-          <i class="fa fa-cloud-download"></i> Precargar seleccionados
-        </button>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- Scripts -->
@@ -1674,12 +1681,6 @@ $(document).ready(function(){
 <script src="assets/js/bootstrap_index_cache.js"></script>
 <script src="assets/js/journal_db.js"></script>
 <script src="assets/js/journal_ui.js"></script>
-<script>
-  window.__GESTIONAR_PRECACHE_TARGETS = <?php echo json_encode($precacheTargets, JSON_UNESCAPED_UNICODE); ?>;
-  window.__GESTIONAR_PRECACHE_LIMIT   = <?php echo (int)$precacheLimit; ?>;
-  window.__GESTIONAR_PRECACHE_USER    = <?php echo (int)$usuario_id; ?>;
-</script>
-<script src="assets/js/index_precache.js"></script>
 
 <script>
 

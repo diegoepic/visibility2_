@@ -1,4 +1,4 @@
-const VERSION        = 'v2.7.0';
+const VERSION        = 'v2.7.2';
 const APP_SCOPE      = '/visibility2/app';
 const STATIC_CACHE   = `static-${VERSION}`;
 const RUNTIME_CACHE  = `runtime-${VERSION}`;
@@ -18,7 +18,6 @@ const STATIC_ASSETS = [
   `${APP_SCOPE}/assets/js/v2_cache.js`,
   `${APP_SCOPE}/assets/js/offline-queue.js`,
   `${APP_SCOPE}/assets/js/bootstrap_index_cache.js`,
-  `${APP_SCOPE}/assets/js/index_precache.js`,
   `${APP_SCOPE}/assets/js/gestionar_precache.js`,
   `${APP_SCOPE}/assets/js/gestionar_spa.js`,
 ];

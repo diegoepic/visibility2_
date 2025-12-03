@@ -59,99 +59,6 @@
   window.addEventListener('online',  updateNetworkBadge);
   window.addEventListener('offline', updateNetworkBadge);
 
-  function firstNonNull() {
-    for (let i = 0; i < arguments.length; i++) {
-      const val = arguments[i];
-      if (val !== undefined && val !== null) return val;
-    }
-    return null;
-  }
-
-  function getGestionarPrecacheLimit() {
-    return Number(window.__GESTIONAR_PRECACHE_LIMIT || 10) || 10;
-  }
-
-  function setPrecacheStatus(message, kind) {
-    const statusBox = document.getElementById('precacheStatus');
-    if (!statusBox) return;
-    statusBox.textContent = message || '';
-    statusBox.className = `alert alert-${kind || 'info'}`;
-    statusBox.style.display = message ? 'block' : 'none';
-  }
-
-  // Construye la URL de gestionarPruebas.php (igual a la usada en index_pruebas.php),
-  // tolerando nombres alternativos de campos provenientes de distintas versiones
-  // del bundle offline.
-  function buildGestionarUrlFromAssignment(row) {
-    if (!row) return null;
-
-    const local = row.local || row;
-    const camp  = row.camp  || row;
-
-    const idLocal = firstNonNull(
-      local.id_local, local.idLocal, local.id,
-      row.id_local, row.idLocal, row.local_id
-    );
-
-    const idCampana = firstNonNull(
-      camp.id_formulario, camp.formulario_id, camp.id_campana, camp.idCampana, camp.id,
-      row.id_campana, row.idCampana, row.formulario_id, row.id_formulario
-    );
-
-    const nombreCampana = firstNonNull(
-      camp.nombre, camp.nombre_campana, camp.nombreCampana,
-      row.nombreCampana, row.nombre_campana, ''
-    ) || '';
-
-    const idUsuario = firstNonNull(
-      row.id_usuario, row.idUsuario, row.usuario_id, row.user_id,
-      (typeof window !== 'undefined' ? window.__GESTIONAR_PRECACHE_USER : null)
-    );
-
-    if (!idLocal || !idCampana) return null;
-
-    const url = `${APP_SCOPE}/gestionarPruebas.php`
-      + `?idCampana=${encodeURIComponent(idCampana)}`
-      + `&nombreCampana=${encodeURIComponent(nombreCampana)}`
-      + `&idLocal=${encodeURIComponent(idLocal)}`
-      + (idUsuario ? `&idUsuario=${encodeURIComponent(idUsuario)}` : '');
-
-    return url;
-  }
-
-  // Prefetch suave de gestionarPruebas.php para locales del día: lanza unos GET
-  // controlados para que el Service Worker cachee la página HTML aunque el
-  // usuario sólo haya precacheado datos desde el index. Esto evita que esos
-  // locales fallen al abrirse offline si nunca se visitaron online.
-  async function prefetchGestionarForAssignments(assignments) {
-    const maxToPrefetch = getGestionarPrecacheLimit();
-    if (!Array.isArray(assignments) || !assignments.length || maxToPrefetch <= 0) return;
-
-    const seen = new Set();
-    const urls = [];
-
-    for (const row of assignments) {
-      const url = buildGestionarUrlFromAssignment(row);
-      if (url && !seen.has(url)) {
-        seen.add(url);
-        urls.push(url);
-      }
-    }
-
-    const limited = urls.slice(0, Math.max(0, maxToPrefetch || 0));
-    if (!limited.length) return;
-
-    try {
-      const reg = await registerSW();
-      const worker = reg && (reg.active || reg.waiting || reg.installing);
-      worker?.postMessage({ type: 'PRECACHE_GESTIONAR_PAGES', urls: limited, max: maxToPrefetch });
-      setPrecacheStatus(`Precargando automáticamente ${limited.length} páginas del día…`, 'info');
-    } catch (e) {
-      console.debug('[Index] prefetch gestionarPruebas skipped', e?.message || e);
-      setPrecacheStatus('No se pudo solicitar la precarga automática.', 'warning');
-    }
-  }
-
   async function registerSW() {
     if (!('serviceWorker' in navigator)) return null;
     try {
@@ -390,9 +297,7 @@
       ? await syncAgendaForToday('agenda_flag')
       : await syncAgendaForToday('normal_boot');
 
-    const data = syncedRender || cachedRender || { programados: [], reagendados: [] };
-    const toPrefetch = [...(data.programados || []), ...(data.reagendados || [])];
-    prefetchGestionarForAssignments(toPrefetch);
+    void syncedRender;
   }
 
   document.addEventListener('DOMContentLoaded', boot);

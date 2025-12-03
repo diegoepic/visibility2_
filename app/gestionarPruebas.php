@@ -917,6 +917,40 @@ function showGeoError(err){
   updateGeoUI();
 }
 
+async function waitForGestionarCache(url, timeoutMs = 5500) {
+  if (!('caches' in window)) return false;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const hit = await caches.match(url, { ignoreVary: true });
+      if (hit) return true;
+    } catch (_) {
+      return false;
+    }
+    await new Promise(res => setTimeout(res, 350));
+  }
+  return false;
+}
+
+async function precacheCurrentGestionar() {
+  if (!('serviceWorker' in navigator)) return false;
+  const currentUrl = location.href;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const controller = navigator.serviceWorker.controller || reg.active;
+    if (controller) {
+      controller.postMessage({
+        type: 'PRECACHE_GESTIONAR_PAGES',
+        urls: [currentUrl],
+        max: 1
+      });
+    }
+    return await waitForGestionarCache(currentUrl);
+  } catch (_) {
+    return false;
+  }
+}
+
 function getPositionOnce(opts={}){
   return new Promise((resolve, reject)=>{
     if (!navigator.geolocation) return reject({ code:'NO_GEO', message:'Geolocalización no soportada' });
@@ -951,6 +985,13 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     try{ await ensureFreshGeo(); }
     catch(err){ showGeoError(err); }
   });
+
+  try {
+    const cached = await precacheCurrentGestionar();
+    if (cached) {
+      mcToast('success', 'Local guardado', 'Puede gestionarlo offline ahora o más tarde.');
+    }
+  } catch (_) { /* silent */ }
 });
 
 function initMap(){ /* no-op */ }
