@@ -168,12 +168,34 @@
     }
   }
 
+  async function registerSW() {
+    if (!('serviceWorker' in navigator)) return null;
+    try {
+      const reg = await navigator.serviceWorker.register(`${APP_SCOPE}/sw.js`, { scope: `${APP_SCOPE}/` });
+      const sw = reg && (reg.active || reg.waiting || reg.installing);
+      if (sw) {
+        try {
+          sw.postMessage({ type: 'SKIP_WAITING' });
+          sw.postMessage({ type: 'CLIENTS_CLAIM' });
+        } catch (_) { /* ignore */ }
+      }
+      return reg;
+    } catch (_) {
+      return null;
+    }
+  }
+
   async function ensureSW() {
     if (!('serviceWorker' in navigator)) return { worker: null, controlled: false, reason: 'unsupported' };
     try {
-      const reg = await navigator.serviceWorker.getRegistration(APP_SCOPE + '/');
-      const worker = reg && (reg.active || reg.waiting || reg.installing);
-      return { worker, controlled: !!navigator.serviceWorker.controller, reason: worker ? null : 'no-registration' };
+      let reg = await navigator.serviceWorker.getRegistration(APP_SCOPE + '/');
+      if (!reg) reg = await registerSW();
+
+      const ready = await navigator.serviceWorker.ready.catch(() => null);
+      const worker = ready?.active || reg && (reg.active || reg.waiting || reg.installing);
+      const controlled = !!navigator.serviceWorker.controller;
+
+      return { worker: worker || null, controlled, reason: worker ? null : 'no-registration' };
     } catch (_) {
       return { worker: null, controlled: false, reason: 'error' };
     }
