@@ -11,8 +11,6 @@ $empresa_id     = intval($_SESSION['empresa_id']);
 $usuario_id     = intval($_SESSION['usuario_id']);
 $division_id    = intval($_SESSION['division_id']);
 $appScope       = '/visibility2/app';
-$precacheLimit  = isset($_ENV['GESTIONAR_PRECACHE_LIMIT']) ? (int)$_ENV['GESTIONAR_PRECACHE_LIMIT'] : 10;
-$precacheLimit  = $precacheLimit > 0 ? $precacheLimit : 10;
 
 $sql_campaigns = "
     SELECT DISTINCT 
@@ -307,24 +305,12 @@ foreach ($locales_reag as $local) {
       #panelInfoRuta { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; z-index: 1001; }
       #panelInstruccionesModal { right: 50%; transform: translateX(50%); width: 90%; left: 5%; top: auto; bottom: 60px; }
     }
-    .custom-map-control-button {
+    .custom-map-control-button { 
       background-color: #fff; border: 2px solid #fff; border-radius: 3px; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
       cursor: pointer; margin: 10px; padding: 10px; font-size: 16px; font-family: 'Roboto, Arial, sans-serif';
       display: flex; align-items: center; transition: background-color 0.3s;
     }
     .custom-map-control-button:hover { background-color: #e6e6e6; }
-    .precache-fab {
-      position: fixed;
-      right: 16px;
-      bottom: 82px;
-      z-index: 1050;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.2);
-    }
-    .precache-fab .badge {
-      background: #fff;
-      color: #c0392b;
-      margin-left: 6px;
-    }
     #loadingIndicator {
       position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background-color: rgba(255, 255, 255, 0.8);
       padding: 5px 10px; border-radius: 3px; display: none; z-index: 1001;
@@ -980,10 +966,8 @@ if (isset($_SESSION['success'])) {
 
 <?php
 // Modales de gestión por local (programados + reagendados)
-$localesTotales    = array_merge($locales, $locales_reag);
-$idsGenerados      = [];
-$precacheTargets   = [];
-$precacheTargetsId = [];
+$localesTotales = array_merge($locales, $locales_reag);
+$idsGenerados   = [];
 foreach ($localesTotales as $row) {
     if (in_array($row['idLocal'], $idsGenerados)) continue;
     $idsGenerados[] = $row['idLocal'];
@@ -1050,18 +1034,6 @@ $sql_campanas = "
                     . '&idUsuario=' . urlencode($usuario_id);
                 $gestionarUrlAttr = htmlspecialchars($gestionarUrl, ENT_QUOTES, 'UTF-8');
 
-                $precacheKey = $idLocal . '|' . $idCampana;
-                if (!isset($precacheTargetsId[$precacheKey])) {
-                    $precacheTargetsId[$precacheKey] = true;
-                    $precacheTargets[] = [
-                    'idLocal'        => $idLocal,
-                    'nombreLocal'    => $nombreLocal,
-                    'direccionLocal' => $direccionLocal,
-                    'idUsuario'      => $usuario_id,
-                    'idCampana'      => $idCampana,
-                    'nombreCampana'  => $nombreCampana
-                ];
-            }
             echo "
                 <tr data-idcampana='{$idCampana}'>
                     <td>{$nombreCampana}</td>
@@ -1070,9 +1042,6 @@ $sql_campanas = "
                         <a href='{$gestionarUrlAttr}' class='btn btn-info'>
                           <i class='fa fa-pencil'></i> Gestionar
                         </a>
-                        <button type='button' class='btn btn-default btn-precache-gestion' data-precache-url='{$gestionarUrlAttr}' title='Guardar esta página para trabajar offline'>
-                          <i class='fa fa-cloud-download'></i>
-                        </button>
                       </div>
                     </td>
                 </tr>
@@ -1108,47 +1077,6 @@ $sql_campanas = "
    <div class="footer-items">
       <span class="go-top"><i class='fa fa-chevron-up'></i></span>
    </div>
-</div>
-
-<!-- Precarga de gestionarPruebas offline -->
-<button id="btnOpenPrecache" type="button" class="btn btn-warning precache-fab" title="Precargar gestionarPruebas offline">
-  <i class="fa fa-cloud-download"></i> Precargar gestionar
-  <span class="badge" id="precacheBadge" aria-live="polite"></span>
-</button>
-
-<div id="modalPrecacheGestionar" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="precacheLabel">
-  <div class="modal-dialog modal-lg" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-        <h4 class="modal-title" id="precacheLabel">Precargar gestionarPruebas para trabajar offline</h4>
-      </div>
-      <div class="modal-body">
-        <p class="text-muted">Selecciona hasta <strong id="precacheLimitLabel">10</strong> locales/campañas para cachear sus páginas de gestión. Esto permite abrirlas sin conexión simulando haber navegado online.</p>
-        <div class="table-responsive" style="max-height:320px; overflow-y:auto;">
-          <table class="table table-striped table-condensed">
-            <thead>
-              <tr>
-                <th style="width:50px;">#</th>
-                <th>Campaña</th>
-                <th>Local</th>
-                <th>Dirección</th>
-              </tr>
-            </thead>
-            <tbody id="precacheList"></tbody>
-          </table>
-        </div>
-        <div class="alert alert-info" id="precacheStatus" style="display:none;"></div>
-      </div>
-      <div class="modal-footer">
-        <div class="pull-left text-muted" id="precacheCounter">0 seleccionados</div>
-        <button type="button" class="btn btn-default" data-dismiss="modal">Cerrar</button>
-        <button type="button" class="btn btn-primary" id="btnDoPrecache" disabled>
-          <i class="fa fa-cloud-download"></i> Precargar seleccionados
-        </button>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- Scripts -->
@@ -1685,12 +1613,6 @@ $(document).ready(function(){
 <script src="assets/js/bootstrap_index_cache.js"></script>
 <script src="assets/js/journal_db.js"></script>
 <script src="assets/js/journal_ui.js"></script>
-<script>
-  window.__GESTIONAR_PRECACHE_TARGETS = <?php echo json_encode($precacheTargets, JSON_UNESCAPED_UNICODE); ?>;
-  window.__GESTIONAR_PRECACHE_LIMIT   = <?php echo (int)$precacheLimit; ?>;
-  window.__GESTIONAR_PRECACHE_USER    = <?php echo (int)$usuario_id; ?>;
-</script>
-<script src="assets/js/index_precache.js"></script>
 
 <script>
 
