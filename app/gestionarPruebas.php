@@ -1625,6 +1625,7 @@ function setupFileInput(inputElem) {
 
       const idFQ = inputElem.id.split('_').pop();
       const hiddenContainer = document.getElementById(`hiddenUploadContainer_${idFQ}`);
+    const idFQ = inputElem.id.split('_').pop();
     const yaSubidas = document.querySelectorAll(
       `#hiddenUploadContainer_${idFQ} input[type="hidden"][name^="fotos[${idFQ}]"]`
     ).length;
@@ -1803,6 +1804,43 @@ function setupFileInput(inputElem) {
     pendingUploads = Math.max(0, pendingUploads - 1);
     updateFinalizeButton();
   }
+
+function appendMaterialHidden(idFQ, url) {
+  const hiddenContainer = document.getElementById(`hiddenUploadContainer_${idFQ}`);
+  if (!hiddenContainer) return;
+  const hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = `fotos[${idFQ}][]`;
+  hiddenInput.value = url;
+  hiddenContainer.appendChild(hiddenInput);
+}
+
+function handleMaterialUploadResponse(jobId, resp) {
+  const info = materialUploadTasks.get(jobId);
+  if (!info) return;
+
+  const finalUrl = resp?.url || resp?.abs_url;
+  if (!finalUrl) {
+    if (info.note) info.note.textContent = 'No se recibió URL del servidor.';
+    if (info.bar) info.bar.classList.add('error');
+    materialUploadTasks.delete(jobId);
+    pendingUploads = Math.max(0, pendingUploads - 1);
+    updateFinalizeButton();
+    return;
+  }
+
+  appendMaterialHidden(info.idFQ, normalizeAppUrl(finalUrl));
+
+  if (info.bar) {
+    info.bar.style.width = '100%';
+    info.bar.classList.remove('error');
+  }
+  if (info.note) info.note.textContent = 'Foto sincronizada.';
+
+  materialUploadTasks.delete(jobId);
+  pendingUploads = Math.max(0, pendingUploads - 1);
+  updateFinalizeButton();
+}
 
 function handleMaterialUploadError(jobId, message) {
   const info = materialUploadTasks.get(jobId);
