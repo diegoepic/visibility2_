@@ -1419,13 +1419,15 @@ async function subirFotoPregunta(id_form_question, id_local) {
       mcToast('info', 'Offline', 'La foto se subirá al recuperar conexión.');
 
       // Nos suscribimos al evento global que emite la cola cuando esa tarea se procese
-      window.addEventListener('queue:done', async (ev) => {
+      const queueDoneHandler = async (ev) => {
         try {
           if (!ev || !ev.detail) return;
           const { id, type, response } = ev.detail;
 
           // Aseguramos que sea el MISMO job y del MISMO tipo
           if (id !== res.id || type !== 'pregunta_foto') return;
+
+          window.removeEventListener('queue:done', queueDoneHandler);
 
           // Validamos respuesta del backend
           if (!response || response.status !== 'success' || !response.fotoUrl) return;
@@ -1503,7 +1505,9 @@ async function subirFotoPregunta(id_form_question, id_local) {
         } catch (err) {
           console.error(err);
         }
-      }, { once: false });
+      };
+
+      window.addEventListener('queue:done', queueDoneHandler, { once: false });
 
     } else if (res && res.ok && res.response && res.response.fotoUrl) {
       // Caso menos común: smartPost logró subirla online directamente
