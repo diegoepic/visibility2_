@@ -1012,14 +1012,26 @@ function normalizeAppUrl(u) {
 }
 
 const START_VISITA_TIMEOUT_MS = 8000;
-const MAX_FOTOS_POR_MATERIAL = 10;    
+const MAX_FOTOS_POR_MATERIAL = 10;
 let pendingUploads = 0;
+const compressionCache = new Map();
+const photoMetaCache   = new Map();
+const materialUploadTasks = new Map();
+const overlayMsgEl = typeof document !== 'undefined' ? document.querySelector('#loadingOverlay p') : null;
+const overlayMsgDefault = overlayMsgEl ? overlayMsgEl.textContent : 'Procesando, por favor espere...';
+
+function cacheKeyFor(file){
+  return `${file.name}#${file.size}#${file.lastModified}`;
+}
 
 function updateFinalizeButton() {
   const $btn = $('#btnFinalizar');
   if (!$btn.length) return;
   if (pendingUploads > 0) {
-    $btn.prop('disabled', true).text('Subiendo fotos…');
+    const label = pendingUploads === 1
+      ? 'Subiendo 1 foto pendiente…'
+      : `Subiendo ${pendingUploads} fotos pendientes…`;
+    $btn.prop('disabled', true).text(label);
   } else {
     $btn.prop('disabled', false).text('Finalizar Gestión');
   }
@@ -1541,11 +1553,13 @@ function toFixedOrEmpty(v, decimals){ if (v==null || isNaN(v)) return ''; return
 function exposureToStr(x){ if (!x || isNaN(x)) return ''; if (x >= 1) return x.toFixed(3); const den = Math.round(1/x); return `1/${den}`; }
 
 async function extractPhotoMeta(file){
+  const key = cacheKeyFor(file);
+  if (photoMetaCache.has(key)) return Object.assign({}, photoMetaCache.get(key));
   try{
     const ex = await exifr.parse(file, { gps: true, tiff: true, ifd0: true, exif: true, xmp: true, jfif: true, iptc: true }) || {};
     const exifDate = ex.DateTimeOriginal || ex.CreateDate || ex.ModifyDate || null;
     const dt = exifDate ? toMySQLDateTime(exifDate) : '';
-    return {
+    const meta = {
       exif_datetime      : dt,
       exif_lat           : toFixedOrEmpty(ex.latitude, 7),
       exif_lng           : toFixedOrEmpty(ex.longitude, 7),
@@ -1568,6 +1582,8 @@ async function extractPhotoMeta(file){
         GPSImgDirectionRef: ex.GPSImgDirectionRef || null,
       })
     };
+    photoMetaCache.set(key, meta);
+    return Object.assign({}, meta);
   } catch(e){
     console.warn('No se pudieron leer metadatos EXIF:', e);
     return {
@@ -1580,61 +1596,16 @@ async function extractPhotoMeta(file){
 }
 
 async function compressFile(file) {
+  const key = cacheKeyFor(file);
+  if (compressionCache.has(key)) return compressionCache.get(key);
+
   const options = { maxSizeMB: 1, maxWidthOrHeight: 1024, useWebWorker: true };
-  const blob = await imageCompression(file, options);
-  return new File([blob], file.name, { type: blob.type, lastModified: Date.now() });
-}
+  const promise = imageCompression(file, options)
+    .then(blob => new File([blob], file.name, { type: blob.type, lastModified: Date.now() }))
+    .catch(() => file);
 
-async function uploadFile(file, url, idFQ, onProgress, meta = {}, extra = {}) {
-  pendingUploads++;
-  updateFinalizeButton();
-
-  try {
-    const resp = await new Promise((res, rej) => {
-      const fd = new FormData();
-      fd.append('visita_id', $('#visita_id').val());
-      fd.append('client_guid', document.getElementById('client_guid')?.value || '');
-      fd.append('foto', file);
-      fd.append('csrf_token', window.CSRF_TOKEN);
-      fd.append('idFQ', idFQ);
-      fd.append('idCampana', document.querySelector('input[name="idCampana"]').value);
-      fd.append('idLocal', document.querySelector('input[name="idLocal"]').value);
-      fd.append('division_id', window.campaignDivision);
-      if (extra.lat) fd.append('lat', extra.lat);
-      if (extra.lng) fd.append('lng', extra.lng);
-
-      fd.append('exif_datetime', meta.exif_datetime || '');
-      fd.append('exif_lat', meta.exif_lat || '');
-      fd.append('exif_lng', meta.exif_lng || '');
-      fd.append('exif_altitude', meta.exif_altitude || '');
-      fd.append('exif_img_direction', meta.exif_img_direction || '');
-      fd.append('exif_make', meta.exif_make || '');
-      fd.append('exif_model', meta.exif_model || '');
-      fd.append('exif_software', meta.exif_software || '');
-      fd.append('exif_lens_model', meta.exif_lens_model || '');
-      fd.append('exif_fnumber', meta.exif_fnumber || '');
-      fd.append('exif_exposure_time', meta.exif_exposure_time || '');
-      fd.append('exif_iso', meta.exif_iso || '');
-      fd.append('exif_focal_length', meta.exif_focal_length || '');
-      fd.append('exif_orientation', meta.exif_orientation || '');
-      fd.append('capture_source', meta.capture_source || extra.capture_source || 'unknown');
-      fd.append('meta_json', meta.meta_json || '{}');
-
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', url);
-      xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round(e.loaded / e.total * 100)); };
-      xhr.onload  = () => xhr.status < 300 ? res(JSON.parse(xhr.response)) : rej(xhr.responseText);
-      xhr.onerror = () => rej(xhr.statusText);
-      try { xhr.setRequestHeader('X-CSRF-Token', window.CSRF_TOKEN || ''); } catch(_) {}
-        const _idem = (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random()));
-        try { xhr.setRequestHeader('X-Idempotency-Key', _idem); } catch(_) {}
-        xhr.send(fd);
-    });
-    return resp;
-  } finally {
-    pendingUploads--;
-    updateFinalizeButton();
-  }
+  compressionCache.set(key, promise);
+  return promise;
 }
 
 /* === FileInput materiales con soporte OFFLINE === */
@@ -1649,7 +1620,7 @@ function setupFileInput(inputElem) {
 
   inputElem.addEventListener('change', async () => {
     ensureClientGuid(); // asegura que exista el GUID antes de procesar
-    let files = Array.from(inputElem.files || []);
+    const files = Array.from(inputElem.files || []);
     if (files.length === 0) return;
 
     const idFQ = inputElem.id.split('_').pop();
@@ -1668,61 +1639,164 @@ function setupFileInput(inputElem) {
     const tieneVisita = !!$('#visita_id').val();
     const online = await isReallyOnline();
     const cg = document.getElementById('client_guid')?.value || '';
-    const allowOnline = online && (tieneVisita || cg);
-
     if (!cg) { ensureClientGuid(); }
 
-    for (const rawFile of files) {
-      const meta = await extractPhotoMeta(rawFile);
-      meta.capture_source = captureSource;
-      const compressed = await compressFile(rawFile);
+    const prepared = await Promise.all(files.map(async (rawFile) => {
+      const [metaBase, compressed] = await Promise.all([
+        extractPhotoMeta(rawFile),
+        compressFile(rawFile)
+      ]);
+      return {
+        rawFile,
+        compressed,
+        meta: Object.assign({}, metaBase, { capture_source: captureSource })
+      };
+    }));
+
+    const QueueObj =
+      (window.Queue && typeof window.Queue.smartPost === 'function') ? window.Queue :
+      (window.OfflineQueue && typeof window.OfflineQueue.smartPost === 'function') ? window.OfflineQueue :
+      null;
+
+    if (!QueueObj) {
+      mcToast('danger', 'Queue no disponible', 'No se pudo cargar offline-queue.js.');
+      return;
+    }
+
+    for (const prep of prepared) {
+      const { rawFile, compressed, meta } = prep;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'upload-instance';
+      previewContainer.appendChild(wrapper);
 
       const img = document.createElement('img');
       img.src = URL.createObjectURL(compressed);
       img.classList.add('thumbnail');
-      previewContainer.appendChild(img);
+      wrapper.appendChild(img);
+
       const bar = document.createElement('div');
       bar.classList.add('upload-bar');
-      previewContainer.appendChild(bar);
+      wrapper.appendChild(bar);
 
-      if (allowOnline) {
-        try {
-          const resp = await uploadFile(
-            compressed,
-            '/visibility2/app/upload_material_foto_pruebas.php',
-            idFQ,
-            pct => { bar.style.width = pct + '%'; },
-            meta,
-            { lat: cachedPhotoCoords.lat || '', lng: cachedPhotoCoords.lng || '' }
-          );
-          const hiddenInput = document.createElement('input');
-          hiddenInput.type = 'hidden';
-          hiddenInput.name = `fotos[${idFQ}][]`;
-          hiddenInput.value = resp.url;
-          hiddenContainer.appendChild(hiddenInput);
+      const note = document.createElement('div');
+      note.className = 'small text-muted';
+      wrapper.appendChild(note);
 
-          const ok = document.createElement('div');
-          ok.className = 'alert alert-success';
-          ok.style.marginTop = '8px';
-          ok.textContent = '¡Foto subida exitosamente!';
-          previewContainer.appendChild(ok);
-          setTimeout(() => { $(ok).fadeOut(300, () => ok.remove()); }, 2000);
-        } catch (err) {
-          bar.classList.add('error');
-          console.error('Upload error', err);
-          alert('Error al subir la foto: ' + err);
+      const fd = new FormData();
+      fd.append('visita_id', $('#visita_id').val());
+      fd.append('client_guid', document.getElementById('client_guid')?.value || '');
+      fd.append('foto', new File([compressed], rawFile.name, { type: compressed.type }));
+      fd.append('csrf_token', window.CSRF_TOKEN);
+      fd.append('idFQ', idFQ);
+      fd.append('idCampana', document.querySelector('input[name="idCampana"]').value);
+      fd.append('idLocal', document.querySelector('input[name="idLocal"]').value);
+      fd.append('division_id', window.campaignDivision);
+      fd.append('capture_source', meta.capture_source || captureSource || 'unknown');
+      fd.append('exif_datetime', meta.exif_datetime || '');
+      fd.append('exif_lat', meta.exif_lat || '');
+      fd.append('exif_lng', meta.exif_lng || '');
+      fd.append('exif_altitude', meta.exif_altitude || '');
+      fd.append('exif_img_direction', meta.exif_img_direction || '');
+      fd.append('exif_make', meta.exif_make || '');
+      fd.append('exif_model', meta.exif_model || '');
+      fd.append('exif_software', meta.exif_software || '');
+      fd.append('exif_lens_model', meta.exif_lens_model || '');
+      fd.append('exif_fnumber', meta.exif_fnumber || '');
+      fd.append('exif_exposure_time', meta.exif_exposure_time || '');
+      fd.append('exif_iso', meta.exif_iso || '');
+      fd.append('exif_focal_length', meta.exif_focal_length || '');
+      fd.append('exif_orientation', meta.exif_orientation || '');
+      fd.append('meta_json', meta.meta_json || '{}');
+      if (cachedPhotoCoords.lat) fd.append('lat', cachedPhotoCoords.lat);
+      if (cachedPhotoCoords.lng) fd.append('lng', cachedPhotoCoords.lng);
+
+      const jobId = `mat-foto-${idFQ}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      pendingUploads++;
+      updateFinalizeButton();
+
+      materialUploadTasks.set(jobId, { bar, note, idFQ, wrapper });
+
+      try {
+        const res = await QueueObj.smartPost('/visibility2/app/upload_material_foto_pruebas.php', fd, {
+          type: 'upload_material_foto',
+          id: jobId,
+          client_guid: cg,
+          dependsOn: cg ? `create:${cg}` : undefined,
+          meta: { kind: 'upload_material', idFQ }
+        });
+
+        const effId = res.id || jobId;
+        if (effId !== jobId) {
+          const info = materialUploadTasks.get(jobId);
+          materialUploadTasks.delete(jobId);
+          materialUploadTasks.set(effId, info);
         }
-      } else {
-        mcToast('info', 'Offline', 'La foto se subirá al recuperar conexión.');
-        bar.style.width = '100%';
-        // Importante: NO limpiamos el input; mantenemos los files para que viajen con el form en la cola
+
+        if (res.queued) {
+          note.textContent = online && !tieneVisita
+            ? 'En cola: se subirá cuando la visita esté sincronizada.'
+            : 'En cola: se subirá al recuperar conexión.';
+          bar.style.width = '35%';
+          continue;
+        }
+
+        handleMaterialUploadResponse(effId, res.response || {});
+      } catch (err) {
+        console.error('Upload error', err);
+        bar.classList.add('error');
+        note.textContent = 'No se pudo encolar la foto. Intenta nuevamente.';
+        materialUploadTasks.delete(jobId);
+        pendingUploads = Math.max(0, pendingUploads - 1);
+        updateFinalizeButton();
       }
     }
 
-    // Si subimos online, podemos limpiar; si no, dejarlo.
-    const onlineAgain = await isReallyOnline();
-    if (onlineAgain) inputElem.value = '';
+    inputElem.value = '';
   });
+}
+
+function appendMaterialHidden(idFQ, url) {
+  const hiddenContainer = document.getElementById(`hiddenUploadContainer_${idFQ}`);
+  if (!hiddenContainer) return;
+  const hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = `fotos[${idFQ}][]`;
+  hiddenInput.value = url;
+  hiddenContainer.appendChild(hiddenInput);
+}
+
+function handleMaterialUploadResponse(jobId, resp) {
+  const info = materialUploadTasks.get(jobId);
+  if (!info) return;
+
+  const finalUrl = resp?.url || resp?.abs_url;
+  if (!finalUrl) {
+    if (info.note) info.note.textContent = 'No se recibió URL del servidor.';
+    if (info.bar) info.bar.classList.add('error');
+    materialUploadTasks.delete(jobId);
+    pendingUploads = Math.max(0, pendingUploads - 1);
+    updateFinalizeButton();
+    return;
+  }
+
+  appendMaterialHidden(info.idFQ, normalizeAppUrl(finalUrl));
+
+  if (info.bar) {
+    info.bar.style.width = '100%';
+    info.bar.classList.remove('error');
+  }
+  if (info.note) info.note.textContent = 'Foto sincronizada.';
+
+  materialUploadTasks.delete(jobId);
+  pendingUploads = Math.max(0, pendingUploads - 1);
+  updateFinalizeButton();
+}
+
+function handleMaterialUploadError(jobId, message) {
+  const info = materialUploadTasks.get(jobId);
+  if (!info) return;
+  if (info.bar) info.bar.classList.add('error');
+  if (info.note) info.note.textContent = message || 'Error al subir la foto; se reintentará.';
 }
 
 function bindCompressionTo(inputElem) {
@@ -2027,7 +2101,7 @@ $('#btnNext1').off('click').on('click', async function(){
 
         if (hiddenUrls.length === 0 && !haveLocalFiles) {
           alert("Debes adjuntar al menos una foto para el material implementado (ID " + idFQ + ").\
- Si estás offline, basta con dejar los archivos cargados (se subirán cuando haya red).");
+ Si estás offline, las fotos quedarán en cola y el envío se habilitará al sincronizarse.");
           valido = false; return false;
         }
       }
@@ -2111,6 +2185,73 @@ $('#btnNext1').off('click').on('click', async function(){
 
   updateFinalizeButton();
 });
+
+
+function materialJobFromEvent(ev){
+  const d = ev.detail || {};
+  return d.job || d;
+}
+
+function onMaterialUploadProgress(ev){
+  const job = materialJobFromEvent(ev);
+  const type = String(job.type || ev.detail?.type || '').toLowerCase();
+  if (!type.includes('upload_material')) return;
+  const info = materialUploadTasks.get(job.id || ev.detail?.id);
+  if (!info || !info.bar) return;
+  const pct = Math.max(5, Math.min(100, Math.round(ev.detail?.progress || 0)));
+  info.bar.style.width = pct + '%';
+  if (info.note) info.note.textContent = `Progreso: ${pct}%`;
+}
+
+function onMaterialUploadQueueSuccess(ev){
+  const job = materialJobFromEvent(ev);
+  const type = String(job.type || ev.detail?.type || '').toLowerCase();
+  if (!type.includes('upload_material')) return;
+  const jobId = job.id || ev.detail?.id;
+  handleMaterialUploadResponse(jobId, ev.detail?.response || {});
+}
+
+function onMaterialUploadQueueError(ev){
+  const job = materialJobFromEvent(ev);
+  const type = String(job.type || ev.detail?.type || '').toLowerCase();
+  if (!type.includes('upload_material')) return;
+  const jobId = job.id || ev.detail?.id;
+  handleMaterialUploadError(jobId, 'Error de red; se reintentará automáticamente.');
+}
+
+window.addEventListener('queue:dispatch:progress', onMaterialUploadProgress);
+window.addEventListener('queue:dispatch:success', onMaterialUploadQueueSuccess);
+window.addEventListener('queue:dispatch:error', onMaterialUploadQueueError);
+
+
+function isGestionJob(job){
+  const t = String(job?.type || job?.kind || '').toLowerCase();
+  return t.includes('procesar_gestion');
+}
+
+function onGestionQueueStart(ev){
+  const job = materialJobFromEvent(ev);
+  if (!isGestionJob(job)) return;
+  if (overlayMsgEl) overlayMsgEl.textContent = 'Preparando envío de gestión…';
+}
+
+function onGestionQueueProgress(ev){
+  const job = materialJobFromEvent(ev);
+  if (!isGestionJob(job)) return;
+  const pct = Math.max(0, Math.min(100, Math.round(ev.detail?.progress || 0)));
+  if (overlayMsgEl) overlayMsgEl.textContent = `Enviando gestión (${pct}%)…`;
+}
+
+function onGestionQueueEnd(ev){
+  const job = materialJobFromEvent(ev);
+  if (!isGestionJob(job)) return;
+  if (overlayMsgEl) overlayMsgEl.textContent = overlayMsgDefault;
+}
+
+window.addEventListener('queue:dispatch:start', onGestionQueueStart);
+window.addEventListener('queue:dispatch:progress', onGestionQueueProgress);
+window.addEventListener('queue:dispatch:success', onGestionQueueEnd);
+window.addEventListener('queue:dispatch:error', onGestionQueueEnd);
 
 
 function onAddMaterialSuccess(ev){

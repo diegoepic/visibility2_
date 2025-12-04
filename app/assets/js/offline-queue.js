@@ -453,7 +453,8 @@
         id: options.id || options.idempotencyKey || undefined,
         dedupeKey: options.dedupeKey || undefined,
         dependsOn: options.dependsOn || undefined,
-        client_guid: options.client_guid || fields.client_guid || undefined
+        client_guid: options.client_guid || fields.client_guid || undefined,
+        meta: options.meta || undefined
       };
 
       if (!task.id) {
