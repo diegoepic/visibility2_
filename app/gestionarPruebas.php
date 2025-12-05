@@ -1592,28 +1592,58 @@ async function uploadFile(file, url, idFQ, onProgress, meta = {}, extra = {}) {
   }
 }
 
+function syncOfflineMetaInputs(container, idFQ, metas = []) {
+  if (!container) return;
+  container.innerHTML = '';
+  metas.forEach(meta => {
+    const metaInput = document.createElement('input');
+    metaInput.type = 'hidden';
+    metaInput.name = `fotos_meta[${idFQ}][]`;
+    metaInput.value = JSON.stringify({
+      capture_source: meta.capture_source || 'unknown',
+      lat: meta.lat || '',
+      lng: meta.lng || ''
+    });
+    container.appendChild(metaInput);
+  });
+}
+
 /* === FileInput materiales con soporte OFFLINE === */
 function setupFileInput(inputElem) {
+  const idFQ = inputElem.id.split('_').pop();
   const previewContainer = document.createElement('div');
   previewContainer.classList.add('preview-container');
   inputElem.parentNode.appendChild(previewContainer);
 
   const hiddenContainer = document.createElement('div');
-  hiddenContainer.id = 'hiddenUploadContainer_' + inputElem.id.split('_').pop();
+  hiddenContainer.id = 'hiddenUploadContainer_' + idFQ;
   inputElem.parentNode.appendChild(hiddenContainer);
+
+  const metaContainer = document.createElement('div');
+  metaContainer.id = 'hiddenMetaContainer_' + idFQ;
+  inputElem.parentNode.appendChild(metaContainer);
+
+  inputElem._retainedFilesDT = inputElem._retainedFilesDT || new DataTransfer();
+  inputElem._retainedMeta = inputElem._retainedMeta || [];
 
   inputElem.addEventListener('change', async () => {
     ensureClientGuid(); // asegura que exista el GUID antes de procesar
-    let files = Array.from(inputElem.files || []);
+
+    const previousSelection = new DataTransfer();
+    Array.from(inputElem.files || []).forEach(f => previousSelection.items.add(f));
+    let files = Array.from(previousSelection.files || []);
     if (files.length === 0) return;
 
-    const idFQ = inputElem.id.split('_').pop();
     const yaSubidas = document.querySelectorAll(
       `#hiddenUploadContainer_${idFQ} input[type="hidden"][name^="fotos[${idFQ}]"]`
     ).length;
-    
-    if (yaSubidas + files.length > MAX_FOTOS_POR_MATERIAL) {
-      alert(`Máximo ${MAX_FOTOS_POR_MATERIAL} fotos por material. Ya tienes ${yaSubidas}.`);
+
+    const offlineCount = (inputElem._retainedFilesDT && inputElem._retainedFilesDT.files)
+      ? inputElem._retainedFilesDT.files.length
+      : 0;
+
+    if (yaSubidas + offlineCount + files.length > MAX_FOTOS_POR_MATERIAL) {
+      alert(`Máximo ${MAX_FOTOS_POR_MATERIAL} fotos por material. Ya tienes ${yaSubidas + offlineCount}.`);
       return;
     }
 
@@ -1626,6 +1656,10 @@ function setupFileInput(inputElem) {
     const allowOnline = online && (tieneVisita || cg);
 
     if (!cg) { ensureClientGuid(); }
+
+    const coords = { lat: cachedPhotoCoords.lat || '', lng: cachedPhotoCoords.lng || '' };
+    const retainedDT = inputElem._retainedFilesDT || new DataTransfer();
+    const retainedMeta = Array.isArray(inputElem._retainedMeta) ? inputElem._retainedMeta : [];
 
     for (const rawFile of files) {
       const meta = await extractPhotoMeta(rawFile);
@@ -1648,7 +1682,7 @@ function setupFileInput(inputElem) {
             idFQ,
             pct => { bar.style.width = pct + '%'; },
             meta,
-            { lat: cachedPhotoCoords.lat || '', lng: cachedPhotoCoords.lng || '' }
+            coords
           );
           const hiddenInput = document.createElement('input');
           hiddenInput.type = 'hidden';
@@ -1670,13 +1704,27 @@ function setupFileInput(inputElem) {
       } else {
         mcToast('info', 'Offline', 'La foto se subirá al recuperar conexión.');
         bar.style.width = '100%';
+        retainedDT.items.add(compressed);
+        retainedMeta.push({
+          capture_source: captureSource,
+          lat: coords.lat || '',
+          lng: coords.lng || ''
+        });
         // Importante: NO limpiamos el input; mantenemos los files para que viajen con el form en la cola
       }
     }
 
-    // Si subimos online, podemos limpiar; si no, dejarlo.
-    const onlineAgain = await isReallyOnline();
-    if (onlineAgain) inputElem.value = '';
+    if (allowOnline) {
+      const onlineAgain = await isReallyOnline();
+      if (onlineAgain) inputElem.value = '';
+    } else {
+      inputElem._retainedFilesDT = retainedDT;
+      inputElem._retainedMeta = retainedMeta;
+      const mergedDT = new DataTransfer();
+      Array.from(retainedDT.files || []).forEach(f => mergedDT.items.add(f));
+      inputElem.files = mergedDT.files;
+      syncOfflineMetaInputs(metaContainer, idFQ, retainedMeta);
+    }
   });
 }
 

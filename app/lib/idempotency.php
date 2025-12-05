@@ -12,6 +12,7 @@ if (!function_exists('idempo_raw_header')) {
   }
 }
 
+
 if (!function_exists('idempo_sanitize')) {
   /**
    * Permite únicamente [A-Za-z0-9_.:-] y limita a 64 chars.
