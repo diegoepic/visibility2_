@@ -6,7 +6,7 @@
   const MAX_PAGES   = 3;   // cuántos gestionar extra intentamos precachear
   const DAYS_BACK   = 0;   // ventana hacia atrás
   const DAYS_FWD    = 1;   // ventana hacia adelante
-  const EVICT_ON_LEAVE = true; // si true: al salir de la página, pedimos eliminar esta URL del cache
+  const EVICT_ON_LEAVE = false; // si true: al salir de la página, pedimos eliminar esta URL del cache
 
   function paramsFromLocation() {
     const u  = new URL(location.href);
@@ -89,8 +89,7 @@
     try {
       navigator.serviceWorker.controller.postMessage({
         type: 'PRECACHE_GESTIONAR_PAGES',
-        urls,
-        max: MAX_PAGES
+        urls
       });
     } catch (_) { /* silent */ }
   }

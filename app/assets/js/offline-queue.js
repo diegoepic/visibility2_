@@ -44,13 +44,6 @@
     return null;
   }
 
-  async function ensureCSRF(){
-    if (!window.CSRF_TOKEN) {
-      return refreshCSRF();
-    }
-    return window.CSRF_TOKEN;
-  }
-
   async function heartbeat(){
     try {
       const r = await fetch(PING_ENDPOINT, { credentials: 'same-origin', cache: 'no-store' });
@@ -100,8 +93,8 @@
   async function httpPost(task){
     if (!task || !task.url) throw new Error('Task sin URL');
 
-    // Intenta usar el CSRF cacheado y sólo refresca si no existe o el backend lo rechaza
-    if (task.sendCSRF !== false) await ensureCSRF();
+    // SIEMPRE refrescamos CSRF para evitar drift
+    await refreshCSRF();
 
     let url = task.url;
     if (!/^https?:\/\//i.test(url)) {
@@ -115,7 +108,15 @@
 
     let r;
     try {
-      r = await uploadWithProgress(url, fd, headers, task);
+      QueueEvents.emit('queue:dispatch:progress', { job: task, progress: 50 });
+      r = await fetch(url, {
+        method: 'POST',
+        body: fd,
+        credentials: 'include',      // ← más robusto que 'same-origin'
+        cache: 'no-store',
+        headers
+      });
+      QueueEvents.emit('queue:dispatch:progress', { job: task, progress: 90 });
     } catch (err) {
       throw new Error(`Network error calling ${url}: ${err && err.message ? err.message : err}`);
     }
@@ -126,52 +127,10 @@
       if (ok) {
         const fd2 = buildFormData(task);
         const headers2 = { ...headers, 'X-CSRF-Token': window.CSRF_TOKEN || '' };
-        return uploadWithProgress(url, fd2, headers2, task);
+        return fetch(url, { method:'POST', body: fd2, credentials:'include', cache:'no-store', headers: headers2 });
       }
     }
     return r;
-  }
-
-  function uploadWithProgress(url, fd, headers, task){
-    const emitProgress = (progress)=> QueueEvents.emit('queue:dispatch:progress', { job: task, progress });
-    emitProgress(50);
-
-    // Preferimos XHR para poder despachar progreso de carga; si algo falla usamos fetch
-    try {
-      return new Promise((resolve, reject)=>{
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', url, true);
-        xhr.responseType = 'json';
-        xhr.withCredentials = true;
-        xhr.onload = ()=>{
-          emitProgress(95);
-          const status = xhr.status;
-          const ok = status >= 200 && status < 300;
-          resolve({
-            status,
-            ok,
-            json: async()=>{
-              try { return xhr.responseType === 'json' ? (xhr.response || {}) : JSON.parse(xhr.responseText||'{}'); }
-              catch(_){ return {}; }
-            }
-          });
-        };
-        xhr.onerror = ()=> reject(new Error('XHR network error'));
-        xhr.onabort  = ()=> reject(new Error('XHR aborted'));
-        if (xhr.upload){
-          xhr.upload.onprogress = (ev)=>{
-            if (!ev.lengthComputable) return;
-            const pct = 50 + Math.min(40, (ev.loaded/ev.total)*40);
-            emitProgress(Math.round(pct));
-          };
-        }
-        Object.entries(headers||{}).forEach(([k,v])=> xhr.setRequestHeader(k, v));
-        xhr.send(fd);
-      });
-    } catch(_){
-      QueueEvents.emit('queue:dispatch:progress', { job: task, progress: 60 });
-      return fetch(url, { method: 'POST', body: fd, credentials: 'include', cache: 'no-store', headers });
-    }
   }
 
   // --------------------------------------------------------------------------------
@@ -234,17 +193,6 @@
   // --------------------------------------------------------------------------------
   // Ejecución de tareas
   // --------------------------------------------------------------------------------
-  function isGestionTask(task){
-    const typeStr = String(task.type || '');
-    const urlStr  = String(task.url || '').toLowerCase();
-    return (
-      typeStr === 'procesar_gestion' ||
-      typeStr === 'procesar_gestion_pruebas' ||
-      urlStr.includes('procesar_gestion_pruebas.php') ||
-      urlStr.includes('procesar_gestion.php')
-    );
-  }
-
   async function processTask(task){
     // Resolver visita local desde GUID si aplica
     if (task.fields && !task.fields.visita_id && task.fields.client_guid) {
@@ -277,7 +225,15 @@
 
     // Si es una tarea de PROCESAR GESTIÓN, marcamos que la agenda debe refrescarse
     //    Esto se usará en bootstrap_index_cache.js para forzar un sync_bundle()
-    if (isGestionTask(task)) {
+    const typeStr = String(task.type || '');
+    const urlStr  = String(task.url || '').toLowerCase();
+    const isGestionTask =
+      typeStr === 'procesar_gestion' ||
+      typeStr === 'procesar_gestion_pruebas' ||
+      urlStr.includes('procesar_gestion_pruebas.php') ||
+      urlStr.includes('procesar_gestion.php');
+
+    if (isGestionTask) {
       try {
         localStorage.setItem('v2_agenda_needs_refresh', '1');
       } catch(_) {}
@@ -312,15 +268,11 @@
       // Para UI: badge/contador
       QueueEvents.emit('queue:update', { pending: pendings.length });
 
-      const ready = pendings.filter(t => (!t.nextTry || t.nextTry <= now) && (!t.dependsOn || CompletedDeps.has(t.dependsOn)));
-      ready.sort((a,b)=>{
-        const aPri = isGestionTask(a) ? 0 : 1;
-        const bPri = isGestionTask(b) ? 0 : 1;
-        if (aPri !== bPri) return aPri - bPri;
-        return (a.createdAt||0) - (b.createdAt||0);
-      });
+      for (const t of pendings) {
+        if (t.nextTry && t.nextTry > now) continue;
 
-      for (const t of ready) {
+        // Dependencias (ej. cerrar_gestion depende de create:<guid>)
+        if (t.dependsOn && !CompletedDeps.has(t.dependsOn)) continue;
 
         // Rellenar meta si no existe
         t.meta = t.meta || inferMetaFromTask(t);
@@ -625,7 +577,6 @@
           return all.find(t=>t.status!=='done') || null;
         }
       };
-
 
       function tx(store, mode, fn){
         return new Promise((resolve, reject)=>{

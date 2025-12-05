@@ -152,8 +152,7 @@
 
   async function renderTodayFromCache(ymd) {
     try {
-      const empty = { items: [], programados: [], reagendados: [] };
-      if (!window.V2Cache || typeof V2Cache.listToday !== 'function') return empty;
+      if (!window.V2Cache || typeof V2Cache.listToday !== 'function') return;
 
       const rawItems = await V2Cache.listToday(ymd) || [];
 
@@ -193,23 +192,23 @@
         });
       }
 
-      const programados = items.filter(x => !x.reagendado);
-      const reagendados = items.filter(x => !!x.reagendado);
-
       // UI nueva (IndexUI) si existe
       if (window.IndexUI && typeof IndexUI.renderDay === 'function') {
         IndexUI.renderDay(ymd, items);
-        return { items, programados, reagendados };
+        return;
       }
       // UI legacy
       if (typeof window.renderProgramadosDeHoy === 'function') {
         window.renderProgramadosDeHoy(items);
-        return { items, programados, reagendados };
+        return;
       }
 
       const boxProg = document.querySelector('#programados, #programados-list, [data-programados]');
       const boxReag = document.querySelector('#reagendados, #reagendados-list, [data-reagendados]');
-      if (!boxProg && !boxReag) return { items, programados, reagendados };
+      if (!boxProg && !boxReag) return;
+      const prog = items.filter(x => !x.reagendado);
+      const reag = items.filter(x => !!x.reagendado);
+
       const card = (row) => {
         const local = row.local || {};
         const camp  = row.camp  || {};
@@ -231,13 +230,10 @@
           </div>`;
       };
 
-      if (boxProg) boxProg.innerHTML = programados.map(card).join('') || '<div class="text-muted">Sin programados</div>';
-      if (boxReag) boxReag.innerHTML = reagendados.map(card).join('') || '<div class="text-muted">Sin reagendados</div>';
-
-      return { items, programados, reagendados };
+      if (boxProg) boxProg.innerHTML = prog.map(card).join('') || '<div class="text-muted">Sin programados</div>';
+      if (boxReag) boxReag.innerHTML = reag.map(card).join('') || '<div class="text-muted">Sin reagendados</div>';
     } catch (e) {
       console.warn('[Index] renderTodayFromCache error', e);
-      return { items: [], programados: [], reagendados: [] };
     }
   }
 
@@ -260,7 +256,8 @@
     const ymd = todayYMD();
     if (!navigator.onLine) {
       // Si no hay red, sólo re-render desde cache
-      return await renderTodayFromCache(ymd);
+      await renderTodayFromCache(ymd);
+      return;
     }
 
     try {
@@ -277,7 +274,7 @@
       console.warn(`[Index] fetchBundle error (${reason || 'boot'}) , se mantiene cache local`, e);
     }
 
-    return await renderTodayFromCache(ymd);
+    await renderTodayFromCache(ymd);
   }
 
   async function boot() {
@@ -285,7 +282,7 @@
 
     const ymd = todayYMD();
     // 1) Mostrar rápido lo que haya en cache (para que el index no se vea vacío)
-    const cachedRender = await renderTodayFromCache(ymd);
+    await renderTodayFromCache(ymd);
     // 2) Ping de sesión en paralelo
     void pingSession();
 
@@ -293,11 +290,11 @@
     //    forzamos un sync explícito. Si no, también sincronizamos, pero esto
     //    permite que otros componentes sepan que hubo cambios importantes.
     const needs = agendaNeedsRefresh();
-    const syncedRender = needs
-      ? await syncAgendaForToday('agenda_flag')
-      : await syncAgendaForToday('normal_boot');
-
-    void syncedRender;
+    if (needs) {
+      await syncAgendaForToday('agenda_flag');
+    } else {
+      await syncAgendaForToday('normal_boot');
+    }
   }
 
   document.addEventListener('DOMContentLoaded', boot);

@@ -115,7 +115,7 @@ $conditionalPreguntas = [];
 foreach ($preguntas as $preg) {
     $tipo = intval($preg['id_question_type']);
     $dep  = isset($preg['id_dependency_option']) ? intval($preg['id_dependency_option']) : 0;
-    if ($dep > 0) {
+    if ($dep > 0 && ($tipo === 2 || $tipo === 3)) {
         $conditionalPreguntas[] = $preg;
     } else {
         $parentPreguntas[] = $preg;
@@ -917,40 +917,6 @@ function showGeoError(err){
   updateGeoUI();
 }
 
-async function waitForGestionarCache(url, timeoutMs = 5500) {
-  if (!('caches' in window)) return false;
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const hit = await caches.match(url, { ignoreVary: true });
-      if (hit) return true;
-    } catch (_) {
-      return false;
-    }
-    await new Promise(res => setTimeout(res, 350));
-  }
-  return false;
-}
-
-async function precacheCurrentGestionar() {
-  if (!('serviceWorker' in navigator)) return false;
-  const currentUrl = location.href;
-  try {
-    const reg = await navigator.serviceWorker.ready;
-    const controller = navigator.serviceWorker.controller || reg.active;
-    if (controller) {
-      controller.postMessage({
-        type: 'PRECACHE_GESTIONAR_PAGES',
-        urls: [currentUrl],
-        max: 1
-      });
-    }
-    return await waitForGestionarCache(currentUrl);
-  } catch (_) {
-    return false;
-  }
-}
-
 function getPositionOnce(opts={}){
   return new Promise((resolve, reject)=>{
     if (!navigator.geolocation) return reject({ code:'NO_GEO', message:'Geolocalización no soportada' });
@@ -985,13 +951,6 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     try{ await ensureFreshGeo(); }
     catch(err){ showGeoError(err); }
   });
-
-  try {
-    const cached = await precacheCurrentGestionar();
-    if (cached) {
-      mcToast('success', 'Local guardado', 'Puede gestionarlo offline ahora o más tarde.');
-    }
-  } catch (_) { /* silent */ }
 });
 
 function initMap(){ /* no-op */ }
@@ -2058,15 +2017,14 @@ $('#btnNext1').off('click').on('click', async function(){
       $(this).hide();
     });
   }
-  function applyDependencyVisibility($parent) {
-    const qid = $parent.data('question-id');
-    const checkedRadio = $parent.find('input[type=radio]:checked');
+  function onDependencyChange($input, isCheckbox) {
+    const $parent = $input.closest('.question-container');
+    const qid     = $parent.data('question-id');
+    const val     = $input.val();
     $('.conditional-question').filter('[data-parent-question="' + qid + '"]').each(function() {
       const $cond = $(this);
       const dep   = String($cond.data('dependency-option'));
-      const checkboxMatch = $parent.find(`input[type=checkbox][value="${dep}"]`).is(':checked');
-      const radioMatch    = checkedRadio.length > 0 && checkedRadio.val() === dep;
-      const show          = checkboxMatch || radioMatch;
+      const show  = isCheckbox ? $parent.find(`input[type=checkbox][value="${dep}"]`).is(':checked') : val === dep;
 
       if (show) {
         $cond.slideDown(200, () => {
@@ -2079,32 +2037,15 @@ $('#btnNext1').off('click').on('click', async function(){
       }
     });
   }
-  function onDependencyChange($input) {
-    const $parent = $input.closest('.question-container');
-    applyDependencyVisibility($parent);
-  }
 
   $(document).on('change', 'input[id^="fotoPregunta_"]', function () {
     const qId = this.id.split('_').pop();
     subirFotoPregunta(qId, <?php echo $idLocal; ?>);
   });
-
-  $(document).on('change', '.question-container input[type=radio]', function(){ onDependencyChange($(this)); });
-  $(document).on('change', '.question-container input[type=checkbox]', function(){ onDependencyChange($(this)); });
-
-  // Aplica la lógica de dependencias al cargar la página para cualquier opción marcada
-  const parentIds = new Set();
-  $('.conditional-question').each(function() {
-    const pid = $(this).data('parent-question');
-    if (pid) parentIds.add(pid);
-  });
-  parentIds.forEach(function(pid) {
-    const $parent = $('.question-container[data-question-id="' + pid + '"]');
-    if ($parent.length) {
-      applyDependencyVisibility($parent);
-    }
-  });
-
+  
+  $(document).on('change', '.question-container input[type=radio]', function(){ onDependencyChange($(this), false); });
+  $(document).on('change', '.question-container input[type=checkbox]', function(){ onDependencyChange($(this), true); });
+        
   updateFinalizeButton();
 });
 

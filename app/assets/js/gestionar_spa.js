@@ -197,8 +197,7 @@
       type: 'procesar_gestion',
       id: genIdempoKey('visit-finish'),
       client_guid,
-      dependsOn: client_guid ? `create:${client_guid}` : undefined,
-      dedupeKey: client_guid ? `finish:${client_guid}` : undefined
+      dependsOn: client_guid ? `create:${client_guid}` : undefined
     });
 
     if (result.queued) {
