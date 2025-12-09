@@ -442,6 +442,37 @@
       return { queued:true, ok:true, id };
     },
 
+    /**
+     * Cancela y elimina una tarea encolada (por ejemplo, foto borrada).
+     * También limpia el Journal para que la UI refleje el cambio.
+     */
+    async cancel(id){
+      if (!id) return false;
+
+      try {
+        await AppDB.remove(id);
+        if (window.JournalDB && typeof JournalDB.remove === 'function') {
+          await JournalDB.remove(id);
+        }
+      } catch (err) {
+        QueueEvents.emit('queue:dispatch:error', { job: { id }, error: String(err) });
+        jr('onError', { id }, String(err));
+        return false;
+      }
+
+      try {
+        const pend = await AppDB.listByStatus('pending');
+        QueueEvents.emit('queue:update', { pending: pend.length });
+      } catch(_) {
+        QueueEvents.emit('queue:update', {});
+      }
+
+      // Notificar cancelación explícita para que vistas puedan reaccionar
+      QueueEvents.emit('queue:cancelled', { job: { id } });
+      jr('onCancel', { id });
+      return true;
+    },
+
     async listPending(){
       return AppDB.listByStatus('pending');
     },

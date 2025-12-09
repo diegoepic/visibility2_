@@ -344,6 +344,7 @@
     openDB,
     upsert,
     get,
+    remove,
     listByYMD,
     listRange,
     statsFor,

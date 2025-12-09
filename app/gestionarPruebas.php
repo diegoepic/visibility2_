@@ -1212,7 +1212,10 @@ async function subirFotoPregunta(id_form_question, id_local) {
       cancel.textContent = 'Cancelar';
       cancel.onclick = async () => {
         try {
-          await AppDB.remove(queuedId);
+          const cancelled = await (window.Queue && typeof Queue.cancel === 'function'
+            ? Queue.cancel(queuedId)
+            : AppDB.remove(queuedId));
+          if (!cancelled) throw new Error('cancel_failed');
           $(wrapper).fadeOut(150, () => wrapper.remove());
           mcToast('info', 'Cancelado', 'Se eliminó la foto de la cola.');
           // Limpia flag si no quedan fotos
