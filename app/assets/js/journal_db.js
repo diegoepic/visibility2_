@@ -3,7 +3,7 @@
   'use strict';
 
   const DB_NAME = 'v2_journal';
-  const DB_VER  = 6;
+  const DB_VER  = 7;
   const STORE   = 'journal';
 
   function ymdLocal(d){

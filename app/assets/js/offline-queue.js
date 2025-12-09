@@ -219,7 +219,7 @@
       if (task.fields.client_guid) {
         const depTag = `create:${task.fields.client_guid}`;
         CompletedDeps.add(depTag);
-        LocalByGuid.del(task.fields.client_guid);
+        LocalByGuid.set(task.fields.client_guid, js.visita_id);
       }
     }
 
