@@ -101,6 +101,8 @@
       g.onerror = () => reject(g.error);
     }));
   }
+  
+  
 
   async function remove(id){
     return tx(STORE, 'readwrite', os => os.delete(id));

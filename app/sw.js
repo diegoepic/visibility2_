@@ -1,8 +1,7 @@
-const VERSION        = 'v2.8.2';
+const VERSION        = 'v2.8.6';
 const APP_SCOPE      = '/visibility2/app';
 const STATIC_CACHE   = `static-${VERSION}`;
 const RUNTIME_CACHE  = `runtime-${VERSION}`;
-
 
 //archivos guardados en cache
 const STATIC_ASSETS = [
@@ -30,13 +29,34 @@ self.addEventListener('install', (event) => {
   })());
 });
 
+function claimClientsWhenActive() {
+  const { active, waiting, installing } = self.registration;
+
+  if (active && active.state === 'activated') {
+    return self.clients.claim();
+  }
+
+  const pending = waiting || installing;
+  if (!pending) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const onStateChange = () => {
+      if (pending.state === 'activated') {
+        pending.removeEventListener('statechange', onStateChange);
+        resolve(self.clients.claim());
+      }
+    };
+    pending.addEventListener('statechange', onStateChange);
+  });
+}
+
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(keys.map(k => {
       if (k !== STATIC_CACHE && k !== RUNTIME_CACHE) return caches.delete(k);
     }));
-    await self.clients.claim();
+    await claimClientsWhenActive();
   })());
 });
 
@@ -46,7 +66,7 @@ self.addEventListener('message', (event) => {
   if (data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   } else if (data.type === 'CLIENTS_CLAIM') {
-    self.clients.claim();
+    event.waitUntil(claimClientsWhenActive());
   } else if (data.type === 'PRECACHE_ASSETS') {
     const urls = Array.isArray(data.assets) ? data.assets : [];
     event.waitUntil(precacheAssets(urls));

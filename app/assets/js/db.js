@@ -2,7 +2,7 @@
 // Simple wrapper IndexedDB para cola offline
 (function(){
   const DB_NAME = 'v2_offline';
-  const DB_VER  = 6;
+  const DB_VER  = 7;
   const STORE   = 'queue';
 
   function openDB(){

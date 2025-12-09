@@ -1070,9 +1070,6 @@ $sql_campanas = "
                         <a href='{$gestionarUrlAttr}' class='btn btn-info'>
                           <i class='fa fa-pencil'></i> Gestionar
                         </a>
-                        <button type='button' class='btn btn-default btn-precache-gestion' data-precache-url='{$gestionarUrlAttr}' title='Guardar esta página para trabajar offline'>
-                          <i class='fa fa-cloud-download'></i>
-                        </button>
                       </div>
                     </td>
                 </tr>
@@ -1110,46 +1107,6 @@ $sql_campanas = "
    </div>
 </div>
 
-<!-- Precarga de gestionarPruebas offline -->
-<button id="btnOpenPrecache" type="button" hidden class="btn btn-warning precache-fab" title="Precargar gestionarPruebas offline">
-  <i class="fa fa-cloud-download"></i> Precargar gestionar
-  <span class="badge" id="precacheBadge" aria-live="polite"></span>
-</button>
-
-<div id="modalPrecacheGestionar" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="precacheLabel">
-  <div class="modal-dialog modal-lg" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-        <h4 class="modal-title" id="precacheLabel">Precargar gestionarPruebas para trabajar offline</h4>
-      </div>
-      <div class="modal-body">
-        <p class="text-muted">Selecciona hasta <strong id="precacheLimitLabel">10</strong> locales/campañas para cachear sus páginas de gestión. Esto permite abrirlas sin conexión simulando haber navegado online.</p>
-        <div class="table-responsive" style="max-height:320px; overflow-y:auto;">
-          <table class="table table-striped table-condensed">
-            <thead>
-              <tr>
-                <th style="width:50px;">#</th>
-                <th>Campaña</th>
-                <th>Local</th>
-                <th>Dirección</th>
-              </tr>
-            </thead>
-            <tbody id="precacheList"></tbody>
-          </table>
-        </div>
-        <div class="alert alert-info" id="precacheStatus" style="display:none;"></div>
-      </div>
-      <div class="modal-footer">
-        <div class="pull-left text-muted" id="precacheCounter">0 seleccionados</div>
-        <button type="button" class="btn btn-default" data-dismiss="modal">Cerrar</button>
-        <button type="button" class="btn btn-primary" id="btnDoPrecache" disabled>
-          <i class="fa fa-cloud-download"></i> Precargar seleccionados
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- Scripts -->
 <script src="assets/plugins/jquery/jquery-3.6.0.min.js"></script>
@@ -1690,7 +1647,6 @@ $(document).ready(function(){
   window.__GESTIONAR_PRECACHE_LIMIT   = <?php echo (int)$precacheLimit; ?>;
   window.__GESTIONAR_PRECACHE_USER    = <?php echo (int)$usuario_id; ?>;
 </script>
-<script src="assets/js/index_precache.js"></script>
 
 <script>
 

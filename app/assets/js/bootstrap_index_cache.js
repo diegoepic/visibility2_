@@ -116,39 +116,7 @@
   }
 
   // ---- NUEVO: leer del Journal qué locales ya tienen gestión (procesar_gestion) para ese día ----
-  async function getLocalsWithGestionForDay(ymd) {
-    const result = {
-      locals: new Set(), // locales con alguna gestion
-      pairs:  new Set()  // local|form para ser más precisos cuando podamos
-    };
-
-    try {
-      if (!window.JournalDB || typeof JournalDB.listByYMD !== 'function') {
-        return result;
-      }
-
-      const rows = await JournalDB.listByYMD(ymd);
-      for (const r of rows) {
-        const kind = (r.kind || '').toLowerCase();
-        // Sólo nos interesan las tareas de cierre de gestión
-        if (!kind.includes('procesar_gestion')) continue;
-
-        const lid = r.local_id || r.visita_local_id;
-        if (!lid) continue;
-        const localKey = String(lid);
-        result.locals.add(localKey);
-
-        if (r.form_id) {
-          const pairKey = localKey + '|' + String(r.form_id);
-          result.pairs.add(pairKey);
-        }
-      }
-    } catch (e) {
-      console.warn('[Index] getLocalsWithGestionForDay error', e);
-    }
-
-    return result;
-  }
+  
 
   async function renderTodayFromCache(ymd) {
     try {
