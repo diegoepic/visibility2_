@@ -1115,6 +1115,31 @@ function getCSRF() {
 function getCSRF() {
   return document.querySelector('input[name="csrf_token"]')?.value || '';
 }
+function loadCompletedDeps(){
+  try { return JSON.parse(localStorage.getItem('v2_completed_deps') || '[]'); }
+  catch(_) { return []; }
+}
+function isCreateVisitaResolved(guid){
+  if (!guid) return false;
+  return loadCompletedDeps().includes(`create:${guid}`);
+}
+async function hasPendingCreateVisita(guid){
+  if (!guid) return false;
+  let listFn = null;
+  if (window.Queue && typeof window.Queue.listPending === 'function') {
+    listFn = window.Queue.listPending;
+  } else if (window.AppDB && typeof window.AppDB.listByStatus === 'function') {
+    listFn = () => window.AppDB.listByStatus('pending');
+  }
+  if (!listFn) return false;
+
+  const pending = await listFn();
+  return Array.isArray(pending) && pending.some(t => {
+    if (!t) return false;
+    const cg = t.client_guid || (t.fields && t.fields.client_guid);
+    return t.type === 'create_visita' && cg && cg === guid;
+  });
+}
 const QUEUE_META_BASE = {
   local_name: <?php echo json_encode($nombreLocal, JSON_UNESCAPED_UNICODE); ?>,
   local_direccion: <?php echo json_encode($direccionLocal, JSON_UNESCAPED_UNICODE); ?>,
@@ -1862,6 +1887,12 @@ $('#btnNext1').off('click').on('click', async function(){
     if (r.ok && js && js.status === 'success' && js.visita_id) {
       // Online OK
       $('#visita_id').val(js.visita_id);
+      if (window.Queue && window.Queue.CompletedDeps) {
+        window.Queue.CompletedDeps.add(`create:${client_guid}`);
+      }
+      if (window.Queue && window.Queue.LocalByGuid) {
+        window.Queue.LocalByGuid.set(client_guid, js.visita_id);
+      }
       currentStep = 2;
       showStep(currentStep);
     } else {
@@ -2531,13 +2562,49 @@ document.getElementById('btnFinalizar')?.addEventListener('click', async functio
     document.getElementById('loadingOverlay').style.display = 'none';
     return;
   }
-  const online = await isReallyOnline();
-if (online) {
-  ensureClientGuid();
-  document.getElementById('gestionarForm').submit();
-  setTimeout(() => { try { clearClientGuid(); } catch(_){} }, 8000);
-  return;
-}
+const online = await isReallyOnline();
+  if (online) {
+    const clientGuid = ensureClientGuid();
+    try {
+      const createPending = await hasPendingCreateVisita(clientGuid);
+      const visitaCreada  = isCreateVisitaResolved(clientGuid);
+
+      if (createPending || !visitaCreada) {
+        await Queue.flushNow();
+
+        const stillPending  = await hasPendingCreateVisita(clientGuid);
+        const stillUnmarked = !isCreateVisitaResolved(clientGuid);
+
+        if (stillPending || stillUnmarked) {
+          await queueProcesarGestion(document.getElementById('gestionarForm'), { reason: 'create_visita_pending' });
+          clearClientGuid();
+          mcToast('warning','Gestión en cola','La visita aún está sincronizándose; la gestión se enviará cuando quede lista.');
+          setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 700);
+          return;
+        }
+      }
+
+      document.getElementById('gestionarForm').submit();
+      setTimeout(() => { try { clearClientGuid(); } catch(_){} }, 8000);
+      return;
+    } catch (err) {
+      console.error('No se pudo sincronizar la visita antes de enviar la gestión', err);
+      alert('No se pudo confirmar la creación de la visita. Continuamos en modo offline.');
+      try {
+        await queueProcesarGestion(document.getElementById('gestionarForm'), { reason: 'create_visita_sync_error' });
+        clearClientGuid();
+        mcToast('warning','Gestión en cola','Se enviará automáticamente al recuperar conexión.');
+        setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 700);
+        return;
+      } catch (e2) {
+        console.error('Tampoco se pudo encolar la gestión', e2);
+        alert('No se pudo enviar ni encolar la gestión. Intenta nuevamente.');
+        this.disabled = false;
+        document.getElementById('loadingOverlay').style.display = 'none';
+        return;
+      }
+    }
+  }
   // OFFLINE: encolar form completo
   try {
     ensureClientGuid();

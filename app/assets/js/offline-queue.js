@@ -549,6 +549,8 @@
 
   // Export
   window.Queue = Queue;
+  window.Queue.CompletedDeps = CompletedDeps;
+  window.Queue.LocalByGuid = LocalByGuid;
 
   // --------------------------------------------------------------------------------
   // Fallback de AppDB (IndexedDB) por si no viene provisto en assets/js/db.js
