@@ -1,5 +1,13 @@
 # === Carpetas de fotos / uploads ===
-/portal/
+/portal/video/
+/portal/cache/
+/portal/repositorio/
+/portal/RESTful/
+/portal/uploads/
+/portal/documentos/
+/portal/exportaciones/
+/portal/modulos/images
+/portal/modulos/uploads
 /app/uploads/
 /app/uploads/*
 /app/uploads_material/
@@ -7,9 +15,12 @@
 /uploads/
 /uploads/*
 
-# Si guardas fotos de reportes en otro lado:
-*/fotos/*
-*/photos/*
+portal/repositorio/redbull/*.csv
+portal/RESTful/cache/*.json
+portal/RESTful/cache/
+
+
+
 */imagenes/*
 
 # === Tipos de archivo pesados (por si se cuelan) ===
@@ -21,6 +32,7 @@
 *.heic
 *.bmp
 *.tiff
+*.webp
 
 # === Backups, dumps grandes, zips, etc. ===
 *.zip
