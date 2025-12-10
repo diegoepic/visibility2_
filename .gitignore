@@ -14,6 +14,7 @@
 /app/uploads_*/*
 /uploads/
 /uploads/*
+node_modules/
 
 portal/repositorio/redbull/*.csv
 portal/RESTful/cache/*.json
@@ -23,7 +24,7 @@ portal/RESTful/cache/
 
 */imagenes/*
 
-# === Tipos de archivo pesados (por si se cuelan) ===
+# === Tipos de archivo pesados ===
 *.jpg
 *.jpeg
 *.png

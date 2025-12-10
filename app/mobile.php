@@ -15,65 +15,41 @@
 		<meta name="apple-mobile-web-app-capable" content="yes">
 		<meta name="apple-mobile-web-app-status-bar-style" content="black">
 		<meta content="" name="description" />
-		<meta content="" name="author" />
-		<!-- end: META -->
-		<!-- start: MAIN CSS -->
-		<link href="assets/plugins/bootstrap/css/bootstrap.min.css" rel="stylesheet" media="screen">
-		<link rel="stylesheet" href="assets/plugins/font-awesome/css/font-awesome.min.css">
-		<link rel="stylesheet" href="assets/fonts/style.css">
-		<link rel="stylesheet" href="assets/css/main.css">
-		<link rel="stylesheet" href="assets/css/main-responsive.css">
-		<link rel="stylesheet" href="assets/plugins/iCheck/skins/all.css">
-		<link rel="stylesheet" href="assets/plugins/bootstrap-colorpalette/css/bootstrap-colorpalette.css">
-		<link rel="stylesheet" href="assets/plugins/perfect-scrollbar/src/perfect-scrollbar.css">
-		<!--<link rel="stylesheet/less" type="text/css" href="assets/css/styles.less">-->
-		<link rel="stylesheet" href="assets/css/theme_light.css" type="text/css" id="skin_color">
-		<!--[if IE 7]>
-		<link rel="stylesheet" href="assets/plugins/font-awesome/css/font-awesome-ie7.min.css">
-		<![endif]-->
-		<!-- end: MAIN CSS -->
-		<!-- start: CSS REQUIRED FOR THIS PAGE ONLY -->
-		<link rel="stylesheet" href="assets/plugins/fullcalendar/fullcalendar/fullcalendar.css">
-		<!-- end: CSS REQUIRED FOR THIS PAGE ONLY -->
-		<link rel="shortcut icon" href="favicon.ico" />
-	</head>
+		 <meta content="" name="author" />
+                <!-- end: META -->
+                <!-- start: MAIN CSS -->
+                <link href="assets/plugins/bootstrap/css/bootstrap.min.css" rel="stylesheet" media="screen">
+                <link rel="stylesheet" href="assets/css/main.css">
+                <link rel="stylesheet" href="assets/css/main-responsive.css">
+                <link rel="stylesheet" href="assets/css/theme_light.css" type="text/css" id="skin_color">
+                <style>
+                        /* Mantiene el iframe a pantalla completa en la vista webview */
+                        html, body {
+                                height: 100%;
+                                margin: 0;
+                        }
+                        body {
+                                display: flex;
+                        }
+                </style>
+                <!-- end: MAIN CSS -->
+                <link rel="shortcut icon" href="favicon.ico" />
+        </head>
 	<!-- end: HEAD -->
-	<!-- start: BODY -->
-	<body>
-		<iframe src="login.php" width="100%" height="700" frameborder="0"></iframe>
-		<!-- start: MAIN JAVASCRIPTS -->
-		<!--[if lt IE 9]>
-		<script src="assets/plugins/respond.min.js"></script>
-		<script src="assets/plugins/excanvas.min.js"></script>
-		<![endif]-->
-		<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
-		<script src="assets/plugins/jquery-ui/jquery-ui-1.10.2.custom.min.js"></script>
-		<script src="assets/plugins/bootstrap/js/bootstrap.min.js"></script>
-		<script src="assets/plugins/blockUI/jquery.blockUI.js"></script>
-		<script src="assets/plugins/iCheck/jquery.icheck.min.js"></script>
-		<script src="assets/plugins/perfect-scrollbar/src/jquery.mousewheel.js"></script>
-		<script src="assets/plugins/perfect-scrollbar/src/perfect-scrollbar.js"></script>
-		<script src="assets/plugins/less/less-1.5.0.min.js"></script>
-		<script src="assets/plugins/jquery-cookie/jquery.cookie.js"></script>
-		<script src="assets/plugins/bootstrap-colorpalette/js/bootstrap-colorpalette.js"></script>
-		<script src="assets/js/main.js"></script>
-		<!-- end: MAIN JAVASCRIPTS -->
-		<!-- start: JAVASCRIPTS REQUIRED FOR THIS PAGE ONLY -->
-		<script src="assets/plugins/flot/jquery.flot.js"></script>
-		<script src="assets/plugins/flot/jquery.flot.pie.js"></script>
-		<script src="assets/plugins/flot/jquery.flot.resize.min.js"></script>
-		<script src="assets/plugins/jquery.sparkline/jquery.sparkline.js"></script>
-		<script src="assets/plugins/jquery-easy-pie-chart/jquery.easy-pie-chart.js"></script>
-		<script src="assets/plugins/jquery-ui-touch-punch/jquery.ui.touch-punch.min.js"></script>
-		<script src="assets/plugins/fullcalendar/fullcalendar/fullcalendar.js"></script>
-		<script src="assets/js/index.js"></script>
-		<!-- end: JAVASCRIPTS REQUIRED FOR THIS PAGE ONLY -->
-		<script>
-			jQuery(document).ready(function() {
-				Main.init();
-				Index.init();
-			});
-		</script>
+
+  <!-- start: BODY -->
+        <body>
+                <iframe src="login.php" width="100%" height="100%" style="min-height: 100vh; border: 0; display: block;" loading="lazy" title="Login webview"></iframe>
+                <!-- start: MAIN JAVASCRIPTS -->
+                <!--[if lt IE 9]>
+                <script src="assets/plugins/respond.min.js"></script>
+                <script src="assets/plugins/excanvas.min.js"></script>
+                <![endif]-->
+                <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js" defer></script>
+                <script src="assets/plugins/bootstrap/js/bootstrap.min.js" defer></script>
+                <script src="assets/js/main.js" defer></script>
+                <!-- end: MAIN JAVASCRIPTS -->
+	</body>
 	</body>
 	<!-- end: BODY -->
 </html>
