@@ -72,11 +72,11 @@
       counts: { photos:0, answers:0 },
 
       names: {
-        local    : null,
-        codigo   : null,
-        direccion: null,
-        comuna   : null,
-        campaign : null
+         local   : meta.local_name      || meta.local      || fields.nombre_local    || null,
+        codigo   : meta.local_codigo    || meta.codigo     || fields.codigo_local    || null,
+        direccion: meta.local_direccion || meta.direccion  || fields.direccionLocal  || fields.direccion_local || null,
+        comuna   : meta.local_comuna    || fields.comuna   || fields.comunaLocal     || null,
+        campaign : meta.campaign_name   || meta.nombre_campana || fields.nombreCampana || null
       },
 
       vars : {},

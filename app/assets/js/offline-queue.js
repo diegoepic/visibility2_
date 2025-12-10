@@ -389,7 +389,12 @@
     /**
      * Encola a partir de un <form> o un FormData
      */
-    async enqueueFromForm(url, formOrFD, type='generic'){
+    async enqueueFromForm(url, formOrFD, type='generic', extraOpts={}){
+      const opts = (typeof type === 'object' && type !== null)
+        ? Object.assign({}, type, extraOpts)
+        : Object.assign({}, extraOpts, { type });
+
+      const finalType = opts.type || 'generic';
       let fd;
       if (formOrFD instanceof FormData) fd = formOrFD;
       else if (formOrFD && formOrFD.tagName === 'FORM') fd = new FormData(formOrFD);
@@ -409,8 +414,19 @@
         if (lid) fields['visita_id'] = lid;
       }
 
-      const task = { url, type, fields, files, sendCSRF: true };
-      task.meta = inferMetaFromTask(task);
+      const task = {
+        url,
+        type: finalType,
+        fields,
+        files,
+        sendCSRF: opts.sendCSRF !== false,
+        id: opts.id || opts.idempotencyKey || undefined,
+        dedupeKey: opts.dedupeKey || undefined,
+        dependsOn: opts.dependsOn || undefined,
+        client_guid: opts.client_guid || fields.client_guid || undefined
+      };
+
+      task.meta = Object.assign({}, inferMetaFromTask(task), opts.meta || {});
       return this.enqueue(task);
     },
 
@@ -447,7 +463,7 @@
         task.id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
       }
 
-      task.meta = task.meta || inferMetaFromTask(task);
+      task.meta = Object.assign({}, inferMetaFromTask(task), options.meta || {});
 
       // Registrar en Journal también para gestiones ONLINE
       jr('onEnqueue', task);

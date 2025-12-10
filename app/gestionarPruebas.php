@@ -208,7 +208,8 @@ navigator.serviceWorker.register('/visibility2/app/sw.js', { scope: '/visibility
     </script>
 
    <script>
-  window.OfflineQueue = Object.assign({}, window.Queue, {
+  //  data designada para mostrar en journal
+window.OfflineQueue = Object.assign({}, window.Queue, {
     enqueueJSON: (url, data, opts={}) => {
       const options = {
         type: opts.type || 'generic',
@@ -216,12 +217,13 @@ navigator.serviceWorker.register('/visibility2/app/sw.js', { scope: '/visibility
         id: opts.idempotencyKey || opts.id || undefined,   // <-- pasa la key
         dedupeKey: opts.dedupeKey || undefined,
         dependsOn: opts.dependsOn || undefined,
-        client_guid: opts.client_guid || undefined
+        client_guid: opts.client_guid || undefined,
+        meta: opts.meta || undefined
       };
       return window.Queue.smartPost(url, data, options);
     },
     enqueueForm: (url, formEl, opts={}) =>
-      window.Queue.enqueueFromForm(url, formEl, opts.type || 'generic')
+      window.Queue.enqueueFromForm(url, formEl, opts)
   });
   
   
@@ -441,7 +443,7 @@ input[type=file][id^="fotoPregunta_"] {
                      </div>
                      <br>
                      <button type="button" class="btn btn-primary" id="btnNext1" disabled>Siguiente &raquo;</button>
-                     <a href="index_pruebas.php">&laquo; Volver</a>
+                     <a href="index_pruebas.php">&laquo; Volver al inicio</a>
                  </div>
 
                  <!-- Paso 2 -->
@@ -837,7 +839,7 @@ input[type=file][id^="fotoPregunta_"] {
         background: rgba(0,0,0,0.5); z-index: 9999; text-align: center;">
       <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
           <div class="spinner-border text-light" role="status">
-            <span class="sr-only">Cargando...</span>
+            <span class="sr-only">Cargando..</span>
           </div>
           <p class="text-light mt-2">Procesando, por favor espere...</p>
       </div>
@@ -1110,6 +1112,15 @@ function ensureClientGuid() {
 function getCSRF() {
   return document.querySelector('input[name="csrf_token"]')?.value || '';
 }
+function getCSRF() {
+  return document.querySelector('input[name="csrf_token"]')?.value || '';
+}
+const QUEUE_META_BASE = {
+  local_name: <?php echo json_encode($nombreLocal, JSON_UNESCAPED_UNICODE); ?>,
+  local_direccion: <?php echo json_encode($direccionLocal, JSON_UNESCAPED_UNICODE); ?>,
+  campaign_name: <?php echo json_encode($nombreCampanaDB, JSON_UNESCAPED_UNICODE); ?>,
+  local_id: <?php echo (int)$idLocal; ?>
+};
 async function queueCreateVisita(payload, idempKey) {
   return OfflineQueue.enqueueJSON('/visibility2/app/create_visita_pruebas.php', {
     ...payload,
@@ -1118,7 +1129,8 @@ async function queueCreateVisita(payload, idempKey) {
     type: 'create_visita',
     idempotencyKey: idempKey,
     client_guid: payload.client_guid,
-    dedupeKey: `create:${payload.client_guid}`
+    dedupeKey: `create:${payload.client_guid}`,
+    meta: QUEUE_META_BASE
   });
 }
 async function queueProcesarGestion(formEl, meta={}) {
@@ -1133,7 +1145,8 @@ async function queueProcesarGestion(formEl, meta={}) {
   return OfflineQueue.enqueueForm('/visibility2/app/procesar_gestion_pruebas.php', formEl, {
     type: 'procesar_gestion',
     client_guid: cg,
-    dependsOn: `create:${cg}`
+    dependsOn: `create:${cg}`,
+    meta: Object.assign({}, QUEUE_META_BASE, meta)
   });
 }
     </script>
