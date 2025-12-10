@@ -1133,7 +1133,7 @@ async function queueCreateVisita(payload, idempKey) {
     meta: QUEUE_META_BASE
   });
 }
-async function queueProcesarGestion(formEl, meta={}) {
+async function queueProcesarGestion(formEl, opts={}) {
   const cg = document.getElementById('client_guid').value || ensureClientGuid();
   // Asegura que el hidden exista con valor
   const h = formEl.querySelector('#client_guid');
@@ -1145,8 +1145,9 @@ async function queueProcesarGestion(formEl, meta={}) {
   return OfflineQueue.enqueueForm('/visibility2/app/procesar_gestion_pruebas.php', formEl, {
     type: 'procesar_gestion',
     client_guid: cg,
+    idempotencyKey: opts.idempotencyKey,
     dependsOn: `create:${cg}`,
-    meta: Object.assign({}, QUEUE_META_BASE, meta)
+    meta: Object.assign({}, QUEUE_META_BASE, opts.meta || opts)
   });
 }
     </script>
@@ -2531,25 +2532,54 @@ document.getElementById('btnFinalizar')?.addEventListener('click', async functio
     document.getElementById('loadingOverlay').style.display = 'none';
     return;
   }
-  const online = await isReallyOnline();
-if (online) {
-  ensureClientGuid();
-  document.getElementById('gestionarForm').submit();
-  setTimeout(() => { try { clearClientGuid(); } catch(_){} }, 8000);
-  return;
-}
-  // OFFLINE: encolar form completo
+  const formEl = document.getElementById('gestionarForm');
+  const cg     = ensureClientGuid();
+  const fd     = new FormData(formEl);
+  fd.set('client_guid', cg);
+  fd.append('return_json', '1');
+
+  const idemp = makeIdempKey();
   try {
-    ensureClientGuid();
-    await queueProcesarGestion(document.getElementById('gestionarForm'), { reason: 'offline' });
-    clearClientGuid();     
-    mcToast('success','Gestión encolada','Se enviará automáticamente al recuperar conexión.');
-    setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 600);
+    const { queued, ok, response } = await Queue.smartPost(
+      '/visibility2/app/procesar_gestion_pruebas.php',
+      fd,
+      {
+        type: 'procesar_gestion',
+        idempotencyKey: idemp,
+        client_guid: cg,
+        dependsOn: `create:${cg}`,
+        meta: Object.assign({}, QUEUE_META_BASE, { reason: 'finalize_visit' })
+      }
+    );
+
+    if (queued) {
+      mcToast('info','Gestión encolada','Se enviará automáticamente al recuperar conexión.');
+      clearClientGuid();
+      setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 600);
+      return;
+    }
+
+    if (ok && response && response.status === 'success') {
+      mcToast('success','Gestión enviada','Se registró correctamente.');
+      clearClientGuid();
+      setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 400);
+      return;
+    }
+
+    throw new Error((response && response.message) || 'No se pudo confirmar la gestión.');
   } catch (err) {
     console.error(err);
-    alert('No se pudo encolar la gestión. Intenta nuevamente.');
-    this.disabled = false;
-    document.getElementById('loadingOverlay').style.display = 'none';
+    try {
+      await queueProcesarGestion(formEl, { reason: 'fallback', idempotencyKey: idemp });
+      mcToast('warning','Modo offline','No se pudo enviar online; quedó en cola.');
+      clearClientGuid();
+      setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 700);
+      return;
+    } catch (e2) {
+      alert('No se pudo enviar ni encolar la gestión. Intenta nuevamente.');
+      this.disabled = false;
+      document.getElementById('loadingOverlay').style.display = 'none';
+    }
   }
 });
 window.campaignDivision = <?php echo json_encode($idDivision, JSON_UNESCAPED_UNICODE); ?>;
