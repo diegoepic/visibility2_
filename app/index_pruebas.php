@@ -571,10 +571,13 @@ if (isset($_SESSION['success'])) {
                <button class="btn btn-primary btn-block" style="margin-bottom: 10px;" data-toggle="modal" data-target="#modalMapa">
                   <i class="fa fa-map-marker"></i> Ver Mapa
                </button>
+               <button class="btn btn-info btn-block" style="margin-bottom: 10px;" data-toggle="modal" data-target="#modalAyudaFuncionamiento">
+                  <i class="fa fa-question-circle"></i> ¿Cómo funciona?
+               </button>
                <div class="form-group">
                  <label for="filtroFechaProg">Seleccionar fecha:</label>
                  <select id="filtroFechaProg" class="form-control">
-                    <?php 
+                    <?php
                       foreach ($locales_por_dia as $fecha => $localesDia) {
                           $selected = ($fecha == date('Y-m-d')) ? 'selected' : '';
                           echo '<option value="'.$fecha.'" '.$selected.'>'.date('d-m-Y', strtotime($fecha)).'</option>';
@@ -884,6 +887,64 @@ if (isset($_SESSION['success'])) {
       </div><!-- /.container -->
    </div><!-- /.main-content -->
 </div><!-- /.main-container -->
+
+<!-- Modal de ayuda "¿Cómo funciona?" -->
+<div id="modalAyudaFuncionamiento" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="modalAyudaFuncionamientoLabel" aria-hidden="true">
+   <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+         <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+            <h4 class="modal-title" id="modalAyudaFuncionamientoLabel">¿Cómo funciona?</h4>
+         </div>
+         <div class="modal-body">
+            <p>Este panel resume todo lo que puedes hacer en la aplicación con palabras simples pensadas para ejecutores en terreno.</p>
+
+            <h4>1. Tablas de locales programados y reagendados</h4>
+            <ul>
+               <li><strong>Programados:</strong> es la tabla principal. Se agrupa por fecha y muestra código, cadena, comuna, dirección y opciones de ruta.</li>
+               <li><strong>Reagendados:</strong> se abre con el botón <em>Ver Locales Reagendados</em>. Tiene el mismo formato, pero solo con los locales tipificados como pendiente</li>
+               <li><strong>Filtro de texto:</strong> sobre cada tabla hay un cuadro para buscar por código, cadena, comuna o dirección. Escribe cualquier palabra y la tabla filtra al instante.</li>
+               <li><strong>Campañas tachadas:</strong> en el panel de campañas (izquierda) puedes tocar el nombre para tacharlo. Las campañas tachadas se ocultan de la tabla y del mapa para evitar visitas equivocadas.</li>
+        
+            </ul>
+
+            <h4>2. Gestionar un local y registrar campañas</h4>
+            <ul>
+               <li><strong>Botón Gestionar Local:</strong> cada local tiene el botón azul con un engranaje. Al presionarlo abre el modal del local y desde ahí eliges <em>Gestionar</em> para entrar a la seccion de gestionar Local.</li>
+   
+               <li><strong>Actividades complementarias:</strong>abajo de la tabla de locales aparecen las gestiones complementarias, como pueden ser gestiones adicionales, kilometrajes etc.</li>
+            </ul>
+
+            <h4>3. Guardar locales para trabajar sin conexión</h4>
+            <ul>
+               <li><strong>Guardar locales:</strong> Para guardar locales y asi poder gestionarlos sin conexión, simplemente tienes que ingresar al menos una vez a la seccion de gestionar local de manera online, ahi ya queda guardado para gestionarlo offline, ya sea en el momento o mas tarde</li>
+            </ul>
+
+            <h4>4. Ruta y navegación</h4>
+            <ul>
+               <li><strong>Ver Mapa:</strong> abre el mapa con todos los locales visibles según la fecha y campañas activas.</li>
+               <li><strong>Armar ruta:</strong> usa los checks de cada fila (columna Ruta) para incluir o excluir locales. Los tachados o excluidos desaparecen del mapa.</li>
+               <li><strong>Recalcular:</strong> el botón <em>Recalcular</em> ordena la ruta. Puedes activar <em>Optimizar</em> para que Google proponga el mejor orden.</li>
+               <li><strong>Exportar a Google Maps:</strong> en el mapa usa <em>Abrir en Google Maps</em> para abrir la ruta en la app de google maps del teléfono.</li>
+               <li><strong>Indicaciones paso a paso:</strong> el botón <em>Indicaciones</em> abre el panel lateral con cada giro, distancia y tiempo estimado.</li>
+               <li><strong>Modo navegación:</strong> <em>Iniciar navegación</em> activa la vista 3D con flecha en vivo; <em>Centrar</em> devuelve el mapa a tu posición.(funcionalidad en progreso)</li>
+            </ul>
+
+            <h4>5. Extras útiles</h4>
+            <ul>
+               <li><strong>Contadores rápidos:</strong> bajo el selector de fecha verás cuántos locales están en la tabla, en el mapa y cuántos excluiste.</li>
+               <li><strong>Estado de red:</strong> el mensaje <em>Online/Offline</em> te avisa si puedes sincronizar. Cuando vuelve la señal, las gestiones pendientes se envían solas.</li>
+               <li><strong>Bitácora:</strong> la sección <em>Gestiones</em> muestra lo enviado hoy y en la semana con progreso total y errores a reintentar.</li>
+            </ul>
+
+            <p class="text-muted">Si algo no funciona como esperas, refresca la página o revisa que tengas señal. Todo lo cacheado permanece guardado para que no pierdas tu trabajo.</p>
+         </div>
+         <div class="modal-footer">
+            <button type="button" class="btn btn-default" data-dismiss="modal">Cerrar</button>
+         </div>
+      </div>
+   </div>
+</div>
 
 <!-- Modal Mapa -->
 <div id="modalMapa" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="modalMapaLabel" aria-hidden="true">

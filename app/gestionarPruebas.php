@@ -1045,6 +1045,24 @@ async function isReallyOnline() {
   }
 }
 
+// Anuncio: este local quedó habilitado para trabajar offline en esta sesión
+(function showOfflineReadyHint(){
+  try {
+    const key = `offline_ready_${<?php echo (int)$idLocal; ?>}_${<?php echo (int)$idCampana; ?>}`;
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, '1');
+
+    const localName    = <?php echo json_encode($nombreLocal, JSON_UNESCAPED_UNICODE); ?>;
+    const campaignName = <?php echo json_encode($nombreCampanaDB, JSON_UNESCAPED_UNICODE); ?>;
+    mcToast(
+      'info',
+      'Modo offline listo',
+      `Este local quedó marcado para seguir gestionando sin conexión. Si pierdes internet, las fotos y formularios quedarán en cola y se sincronizarán al volver la red.`,
+      3000
+    );
+  } catch(_){ /* silencioso */ }
+})();
+
 function uuidv4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{
     const r = crypto.getRandomValues(new Uint8Array(1))[0] & 15;
@@ -2006,9 +2024,8 @@ $('#btnNext1').off('click').on('click', async function(){
 
     if (estado === 'implementado_auditado' || estado === 'solo_implementado' || estado === 'solo_retirado') {
       const hayImplementaciones = $('.implementa-material:checked').length > 0;
-      const hayMotivos = $('.no-implementa-section textarea').filter((i, el) => $(el).val().trim() !== '').length > 0;
-      if (!hayImplementaciones && !hayMotivos) {
-        alert("Debe implementar al menos un material o indicar el motivo de no implementación.");
+      if (!hayImplementaciones) {
+        alert("Para marcar la gestión como implementada, debes seleccionar al menos un material e ingresar su cantidad.");
         return false;
       }
     }
@@ -2024,7 +2041,7 @@ $('#btnNext1').off('click').on('click', async function(){
         const valor = parseInt($inputValor.val(), 10);
 
         if (isNaN(valor)) { alert("Debe ingresar un valor numérico en ID " + idFQ); valido = false; return false; }
-        if (valor < 0) { alert("El valor implementado no puede ser negativo (ID " + idFQ + ")."); valido = false; return false; }
+        if (valor <= 0) { alert("El valor implementado debe ser al menos 1 (ID " + idFQ + ")."); valido = false; return false; }
         if (!isNaN(maxPropuesto) && valor > maxPropuesto) { alert("El valor implementado (" + valor + ") excede el propuesto (" + maxPropuesto + "). (ID " + idFQ + ")"); valido = false; return false; }
 
         const hiddenUrls = document.querySelectorAll(`#hiddenUploadContainer_${idFQ} input[type="hidden"][name^="fotos[${idFQ}]"]`);
