@@ -1,0 +1,4 @@
+linea;codigo;"nombre local";"motivo de fallo"
+2;2400198;"ADMINISTRACIÓN DE VENTAS AL DETALLE S.A.    ";"El código de local '2400198' ya existe (línea 2)."
+3;573731;"SOC.COM.RIO TRANCURA LTDA.                  ";"El código de local '573731' ya existe (línea 3)."
+4;2386532;"WALMART CHILE S.A.                          ";"El código de local '2386532' ya existe (línea 4)."

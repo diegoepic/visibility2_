@@ -1,0 +1,90 @@
+ body { background-color: #f4f6f9; }
+    th { font-size: 0.85rem; } td { font-size: 0.8rem; }
+    .card-body { background:#2d313f; border-radius:0px; box-shadow:0 6px 16px -6px rgba(0,0,0,.25); transition:box-shadow .25s ease, transform .25s ease; color:#fff;}
+    .card-body:hover{ box-shadow:0 12px 28px -10px rgba(0,0,0,.35); transform:translateY(-2px); }
+    .card-panel { margin-top: 0px; }
+    .panel-header {
+      background:#93C01F;
+      background-image: linear-gradient(to left,#E7F4CB 0%,#CBE47B 40%,#A7D13A 75%,#93C01F 100%);
+      color:#fff; padding:15px; border-radius:3px 3px 0 0;
+    }
+    h1.panel-title { margin:0; font-size:24px; }
+    .table th { background:#f1f1f1; }
+    .badge-custom { font-size:90%; padding:.35em .55em; }
+    .badge-pendientes { background-color:#878787; }
+    .badge-completados{ background-color:#00a65a; }
+    .badge-cancelados { background-color:#dd4b39; }
+    #map { width:100%; height:350px; margin-bottom:0px; }
+    small.help { display:block; color:#fff; margin-top:2px; }
+    .seccion-tabla{
+      max-width: 100%;
+      width: 100%;
+      padding-right: 15px;
+      padding-left: 15px;
+      margin-right: auto;
+      margin-left: auto;
+    }
+    .mt-3 { margin-top: 0rem !important; }
+    @media (min-width: 1200px) {
+    .container, .container-lg, .container-md, .container-sm, .container-xl {
+        max-width: 100%;
+    }
+    .card {
+    background-color: #2d313f;
+    border-radius: 0rem;
+        
+    }
+    #map::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.05); /* 0.35 = opacidad del oscurecido */
+  pointer-events: none; /* Permite seguir usando el mapa */
+  z-index: 2;
+}
+.container, .container-fluid, .container-lg, .container-md, .container-sm, .container-xl {
+    padding-right: 0px!important;
+    padding-left: 0px!important;
+}
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    animation: fadeIn 0.2s ease-in-out;
+  }
+
+  .modal-content {
+    position: relative;
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    width: 90%;
+    max-width: 90%;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    animation: slideIn 0.2s ease-in-out;
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    font-size: 20px;
+    font-weight: bold;
+    color: #666;
+    cursor: pointer;
+  }
+  .modal-close:hover { color: #000; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  @keyframes slideIn {
+    from { transform: translateY(-10px); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+  }

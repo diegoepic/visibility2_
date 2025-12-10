@@ -1,0 +1,4 @@
+línea;código;"nombre local";"motivo de fallo"
+3;L002;;"Algún campo requerido está vacío."
+5;L001;"Local Duplicate";"El código de local 'L001' ya existe (línea 5)."
+6;L005;.;"cURL error en línea 6: Resolving timed out after 10001 milliseconds"

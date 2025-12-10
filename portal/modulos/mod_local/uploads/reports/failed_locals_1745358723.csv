@@ -1,0 +1,7 @@
+línea;código;"nombre local";"motivo de fallo"
+2;L001;"Local Valido";"El código de local 'L001' ya existe (línea 2)."
+3;L002;;"Algún campo requerido está vacío."
+4;L003;LocalColumnError;"cURL error en línea 4: Could not resolve host: maps.googleapis.com"
+5;L001;"Local Duplicate";"cURL error en línea 5: Resolving timed out after 10001 milliseconds"
+6;L005;.;"cURL error en línea 6: Could not resolve host: maps.googleapis.com"
+7;L006;LocalTooMany;"cURL error en línea 7: Resolving timed out after 10000 milliseconds"

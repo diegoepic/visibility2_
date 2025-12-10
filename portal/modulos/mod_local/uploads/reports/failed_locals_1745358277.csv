@@ -1,0 +1,3 @@
+línea;código;"nombre local";"motivo de fallo"
+3;L002;;"Algún campo requerido está vacío."
+5;L001;"Local Duplicate";"El código de local 'L001' ya existe (línea 5)."

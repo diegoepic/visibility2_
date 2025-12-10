@@ -1,7 +1,8 @@
-const VERSION        = 'v2.8.8';
+const VERSION        = 'v2.8.9';
 const APP_SCOPE      = '/visibility2/app';
 const STATIC_CACHE   = `static-${VERSION}`;
 const RUNTIME_CACHE  = `runtime-${VERSION}`;
+
 
 //archivos guardados en cache
 const STATIC_ASSETS = [

@@ -1,0 +1,17 @@
+.dt-button.buttons-columnVisibility{
+  text-align:left;
+}
+
+.dt-button.buttons-columnVisibility:before {
+   font-family: "FontAwesome";
+   content: "\f096";
+   display: inline-block;
+   padding-right: 3px;
+}
+
+.dt-button.buttons-columnVisibility.active:before {
+   font-family: "FontAwesome";
+   content: "\f046";
+   display: inline-block;
+   padding-right: 3px;
+}

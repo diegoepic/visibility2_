@@ -1,0 +1,4 @@
+linea;codigo;"nombre local";"motivo de fallo"
+2;1359611;"ESTACION DE SERVICIO TRES ESQUINAS LTDA";"El código de local '1359611' ya existe (línea 2)."
+3;573731;"SOC.COM.RIO TRANCURA LTDA.";"El código de local '573731' ya existe (línea 3)."
+4;530367;"PATRICIO FERRADA JARAMILLO";"El código de local '530367' ya existe (línea 4)."

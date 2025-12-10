@@ -1,0 +1,3 @@
+linea;codigo;"nombre local";"motivo de fallo"
+2;2214924;"COPEC CHACABUCO";"El código de local '2214924' ya existe (línea 2)."
+3;711813;"PRONTO Err�zuriz";"Error HTTP (400) geocodificando en línea 3."

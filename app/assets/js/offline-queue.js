@@ -190,6 +190,34 @@
     return meta;
   }
 
+  function isLogicalSuccess(js){
+    if (!js || typeof js !== 'object') return false;
+
+    const okVal = js.ok;
+    if (okVal === true) return true;
+    if (typeof okVal === 'string' && okVal.toLowerCase() === 'ok') return true;
+
+    const statusVal = js.status;
+    if (statusVal === true) return true;
+    if (typeof statusVal === 'string' && ['ok', 'success'].includes(statusVal.toLowerCase())) return true;
+    if (typeof statusVal === 'number' && [0, 200].includes(statusVal)) return true;
+
+    const successVal = js.success;
+    if (successVal === true) return true;
+    if (typeof successVal === 'string' && ['ok', 'success', 'true'].includes(successVal.toLowerCase())) return true;
+
+    const codeVal = js.code || js.codigo || js.status_code;
+    if (typeof codeVal === 'number' && [0, 200].includes(codeVal)) return true;
+    if (typeof codeVal === 'string' && ['0', '200', 'ok', 'success'].includes(codeVal.toLowerCase())) return true;
+
+    return false;
+  }
+
+  function logicalErrorMessage(js){
+    if (!js || typeof js !== 'object') return 'Respuesta sin confirmar éxito';
+    return js.message || js.error || js.msg || js.detail || 'Respuesta sin confirmar éxito';
+  }
+
   // --------------------------------------------------------------------------------
   // Ejecución de tareas
   // --------------------------------------------------------------------------------
@@ -210,6 +238,13 @@
     if (!r.ok) throw new Error('HTTP ' + r.status);
 
     const js = await r.json().catch(()=> ({}));
+
+    if (!isLogicalSuccess(js)) {
+      const err = new Error(`Logical failure (${r.status}): ${logicalErrorMessage(js)}`);
+      err.response = js;
+      err.status = r.status;
+      throw err;
+    }
 
     // Si es la creación de visita, persistir mapping y marcar dependencia como resuelta
     if (task.type === 'create_visita' && js && js.visita_id) {

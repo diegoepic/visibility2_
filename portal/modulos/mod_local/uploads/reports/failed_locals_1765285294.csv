@@ -1,0 +1,4 @@
+linea;codigo;"nombre local";"motivo de fallo"
+9;7042962;"REGIMIENTO ARICA 655";"El código de local '7042962' ya existe (línea 9)."
+13;4656418;"PSJ FRANCISCO TORREJON 387";"El código de local '4656418' ya existe (línea 13)."
+23;164991;"PLAYA TOTORALILLO S/N";"El código de local '164991' ya existe (línea 23)."

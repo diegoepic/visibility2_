@@ -1,0 +1,20 @@
+Array
+(
+    [csvFile] => Array
+        (
+            [name] => carga_locales.csv
+            [full_path] => carga_locales.csv
+            [type] => text/csv
+            [tmp_name] => /tmp/php4K1gCx
+            [error] => 0
+            [size] => 8749
+        )
+
+)
+
+Array
+(
+    [csrf_token] => d2e9511acc54b827b504d26acf468109926cfacb4b5a6735d09e3148d15b37b6
+    [empresa_id] => 103
+    [division_id] => 13
+)

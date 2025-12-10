@@ -1,0 +1,50 @@
+   /* Estilos personalizados para ajustar las tarjetas */
+    .widget-user .widget-user-header {
+        padding: 20px;
+        height: 170px;
+    }
+    .widget-user .widget-user-image {
+        top: 22%;
+    }
+    .widget-user .widget-user-username {
+        display: block;
+        width: 95%;
+        margin-top: 0;
+        font-size: 18px;
+        white-space: normal;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        box-sizing: border-box;
+    }
+    .widget-user .widget-user-desc {
+        margin-top: 5px;
+        font-size: 14px;
+    }
+    .description-block {
+        margin: 10px 0;
+    }
+    .description-text {
+        font-size: 0.8rem !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .description-header {
+        font-size: 1.2rem;
+    }
+    .widget-user .card-footer {
+        
+        padding-top: 30px;
+    }
+    .btn-app {
+        margin: 5px auto;
+        min-width: 80px;
+    }
+    .widget-user .inner {
+        padding: 10px;
+    }
+    @media (max-width: 575.98px) {
+        .widget-user .widget-user-image {
+            top: 45px;
+        }
+    }

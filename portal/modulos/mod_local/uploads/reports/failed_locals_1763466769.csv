@@ -1,0 +1,4 @@
+linea;codigo;"nombre local";"motivo de fallo"
+2;45284;"MARIA DE LA PAZ RIOS ACEITUNO";"El código de local '45284' ya existe (línea 2)."
+4;41225;"COMERCIAL RAMIREZ Y RAMIREZ";"El código de local '41225' ya existe (línea 4)."
+6;97040;"DISTRIBUIDORA BL SPA";"El código de local '97040' ya existe (línea 6)."

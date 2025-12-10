@@ -1,0 +1,2 @@
+línea;código;"nombre local";"motivo de fallo"
+2;L001;"Local Valido";"cURL error en línea 2: Resolving timed out after 10001 milliseconds"

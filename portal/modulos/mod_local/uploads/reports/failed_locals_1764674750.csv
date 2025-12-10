@@ -1,0 +1,3 @@
+linea;codigo;"nombre local";"motivo de fallo"
+42;40879;"PANADERIA COMERCIAL LA INDUSTRIAL LTDA";"El código de local '40879' ya existe (línea 42)."
+43;40879;"PANADERIA COMERCIAL LA INDUSTRIAL LTDA";"El código de local '40879' ya existe (línea 43)."

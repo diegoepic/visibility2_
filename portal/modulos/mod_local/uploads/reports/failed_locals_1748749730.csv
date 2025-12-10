@@ -1,0 +1,4 @@
+linea;codigo;"nombre local";"motivo de fallo"
+2;12345;"VICUÑA MACKENA 4230";"El código de local '12345' ya existe (línea 2)."
+4;60987;TOBALABA11567;"El código de local '60987' ya existe (línea 4)."
+28;8555489.1;"LAGO CALAFQUEN 2230";"El código de local '8555489.1' ya existe (línea 28)."

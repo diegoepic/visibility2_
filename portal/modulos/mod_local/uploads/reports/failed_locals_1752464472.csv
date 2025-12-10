@@ -1,0 +1,3 @@
+linea;codigo;"nombre local";"motivo de fallo"
+2;2397182;"ARAMCO PANAMERICANA NORTE";"cURL error en linea 2: Resolving timed out after 10000 milliseconds"
+3;2453843;"PUNTO COPEC NICARAGUA";"cURL error en linea 3: Could not resolve host: maps.googleapis.com"

@@ -1,0 +1,8 @@
+linea;codigo;"nombre local";"motivo de fallo"
+2;5003360;"SUPERMERCADOS CENTRAL LIMITADA";"El código de local '5003360' ya existe (línea 2)."
+3;5003362;"SUPERMERCADOS CENTRAL LIMITADA";"El código de local '5003362' ya existe (línea 3)."
+4;6556479;"SUPERMERCADOS CENTRAL LIMITADA";"El código de local '6556479' ya existe (línea 4)."
+5;5636402;"COMERCIAL PLUS ULTRA SPA ";"El código de local '5636402' ya existe (línea 5)."
+6;4895503;"MUNOZ FUENTES RIZZIERCI RENE";"El código de local '4895503' ya existe (línea 6)."
+7;172699;"MUNOZ FUENTES RIZZIERCI RENE";"El código de local '172699' ya existe (línea 7)."
+8;139444;"SUPERMERCADO ITALIA Y COMPANIA";"El código de local '139444' ya existe (línea 8)."

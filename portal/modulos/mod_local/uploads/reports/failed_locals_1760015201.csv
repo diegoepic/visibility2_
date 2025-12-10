@@ -1,0 +1,8 @@
+linea;codigo;"nombre local";"motivo de fallo"
+179;1331664;"LOGISTIC MANAGEMENT SPA";"El código de local '1331664' ya existe (línea 179)."
+180;1331664;"LOGISTIC MANAGEMENT SPA";"El código de local '1331664' ya existe (línea 180)."
+203;743773;"CECILIA GONZALEZ VIDAL";"El código de local '743773' ya existe (línea 203)."
+205;2365199;"SOCIELDAD EL RENACER SPA";"El código de local '2365199' ya existe (línea 205)."
+213;928290;"MARYORIS MONTOYA";"El código de local '928290' ya existe (línea 213)."
+357;2474269;"COMERCIALIZADORANS SPA";"Geocoding fallido en línea 357: ZERO_RESULTS"
+370;2420980;"INVERSIONES NAVARRO Y OTROS SPA";"El código de local '2420980' ya existe (línea 370)."

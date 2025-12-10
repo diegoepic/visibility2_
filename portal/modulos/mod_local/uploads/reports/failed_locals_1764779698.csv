@@ -1,0 +1,4 @@
+linea;codigo;"nombre local";"motivo de fallo"
+2;70062;"PANADERIA DON LALO SPA";"El código de local '70062' ya existe (línea 2)."
+3;69506;"COMIDAS AL PASO JENNIFER GOENAGA GARCIA SPA";"El código de local '69506' ya existe (línea 3)."
+5;45284;"MARIA DE LA PAZ RIOS ACEITUNO";"El código de local '45284' ya existe (línea 5)."

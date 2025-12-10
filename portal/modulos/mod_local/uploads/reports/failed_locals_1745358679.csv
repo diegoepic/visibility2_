@@ -1,0 +1,4 @@
+línea;código;"nombre local";"motivo de fallo"
+3;L002;;"Algún campo requerido está vacío."
+5;L001;"Local Duplicate";"cURL error en línea 5: Resolving timed out after 10000 milliseconds"
+6;L005;.;"cURL error en línea 6: Resolving timed out after 10000 milliseconds"
