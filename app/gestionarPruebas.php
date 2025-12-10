@@ -2552,24 +2552,29 @@ document.getElementById('btnFinalizar')?.addEventListener('click', async functio
       }
     );
 
-    if (queued) {
-      mcToast('info','Gestión encolada','Se enviará automáticamente al recuperar conexión.');
-      clearClientGuid();
-      setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 600);
-      return;
-    }
+      if (queued) {
+        mcToast('info','Gestión encolada','Se enviará automáticamente al recuperar conexión.');
+        clearClientGuid();
+        setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 600);
+        return;
+      }
 
-    if (ok && response && response.status === 'success') {
-      mcToast('success','Gestión enviada','Se registró correctamente.');
-      clearClientGuid();
-      setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 400);
-      return;
-    }
+      if (ok && response && response.status === 'success') {
+        mcToast('success','Gestión enviada','Se registró correctamente.');
+        clearClientGuid();
+        setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 400);
+        return;
+      }
 
-    throw new Error((response && response.message) || 'No se pudo confirmar la gestión.');
-  } catch (err) {
-    console.error(err);
-    try {
+      // Errores online deben mostrarse y no encolarse silenciosamente
+      const errMsg = (response && response.message) || 'No se pudo confirmar la gestión.';
+      mcToast('danger','Error', errMsg);
+      this.disabled = false;
+      document.getElementById('loadingOverlay').style.display = 'none';
+      return;
+    } catch (err) {
+      console.error(err);
+      try {
       await queueProcesarGestion(formEl, { reason: 'fallback', idempotencyKey: idemp });
       mcToast('warning','Modo offline','No se pudo enviar online; quedó en cola.');
       clearClientGuid();

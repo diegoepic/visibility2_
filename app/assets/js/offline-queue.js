@@ -468,26 +468,31 @@
       // Registrar en Journal también para gestiones ONLINE
       jr('onEnqueue', task);
 
-      if (navigator.onLine) {
-        try {
-          await heartbeat();
-          // Ahora el job SIEMPRE tiene id
-          QueueEvents.emit('queue:dispatch:start', { job: task });
-          jr('onStart', task);
-          const js = await processTask(task);
+        if (navigator.onLine) {
+          try {
+            await heartbeat();
+            // Ahora el job SIEMPRE tiene id
+            QueueEvents.emit('queue:dispatch:start', { job: task });
+            jr('onStart', task);
+            const js = await processTask(task);
 
-          QueueEvents.emit('queue:dispatch:success', {
-            job: task,
-            responseStatus: 200,
-            response: js
-          });
-          jr('onSuccess', task, js);
-          return { queued:false, ok:true, response: js };
-        } catch (e) {
-          QueueEvents.emit('queue:dispatch:error', { job: task, error: String(e) });
-          jr('onError', task, String(e));
+            QueueEvents.emit('queue:dispatch:success', {
+              job: task,
+              responseStatus: 200,
+              response: js
+            });
+            jr('onSuccess', task, js);
+            return { queued:false, ok:true, response: js };
+          } catch (e) {
+            QueueEvents.emit('queue:dispatch:error', { job: task, error: String(e) });
+            jr('onError', task, String(e));
+
+            // Si hubo un error lógico con respuesta, devolverlo para mostrarlo en UI
+            if (e && e.response) {
+              return { queued:false, ok:false, response: e.response, error: e };
+            }
+          }
         }
-      }
 
       const id = await this.enqueue(task);
       return { queued:true, ok:true, id };
