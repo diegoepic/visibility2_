@@ -12,6 +12,10 @@ if ($script !== '') {
         .'|procesar_login\.php'
         .'|recuperar_clave\.php'
         .'|logout\.php'
+        .'|login_pruebas\.php'
+        .'|procesar_login_pruebas\.php'
+        .'|logout\.php'
+        .'|logout\.php'
         .'|ping\.php'              // ⚠ debe poder devolver 401 JSON
         .'|csrf_refresh\.php'      // ⚠ idem
         .')$#i',

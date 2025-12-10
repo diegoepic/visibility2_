@@ -27,19 +27,17 @@ if (empty($_SESSION['csrf_token'])) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-
-$ids_index_pruebas = [2, 70, 268];
-
 if (!empty($_SESSION['usuario_id'])) {
-    $usuarioId = (int) $_SESSION['usuario_id'];
+    $divisionId = isset($_SESSION['division_id']) ? (int) $_SESSION['division_id'] : 0;
 
-    if (in_array($usuarioId, $ids_index_pruebas, true)) {
+    if ($divisionId === 14) {
         header('Location: index_pruebas.php');
     } else {
         header('Location: index.php');
     }
     exit;
 }
+
 
 $login_error = $_SESSION['error_login'] ?? '';
 unset($_SESSION['error_login']);

@@ -1,110 +1,20 @@
 {
     "success": true,
-    "inserted": 10,
-    "failed": 15,
-    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1765380429.csv",
+    "inserted": 11,
+    "failed": 0,
+    "reportUrl": "",
     "successes": [
-        "L\u00ednea 2: Local 'CONEJEROS REBOLLEDO JAVIER EDUARDO' (c\u00f3digo 1743280) insertado.",
-        "L\u00ednea 4: Local 'SERVICIOS GASTRONOMICOS AQUELARRE' (c\u00f3digo 6549987) insertado.",
-        "L\u00ednea 15: Local 'GONZALEZ ELVA' (c\u00f3digo 153902) insertado.",
-        "L\u00ednea 18: Local 'COMERCIAL CLEM SPA' (c\u00f3digo 6959246) insertado.",
-        "L\u00ednea 19: Local 'ARAVENA TOLEDO JAVIER ANDRES' (c\u00f3digo 6846118) insertado.",
-        "L\u00ednea 20: Local 'NAIMAN OJEDA AURELIA' (c\u00f3digo 1181021) insertado.",
-        "L\u00ednea 21: Local 'ARANGUIZ RUIZ JAIME ANTONIO' (c\u00f3digo 3962171) insertado.",
-        "L\u00ednea 23: Local 'CUMELEN SPA' (c\u00f3digo 6832678) insertado.",
-        "L\u00ednea 24: Local 'OLIVARES VERA OLIMPIA EDITH' (c\u00f3digo 2744452) insertado.",
-        "L\u00ednea 25: Local 'COMERCIAL JM SPA' (c\u00f3digo 6726254) insertado."
+        "L\u00ednea 2: Local 'COMERCIAL VERONICA DUPUY' (c\u00f3digo 7234529) insertado.",
+        "L\u00ednea 3: Local 'MAURICIO PINEDA' (c\u00f3digo 5830540) insertado.",
+        "L\u00ednea 4: Local 'HUGO VERA' (c\u00f3digo 6036144) insertado.",
+        "L\u00ednea 5: Local 'CRISTINA GAETE' (c\u00f3digo 5729410) insertado.",
+        "L\u00ednea 6: Local 'EMILIO HUILCAMAN' (c\u00f3digo 5825605) insertado.",
+        "L\u00ednea 7: Local 'MARGARITA SAEZ' (c\u00f3digo 5880605) insertado.",
+        "L\u00ednea 8: Local 'JEANETTE FIERRO' (c\u00f3digo 6455401) insertado.",
+        "L\u00ednea 9: Local 'TOMA FICA' (c\u00f3digo 6243139) insertado.",
+        "L\u00ednea 10: Local 'COMERCIAL VERONICA DUPUY' (c\u00f3digo 6241139) insertado.",
+        "L\u00ednea 11: Local 'LOS CHAMOS' (c\u00f3digo 6384180) insertado.",
+        "L\u00ednea 12: Local 'JORGE ALVAREZ' (c\u00f3digo 6683155) insertado."
     ],
-    "failures": [
-        {
-            "line": 3,
-            "codigo": "7450597",
-            "nombre": "DISTRIBUIDORA GUTIJEREZ SPA",
-            "reason": "El c\u00f3digo de local '7450597' ya existe (l\u00ednea 3)."
-        },
-        {
-            "line": 5,
-            "codigo": "2225438",
-            "nombre": "ACU\u00d1A V\u00c1SQUEZ CRISTINA LILIANA",
-            "reason": "El c\u00f3digo de local '2225438' ya existe (l\u00ednea 5)."
-        },
-        {
-            "line": 6,
-            "codigo": "6199445",
-            "nombre": "GASTRONOMICA DEL SUR SA",
-            "reason": "El c\u00f3digo de local '6199445' ya existe (l\u00ednea 6)."
-        },
-        {
-            "line": 7,
-            "codigo": "5265226",
-            "nombre": "SOCIEDAD COMERCIAL Y GASTRONOMICA",
-            "reason": "El c\u00f3digo de local '5265226' ya existe (l\u00ednea 7)."
-        },
-        {
-            "line": 8,
-            "codigo": "7411502",
-            "nombre": "CRISTINA EDITH BARRERA NIETO",
-            "reason": "El c\u00f3digo de local '7411502' ya existe (l\u00ednea 8)."
-        },
-        {
-            "line": 9,
-            "codigo": "6561341",
-            "nombre": "ASENCIO ARANEDA ESTHER INGRID",
-            "reason": "El c\u00f3digo de local '6561341' ya existe (l\u00ednea 9)."
-        },
-        {
-            "line": 10,
-            "codigo": "2792271",
-            "nombre": "BARRIA BARRIA IRMA ELOISA DEL",
-            "reason": "El c\u00f3digo de local '2792271' ya existe (l\u00ednea 10)."
-        },
-        {
-            "line": 11,
-            "codigo": "7060983",
-            "nombre": "COMERCIAL LA BARA SPA",
-            "reason": "El c\u00f3digo de local '7060983' ya existe (l\u00ednea 11)."
-        },
-        {
-            "line": 12,
-            "codigo": "142392",
-            "nombre": "COZUT VASQUEZ Y CIA",
-            "reason": "El c\u00f3digo de local '142392' ya existe (l\u00ednea 12)."
-        },
-        {
-            "line": 13,
-            "codigo": "7232091",
-            "nombre": "SUPERMERCADOS DIMARKET LTDA",
-            "reason": "El c\u00f3digo de local '7232091' ya existe (l\u00ednea 13)."
-        },
-        {
-            "line": 14,
-            "codigo": "7475168",
-            "nombre": "PJ SPA",
-            "reason": "El c\u00f3digo de local '7475168' ya existe (l\u00ednea 14)."
-        },
-        {
-            "line": 16,
-            "codigo": "6827717",
-            "nombre": "INVERSIONES O N SPA",
-            "reason": "El c\u00f3digo de local '6827717' ya existe (l\u00ednea 16)."
-        },
-        {
-            "line": 17,
-            "codigo": "105256",
-            "nombre": "MARTINEZ BAHAMONDE JAIME",
-            "reason": "El c\u00f3digo de local '105256' ya existe (l\u00ednea 17)."
-        },
-        {
-            "line": 22,
-            "codigo": "5405888",
-            "nombre": "COMERCIAL DON BENITO SPA",
-            "reason": "El c\u00f3digo de local '5405888' ya existe (l\u00ednea 22)."
-        },
-        {
-            "line": 26,
-            "codigo": "5816836",
-            "nombre": "BURGOS OBANDO HERNAN ANDRES",
-            "reason": "El c\u00f3digo de local '5816836' ya existe (l\u00ednea 26)."
-        }
-    ]
+    "failures": []
 }

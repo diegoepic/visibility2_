@@ -170,11 +170,10 @@ if ($update_stmt = $conn->prepare("UPDATE usuario SET login_count = login_count 
 }
 
 
-$ids_index_pruebas = [2, 70, 268]; 
+// Redirección según división (RedBull = 14)
+$divisionId = isset($u['id_division']) ? (int)$u['id_division'] : 0;
 
-$usuarioId = (int)$u['id'];
-
-if (in_array($usuarioId, $ids_index_pruebas, true)) {
+if ($divisionId === 14) {
     header("Location: index_pruebas.php");
 } else {
     header("Location: index.php");
