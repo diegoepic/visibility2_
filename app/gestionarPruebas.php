@@ -443,7 +443,7 @@ input[type=file][id^="fotoPregunta_"] {
                      </div>
                      <br>
                     <button type="button" class="btn btn-primary" id="btnNext1" >Siguiente &raquo;</button>
-                    <a href="/visibility2/app/index_pruebas.php">&laquo; Volver al inicio</a>
+                    <a href="index_pruebas.php">&laquo; Volver al inicio</a>
                  </div>
 
                  <!-- Paso 2 -->
@@ -2597,7 +2597,7 @@ const online = await isReallyOnline();
           await queueProcesarGestion(document.getElementById('gestionarForm'), { reason: 'create_visita_pending' });
           clearClientGuid();
           mcToast('warning','Gestión en cola','La visita aún está sincronizándose; la gestión se enviará cuando quede lista.');
-          setTimeout(()=>{ window.location.href = '/visibility2/app/index_pruebas.php'; }, 700);
+          setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 700);
           return;
         }
       }
@@ -2612,7 +2612,7 @@ const online = await isReallyOnline();
         await queueProcesarGestion(document.getElementById('gestionarForm'), { reason: 'create_visita_sync_error' });
         clearClientGuid();
         mcToast('warning','Gestión en cola','Se enviará automáticamente al recuperar conexión.');
-        setTimeout(()=>{ window.location.href = '/visibility2/app/index_pruebas.php'; }, 700);
+        setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 700);
         return;
       } catch (e2) {
         console.error('Tampoco se pudo encolar la gestión', e2);
@@ -2629,7 +2629,7 @@ const online = await isReallyOnline();
     await queueProcesarGestion(document.getElementById('gestionarForm'), { reason: 'offline' });
     clearClientGuid();     
     mcToast('success','Gestión encolada','Se enviará automáticamente al recuperar conexión.');
-    setTimeout(()=>{ window.location.href = '/visibility2/app/index_pruebas.php'; }, 600);
+    setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 600);
   } catch (err) {
     console.error(err);
     alert('No se pudo encolar la gestión. Intenta nuevamente.');

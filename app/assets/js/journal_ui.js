@@ -669,7 +669,11 @@
       );
     }
   }
-
+    function hasEndDate(item){
+    return Boolean(item && item.tiempos && item.tiempos.fecha_fin);
+  }
+  
+  
   // ---------- HTML para items venidos del SERVIDOR ----------
 
   function serverItemHTML(item){
@@ -806,9 +810,10 @@
     let localSection  = '';
 
     try {
-      const serverItems = await fetchServerJournal(ymd, ymd);
-      if (serverItems && serverItems.length){
-        const serverHtml = serverItems.map(serverItemHTML).join('');
+    const serverItems = await fetchServerJournal(ymd, ymd);
+      const completedServerItems = (serverItems || []).filter(hasEndDate);
+      if (completedServerItems.length){
+        const serverHtml = completedServerItems.map(serverItemHTML).join('');
         if (serverHtml){
           serverSection = `
             <div class="jr-section jr-section--server">
@@ -873,7 +878,9 @@
 
     const srvByDate = {};
     if (Array.isArray(serverItems)){
-      serverItems.forEach(it => {
+      serverItems
+        .filter(hasEndDate)
+        .forEach(it => {
         let ymd = null;
         if (it.tiempos && it.tiempos.fecha_inicio){
           ymd = String(it.tiempos.fecha_inicio).slice(0, 10);

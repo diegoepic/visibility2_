@@ -3,10 +3,6 @@ declare(strict_types=1);
 
 
 $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
-$appBasePath = '/visibility2/app';
-$indexUrl = $appBasePath . '/index.php';
-$indexPruebasUrl = $appBasePath . '/index_pruebas.php';
-
 session_set_cookie_params([
   'lifetime' => 0,
   'path'     => '/',
@@ -35,9 +31,9 @@ if (!empty($_SESSION['usuario_id'])) {
     $divisionId = isset($_SESSION['division_id']) ? (int) $_SESSION['division_id'] : 0;
 
     if ($divisionId === 14) {
-        header('Location: ' . $indexPruebasUrl);
+        header('Location: index_pruebas.php');
     } else {
-        header('Location: ' . $indexUrl);
+        header('Location: index.php');
     }
     exit;
 }
