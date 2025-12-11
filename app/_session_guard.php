@@ -47,6 +47,45 @@ if (!isset($conn) || !($conn instanceof mysqli)) {
   }
 }
 
+
+
+$envFile = '/home/visibility/.env_visibility2';
+
+if (is_readable($envFile)) {
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+
+    foreach ($lines as $line) {
+        // Ignorar comentarios
+        if ($line[0] === '#') {
+            continue;
+        }
+
+        if (!str_contains($line, '=')) {
+            continue;
+        }
+
+        [$key, $value] = explode('=', $line, 2);
+        $key   = trim($key);
+        $value = trim($value);
+
+        // quitar comillas simples/dobles del valor
+        $value = trim($value, "\"'");
+
+        if ($key === '') {
+            continue;
+        }
+
+        // Solo setear si no existe a¨²n
+        if (getenv($key) === false) {
+            putenv("$key=$value");
+        }
+
+       
+        $_ENV[$key] = $value;
+    }
+}
+
+
 // Helpers compartidos
 if (!function_exists('fpr_salt')) {
   function fpr_salt(): string {

@@ -13,6 +13,9 @@ $division_id    = intval($_SESSION['division_id']);
 $appScope       = '/visibility2/app';
 $precacheLimit  = isset($_ENV['GESTIONAR_PRECACHE_LIMIT']) ? (int)$_ENV['GESTIONAR_PRECACHE_LIMIT'] : 10;
 $precacheLimit  = $precacheLimit > 0 ? $precacheLimit : 10;
+$googleMapsApiKey = getenv('GOOGLE_MAPS_API_KEY');
+$googleMapsApiKey = is_string($googleMapsApiKey) ? trim($googleMapsApiKey) : '';
+
 
 $sql_campaigns = "
     SELECT DISTINCT 
@@ -1171,7 +1174,10 @@ $sql_campanas = "
 
 <!-- Scripts -->
 <script src="assets/plugins/jquery/jquery-3.6.0.min.js"></script>
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+<script src="assets/plugins/bootstrap/js/bootstrap.min.js" defer></script>
+<script>
+  window.__GOOGLE_MAPS_API_KEY = "<?php echo htmlspecialchars($googleMapsApiKey, ENT_QUOTES, 'UTF-8'); ?>";
+</script>
 
 <script>
 // ============ Preferencias/estado ============
@@ -1190,8 +1196,54 @@ function saveExcluded(){ savePref('v2_excluded', Array.from(window.excluded||[])
 loadExcluded();
 
 // ============ Utilidades de ruta ============
-const GOOGLE_MAPS_API_KEY = "AIzaSyAkWMIwHuWxwVkC-1Tk208gNRUBbwqZYIQ"; // ⚠️ restringe por dominio
-const MAP_ID = "YOUR_VECTOR_MAP_ID"; // opcional (vector map id)
+const GOOGLE_MAPS_API_KEY = window.__GOOGLE_MAPS_API_KEY || '';
+const MAP_ID = "YOUR_VECTOR_MAP_ID"; 
+const MAPS_LIBRARIES = 'geometry';
+let mapsScriptPromise = null;
+let mapsRetryTimer = null;
+
+function scheduleMapsRetry(){
+  if (mapsRetryTimer) return;
+  const retry = ()=>{
+    mapsRetryTimer = null;
+    loadGoogleMapsSdk().then(()=>{ if(!window.mapa) initMap(); }).catch(()=>{});
+  };
+  if (navigator.onLine){
+    mapsRetryTimer = setTimeout(retry, 5000);
+  } else {
+    const onBackOnline = ()=>{ window.removeEventListener('online', onBackOnline); retry(); };
+    window.addEventListener('online', onBackOnline);
+  }
+}
+
+function loadGoogleMapsSdk(){
+  if (window.google && window.google.maps) return Promise.resolve(window.google.maps);
+  if (mapsScriptPromise) return mapsScriptPromise;
+  if (!GOOGLE_MAPS_API_KEY){
+    return Promise.reject(new Error('Falta la Google Maps API key.'));
+  }
+
+  mapsScriptPromise = new Promise((resolve, reject)=>{
+    const prev = document.querySelector('script[data-google-maps-loader="true"]');
+    if (prev) prev.remove();
+    const s = document.createElement('script');
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&libraries=${MAPS_LIBRARIES}`;
+    s.async = true; s.defer = true; s.dataset.googleMapsLoader = 'true';
+    const onError = ()=>{ cleanup(); reject(new Error('Error al cargar Google Maps.')); };
+    const onLoad = ()=>{ cleanup(true); resolve(window.google.maps); };
+    const cleanup = (ok)=>{ s.onload=null; s.onerror=null; if (!ok && s.parentNode) s.parentNode.removeChild(s); };
+    s.onload = onLoad;
+    s.onerror = onError;
+    document.head.appendChild(s);
+  }).catch(err=>{ mapsScriptPromise=null; scheduleMapsRetry(); throw err; });
+
+  return mapsScriptPromise;
+}
+
+async function ensureMapReady(){
+  await loadGoogleMapsSdk();
+  if (!window.mapa) initMap();
+}
 function secondsFromDuration(d){ if (typeof d==='string' && d.endsWith('s')) return Math.round(parseFloat(d)); return 0; }
 function decode(encoded){ return google.maps.geometry.encoding.decodePath(encoded).map(ll=>({lat:ll.lat(), lng:ll.lng()})); }
 function fmtKm(m){ return (m>=1000) ? (m/1000).toFixed(1)+' km' : Math.round(m)+' m'; }
@@ -1435,6 +1487,10 @@ window.applyFilters = function(){
 
 // ====== INIT MAP ======
 window.initMap=function(){
+  if (window.mapa) {
+    google.maps.event.trigger(window.mapa, 'resize');
+    return;
+  }
   const coordenadasProg=<?php echo json_encode($coordenadas_locales_programados); ?>;
   const coordenadasReag=<?php echo json_encode($coordenadas_locales_reag); ?>;
 
@@ -1681,18 +1737,18 @@ $(document).ready(function(){
   // modos
   $('#btnVerReagendados').on('click', ()=> setMode('reag'));
   $('#btnVerProgramados').on('click', ()=> setMode('prog'));
+  $('#modalMapa').on('show.bs.modal', function(){
+    ensureMapReady().catch(()=>{
+      alert('No se pudo cargar Google Maps. Reintentaremos cuando haya conexión.');
+    });
+  });
   // filtros de texto -> aplica filtros completos
   $('#filtroLocalesProg, #filtroLocalesReag').on('input', debounce(()=>applyFilters(),200));
   // inicia
   window.modoLocal='prog'; setTimeout(applyFilters, 500);
 });
 
-</script>
 
-<!-- Google Maps API -->
-<script async defer
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAkWMIwHuWxwVkC-1Tk208gNRUBbwqZYIQ&callback=initMap&libraries=geometry"
-    onerror="alert('Error al cargar Google Maps. Verifica tu conexión o la clave de API.')">
     
     
 </script>
