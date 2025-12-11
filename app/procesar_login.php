@@ -15,6 +15,9 @@ error_reporting(E_ALL);
 ini_set('display_errors', 0);
 session_start();
 
+$appBasePath = '/visibility2/app';
+$indexUrl = $appBasePath . '/index.php';
+
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';
 
 /* ===== Helpers para sesión única (mismos que en portal) ===== */
@@ -174,8 +177,8 @@ if ($update_stmt = $conn->prepare("UPDATE usuario SET login_count = login_count 
 $divisionId = isset($u['id_division']) ? (int)$u['id_division'] : 0;
 
 if ($divisionId === 14) {
-    header("Location: index_pruebas.php");
+    header("Location: " . $indexPruebasUrl);
 } else {
-    header("Location: index.php");
+    header("Location: " . $indexUrl);
 }
 exit();

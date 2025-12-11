@@ -442,8 +442,8 @@ input[type=file][id^="fotoPregunta_"] {
                        </select>
                      </div>
                      <br>
-                     <button type="button" class="btn btn-primary" id="btnNext1" disabled>Siguiente &raquo;</button>
-                     <a href="index_pruebas.php">&laquo; Volver al inicio</a>
+                    <button type="button" class="btn btn-primary" id="btnNext1" >Siguiente &raquo;</button>
+                    <a href="/visibility2/app/index_pruebas.php">&laquo; Volver al inicio</a>
                  </div>
 
                  <!-- Paso 2 -->
@@ -1185,6 +1185,11 @@ async function subirFotoPregunta(id_form_question, id_local) {
   const file      = inputFile.files[0];
   if (!file) { alert("Debes seleccionar una imagen primero."); return; }
 
+  // Aseguramos que exista un client_guid consistente para enlazar fotos offline
+  const clientGuidInput = document.getElementById('client_guid');
+  const clientGuid      = (clientGuidInput?.value || '').trim() || ensureClientGuid();
+  if (clientGuidInput && !clientGuidInput.value) clientGuidInput.value = clientGuid;
+
   // === Metadatos/coords ===
   let meta = await extractPhotoMeta(file);
   meta.capture_source = inputFile.dataset.captureSource || 'unknown';
@@ -1207,12 +1212,13 @@ async function subirFotoPregunta(id_form_question, id_local) {
 
   // === Construcción del FormData ===
   const formData = new FormData();
-  formData.append('visita_id', $('#visita_id').val());
+ formData.append('visita_id', $('#visita_id').val());
   formData.append('id_form_question', id_form_question);
   formData.append('id_local', id_local);
   formData.append('fotoPregunta', new File([compressedFile], file.name, { type: compressedFile.type }));
   formData.append('csrf_token', window.CSRF_TOKEN);
-  formData.append('client_guid', document.getElementById('client_guid')?.value || '');
+  if (typeof formData.set === 'function') { formData.set('client_guid', clientGuid); }
+  else { formData.append('client_guid', clientGuid); }
   formData.append('lat', coords.lat);
   formData.append('lng', coords.lng);
   formData.append('exif_datetime', meta.exif_datetime);
@@ -1419,10 +1425,22 @@ async function subirFotoPregunta(id_form_question, id_local) {
     }
 
     // Encolamos el POST completo (incluye el archivo) para que se procese cuando haya red
+    const visitaVal = $('#visita_id').val();
+    const needsCreateSync = !visitaVal || String(visitaVal).startsWith('local-');
+
+    let dependsOn = undefined;
+    if (needsCreateSync && clientGuid) {
+      try {
+        if (await hasPendingCreateVisita(clientGuid)) {
+          dependsOn = `create:${clientGuid}`;
+        }
+      } catch (_) { /* noop */ }
+    }
+
     const res = await QueueObj.smartPost(
       '/visibility2/app/procesar_pregunta_foto_pruebas.php',
       formData,
-      { type: 'pregunta_foto', sendCSRF: true }
+      { type: 'pregunta_foto', sendCSRF: true, dependsOn, client_guid: clientGuid }
     );
 
     // Pintamos miniatura local (blob) y badge “En cola” si corresponde
@@ -2579,7 +2597,7 @@ const online = await isReallyOnline();
           await queueProcesarGestion(document.getElementById('gestionarForm'), { reason: 'create_visita_pending' });
           clearClientGuid();
           mcToast('warning','Gestión en cola','La visita aún está sincronizándose; la gestión se enviará cuando quede lista.');
-          setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 700);
+          setTimeout(()=>{ window.location.href = '/visibility2/app/index_pruebas.php'; }, 700);
           return;
         }
       }
@@ -2594,7 +2612,7 @@ const online = await isReallyOnline();
         await queueProcesarGestion(document.getElementById('gestionarForm'), { reason: 'create_visita_sync_error' });
         clearClientGuid();
         mcToast('warning','Gestión en cola','Se enviará automáticamente al recuperar conexión.');
-        setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 700);
+        setTimeout(()=>{ window.location.href = '/visibility2/app/index_pruebas.php'; }, 700);
         return;
       } catch (e2) {
         console.error('Tampoco se pudo encolar la gestión', e2);
@@ -2611,7 +2629,7 @@ const online = await isReallyOnline();
     await queueProcesarGestion(document.getElementById('gestionarForm'), { reason: 'offline' });
     clearClientGuid();     
     mcToast('success','Gestión encolada','Se enviará automáticamente al recuperar conexión.');
-    setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 600);
+    setTimeout(()=>{ window.location.href = '/visibility2/app/index_pruebas.php'; }, 600);
   } catch (err) {
     console.error(err);
     alert('No se pudo encolar la gestión. Intenta nuevamente.');

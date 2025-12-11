@@ -1,20 +1,10 @@
 {
     "success": true,
-    "inserted": 11,
+    "inserted": 1,
     "failed": 0,
     "reportUrl": "",
     "successes": [
-        "L\u00ednea 2: Local 'COMERCIAL VERONICA DUPUY' (c\u00f3digo 7234529) insertado.",
-        "L\u00ednea 3: Local 'MAURICIO PINEDA' (c\u00f3digo 5830540) insertado.",
-        "L\u00ednea 4: Local 'HUGO VERA' (c\u00f3digo 6036144) insertado.",
-        "L\u00ednea 5: Local 'CRISTINA GAETE' (c\u00f3digo 5729410) insertado.",
-        "L\u00ednea 6: Local 'EMILIO HUILCAMAN' (c\u00f3digo 5825605) insertado.",
-        "L\u00ednea 7: Local 'MARGARITA SAEZ' (c\u00f3digo 5880605) insertado.",
-        "L\u00ednea 8: Local 'JEANETTE FIERRO' (c\u00f3digo 6455401) insertado.",
-        "L\u00ednea 9: Local 'TOMA FICA' (c\u00f3digo 6243139) insertado.",
-        "L\u00ednea 10: Local 'COMERCIAL VERONICA DUPUY' (c\u00f3digo 6241139) insertado.",
-        "L\u00ednea 11: Local 'LOS CHAMOS' (c\u00f3digo 6384180) insertado.",
-        "L\u00ednea 12: Local 'JORGE ALVAREZ' (c\u00f3digo 6683155) insertado."
+        "L\u00ednea 2: Local 'DAYAN DUPUY AGUAYO VENTAS' (c\u00f3digo SA6036144) insertado."
     ],
     "failures": []
 }

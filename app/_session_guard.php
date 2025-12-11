@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 if (PHP_SAPI === 'cli') { return; }
 
-// Detecta si el script es ¡°p¨²blico¡± (no forzar login/redirect aqu¨ª)
 $script = str_replace('\\', '/', $_SERVER['SCRIPT_FILENAME'] ?? '');
 $isPublic = false;
 if ($script !== '') {
@@ -42,7 +41,6 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 if (!isset($conn) || !($conn instanceof mysqli)) {
   require_once __DIR__ . '/con_.php';
   if (!isset($conn) || !($conn instanceof mysqli)) {
-    // Si no hay conexi¨®n, no bloqueamos: dejamos que el script falle con su propio manejo
     return;
   }
 }
