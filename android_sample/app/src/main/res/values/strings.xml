@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">VisibilityApp</string>
+    <string name="app_title">Permisos de Cámara y Ubicación</string>
+    <string name="get_location">Obtener ubicación</string>
+    <string name="location_placeholder">Lat: %1$.5f, Lon: %2$.5f</string>
+    <string name="open_camera">Abrir cámara</string>
+    <string name="preview_content_description">Vista previa de la foto capturada</string>
+    <string name="permission_denied">Permiso denegado. Concede los permisos para usar esta función.</string>
+    <string name="location_unavailable">No se pudo obtener la ubicación. Intenta nuevamente.</string>
+</resources>
