@@ -22,6 +22,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.visibility.wrapper.BuildConfig
 import com.visibility.wrapper.databinding.ActivityMainBinding
 import java.io.File
 import java.io.IOException
