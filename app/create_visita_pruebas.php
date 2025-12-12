@@ -163,6 +163,33 @@ try {
   $now = date('Y-m-d H:i:s');
   $visita_id = 0;
   $reused    = false;
+  $canonical_guid = $client_guid;
+
+  // 0) Reusar visita ABIERTA reciente aunque el GUID cambie (ventana de 6h)
+  if ($visita_id === 0) {
+    $windowStart = date('Y-m-d H:i:s', strtotime('-6 hours', strtotime($now)));
+    if ($sel0 = $conn->prepare("
+      SELECT id, client_guid
+        FROM visita
+       WHERE id_usuario=? AND id_formulario=? AND id_local=?
+         AND (fecha_fin IS NULL OR fecha_fin='0000-00-00 00:00:00')
+         AND fecha_inicio >= ?
+       ORDER BY id DESC
+       LIMIT 1
+    ")) {
+      $sel0->bind_param('iiis', $user_id, $form_id, $local_id, $windowStart);
+      if ($sel0->execute()) {
+        $row0_id = null; $row0_guid = '';
+        $sel0->bind_result($row0_id, $row0_guid);
+        if ($sel0->fetch()) {
+          $visita_id = (int)$row0_id;
+          $canonical_guid = $row0_guid ?: $canonical_guid;
+          $reused    = true;
+        }
+      }
+      $sel0->close();
+    }
+  }
 
   // 1) Si viene client_guid, reusar visita ABIERTA con ese guid
   if ($client_guid !== '') {
@@ -179,6 +206,7 @@ try {
         if ($sel->fetch()) {
           if (empty($row_fin) || $row_fin==='0000-00-00 00:00:00') {
             $visita_id = (int)$row_id;
+            $canonical_guid = $client_guid;
             $reused    = true;
           } else {
             $sel->close();
@@ -210,6 +238,7 @@ try {
         $sel2->bind_result($row2_id);
         if ($sel2->fetch()) {
           $visita_id = (int)$row2_id;
+          $canonical_guid = $client_guid ?: $canonical_guid;
           $reused    = true;
         }
       }
@@ -313,7 +342,7 @@ try {
 
   $payload = [
     'visita_id'   => $visita_id,
-    'client_guid' => $client_guid,
+    'client_guid' => $canonical_guid ?: $client_guid,
     'reused'      => $reused,
     'now'         => $now,
     'started_at'  => $started_at ?: $now,

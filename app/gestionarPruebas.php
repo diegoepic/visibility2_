@@ -1073,41 +1073,84 @@ function uuidv4() {
   });
 }
 function makeIdempKey() { return 'idemp-' + Date.now() + '-' + Math.random().toString(16).slice(2); }
-function clientGuidKey() {
+function visitSessionKey() {
   const uid  = (window.USER_ID || <?php echo (int)$usuario_id; ?>);
   const form = <?php echo (int)$idCampana; ?>;
   const loc  = <?php echo (int)$idLocal; ?>;
-  return `vguid:${uid}:${form}:${loc}`;
+  return `visit_session:${uid}:${loc}:${form}`;
+}
+
+function loadVisitSession() {
+  try {
+    return JSON.parse(localStorage.getItem(visitSessionKey()) || '{}');
+  } catch (_) {
+    return {};
+  }
+}
+
+function persistVisitSession(partial = {}) {
+  const current = loadVisitSession();
+  const next = Object.assign({ createdAt: Date.now() }, current, partial);
+  localStorage.setItem(visitSessionKey(), JSON.stringify(next));
+  return next;
 }
 
 function setClientGuid(g) {
-  document.getElementById('client_guid').value = g;
+  const guid = g || uuidv4();
+  const session = persistVisitSession({ client_guid: guid });
+  document.getElementById('client_guid').value = guid;
+  return session.client_guid;
 }
 function rotateClientGuid() {
-  const g = uuidv4();
-  localStorage.setItem(clientGuidKey(), g);
-  setClientGuid(g);
-  return g;
+  return setClientGuid(uuidv4());
 }
 function getOrCreateClientGuid() {
-  const k = clientGuidKey();
-  let g = localStorage.getItem(k);
-  if (!g) g = rotateClientGuid();
-  else setClientGuid(g);
-  return g;
+  const cur = loadVisitSession();
+  const guid = cur.client_guid || uuidv4();
+  return setClientGuid(guid);
 }
 
 function clearClientGuid() {
-  localStorage.removeItem(clientGuidKey());
+  localStorage.removeItem(visitSessionKey());
   const h = document.getElementById('client_guid');
   if (h) h.value = '';
 }
 function ensureClientGuid() {
-  const k = clientGuidKey();
-  let g = localStorage.getItem(k);
-  if (!g) { g = uuidv4(); localStorage.setItem(k, g); }
-  document.getElementById('client_guid').value = g;
-  return g;
+  return getOrCreateClientGuid();
+}
+function rememberVisitaId(vId) {
+  if (!vId) return null;
+  const session = persistVisitSession({ visita_id: vId });
+  const hv = document.getElementById('visita_id');
+  if (hv && !hv.value) hv.value = vId;
+  return session.visita_id;
+}
+
+async function ensureVisitaRealId(options = {}) {
+  const { forceDrain = false } = options;
+  const session = loadVisitSession();
+  const guid = session.client_guid || ensureClientGuid();
+  const hv = document.getElementById('visita_id');
+  const currentVal = (hv?.value || session.visita_id || '').toString();
+  if (currentVal && !currentVal.startsWith('local-')) {
+    rememberVisitaId(currentVal);
+    return currentVal;
+  }
+
+  if (forceDrain && guid && window.Queue && typeof window.Queue.flushNow === 'function') {
+    if (await hasPendingCreateVisita(guid)) {
+      try { await window.Queue.flushNow(); } catch (_) {}
+    }
+  }
+
+  const mapped = (window.Queue && window.Queue.LocalByGuid && window.Queue.LocalByGuid.get(guid)) || null;
+  if (mapped) {
+    rememberVisitaId(mapped);
+    if (hv) hv.value = mapped;
+    return mapped;
+  }
+
+  return currentVal || null;
 }
 function getCSRF() {
   return document.querySelector('input[name="csrf_token"]')?.value || '';
@@ -1147,6 +1190,7 @@ const QUEUE_META_BASE = {
   local_id: <?php echo (int)$idLocal; ?>
 };
 async function queueCreateVisita(payload, idempKey) {
+  persistVisitSession({ client_guid: payload.client_guid || ensureClientGuid() });
   return OfflineQueue.enqueueJSON('/visibility2/app/create_visita_pruebas.php', {
     ...payload,
     csrf_token: getCSRF()
@@ -1154,7 +1198,7 @@ async function queueCreateVisita(payload, idempKey) {
     type: 'create_visita',
     idempotencyKey: idempKey,
     client_guid: payload.client_guid,
-    dedupeKey: `create:${payload.client_guid}`,
+    dedupeKey: `create:<?php echo (int)$usuario_id; ?>:<?php echo (int)$idLocal; ?>:<?php echo (int)$idCampana; ?>`,
     meta: QUEUE_META_BASE
   });
 }
@@ -1190,6 +1234,10 @@ async function subirFotoPregunta(id_form_question, id_local) {
   const clientGuid      = (clientGuidInput?.value || '').trim() || ensureClientGuid();
   if (clientGuidInput && !clientGuidInput.value) clientGuidInput.value = clientGuid;
 
+  const online = await isReallyOnline().catch(() => false);
+  await ensureVisitaRealId({ forceDrain: online });
+  const visitaActual = document.getElementById('visita_id')?.value || '';
+
   // === Metadatos/coords ===
   let meta = await extractPhotoMeta(file);
   meta.capture_source = inputFile.dataset.captureSource || 'unknown';
@@ -1212,7 +1260,7 @@ async function subirFotoPregunta(id_form_question, id_local) {
 
   // === Construcción del FormData ===
   const formData = new FormData();
- formData.append('visita_id', $('#visita_id').val());
+ formData.append('visita_id', visitaActual);
   formData.append('id_form_question', id_form_question);
   formData.append('id_local', id_local);
   formData.append('fotoPregunta', new File([compressedFile], file.name, { type: compressedFile.type }));
@@ -1727,9 +1775,10 @@ function setupFileInput(inputElem) {
     const sourceSelect = document.querySelector(`select.photo-source[data-target-input="fotos_input_${idFQ}"]`);
     const captureSource = (sourceSelect && sourceSelect.value) || 'gallery';
 
-    const tieneVisita = !!$('#visita_id').val();
     const online = await isReallyOnline();
+    if (online) { await ensureVisitaRealId({ forceDrain: true }); }
     const cg = document.getElementById('client_guid')?.value || '';
+    const tieneVisita = !!$('#visita_id').val();
     const allowOnline = online && (tieneVisita || cg);
 
     if (!cg) { ensureClientGuid(); }
@@ -1818,6 +1867,9 @@ function bindCompressionTo(inputElem) {
 
 /* === DOM Ready inicializaciones === */
 document.addEventListener('DOMContentLoaded', ()=>{
+  const s = loadVisitSession();
+  if (s.client_guid) setClientGuid(s.client_guid); else ensureClientGuid();
+  if (s.visita_id) { const hv = document.getElementById('visita_id'); if (hv && !hv.value) hv.value = s.visita_id; }
   window.CSRF_TOKEN = document.querySelector('input[name="csrf_token"]').value;
   document.querySelectorAll('.file-input').forEach(input=>{ setupFileInput(input); });
 });
@@ -1854,7 +1906,8 @@ $('#btnNext1').off('click').on('click', async function(){
   }
 
   // 2) Preparamos payload e idempotencia
-  const client_guid = rotateClientGuid();
+  const sessionState = loadVisitSession();
+  const client_guid = sessionState.client_guid || ensureClientGuid();
   const idempKey    = makeIdempKey();
   $('#idemp_create').val(idempKey);
 
@@ -1905,6 +1958,8 @@ $('#btnNext1').off('click').on('click', async function(){
     if (r.ok && js && js.status === 'success' && js.visita_id) {
       // Online OK
       $('#visita_id').val(js.visita_id);
+      rememberVisitaId(js.visita_id);
+      if (js.client_guid) setClientGuid(js.client_guid);
       if (window.Queue && window.Queue.CompletedDeps) {
         window.Queue.CompletedDeps.add(`create:${client_guid}`);
       }
