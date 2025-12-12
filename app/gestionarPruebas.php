@@ -1080,34 +1080,61 @@ function clientGuidKey() {
   return `vguid:${uid}:${form}:${loc}`;
 }
 
-function setClientGuid(g) {
-  document.getElementById('client_guid').value = g;
+const VISIT_SESSION_KEY = `visit_session:${<?php echo (int)$usuario_id; ?>}:${<?php echo (int)$idLocal; ?>}:${<?php echo (int)$idCampana; ?>}`;
+function readVisitSession(){
+  try { return JSON.parse(localStorage.getItem(VISIT_SESSION_KEY) || '{}'); }
+  catch(_) { return {}; }
 }
-function rotateClientGuid() {
-  const g = uuidv4();
-  localStorage.setItem(clientGuidKey(), g);
-  setClientGuid(g);
-  return g;
+function persistVisitSession(data){
+  try { localStorage.setItem(VISIT_SESSION_KEY, JSON.stringify(data||{})); }
+  catch(_){ /* noop */ }
 }
-function getOrCreateClientGuid() {
-  const k = clientGuidKey();
-  let g = localStorage.getItem(k);
-  if (!g) g = rotateClientGuid();
-  else setClientGuid(g);
-  return g;
-}
-
-function clearClientGuid() {
-  localStorage.removeItem(clientGuidKey());
+function clearVisitSession(){
+  persistVisitSession({});
   const h = document.getElementById('client_guid');
   if (h) h.value = '';
+  const v = document.getElementById('visita_id');
+  if (v) v.value = '';
+  localStorage.removeItem(clientGuidKey());
+}
+// Compatibilidad hacia atrás: algunos flujos aún invocan clearClientGuid()
+// luego de encolar o enviar la gestión. Mantenerlo evita ReferenceError
+// cuando se trabaja 100% offline y el enqueue falla.
+function clearClientGuid(){
+  clearVisitSession();
+}
+function setClientGuid(g) {
+  const h = document.getElementById('client_guid');
+  if (h) h.value = g;
+}
+function ensureVisitSession(){
+  const session = readVisitSession();
+  if (!session.client_guid) {
+    session.client_guid = uuidv4();
+    session.createdAt = Date.now();
+  }
+  persistVisitSession(session);
+  localStorage.setItem(clientGuidKey(), session.client_guid);
+  setClientGuid(session.client_guid);
+  if (session.visita_id) {
+    const v = document.getElementById('visita_id');
+    if (v && !v.value) v.value = session.visita_id;
+  }
+  return session;
+}
+function updateVisitSession(patch){
+  const sess = Object.assign({}, ensureVisitSession(), patch || {});
+  persistVisitSession(sess);
+  if (sess.client_guid) setClientGuid(sess.client_guid);
+  if (sess.visita_id) {
+    const v = document.getElementById('visita_id');
+    if (v) v.value = sess.visita_id;
+  }
+  return sess;
 }
 function ensureClientGuid() {
-  const k = clientGuidKey();
-  let g = localStorage.getItem(k);
-  if (!g) { g = uuidv4(); localStorage.setItem(k, g); }
-  document.getElementById('client_guid').value = g;
-  return g;
+  const sess = ensureVisitSession();
+  return sess.client_guid;
 }
 function getCSRF() {
   return document.querySelector('input[name="csrf_token"]')?.value || '';
@@ -1140,6 +1167,69 @@ async function hasPendingCreateVisita(guid){
     return t.type === 'create_visita' && cg && cg === guid;
   });
 }
+function resolveVisitaIdFromMappings(guid){
+  if (!guid) return null;
+  try {
+    if (window.Queue && window.Queue.LocalByGuid) {
+      const mapped = window.Queue.LocalByGuid.get(guid);
+      if (mapped) return mapped;
+    }
+  } catch(_){}
+  return null;
+}
+async function ensureRealVisitaId(reason=''){ // reason para debugging
+  const session = ensureVisitSession();
+  const guid = session.client_guid;
+  const visitaInput = document.getElementById('visita_id');
+  const currentVal = (visitaInput?.value || '').trim();
+  if (currentVal && !currentVal.startsWith('local-')) {
+    updateVisitSession({ visita_id: currentVal });
+    return currentVal;
+  }
+
+  const mapped = resolveVisitaIdFromMappings(guid);
+  if (mapped && !String(mapped).startsWith('local-')) {
+    updateVisitSession({ visita_id: mapped });
+    return mapped;
+  }
+
+  try {
+    if (await hasPendingCreateVisita(guid) && window.Queue && typeof window.Queue.flushNow === 'function') {
+      await window.Queue.flushNow();
+      const mappedAfter = resolveVisitaIdFromMappings(guid);
+      if (mappedAfter && !String(mappedAfter).startsWith('local-')) {
+        updateVisitSession({ visita_id: mappedAfter });
+        return mappedAfter;
+      }
+    }
+  } catch(_){ /* noop */ }
+
+  // Último recurso: intentar reusar/crear visita online para obtener visita_id real
+  try {
+    const params = new URLSearchParams();
+    params.append('id_formulario', String(<?php echo (int)$idCampana; ?>));
+    params.append('id_local',      String(<?php echo (int)$idLocal; ?>));
+    params.append('client_guid',   String(guid || ''));
+    params.append('csrf_token',    getCSRF());
+    if (session.startPayload) {
+      if (session.startPayload.lat) params.append('lat', String(session.startPayload.lat));
+      if (session.startPayload.lng) params.append('lng', String(session.startPayload.lng));
+    }
+    const r = await fetch('/visibility2/app/create_visita_pruebas.php', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', 'X-CSRF-Token': getCSRF() },
+      body: params.toString()
+    });
+    const js = await r.json().catch(() => ({}));
+    if (r.ok && js && js.visita_id) {
+      updateVisitSession({ visita_id: js.visita_id, client_guid: js.client_guid || guid });
+      return js.visita_id;
+    }
+  } catch(_){ /* noop */ }
+
+  return null;
+}
 const QUEUE_META_BASE = {
   local_name: <?php echo json_encode($nombreLocal, JSON_UNESCAPED_UNICODE); ?>,
   local_direccion: <?php echo json_encode($direccionLocal, JSON_UNESCAPED_UNICODE); ?>,
@@ -1147,14 +1237,20 @@ const QUEUE_META_BASE = {
   local_id: <?php echo (int)$idLocal; ?>
 };
 async function queueCreateVisita(payload, idempKey) {
+  const session = ensureVisitSession();
+  const visitaLocal = session.visita_local_id || ('local-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now()));
+  updateVisitSession({ visita_local_id: visitaLocal, startPayload: { lat: payload.lat, lng: payload.lng } });
+  document.getElementById('visita_id').value = visitaLocal;
+
   return OfflineQueue.enqueueJSON('/visibility2/app/create_visita_pruebas.php', {
     ...payload,
+    visita_local_id: visitaLocal,
     csrf_token: getCSRF()
   }, {
     type: 'create_visita',
     idempotencyKey: idempKey,
     client_guid: payload.client_guid,
-    dedupeKey: `create:${payload.client_guid}`,
+    dedupeKey: `create:${<?php echo (int)$usuario_id; ?>}:${<?php echo (int)$idCampana; ?>}:${<?php echo (int)$idLocal; ?>}`,
     meta: QUEUE_META_BASE
   });
 }
@@ -1189,6 +1285,9 @@ async function subirFotoPregunta(id_form_question, id_local) {
   const clientGuidInput = document.getElementById('client_guid');
   const clientGuid      = (clientGuidInput?.value || '').trim() || ensureClientGuid();
   if (clientGuidInput && !clientGuidInput.value) clientGuidInput.value = clientGuid;
+
+  const visitaReal = await ensureRealVisitaId('pregunta_foto');
+  if (visitaReal) { $('#visita_id').val(visitaReal); }
 
   // === Metadatos/coords ===
   let meta = await extractPhotoMeta(file);
@@ -1622,6 +1721,9 @@ async function uploadFile(file, url, idFQ, onProgress, meta = {}, extra = {}) {
   updateFinalizeButton();
 
   try {
+    const visitaReal = await ensureRealVisitaId('material_foto');
+    if (visitaReal) { $('#visita_id').val(visitaReal); }
+
     const resp = await new Promise((res, rej) => {
       const fd = new FormData();
       fd.append('visita_id', $('#visita_id').val());
@@ -1819,6 +1921,9 @@ function bindCompressionTo(inputElem) {
 /* === DOM Ready inicializaciones === */
 document.addEventListener('DOMContentLoaded', ()=>{
   window.CSRF_TOKEN = document.querySelector('input[name="csrf_token"]').value;
+  const sess = ensureVisitSession();
+  const mapped = resolveVisitaIdFromMappings(sess.client_guid);
+  if (mapped) { updateVisitSession({ visita_id: mapped }); }
   document.querySelectorAll('.file-input').forEach(input=>{ setupFileInput(input); });
 });
 
@@ -1854,7 +1959,8 @@ $('#btnNext1').off('click').on('click', async function(){
   }
 
   // 2) Preparamos payload e idempotencia
-  const client_guid = rotateClientGuid();
+  const session = ensureVisitSession();
+  const client_guid = session.client_guid;
   const idempKey    = makeIdempKey();
   $('#idemp_create').val(idempKey);
 
@@ -1865,6 +1971,8 @@ $('#btnNext1').off('click').on('click', async function(){
     lng:           String($('#lngGestion').val() || ''),
     client_guid:   String(client_guid || '')
   };
+
+  updateVisitSession({ startPayload: { lat: payload.lat, lng: payload.lng } });
 
   $btn.text('Iniciando visita…');
 
@@ -1911,6 +2019,7 @@ $('#btnNext1').off('click').on('click', async function(){
       if (window.Queue && window.Queue.LocalByGuid) {
         window.Queue.LocalByGuid.set(client_guid, js.visita_id);
       }
+      updateVisitSession({ visita_id: js.visita_id, client_guid });
       currentStep = 2;
       showStep(currentStep);
     } else {
@@ -2522,6 +2631,9 @@ document.getElementById('btnFinalizar')?.addEventListener('click', async functio
     alert(`Aún se están subiendo ${pendingUploads} foto(s). Espera un momento.`);
     return;
   }
+
+  const visitaReal = await ensureRealVisitaId('finalizar');
+  if (visitaReal) { $('#visita_id').val(visitaReal); }
 
   // Validación encuesta/obligatorias
   var allAnswered = true;
