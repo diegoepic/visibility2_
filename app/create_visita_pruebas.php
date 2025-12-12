@@ -194,22 +194,25 @@ try {
     }
   }
 
-  // 2) Si no hay guid: reusar visita ABIERTA "genérica" del mismo trío
-  if ($visita_id === 0 && $client_guid === '') {
+  // 2) Reusar visita ABIERTA reciente del mismo trío aunque traiga otro guid
+  if ($visita_id === 0) {
+    $reuse_since = date('Y-m-d H:i:s', strtotime('-6 hours'));
     if ($sel2 = $conn->prepare("
-      SELECT id
+      SELECT id, client_guid
         FROM visita
        WHERE id_usuario=? AND id_formulario=? AND id_local=?
          AND (fecha_fin IS NULL OR fecha_fin='0000-00-00 00:00:00')
+         AND (fecha_inicio IS NULL OR fecha_inicio >= ?)
        ORDER BY id DESC
        LIMIT 1
     ")) {
-      $sel2->bind_param('iii', $user_id, $form_id, $local_id);
+      $sel2->bind_param('iiis', $user_id, $form_id, $local_id, $reuse_since);
       if ($sel2->execute()) {
-        $row2_id = null;
-        $sel2->bind_result($row2_id);
+        $row2_id = null; $row2_guid = null;
+        $sel2->bind_result($row2_id, $row2_guid);
         if ($sel2->fetch()) {
           $visita_id = (int)$row2_id;
+          $client_guid = $row2_guid ?: ($client_guid ?: '');
           $reused    = true;
         }
       }
