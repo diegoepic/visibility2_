@@ -33,9 +33,9 @@
   // --------------------------------------------------------------------------------
   async function refreshCSRF(){
     try {
-      const r  = await fetch(CSRF_ENDPOINT, { credentials: 'same-origin', cache: 'no-store' });
+      const r  = await withTimeout((signal) => fetch(CSRF_ENDPOINT, { credentials: 'same-origin', cache: 'no-store', signal }), 6000, 'E_CSRF_TIMEOUT');
       if (r.status === 401) return null; // sin sesión
-      const js = await r.json();
+      const js = await parseJsonSafe(r);
       if (js && js.csrf_token) {
         window.CSRF_TOKEN = js.csrf_token;
         return js.csrf_token;
@@ -46,9 +46,9 @@
 
   async function heartbeat(){
     try {
-      const r = await fetch(PING_ENDPOINT, { credentials: 'same-origin', cache: 'no-store' });
+      const r = await withTimeout((signal) => fetch(PING_ENDPOINT, { credentials: 'same-origin', cache: 'no-store', signal }), 6000, 'E_PING_TIMEOUT');
       if (!r.ok) return false;
-      const js = await r.json();
+      const js = await parseJsonSafe(r);
       if (js && js.csrf_token) window.CSRF_TOKEN = js.csrf_token;
       return !!(js && js.status === 'ok');
     } catch(_) { return false; }
@@ -93,6 +93,8 @@
   async function httpPost(task){
     if (!task || !task.url) throw new Error('Task sin URL');
 
+    const timeoutMs = typeof task.timeoutMs === 'number' ? task.timeoutMs : 20000;
+
     // SIEMPRE refrescamos CSRF para evitar drift
     await refreshCSRF();
 
@@ -109,13 +111,14 @@
     let r;
     try {
       QueueEvents.emit('queue:dispatch:progress', { job: task, progress: 50 });
-      r = await fetch(url, {
+      r = await withTimeout((signal) => fetch(url, {
         method: 'POST',
         body: fd,
         credentials: 'include',      // ← más robusto que 'same-origin'
         cache: 'no-store',
-        headers
-      });
+        headers,
+        signal
+      }), timeoutMs, 'E_POST_TIMEOUT');
       QueueEvents.emit('queue:dispatch:progress', { job: task, progress: 90 });
     } catch (err) {
       throw new Error(`Network error calling ${url}: ${err && err.message ? err.message : err}`);
@@ -127,10 +130,11 @@
       if (ok) {
         const fd2 = buildFormData(task);
         const headers2 = { ...headers, 'X-CSRF-Token': window.CSRF_TOKEN || '' };
-        return fetch(url, { method:'POST', body: fd2, credentials:'include', cache:'no-store', headers: headers2 });
+        r = await withTimeout((signal) => fetch(url, { method:'POST', body: fd2, credentials:'include', cache:'no-store', headers: headers2, signal }), timeoutMs, 'E_POST_TIMEOUT');
       }
     }
-    return r;
+    const data = await parseJsonSafe(r);
+    return { response: r, data };
   }
 
   // --------------------------------------------------------------------------------
@@ -166,6 +170,49 @@
   // --------------------------------------------------------------------------------
   // Helpers varios
   // --------------------------------------------------------------------------------
+  function withTimeout(promiseFactory, ms, code){
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(code || 'timeout'), ms || 20000);
+    let p;
+    try {
+      p = promiseFactory(controller.signal);
+    } catch (e) {
+      clearTimeout(tid);
+      throw e;
+    }
+
+    const timeoutPromise = new Promise((_, reject) => {
+      controller.signal.addEventListener('abort', () => {
+        const err = new DOMException(code || 'timeout', 'AbortError');
+        err.code = code || 'timeout';
+        reject(err);
+      }, { once:true });
+    });
+
+    return Promise.race([p, timeoutPromise]).finally(() => clearTimeout(tid));
+  }
+
+  function isNetworkishError(err){
+    if (!err) return false;
+    if (err.name === 'AbortError' || err.name === 'TimeoutError') return true;
+    const msg = (err && err.message) ? String(err.message) : '';
+    return /Failed to fetch/i.test(msg) || /NetworkError/i.test(msg) || /timeout/i.test(msg);
+  }
+
+  async function parseJsonSafe(response){
+    try {
+      const txt = await response.text();
+      if (!txt) return {};
+      try {
+        return JSON.parse(txt);
+      } catch (_) {
+        return { raw: txt };
+      }
+    } catch (_) {
+      return {};
+    }
+  }
+
   function addField(fields, k, v){
     if (Object.prototype.hasOwnProperty.call(fields, k)) {
       if (Array.isArray(fields[k])) fields[k].push(v);
@@ -234,10 +281,14 @@
       if (real) task.fields.visita_id = real;
     }
 
-    const r = await httpPost(task);
+    const { response: r, data: js } = await httpPost(task);
+    if (r.status === 401 || r.status === 403 || r.status === 419) {
+      const authErr = new Error('HTTP ' + r.status);
+      authErr.status = r.status;
+      authErr.response = js;
+      throw authErr;
+    }
     if (!r.ok) throw new Error('HTTP ' + r.status);
-
-    const js = await r.json().catch(()=> ({}));
 
     if (!isLogicalSuccess(js)) {
       const err = new Error(`Logical failure (${r.status}): ${logicalErrorMessage(js)}`);
@@ -434,8 +485,10 @@
      * Intenta enviar inmediatamente; si falla (offline o error), encola.
      */
     smartPost: async function(url, fdOrFields, options = {}) {
-      const type      = options.type || 'generic';
-      const needCSRF  = options.sendCSRF !== false;
+      const type          = options.type || 'generic';
+      const needCSRF      = options.sendCSRF !== false;
+      const timeoutMs     = typeof options.timeoutMs === 'number' ? options.timeoutMs : 20000;
+      const enqueueOnFail = options.enqueueOnFail !== false;
 
       let fields = {}, files = [];
       if (fdOrFields instanceof FormData) {
@@ -456,7 +509,8 @@
         id: options.id || options.idempotencyKey || undefined,
         dedupeKey: options.dedupeKey || undefined,
         dependsOn: options.dependsOn || undefined,
-        client_guid: options.client_guid || fields.client_guid || undefined
+        client_guid: options.client_guid || fields.client_guid || undefined,
+        timeoutMs
       };
 
       if (!task.id) {
@@ -468,24 +522,53 @@
       // Registrar en Journal también para gestiones ONLINE
       jr('onEnqueue', task);
 
+      const shouldEnqueue = enqueueOnFail !== false && !!task.meta && !!task.meta.kind;
+
+      if (!navigator.onLine) {
+        if (shouldEnqueue) {
+          const id = await this.enqueue(task);
+          return { queued:true, ok:true, id };
+        }
+        throw new Error('Offline');
+      }
+
       if (navigator.onLine) {
         try {
           await heartbeat();
+          if (needCSRF) {
+            const csrfOk = await refreshCSRF();
+            if (!csrfOk && shouldEnqueue) {
+              const id = await this.enqueue(task);
+              return { queued:true, ok:true, id };
+            }
+          }
           // Ahora el job SIEMPRE tiene id
           QueueEvents.emit('queue:dispatch:start', { job: task });
           jr('onStart', task);
-          const js = await processTask(task);
+          const js = await withTimeout(() => processTask(task), timeoutMs, 'E_SMART_TIMEOUT');
 
           QueueEvents.emit('queue:dispatch:success', {
             job: task,
             responseStatus: 200,
             response: js
           });
-          jr('onSuccess', task, js);
+          jr('onSuccess', task, js, 200);
           return { queued:false, ok:true, response: js };
         } catch (e) {
           QueueEvents.emit('queue:dispatch:error', { job: task, error: String(e) });
-          jr('onError', task, String(e));
+          jr('onError', task, String(e), e && e.status ? e.status : null);
+          if (shouldEnqueue && (isNetworkishError(e) || e.status === 401 || e.status === 403 || e.status === 419)) {
+            const id = await this.enqueue(task);
+            return { queued:true, ok:true, id };
+          }
+          if (shouldEnqueue && e && e.name === 'AbortError') {
+            const id = await this.enqueue(task);
+            return { queued:true, ok:true, id };
+          }
+          if (shouldEnqueue && enqueueOnFail) {
+            const id = await this.enqueue(task);
+            return { queued:true, ok:true, id };
+          }
         }
       }
 

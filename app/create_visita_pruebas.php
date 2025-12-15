@@ -2,7 +2,8 @@
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-store');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
 ini_set('display_errors','0');
 date_default_timezone_set('America/Santiago');
 
@@ -25,7 +26,7 @@ function json_fail(int $code, string $message, array $extra = []): void {
 }
 function json_ok(array $payload): void {
   http_response_code(200);
-  echo json_encode(['status'=>'success'] + $payload, JSON_UNESCAPED_UNICODE);
+  echo json_encode(['status'=>'ok'] + $payload, JSON_UNESCAPED_UNICODE);
   exit;
 }
 function get_header_lower(string $name): ?string {
@@ -113,9 +114,12 @@ if (!isset($_SESSION['usuario_id'])) {
   json_fail(401, 'No autenticado.');
 }
 $user_id = (int)$_SESSION['usuario_id'];
+$empresa_id = isset($_SESSION['empresa_id']) ? (int)$_SESSION['empresa_id'] : null; // por si se usa en el futuro
+$csrf_session = $_SESSION['csrf_token'] ?? null;
+session_write_close();
 
 $csrf = read_csrf();
-if (empty($csrf) || empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $csrf)) {
+if (empty($csrf) || empty($csrf_session) || !hash_equals($csrf_session, $csrf)) {
   json_fail(419, 'CSRF inválido o ausente.');
 }
 
@@ -160,6 +164,8 @@ idempo_claim_or_fail($conn, 'create_visita'); // si existe respuesta previa, res
 
 /* -------------------- Lógica principal -------------------- */
 try {
+  @$conn->query('SET SESSION innodb_lock_wait_timeout = 5');
+  $conn->begin_transaction();
   $now = date('Y-m-d H:i:s');
   $visita_id = 0;
   $reused    = false;
@@ -170,7 +176,9 @@ try {
       SELECT id, fecha_fin
         FROM visita
        WHERE id_usuario=? AND id_formulario=? AND id_local=? AND client_guid=?
-       LIMIT 1
+         AND fecha_fin IS NULL
+       ORDER BY id DESC
+       LIMIT 1 FOR UPDATE
     ")) {
       $sel->bind_param('iiis', $user_id, $form_id, $local_id, $client_guid);
       if ($sel->execute()) {
@@ -182,6 +190,7 @@ try {
             $reused    = true;
           } else {
             $sel->close();
+            $conn->rollback();
             json_fail(409, 'client_guid ya fue usado en una visita cerrada. Genera un GUID nuevo.', [
               'code'        => 'GUID_REUSED',
               'client_guid' => $client_guid,
@@ -204,7 +213,7 @@ try {
          AND (fecha_fin IS NULL OR fecha_fin='0000-00-00 00:00:00')
          AND (fecha_inicio IS NULL OR fecha_inicio >= ?)
        ORDER BY id DESC
-       LIMIT 1
+       LIMIT 1 FOR UPDATE
     ")) {
       $sel2->bind_param('iiis', $user_id, $form_id, $local_id, $reuse_since);
       if ($sel2->execute()) {
@@ -232,8 +241,6 @@ try {
       }
     }
 
-    // Transacción ACID para el INSERT (y manejar duplicados limpiamente)
-    $conn->begin_transaction();
     $fecha_ini = $started_at ?: $now;
 
     if ($ins = $conn->prepare("
@@ -289,7 +296,6 @@ try {
       } else {
         $visita_id = (int)$ins->insert_id;
         $ins->close();
-        $conn->commit();
       }
     } else {
       $conn->rollback();
@@ -311,8 +317,14 @@ try {
     }
   }
 
+  if (!$conn->commit()) {
+    throw new RuntimeException('No se pudo confirmar la transacción');
+  }
+
   // Guarda en sesión por conveniencia
+  if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
   $_SESSION['current_visita_id'] = $visita_id;
+  session_write_close();
 
   $payload = [
     'visita_id'   => $visita_id,
@@ -326,7 +338,7 @@ try {
 
   // Persistir respuesta en el log de idempotencia (si vino X-Idempotency-Key)
   if (function_exists('idempo_get_key') && idempo_get_key()) {
-    idempo_store_and_reply($conn, 'create_visita', 200, ['status'=>'success'] + $payload);
+    idempo_store_and_reply($conn, 'create_visita', 200, ['status'=>'ok'] + $payload);
   } else {
     json_ok($payload);
   }
@@ -335,5 +347,15 @@ try {
   // Intentar rollback si quedó una transacción abierta
   if ($conn instanceof mysqli) { @mysqli_rollback($conn); }
   error_log('create_visita_pruebas.php ERROR: ' . $e->getMessage());
-  json_fail(500, 'Error interno al crear la visita.');
+  http_response_code(500);
+  echo json_encode([
+    'status'  => 'error',
+    'error'   => 'E_CREATE_VISITA',
+    'message' => 'Error interno al crear la visita.'
+  ], JSON_UNESCAPED_UNICODE);
+  exit;
 }
+
+// Recomendación de índice para acelerar reuse de visitas abiertas por guid
+// ALTER TABLE visita
+//   ADD INDEX idx_visita_open_lookup (id_usuario, id_formulario, id_local, client_guid, fecha_fin, id);

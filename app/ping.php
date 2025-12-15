@@ -16,10 +16,16 @@ try {
 
     // Si no hay sesión, 401 para que Queue.drain() se detenga
     if (!isset($_SESSION['usuario_id'])) {
+        session_write_close();
         http_response_code(401);
-        echo json_encode(['status' => 'no_session'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok' => false, 'error' => 'NO_SESSION'], JSON_UNESCAPED_UNICODE);
         exit;
     }
+
+    $uid = (int)$_SESSION['usuario_id'];
+    $empresaId = isset($_SESSION['empresa_id']) ? (int)$_SESSION['empresa_id'] : null;
+
+    session_write_close();
 
     // Garantiza un CSRF válido para ayudar al heartbeat
     if (
@@ -40,15 +46,15 @@ try {
     $resp = [
         'status'      => 'ok',
         'server_time' => gmdate('c'),
-        'user_id'     => (int)$_SESSION['usuario_id'],
-        'empresa_id'  => isset($_SESSION['empresa_id']) ? (int)$_SESSION['empresa_id'] : null,
+        'user_id'     => $uid,
+        'empresa_id'  => $empresaId,
         'app_version' => getenv('APP_VERSION') ?: 'v2',
         'db_ok'       => $db_ok,
         'csrf_token'  => $_SESSION['csrf_token'],
     ];
 
     http_response_code(200);
-    echo json_encode($resp, JSON_UNESCAPED_UNICODE);
+    echo json_encode(['ok' => true] + $resp, JSON_UNESCAPED_UNICODE);
     exit;
 
 } catch (Throwable $e) {
