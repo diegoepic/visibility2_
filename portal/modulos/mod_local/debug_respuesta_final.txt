@@ -1,28 +1,168 @@
 {
     "success": true,
-    "inserted": 19,
-    "failed": 0,
-    "reportUrl": "",
+    "inserted": 20,
+    "failed": 23,
+    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1765815757.csv",
     "successes": [
-        "L\u00ednea 2: Local 'QUINTEROS MURIANO GLADYS IRIANA DE' (c\u00f3digo 40681) insertado.",
-        "L\u00ednea 3: Local 'LUIS PEDRO VARGAS ROJAS' (c\u00f3digo 40397) insertado.",
-        "L\u00ednea 4: Local 'HUMBERTO ALFREDO MONTALBAN DIAZ' (c\u00f3digo 40482) insertado.",
-        "L\u00ednea 5: Local 'GODOY CASTILLO GUILLERMO' (c\u00f3digo 40483) insertado.",
-        "L\u00ednea 6: Local 'BORDONES CORTES SONIA RUTH' (c\u00f3digo 40516) insertado.",
-        "L\u00ednea 7: Local 'PRADO MUNOZ MARIA LUZ' (c\u00f3digo 40560) insertado.",
-        "L\u00ednea 8: Local 'DURAN CASTILLO MARCIA DE LOURDES' (c\u00f3digo 40659) insertado.",
-        "L\u00ednea 9: Local 'DIAZ CAMPUSANO LUIS' (c\u00f3digo 40729) insertado.",
-        "L\u00ednea 10: Local 'ANDRES ALFONSO ALFARO GONZALEZ' (c\u00f3digo 57117) insertado.",
-        "L\u00ednea 11: Local 'RIVERA OLIVARES XIMENA ELISA' (c\u00f3digo 62265) insertado.",
-        "L\u00ednea 12: Local 'GUILLERMO KENNEDY ZAMBRA AGUILERA' (c\u00f3digo 73495) insertado.",
-        "L\u00ednea 13: Local 'SARA ENEA FERNANDEZ SCOLA | SUCURSALMK' (c\u00f3digo 63673) insertado.",
-        "L\u00ednea 14: Local 'COMERCIALIZADORA MINORISTA JANA SPA' (c\u00f3digo 65364) insertado.",
-        "L\u00ednea 15: Local 'COMERCIAL NICOL VENEGAS EIRL' (c\u00f3digo 88209) insertado.",
-        "L\u00ednea 16: Local 'MIS RAICES SPA' (c\u00f3digo 92037) insertado.",
-        "L\u00ednea 17: Local 'SALDIAS SEPULVEDA NORMA DEL CARMEN' (c\u00f3digo 40446) insertado.",
-        "L\u00ednea 18: Local 'GOMEZ ZAMORA DANICA ESTER' (c\u00f3digo 61657) insertado.",
-        "L\u00ednea 19: Local 'SOC ROJAS ASTUDILLO LTDA' (c\u00f3digo 62673) insertado.",
-        "L\u00ednea 20: Local 'INVERSIONES LV SPA' (c\u00f3digo 17232) insertado."
+        "L\u00ednea 3: Local 'ANTOJITOS DE FZ' (c\u00f3digo 7499900) insertado.",
+        "L\u00ednea 4: Local 'RIFFO PUNTO DE VENTAS' (c\u00f3digo 5446625) insertado.",
+        "L\u00ednea 5: Local 'ANTUCA SPA' (c\u00f3digo 7045113) insertado.",
+        "L\u00ednea 6: Local 'CASA SORAYA' (c\u00f3digo 3352129) insertado.",
+        "L\u00ednea 7: Local 'JAQUELINE VALDEBENITO (PILLAN)' (c\u00f3digo 5593771) insertado.",
+        "L\u00ednea 8: Local 'CONSTRUMUNDO' (c\u00f3digo 7531758) insertado.",
+        "L\u00ednea 9: Local 'VIVIANA ARIAS' (c\u00f3digo 5245307) insertado.",
+        "L\u00ednea 11: Local 'RICARDO SILVA' (c\u00f3digo 6821767) insertado.",
+        "L\u00ednea 13: Local 'LEVIO' (c\u00f3digo 6862241) insertado.",
+        "L\u00ednea 14: Local 'EL PEUMO' (c\u00f3digo 7328707) insertado.",
+        "L\u00ednea 18: Local 'COMERCIAL KUFULL' (c\u00f3digo 6483116) insertado.",
+        "L\u00ednea 26: Local 'MORA ROJA JOSE LUIS' (c\u00f3digo 4693933) insertado.",
+        "L\u00ednea 28: Local 'JUAN BERNARDO ZUA\u00d1IGA' (c\u00f3digo 7488043) insertado.",
+        "L\u00ednea 29: Local 'COMERCIALIZADORA DE ALIMENTOS Y' (c\u00f3digo 6920565) insertado.",
+        "L\u00ednea 31: Local 'COMERCIALIZADORA SANTANA SILVA' (c\u00f3digo 7307619) insertado.",
+        "L\u00ednea 34: Local 'FLORES CAMPAL SPA.' (c\u00f3digo 6643798) insertado.",
+        "L\u00ednea 36: Local 'SOCIEDAD OSORIO Y SEPULVEDA' (c\u00f3digo 4172558) insertado.",
+        "L\u00ednea 37: Local 'LACTEOS SAN IGNACIO' (c\u00f3digo 7287828) insertado.",
+        "L\u00ednea 38: Local 'MARKETHOME VHS SPA.' (c\u00f3digo 7443654) insertado.",
+        "L\u00ednea 40: Local 'COFRE SEPULVEDA MARCO ANTONIO' (c\u00f3digo 4838701) insertado."
     ],
-    "failures": []
+    "failures": [
+        {
+            "line": 2,
+            "codigo": "7272158",
+            "nombre": "LONCOMARKET",
+            "reason": "El c\u00f3digo de local '7272158' ya existe (l\u00ednea 2)."
+        },
+        {
+            "line": 10,
+            "codigo": "6166371",
+            "nombre": "ENTREMIGAS",
+            "reason": "El c\u00f3digo de local '6166371' ya existe (l\u00ednea 10)."
+        },
+        {
+            "line": 12,
+            "codigo": "141331",
+            "nombre": "RIFFO SANTA ELENA",
+            "reason": "El c\u00f3digo de local '141331' ya existe (l\u00ednea 12)."
+        },
+        {
+            "line": 15,
+            "codigo": "138456",
+            "nombre": "SOTO AGUILAR Y CIA",
+            "reason": "El c\u00f3digo de local '138456' ya existe (l\u00ednea 15)."
+        },
+        {
+            "line": 16,
+            "codigo": "7097566",
+            "nombre": "VENTAS ALCOHOLICAS DANIELA",
+            "reason": "El c\u00f3digo de local '7097566' ya existe (l\u00ednea 16)."
+        },
+        {
+            "line": 17,
+            "codigo": "7381129",
+            "nombre": "SERVICIOS EXPRESS",
+            "reason": "El c\u00f3digo de local '7381129' ya existe (l\u00ednea 17)."
+        },
+        {
+            "line": 19,
+            "codigo": "82609",
+            "nombre": "ELGUETA MANRIQUEZ MIRTA",
+            "reason": "El c\u00f3digo de local '82609' ya existe (l\u00ednea 19)."
+        },
+        {
+            "line": 20,
+            "codigo": "7419013",
+            "nombre": "JFCARNES Y LIQUORS",
+            "reason": "El c\u00f3digo de local '7419013' ya existe (l\u00ednea 20)."
+        },
+        {
+            "line": 21,
+            "codigo": "4059127",
+            "nombre": "PILQUIANTEHENRIQUEZ YERSON",
+            "reason": "El c\u00f3digo de local '4059127' ya existe (l\u00ednea 21)."
+        },
+        {
+            "line": 22,
+            "codigo": "5813207",
+            "nombre": "COMERCIAL MATIAS LIMITADA",
+            "reason": "El c\u00f3digo de local '5813207' ya existe (l\u00ednea 22)."
+        },
+        {
+            "line": 23,
+            "codigo": "5835254",
+            "nombre": "COMERCIAL MATIAS LIMITADA",
+            "reason": "El c\u00f3digo de local '5835254' ya existe (l\u00ednea 23)."
+        },
+        {
+            "line": 24,
+            "codigo": "108043",
+            "nombre": "MOSCOSO RIOSECO JUANA AMELIA",
+            "reason": "El c\u00f3digo de local '108043' ya existe (l\u00ednea 24)."
+        },
+        {
+            "line": 25,
+            "codigo": "2103725",
+            "nombre": "GODOY MARCHANT JUANA MARIA",
+            "reason": "El c\u00f3digo de local '2103725' ya existe (l\u00ednea 25)."
+        },
+        {
+            "line": 27,
+            "codigo": "5849509",
+            "nombre": "LUIS CARRASCO ROBLES ALBERTO",
+            "reason": "El c\u00f3digo de local '5849509' ya existe (l\u00ednea 27)."
+        },
+        {
+            "line": 30,
+            "codigo": "7465248",
+            "nombre": "LA QUESERIA SPA.",
+            "reason": "El c\u00f3digo de local '7465248' ya existe (l\u00ednea 30)."
+        },
+        {
+            "line": 32,
+            "codigo": "5868726",
+            "nombre": "MINI. JOSE PABLO HORMAZABAL",
+            "reason": "El c\u00f3digo de local '5868726' ya existe (l\u00ednea 32)."
+        },
+        {
+            "line": 33,
+            "codigo": "7023485",
+            "nombre": "COMERCIAL CLICK LTDA",
+            "reason": "El c\u00f3digo de local '7023485' ya existe (l\u00ednea 33)."
+        },
+        {
+            "line": 35,
+            "codigo": "6211187",
+            "nombre": "SOCIEDAD ORTIZ Y ORTIZ LIMITADA",
+            "reason": "El c\u00f3digo de local '6211187' ya existe (l\u00ednea 35)."
+        },
+        {
+            "line": 39,
+            "codigo": "1327363",
+            "nombre": "COMERCIAL PEDRO MALDONADO ROA",
+            "reason": "El c\u00f3digo de local '1327363' ya existe (l\u00ednea 39)."
+        },
+        {
+            "line": 41,
+            "codigo": "6822783",
+            "nombre": "SOCIEDAD LAGOS Y ULLOA LTDA",
+            "reason": "El c\u00f3digo de local '6822783' ya existe (l\u00ednea 41)."
+        },
+        {
+            "line": 42,
+            "codigo": "6686200",
+            "nombre": "DONDE LA TOTE SPA",
+            "reason": "El c\u00f3digo de local '6686200' ya existe (l\u00ednea 42)."
+        },
+        {
+            "line": 43,
+            "codigo": "4236840",
+            "nombre": "CASANOVA ILLANES CARLOS JORGE",
+            "reason": "El c\u00f3digo de local '4236840' ya existe (l\u00ednea 43)."
+        },
+        {
+            "line": 44,
+            "codigo": "6394882",
+            "nombre": "LA SURENA SPA",
+            "reason": "El c\u00f3digo de local '6394882' ya existe (l\u00ednea 44)."
+        }
+    ]
 }
