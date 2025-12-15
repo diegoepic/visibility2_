@@ -69,6 +69,10 @@
       visita_local_id: fields.visita_local_id || null,
       visita_id      : null,
 
+      http_status: (patch && patch.http_status) || null,
+      request_id : (patch && patch.request_id)  || null,
+      last_error : (patch && patch.last_error)  || null,
+
       counts: { photos:0, answers:0 },
 
       names: {
@@ -191,7 +195,7 @@
     return upsert(cur);
   }
 
-  async function onSuccess(job, response){
+  async function onSuccess(job, response, httpStatus){
     const cur = await get(job.id);
 
     // Base: marcar éxito y visita_id
@@ -199,6 +203,9 @@
       status   : 'success',
       progress : 100,
       error    : null,
+      last_error: null,
+      http_status: httpStatus || 200,
+      request_id : (response && (response.request_id || response.req_id)) || null,
       visita_id: (response && response.visita_id) ||
                  (cur && cur.visita_id) ||
                  null
@@ -223,14 +230,16 @@
     return upsert(rec);
   }
 
-  async function onError(job, errorMessage){
+  async function onError(job, errorMessage, httpStatus){
     const cur = await get(job.id);
     const rec = normalizeFromQueue(
       job,
       Object.assign({}, cur || {}, {
         status  : 'error',
         progress: (cur && cur.progress > 50) ? cur.progress : 50,
-        error   : String(errorMessage || 'Error')
+        error   : String(errorMessage || 'Error'),
+        last_error: String(errorMessage || 'Error'),
+        http_status: httpStatus || (cur && cur.http_status) || null
       })
     );
     return upsert(rec);
