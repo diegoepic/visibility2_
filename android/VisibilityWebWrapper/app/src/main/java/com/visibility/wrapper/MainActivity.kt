@@ -121,6 +121,26 @@ class MainActivity : AppCompatActivity() {
 
         binding.webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                val uri = request?.url ?: return false
+                val scheme = uri.scheme?.lowercase(Locale.ROOT)
+                val isHttpOrHttps = scheme == "http" || scheme == "https"
+                val host = uri.host?.lowercase(Locale.ROOT).orEmpty()
+                val isGoogleMapsDomain = host.contains("maps.google.") ||
+                        (host.endsWith("google.com") && uri.path?.startsWith("/maps") == true)
+
+                val isExternalScheme = !isHttpOrHttps || isGoogleMapsDomain
+
+                if (isExternalScheme) {
+                    val intent = Intent(Intent.ACTION_VIEW, uri)
+                    val resolvedActivity = intent.resolveActivity(packageManager)
+                    if (resolvedActivity != null) {
+                        startActivity(intent)
+                        return true
+                    }
+                }
+
+
+
                 return false
             }
         }
