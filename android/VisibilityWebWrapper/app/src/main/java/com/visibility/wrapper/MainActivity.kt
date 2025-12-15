@@ -127,8 +127,11 @@ class MainActivity : AppCompatActivity() {
                 val host = uri.host?.lowercase(Locale.ROOT).orEmpty()
                 val isGoogleMapsDomain = host.contains("maps.google.") ||
                         (host.endsWith("google.com") && uri.path?.startsWith("/maps") == true)
+                val isGoogleMapsShortLink = host == "maps.app.goo.gl" ||
+                        (host == "goo.gl" && uri.path?.startsWith("/maps") == true) ||
+                        (host == "goo.gle" && uri.path?.startsWith("/maps") == true)
 
-                val isExternalScheme = !isHttpOrHttps || isGoogleMapsDomain
+                val isExternalScheme = !isHttpOrHttps || isGoogleMapsDomain || isGoogleMapsShortLink
 
                 if (isExternalScheme) {
                     val intent = Intent(Intent.ACTION_VIEW, uri)
