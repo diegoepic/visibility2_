@@ -96,8 +96,9 @@ function getCampaignData($idForm) {
 function getLocalesDetails($idForm) {
     global $conn;
     $sql = "
-        SELECT 
+        SELECT
             l.id                               AS idLocal,
+            fq.id                              AS id_formularioQuestion,
             l.codigo                           AS codigo_local,
             CASE
               WHEN l.nombre REGEXP '^[0-9]+'
@@ -174,6 +175,70 @@ function getLocalesDetails($idForm) {
         die("Error en getLocalesDetails: " . $conn->error);
     }
     return $res->fetch_all(MYSQLI_ASSOC);
+}
+
+function getFotosImplementaciones($idForm, array $fqIds): array {
+    global $conn;
+
+    $fqIds = array_values(array_filter(array_unique(array_map('intval', $fqIds)), function ($v) {
+        return $v > 0;
+    }));
+
+    if (empty($fqIds)) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($fqIds), '?'));
+    $types        = 'i' . str_repeat('i', count($fqIds));
+    $sql          = "
+        SELECT id_formularioQuestion, url
+        FROM fotoVisita
+        WHERE id_formulario = ?
+          AND id_formularioQuestion IN ($placeholders)
+        ORDER BY id ASC
+    ";
+
+    $stmt       = $conn->prepare($sql);
+    $params     = array_merge([$types], [$idForm], $fqIds);
+    $bindParams = [];
+    foreach ($params as $k => $v) {
+        $bindParams[$k] = &$params[$k];
+    }
+    call_user_func_array([$stmt, 'bind_param'], $bindParams);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if (!$res) {
+        die("Error en getFotosImplementaciones: " . $conn->error);
+    }
+
+    $out = [];
+    while ($row = $res->fetch_assoc()) {
+        $fqId = (int)$row['id_formularioQuestion'];
+        $out[$fqId][] = $row['url'];
+    }
+    return $out;
+}
+
+function renderValorConImagen(string $valor, bool $inline): string {
+    $vs = trim($valor);
+
+    if (!$inline) {
+        return e($vs);
+    }
+
+    if (!preg_match('#^https?://#', $vs)) {
+        return e($vs);
+    }
+
+    $urls  = preg_split('/\s*;\s*/', $vs);
+    $first = trim($urls[0] ?? '');
+
+    if ($first !== '' && preg_match('#\.(jpe?g|png|gif|webp)$#i', $first)) {
+        $safe = e($first);
+        return "<img class=\"inline-img\" src=\"{$safe}\" data-toggle=\"modal\" data-target=\"#imgModal\" data-src=\"{$safe}\">";
+    }
+
+    return e($vs);
 }
 
 function getEncuestaPivot($idForm) {
@@ -337,7 +402,7 @@ GROUP_CONCAT(
 // Generador de HTML/XLS
 // -----------------------------------------------------------------------------
 
-function generarExcel($campaign, $locales, $encuesta, $archivo = null, $inline = false) {
+function generarExcel($campaign, $locales, $encuesta, $archivo = null, $inline = false, $fotosLocales = [], $maxFotosLocales = 0) {
     // Normalizar URLs de imágenes en las respuestas de encuesta:
     // - Si el valor empieza con /visibility2/ (en mayúsculas o minúsculas)
     // - Convertir el path a minúsculas
@@ -431,6 +496,15 @@ HTML;
                       <th>CANTIDAD MATERIAL EJECUTADO</th>
                       <th>MATERIAL PROPUESTO</th>
                       <th>OBSERVACION</th>
+";
+
+        if ($maxFotosLocales > 0) {
+            for ($i = 1; $i <= $maxFotosLocales; $i++) {
+                $html .= "                      <th>FOTO {$i}</th>\n";
+            }
+        }
+
+        $html .= "
                     </tr>";
 
         foreach ($locales as $l) {
@@ -463,8 +537,19 @@ HTML;
                         <td>" . e($l['material']) . "</td>
                         <td>" . e($l['valor']) . "</td>
                         <td>" . e($l['valor_propuesto']) . "</td>
-                        <td>" . e($l['observacion']) . "</td>
-                      </tr>";
+                        <td>" . e($l['observacion']) . "</td>";
+
+            $fotos = [];
+            if (!empty($l['id_formularioQuestion']) && isset($fotosLocales[$l['id_formularioQuestion']])) {
+                $fotos = $fotosLocales[$l['id_formularioQuestion']];
+            }
+
+            for ($fi = 0; $fi < $maxFotosLocales; $fi++) {
+                $url = trim((string)($fotos[$fi] ?? ''));
+                $html .= "<td>" . renderValorConImagen($url, $inline) . "</td>";
+            }
+
+            $html .= "</tr>";
         }
 
         $html .= "</table><br>";
@@ -486,22 +571,7 @@ HTML;
         $html .= "<tr>";
         foreach ($row as $v) {
             $vs = (string)($v ?? '');
-            if ($inline && preg_match('#^https?://#', $vs)) {
-                $urls  = preg_split('/\s*;\s*/', $vs);
-                $first = trim($urls[0] ?? '');
-                // Incluimos también webp para las miniaturas
-                if (preg_match('#\.(jpe?g|png|gif|webp)$#i', $first)) {
-                    $html .= "<td><img class=\"inline-img\" src=\"" 
-                           . e($first) 
-                           . "\" data-toggle=\"modal\" data-target=\"#imgModal\" data-src=\"" 
-                           . e($first) 
-                           . "\"></td>";
-                } else {
-                    $html .= "<td>" . e($vs) . "</td>";
-                }
-            } else {
-                $html .= "<td>" . e($vs) . "</td>";
-            }
+            $html .= "<td>" . renderValorConImagen($vs, $inline) . "</td>";
         }
         $html .= "</tr>";
     }
@@ -595,6 +665,16 @@ switch (strtolower(trim($modalidad))) {
         break;
 }
 
+$fotosLocales    = [];
+$maxFotosLocales = 0;
+if (!empty($localesDetails)) {
+    $fqIds        = array_column($localesDetails, 'id_formularioQuestion');
+    $fotosLocales = getFotosImplementaciones($formulario_id, $fqIds);
+    foreach ($fotosLocales as $lista) {
+        $maxFotosLocales = max($maxFotosLocales, count($lista));
+    }
+}
+
 // Normaliza número de local en caso necesario
 foreach ($localesDetails as &$loc) {
     if (empty($loc['numero_local'])) {
@@ -614,9 +694,9 @@ $archivo = "Reporte_{$nombreCampaña}_" . date('Y-m-d_His') . ".xls";
 
 // Render / descarga
 if ($inline) {
-    echo generarExcel($campaignData, $localesDetails, $encuestaPivot, null, true);
+    echo generarExcel($campaignData, $localesDetails, $encuestaPivot, null, true, $fotosLocales, $maxFotosLocales);
     exit();
 }
 
-generarExcel($campaignData, $localesDetails, $encuestaPivot, $archivo);
+generarExcel($campaignData, $localesDetails, $encuestaPivot, $archivo, false, $fotosLocales, $maxFotosLocales);
 ?>
