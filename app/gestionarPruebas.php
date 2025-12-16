@@ -2010,7 +2010,7 @@ $('#btnNext1').off('click').on('click', async function(){
     // Si llegó acá es porque ganó el fetch (no el timeout)
     const js = await r.json().catch(() => ({}));
 
-    if (r.ok && js && js.status === 'success' && js.visita_id) {
+    if (r.ok && js && (js.status === 'success' || js.status === 'ok') && js.visita_id) {
       // Online OK
       $('#visita_id').val(js.visita_id);
       if (window.Queue && window.Queue.CompletedDeps) {

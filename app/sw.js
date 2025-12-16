@@ -136,6 +136,23 @@ self.addEventListener('fetch', (event) => {
   // Ignora orígenes cruzados
   if (url.origin !== self.location.origin) return;
 
+  // Bypass completo de endpoints sensibles
+  const path = url.pathname;
+  const sensitive = [
+    `${APP_SCOPE}/ping.php`,
+    `${APP_SCOPE}/csrf_refresh.php`,
+    `${APP_SCOPE}/create_visita_pruebas.php`,
+    `${APP_SCOPE}/procesar_gestion_pruebas.php`,
+    `${APP_SCOPE}/upload_material_foto_pruebas.php`,
+    `${APP_SCOPE}/procesar_pregunta_foto_pruebas.php`,
+    `${APP_SCOPE}/eliminar_pregunta_foto_pruebas.php`
+  ];
+
+  if (path.startsWith(`${APP_SCOPE}/api/`) || sensitive.includes(path)) {
+    event.respondWith(fetch(req));
+    return;
+  }
+
   // Navegación SPA/HTML
   if (req.mode === 'navigate') {
     event.respondWith(networkFirst(req));
