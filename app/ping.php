@@ -3,7 +3,7 @@ declare(strict_types=1);
 /**
  * /visibility2/app/ping.php
  * Verifica sesión viva + conectividad a DB. Devuelve JSON y evita cache.
- * Si no hay sesión => 401 {status:"no_session"} para que el front pause la cola.
+ * Si no hay sesión => 401 {status:"no_session"} para que el frnt pause la cola.
  */
 
 header('Content-Type: application/json; charset=UTF-8');

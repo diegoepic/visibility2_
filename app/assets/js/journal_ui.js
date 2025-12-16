@@ -310,11 +310,9 @@
             ? ` (${it.counts.photos} foto${it.counts.photos > 1 ? 's' : ''})`
             : '';
           const debugParts = [];
-          if (it.client_guid) debugParts.push(`guid:${esc(it.client_guid)}`);
+           // Se ocultan identificadores técnicos que no aportan al ejecutor
           if (it.visita_local_id) debugParts.push(`local:${esc(it.visita_local_id)}`);
-          if (it.request_id) debugParts.push(`req:${esc(it.request_id)}`);
-          if (it.id) debugParts.push(`idemp:${esc(it.id)}`);
-          if (it.http_status) debugParts.push(`http:${esc(it.http_status)}`);
+
           const debugLine = (debugParts.length || it.last_error)
             ? `<div class="jr-debug">${debugParts.join(' · ')}${it.last_error ? ` · err:${esc(it.last_error)}` : ''}</div>`
             : '';

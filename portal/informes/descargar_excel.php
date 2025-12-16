@@ -96,32 +96,33 @@ function getCampaignData($idForm) {
 function getLocalesDetails($idForm) {
     global $conn;
     $sql = "
-        SELECT 
+        SELECT
             l.id                               AS idLocal,
+            fq.id                              AS id_formularioQuestion,
             l.codigo                           AS codigo_local,
             CASE
               WHEN l.nombre REGEXP '^[0-9]+'
               THEN SUBSTRING_INDEX(l.nombre, ' ', 1)
               ELSE CAST(l.codigo AS UNSIGNED)
-            END                                AS numero_local,
-            f.modalidad                        AS modalidad,
-            UPPER(f.nombre)                    AS nombreCampaña,
-            DATE(f.fechaInicio)                AS fechaInicio,
-            DATE(f.fechaTermino)               AS fechaTermino,
-            DATE(fq.fechaVisita)               AS fechaVisita,
-            TIME(fq.fechaVisita)               AS hora,
-            DATE(fq.fechaPropuesta)            AS fechaPropuesta,
-            UPPER(l.nombre)                    AS nombre_local,
-            UPPER(l.direccion)                 AS direccion_local,
-            UPPER(cm.comuna)                   AS comuna,
-            UPPER(re.region)                   AS region,
-            UPPER(cu.nombre)                   AS cuenta,
-            UPPER(ca.nombre)                   AS cadena,
-            UPPER(fq.material)                 AS material,
-            UPPER(jv.nombre)                   AS jefeVenta,
+            END AS numero_local,
+            f.modalidad AS modalidad,
+            UPPER(f.nombre) AS nombreCampaña,
+            DATE(f.fechaInicio) AS fechaInicio,
+            DATE(f.fechaTermino) AS fechaTermino,
+            DATE(fq.fechaVisita) AS fechaVisita,
+            TIME(fq.fechaVisita) AS hora,
+            DATE(fq.fechaPropuesta) AS fechaPropuesta,
+            UPPER(l.nombre) AS nombre_local,
+            UPPER(l.direccion) AS direccion_local,
+            UPPER(cm.comuna) AS comuna,
+            UPPER(re.region) AS region,
+            UPPER(cu.nombre) AS cuenta,
+            UPPER(ca.nombre) AS cadena,
+            UPPER(fq.material) AS material,
+            UPPER(jv.nombre) AS jefeVenta,
             fq.valor_propuesto,
             fq.valor,
-            UPPER(fq.observacion)              AS observacion,
+            UPPER(fq.observacion) AS observacion,
             CASE
                 WHEN fq.fechaVisita IS NOT NULL 
                      AND fq.fechaVisita <> '0000-00-00 00:00:00'
@@ -174,6 +175,114 @@ function getLocalesDetails($idForm) {
         die("Error en getLocalesDetails: " . $conn->error);
     }
     return $res->fetch_all(MYSQLI_ASSOC);
+}
+
+function getFotosImplementaciones($idForm, array $fqIds): array {
+    global $conn;
+
+    $normalizarFoto = function (string $url): string {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+
+        // Si ya es absoluta, devolver tal cual
+        if (preg_match('#^https?://#i', $url)) {
+            return $url;
+        }
+
+        // Quitar slash inicial y agregar prefijo completo para hacerlo clickeable
+        $url = ltrim($url, '/');
+        return 'https://www.visibility.cl/visibility2/app/' . $url;
+    };
+
+    $fqIds = array_values(array_filter(array_unique(array_map('intval', $fqIds)), function ($v) {
+        return $v > 0;
+    }));
+
+    if (empty($fqIds)) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($fqIds), '?'));
+    $types        = 'i' . str_repeat('i', count($fqIds));
+    $sql          = "
+        SELECT id_formularioQuestion, url
+        FROM fotoVisita
+        WHERE id_formulario = ?
+          AND id_formularioQuestion IN ($placeholders)
+        ORDER BY id ASC
+    ";
+
+    $stmt       = $conn->prepare($sql);
+    $params     = array_merge([$types], [$idForm], $fqIds);
+    $bindParams = [];
+    foreach ($params as $k => $v) {
+        $bindParams[$k] = &$params[$k];
+    }
+    call_user_func_array([$stmt, 'bind_param'], $bindParams);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if (!$res) {
+        die("Error en getFotosImplementaciones: " . $conn->error);
+    }
+
+    $out = [];
+    while ($row = $res->fetch_assoc()) {
+        $fqId = (int)$row['id_formularioQuestion'];
+        $out[$fqId][] = $normalizarFoto($row['url']);
+    }
+    return $out;
+}
+
+function renderValorConImagen(string $valor, bool $inline): string {
+    $vs = trim($valor);
+    if ($vs === '') {
+        return '';
+    }
+
+    // Soportar varias URLs separadas por ';'
+    $parts = preg_split('/\s*;\s*/', $vs);
+
+    // MODO INLINE (vista en navegador)
+    if ($inline) {
+        $out = [];
+
+        foreach ($parts as $p) {
+            if ($p === '') continue;
+
+       
+            if (!preg_match('#^https?://#i', $p)) {
+                $out[] = e($p);
+                continue;
+            }
+
+            $safe = e($p);
+
+            $out[] =
+                '<a href="' . $safe . '" target="_blank">' .
+                    '<img class="inline-img" src="' . $safe . '" ' .
+                        'data-toggle="modal" data-target="#imgModal" data-src="' . $safe . '">' .
+                '</a>';
+        }
+
+        return $out ? implode('<br>', $out) : e($vs);
+    }
+
+    // MODO EXCEL (no inline): siempre hipervínculos
+    $out = [];
+    foreach ($parts as $p) {
+        if ($p === '') continue;
+
+        if (preg_match('#^https?://#i', $p)) {
+            $safe = e($p);
+            $out[] = '<a href="' . $safe . '">' . $safe . '</a>';
+        } else {
+            $out[] = e($p);
+        }
+    }
+
+    return $out ? implode('; ', $out) : e($vs);
 }
 
 function getEncuestaPivot($idForm) {
@@ -337,7 +446,7 @@ GROUP_CONCAT(
 // Generador de HTML/XLS
 // -----------------------------------------------------------------------------
 
-function generarExcel($campaign, $locales, $encuesta, $archivo = null, $inline = false) {
+function generarExcel($campaign, $locales, $encuesta, $archivo = null, $inline = false, $fotosLocales = [], $maxFotosLocales = 0) {
     // Normalizar URLs de imágenes en las respuestas de encuesta:
     // - Si el valor empieza con /visibility2/ (en mayúsculas o minúsculas)
     // - Convertir el path a minúsculas
@@ -431,6 +540,15 @@ HTML;
                       <th>CANTIDAD MATERIAL EJECUTADO</th>
                       <th>MATERIAL PROPUESTO</th>
                       <th>OBSERVACION</th>
+";
+
+        if ($maxFotosLocales > 0) {
+            for ($i = 1; $i <= $maxFotosLocales; $i++) {
+                $html .= "                      <th>FOTO {$i}</th>\n";
+            }
+        }
+
+        $html .= "
                     </tr>";
 
         foreach ($locales as $l) {
@@ -463,8 +581,19 @@ HTML;
                         <td>" . e($l['material']) . "</td>
                         <td>" . e($l['valor']) . "</td>
                         <td>" . e($l['valor_propuesto']) . "</td>
-                        <td>" . e($l['observacion']) . "</td>
-                      </tr>";
+                        <td>" . e($l['observacion']) . "</td>";
+
+            $fotos = [];
+            if (!empty($l['id_formularioQuestion']) && isset($fotosLocales[$l['id_formularioQuestion']])) {
+                $fotos = $fotosLocales[$l['id_formularioQuestion']];
+            }
+
+            for ($fi = 0; $fi < $maxFotosLocales; $fi++) {
+                $url = trim((string)($fotos[$fi] ?? ''));
+                $html .= "<td>" . renderValorConImagen($url, $inline) . "</td>";
+            }
+
+            $html .= "</tr>";
         }
 
         $html .= "</table><br>";
@@ -486,22 +615,7 @@ HTML;
         $html .= "<tr>";
         foreach ($row as $v) {
             $vs = (string)($v ?? '');
-            if ($inline && preg_match('#^https?://#', $vs)) {
-                $urls  = preg_split('/\s*;\s*/', $vs);
-                $first = trim($urls[0] ?? '');
-                // Incluimos también webp para las miniaturas
-                if (preg_match('#\.(jpe?g|png|gif|webp)$#i', $first)) {
-                    $html .= "<td><img class=\"inline-img\" src=\"" 
-                           . e($first) 
-                           . "\" data-toggle=\"modal\" data-target=\"#imgModal\" data-src=\"" 
-                           . e($first) 
-                           . "\"></td>";
-                } else {
-                    $html .= "<td>" . e($vs) . "</td>";
-                }
-            } else {
-                $html .= "<td>" . e($vs) . "</td>";
-            }
+            $html .= "<td>" . renderValorConImagen($vs, $inline) . "</td>";
         }
         $html .= "</tr>";
     }
@@ -595,6 +709,16 @@ switch (strtolower(trim($modalidad))) {
         break;
 }
 
+$fotosLocales    = [];
+$maxFotosLocales = 0;
+if (!empty($localesDetails)) {
+    $fqIds        = array_column($localesDetails, 'id_formularioQuestion');
+    $fotosLocales = getFotosImplementaciones($formulario_id, $fqIds);
+    foreach ($fotosLocales as $lista) {
+        $maxFotosLocales = max($maxFotosLocales, count($lista));
+    }
+}
+
 // Normaliza número de local en caso necesario
 foreach ($localesDetails as &$loc) {
     if (empty($loc['numero_local'])) {
@@ -614,9 +738,9 @@ $archivo = "Reporte_{$nombreCampaña}_" . date('Y-m-d_His') . ".xls";
 
 // Render / descarga
 if ($inline) {
-    echo generarExcel($campaignData, $localesDetails, $encuestaPivot, null, true);
+    echo generarExcel($campaignData, $localesDetails, $encuestaPivot, null, true, $fotosLocales, $maxFotosLocales);
     exit();
 }
 
-generarExcel($campaignData, $localesDetails, $encuestaPivot, $archivo);
+generarExcel($campaignData, $localesDetails, $encuestaPivot, $archivo, false, $fotosLocales, $maxFotosLocales);
 ?>

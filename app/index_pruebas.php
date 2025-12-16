@@ -16,7 +16,6 @@ $precacheLimit  = $precacheLimit > 0 ? $precacheLimit : 10;
 $googleMapsApiKey = getenv('GOOGLE_MAPS_API_KEY');
 $googleMapsApiKey = is_string($googleMapsApiKey) ? trim($googleMapsApiKey) : '';
 
-
 $sql_campaigns = "
     SELECT DISTINCT 
         f.id AS id_campana,
