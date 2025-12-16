@@ -17,8 +17,17 @@ header('Cache-Control: no-store');
 if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
 date_default_timezone_set('America/Santiago');
 
+require_once __DIR__ . '/lib/idempotency.php';
+
+const IDEMPO_ENDPOINT = 'pregunta_foto';
+
 /* ===== Helpers ===== */
 function json_out(int $code, array $payload): void {
+  $hasIdempo = function_exists('idempo_get_key') && idempo_get_key();
+  if ($hasIdempo && isset($GLOBALS['conn']) && $GLOBALS['conn'] instanceof mysqli && function_exists('idempo_store_and_reply')) {
+    idempo_store_and_reply($GLOBALS['conn'], IDEMPO_ENDPOINT, $code, $payload);
+  }
+
   http_response_code($code);
   echo json_encode($payload, JSON_UNESCAPED_UNICODE);
   exit;
@@ -54,6 +63,26 @@ function table_has_col(mysqli $c, string $table, string $col): bool {
   return false;
 }
 
+sanitize_idempotency_key();
+
+/* ===== DB ===== */
+/** @var mysqli $conn */
+if (!isset($conn) || !($conn instanceof mysqli)) {
+  require_once __DIR__ . '/con_.php';
+  if (!isset($conn) || !($conn instanceof mysqli)) {
+    json_out(500, ['status'=>'error','message'=>'Sin conexión a BD']);
+  }
+}
+@$conn->set_charset('utf8mb4');
+
+/* ===== Idempotencia ===== */
+idempo_claim_or_fail($conn, IDEMPO_ENDPOINT); // si existe respuesta previa, responde y exit
+
+/* ===== método ===== */
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+  json_out(405, ['status'=>'error','message'=>'Método inválido']);
+}
+
 /* ===== CSRF ===== */
 $csrf = read_csrf();
 if (empty($csrf) || empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $csrf)) {
@@ -67,26 +96,6 @@ if (!isset($_SESSION['usuario_id'])) {
 $now        = date('Y-m-d H:i:s');
 $usuario_id = (int)$_SESSION['usuario_id'];
 $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
-
-/* ===== DB ===== */
-/** @var mysqli $conn */
-if (!isset($conn) || !($conn instanceof mysqli)) {
-  require_once __DIR__ . '/con_.php';
-  if (!isset($conn) || !($conn instanceof mysqli)) {
-    json_out(500, ['status'=>'error','message'=>'Sin conexión a BD']);
-  }
-}
-@$conn->set_charset('utf8mb4');
-
-/* ===== método ===== */
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-  json_out(405, ['status'=>'error','message'=>'Método inválido']);
-}
-
-/* ===== Idempotencia ===== */
-require_once __DIR__ . '/lib/idempotency.php';
-sanitize_idempotency_key();
-idempo_claim_or_fail($conn, 'pregunta_foto'); // si existe respuesta previa, responde y exit
 
 /* ===== inputs ===== */
 $visita_id        = post_int('visita_id', 0);
@@ -429,7 +438,7 @@ try {
 }
 
 /* ===== responder guardando en log de idempotencia ===== */
-idempo_store_and_reply($conn, 'pregunta_foto', 200, [
+idempo_store_and_reply($conn, IDEMPO_ENDPOINT, 200, [
   'status'      => 'success',
   'message'     => 'Foto subida y guardada',
   'fotoUrl'     => $relUrl,
