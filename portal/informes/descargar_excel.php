@@ -35,8 +35,10 @@ if (!function_exists('e')) {
 if (!isset($_GET['id']) || !filter_var($_GET['id'], FILTER_VALIDATE_INT)) {
     die('ID de formulario inválido.');
 }
-$formulario_id = intval($_GET['id']);
-$inline        = isset($_GET['inline']) && $_GET['inline'] === '1';
+$formulario_id  = intval($_GET['id']);
+$inline         = isset($_GET['inline']) && $_GET['inline'] === '1';
+$incluirFotos   = !isset($_GET['fotos']) || $_GET['fotos'] === '1' || strtolower((string)$_GET['fotos']) === 'true';
+
 
 $stmt_form = $conn->prepare("SELECT nombre FROM formulario WHERE id = ? LIMIT 1");
 $stmt_form->bind_param("i", $formulario_id);
@@ -711,7 +713,7 @@ switch (strtolower(trim($modalidad))) {
 
 $fotosLocales    = [];
 $maxFotosLocales = 0;
-if (!empty($localesDetails)) {
+if ($incluirFotos && !empty($localesDetails)) {
     $fqIds        = array_column($localesDetails, 'id_formularioQuestion');
     $fotosLocales = getFotosImplementaciones($formulario_id, $fqIds);
     foreach ($fotosLocales as $lista) {
