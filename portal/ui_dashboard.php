@@ -500,9 +500,9 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                         <i class="fas fa-file-excel"></i>
                       </button>
                       <div class="dropdown-menu dropdown-menu-right">
-                        <a class="dropdown-item"
-                           href="/visibility2/portal/informes/descargar_excel.php?id=<?= (int)$rowP['id_campana']; ?>"
-                           target="_blank" rel="noopener">
+                       <a class="dropdown-item download-excel-trigger"
+                           href="#"
+                           data-id="<?= (int)$rowP['id_campana']; ?>">
                            DESCARGAR DATA
                         </a>
                         <!--a class="dropdown-item"
@@ -706,10 +706,11 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
               <div class="card card-widget widget-user shadow w-100">
                 <div class="widget-user-header bg-info position-relative">
                   <!-- Descargar Excel -->
-                    <a 
-                      href="informes/descargar_excel.php?id=<?php echo $rowIpt['id_campana']; ?>" 
-                      class="position-absolute download-link" 
-                      title="Descargar Excel" 
+                     <a
+                      href="#"
+                      class="position-absolute download-link download-excel-trigger"
+                      data-id="<?php echo $rowIpt['id_campana']; ?>"
+                      title="Descargar Excel"
                       style="top:10px; right:10px;"
                     >
                       <img src="images/icon/download_excel.png" alt="Download" style="width:40px; cursor:pointer;">
@@ -1096,6 +1097,58 @@ $('#formChangeRef').submit(function(e){
 
 </script>
 
+
+<!-- Modal: selección de descarga Excel -->
+<div class="modal fade" id="modalDescargaExcel" tabindex="-1" aria-labelledby="modalDescargaExcelLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="modalDescargaExcelLabel">Descarga de Excel</h6>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="custom-control custom-radio mb-2">
+          <input type="radio" id="excelPhotosCon" name="excelPhotosOption" value="1" class="custom-control-input" checked>
+          <label class="custom-control-label" for="excelPhotosCon">Con fotos de implementación</label>
+        </div>
+        <div class="custom-control custom-radio">
+          <input type="radio" id="excelPhotosSin" name="excelPhotosOption" value="0" class="custom-control-input">
+          <label class="custom-control-label" for="excelPhotosSin">Sin fotos de implementación</label>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success btn-sm" id="btnDescargarExcelConfirm">
+          <i class="fas fa-file-excel mr-1"></i> Descargar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Modal para descargar Excel con o sin fotos
+let campanaDescargaExcel = null;
+
+$(document).on('click', '.download-excel-trigger', function (e) {
+  e.preventDefault();
+  campanaDescargaExcel = $(this).data('id') || null;
+  $('#excelPhotosCon').prop('checked', true);
+  $('#modalDescargaExcel').modal('show');
+});
+
+$('#btnDescargarExcelConfirm').on('click', function () {
+  if (!campanaDescargaExcel) return;
+
+  const fotos = $("input[name='excelPhotosOption']:checked").val() || '1';
+  const url = `/visibility2/portal/informes/descargar_excel.php?id=${encodeURIComponent(campanaDescargaExcel)}&fotos=${fotos}`;
+
+  $('#modalDescargaExcel').modal('hide');
+  window.open(url, '_blank');
+});
+</script>
 
 <script>
   document.getElementById('bulkDownloadBtn').addEventListener('click', function() {

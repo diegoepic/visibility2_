@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+
+
 if (PHP_SAPI === 'cli') { return; }
 
 $script = str_replace('\\', '/', $_SERVER['SCRIPT_FILENAME'] ?? '');

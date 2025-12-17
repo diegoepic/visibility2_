@@ -16,7 +16,6 @@ $precacheLimit  = $precacheLimit > 0 ? $precacheLimit : 10;
 $googleMapsApiKey = getenv('GOOGLE_MAPS_API_KEY');
 $googleMapsApiKey = is_string($googleMapsApiKey) ? trim($googleMapsApiKey) : '';
 
-
 $sql_campaigns = "
     SELECT DISTINCT 
         f.id AS id_campana,
@@ -646,10 +645,20 @@ if (isset($_SESSION['success'])) {
                                             $esPrioridad    = ($row['is_priority'] === 1);
                                             $trClass        = $esPrioridad ? 'priority-row' : '';
                                         ?>
+                                          <?php
+                                          $busquedaProg = trim(strtolower(
+                                            $row['codigoLocal'] . ' ' .
+                                            $cadena . ' ' .
+                                            ($row['comuna'] ?? '') . ' ' .
+                                            $direccionLocal . ' ' .
+                                            ($row['nombreLocal'] ?? '')
+                                          ));
+                                        ?>
                                         <tr data-idlocal="<?php echo $idLocal; ?>"
                                             data-campanas="<?php echo implode(',', $campanasIds); ?>"
                                             data-lat="<?php echo $row['latitud']; ?>"
                                             data-lng="<?php echo $row['lng']; ?>"
+                                            data-busqueda="<?php echo htmlspecialchars($busquedaProg, ENT_QUOTES, 'UTF-8'); ?>"
                                             class="<?php echo $trClass; ?>">
                                             <td class="center"><?php echo htmlspecialchars($row['codigoLocal'], ENT_QUOTES, 'UTF-8'); ?></td>
                                             <td class="center">
@@ -755,10 +764,19 @@ if (isset($_SESSION['success'])) {
                                             $esPrioridad    = ($row['is_priority'] === 1);
                                             $trClass        = $esPrioridad ? 'priority-row' : '';
                                         ?>
+                                        <?php
+                                          $busquedaReag = trim(strtolower(
+                                            $row['codigoLocal'] . ' ' .
+                                            $cadena . ' ' .
+                                            $direccionLocal . ' ' .
+                                            ($row['nombreLocal'] ?? '')
+                                          ));
+                                        ?>
                                         <tr data-idlocal="<?php echo $idLocal; ?>"
                                             data-campanas="<?php echo implode(',', $campanasIds); ?>"
                                             data-lat="<?php echo $row['latitud']; ?>"
                                             data-lng="<?php echo $row['lng']; ?>"
+                                            data-busqueda="<?php echo htmlspecialchars($busquedaReag, ENT_QUOTES, 'UTF-8'); ?>"
                                             class="<?php echo $trClass; ?>">
                                              <td class="center"><?php echo htmlspecialchars($row['codigoLocal'], ENT_QUOTES, 'UTF-8'); ?></td>
                                              <td class="center">
@@ -1436,21 +1454,25 @@ function updateCounts(){
 window.applyFilters = function(){
   const modo      = window.modoLocal || 'prog';
   const selId     = (modo==='prog') ? '#filtroFechaProg' : '#filtroFechaReag';
+  const searchId  = (modo==='prog') ? '#filtroLocalesProg' : '#filtroLocalesReag';
   const container = (modo==='prog') ? '#localesProgCollapse' : '#localesReagCollapse';
   const markers   = (modo==='prog') ? window.markersProg : window.markersReag;
   const other     = (modo==='prog') ? window.markersReag : window.markersProg;
   hideAllMarkers(other);
+  const searchTerm = String($(searchId).val() || '').trim().toLowerCase();
   const tachadas = $('ul.todo .completed').map((i,li)=>String($(li).data('idcampana'))).get();
   const fechasOk = {};
   $(`${container} table[data-fechaTabla]`).each(function(){
     const fecha = $(this).attr('data-fechaTabla'); let tiene = false;
     $(this).find('tbody tr').each(function(){
       const camps = String($(this).data('campanas')||'').split(',');
-      const ok = camps.some(c => !tachadas.includes(c)); $(this).data('ok', ok);
+      const ok = camps.some(c => !tachadas.includes(c));
+      $(this).data('okCamp', ok);
       if (ok) tiene = true;
     });
     fechasOk[fecha] = tiene;
   });
+  
   const $sel = $(selId), prev = $sel.val(); $sel.empty();
   Object.keys(fechasOk).filter(f=>fechasOk[f]).sort().forEach(f=>{
     const [y,m,d]=f.split('-'); $sel.append(`<option value="${f}">${d}-${m}-${y}</option>`);
@@ -1459,10 +1481,13 @@ window.applyFilters = function(){
   if (!$sel.val()) $sel.val($sel.find('option:first').val() || '');
   const fechaSel = $sel.val(); rememberDate(modo, fechaSel);
   $(`${container} h4[data-fechaencabezado], ${container} table[data-fechaTabla]`).hide();
-  if (fechaSel){
+ if (fechaSel){
     $(`${container} h4[data-fechaencabezado="${fechaSel}"], ${container} table[data-fechaTabla="${fechaSel}"]`).show();
     $(`${container} table[data-fechaTabla="${fechaSel}"] tbody tr`).each(function(){
-      $(this).toggle( !!$(this).data('ok') );
+      const okCamp = !!$(this).data('okCamp');
+      const txt = String($(this).data('busqueda') || $(this).text() || '').toLowerCase();
+      const matches = !searchTerm || txt.includes(searchTerm);
+      $(this).toggle( okCamp && matches );
       const id = parseInt($(this).data('idlocal'),10);
       const $chk = $(this).find('input.in-route');
       if ($chk.length){

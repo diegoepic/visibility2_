@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/../portal/bootstrap.php';
+
 $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
 session_set_cookie_params([
   'lifetime' => 0,
@@ -11,8 +13,6 @@ session_set_cookie_params([
   'samesite' => 'Lax',
 ]);
 
-error_reporting(E_ALL);
-ini_set('display_errors', 0);
 session_start();
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';

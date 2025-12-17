@@ -1,14 +1,11 @@
-const VERSION        = 'v2.9.4';
+const VERSION        = 'v3.0.1';
 const APP_SCOPE      = '/visibility2/app';
 const STATIC_CACHE   = `static-${VERSION}`;
 const RUNTIME_CACHE  = `runtime-${VERSION}`;
 
-
 //archivos guardados en cache
 const STATIC_ASSETS = [
   `${APP_SCOPE}/index_pruebas.php`,
-   `${APP_SCOPE}/login.php`,
-    `${APP_SCOPE}/procesar_login.php`,
   `${APP_SCOPE}/gestionar_spa.html`,
   `${APP_SCOPE}/assets/plugins/bootstrap/css/bootstrap.min.css`,
   `${APP_SCOPE}/assets/plugins/jquery/jquery-3.6.0.min.js`,
@@ -16,9 +13,9 @@ const STATIC_ASSETS = [
   `${APP_SCOPE}/assets/css/main.css`,
   `${APP_SCOPE}/assets/css/main-responsive.css`,
   `${APP_SCOPE}/assets/css/offline.css`,
-  //`${APP_SCOPE}/assets/js/v2_cache.js`,
+  `${APP_SCOPE}/assets/js/v2_cache.js`,
   `${APP_SCOPE}/assets/js/offline-queue.js`,
-  //`${APP_SCOPE}/assets/js/bootstrap_index_cache.js`,
+  `${APP_SCOPE}/assets/js/bootstrap_index_cache.js`,
   `${APP_SCOPE}/assets/js/gestionar_spa.js`,
 ];
 
@@ -138,6 +135,23 @@ self.addEventListener('fetch', (event) => {
 
   // Ignora orígenes cruzados
   if (url.origin !== self.location.origin) return;
+
+  // Bypass completo de endpoints sensibles
+  const path = url.pathname;
+  const sensitive = [
+    `${APP_SCOPE}/ping.php`,
+    `${APP_SCOPE}/csrf_refresh.php`,
+    `${APP_SCOPE}/create_visita_pruebas.php`,
+    `${APP_SCOPE}/procesar_gestion_pruebas.php`,
+    `${APP_SCOPE}/upload_material_foto_pruebas.php`,
+    `${APP_SCOPE}/procesar_pregunta_foto_pruebas.php`,
+    `${APP_SCOPE}/eliminar_pregunta_foto_pruebas.php`
+  ];
+
+  if (path.startsWith(`${APP_SCOPE}/api/`) || sensitive.includes(path)) {
+    event.respondWith(fetch(req));
+    return;
+  }
 
   // Navegación SPA/HTML
   if (req.mode === 'navigate') {

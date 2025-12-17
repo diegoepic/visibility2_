@@ -7,7 +7,8 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 if (!isset($_SESSION['usuario_id'])) {
   http_response_code(401);
-  echo json_encode(['status'=>'no_session']);
+  session_write_close();
+  echo json_encode(['ok'=>false,'error'=>'NO_SESSION']);
   exit;
 }
 
@@ -19,8 +20,11 @@ if (
 ) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
+$token = $_SESSION['csrf_token'];
+session_write_close();
 
 echo json_encode([
+  'ok'         => true,
   'status'     => 'ok',
-  'csrf_token' => $_SESSION['csrf_token'],
+  'csrf_token' => $token,
 ]);

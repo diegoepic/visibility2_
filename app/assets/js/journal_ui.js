@@ -309,6 +309,13 @@
           const extra = it.counts && it.counts.photos
             ? ` (${it.counts.photos} foto${it.counts.photos > 1 ? 's' : ''})`
             : '';
+          const debugParts = [];
+           // Se ocultan identificadores técnicos que no aportan al ejecutor
+          if (it.visita_local_id) debugParts.push(`local:${esc(it.visita_local_id)}`);
+
+          const debugLine = (debugParts.length || it.last_error)
+            ? `<div class="jr-debug">${debugParts.join(' · ')}${it.last_error ? ` · err:${esc(it.last_error)}` : ''}</div>`
+            : '';
           return `
             <div class="jr-detail-row">
               <div class="jr-d-left">
@@ -322,6 +329,7 @@
                     ${pct(p)}%
                   </div>
                 </div>
+                ${debugLine}
               </div>
             </div>`;
         }).join('')}
@@ -1063,8 +1071,9 @@
   window.addEventListener('queue:dispatch:success',  async (e) => {
     const job  = safeJob(e);
     const resp = (e.detail && e.detail.response) || null;
+    const httpStatus = (e.detail && e.detail.responseStatus) || null;
     if (!job) return;
-    await JournalDB.onSuccess(job, resp);
+    await JournalDB.onSuccess(job, resp, httpStatus);
     await renderToday();
     await renderWeek();
 
