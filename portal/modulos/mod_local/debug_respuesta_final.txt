@@ -1,20 +1,154 @@
 {
     "success": true,
-    "inserted": 11,
-    "failed": 0,
-    "reportUrl": "",
+    "inserted": 24,
+    "failed": 20,
+    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1765985648.csv",
     "successes": [
-        "L\u00ednea 2: Local 'PAVEZ SANTIBANEZ VERONICA DE LAS' (c\u00f3digo 11825125-3) insertado.",
-        "L\u00ednea 3: Local 'AELOIZA MARIN ANGELA MAR\u00cdA' (c\u00f3digo 9873799-5) insertado.",
-        "L\u00ednea 4: Local 'ROSA ESTER MELLA ROJAS' (c\u00f3digo 17456868-5) insertado.",
-        "L\u00ednea 5: Local 'MARIA DE LOS ANGELES MORAGUES MUNOZ' (c\u00f3digo 13333781-4) insertado.",
-        "L\u00ednea 6: Local 'VERONICA DEL CARMEN MARTINEZ MARILUAN' (c\u00f3digo 11163621-4) insertado.",
-        "L\u00ednea 7: Local 'DANIEL HUMBERTO MARIN ALIAGA' (c\u00f3digo 8781770-9) insertado.",
-        "L\u00ednea 8: Local 'MARIN ORTIZ PIA CAROLINA' (c\u00f3digo 13754717-1) insertado.",
-        "L\u00ednea 9: Local 'YARITZA ORIELA CISTERNA HERNANDEZ' (c\u00f3digo 15948374-6) insertado.",
-        "L\u00ednea 10: Local 'ANGELA MARIA GARCIA GONZALEZ' (c\u00f3digo 13333795-4) insertado.",
-        "L\u00ednea 11: Local 'MENDOZA Y HENRIQUEZ LIMITADA' (c\u00f3digo 78058122-0) insertado.",
-        "L\u00ednea 12: Local 'CONSUELO TRINIDAD VIDAL VERA' (c\u00f3digo 20678219-6) insertado."
+        "L\u00ednea 21: Local 'YOVINA TREJOS' (c\u00f3digo 15069) insertado.",
+        "L\u00ednea 22: Local 'DANIELA DEZA GAJARDO' (c\u00f3digo 15181) insertado.",
+        "L\u00ednea 23: Local 'PEDRO DEZA PALLAUTA' (c\u00f3digo 10402) insertado.",
+        "L\u00ednea 24: Local 'ISABEL GONZALEZ CARMONA' (c\u00f3digo 40780) insertado.",
+        "L\u00ednea 25: Local 'LUIS AMERICO MOLINA' (c\u00f3digo 40472) insertado.",
+        "L\u00ednea 26: Local 'SUSANA AROSTICA ROJAS' (c\u00f3digo 10702) insertado.",
+        "L\u00ednea 27: Local 'LUIS VALENZUELA ANDRADE' (c\u00f3digo SA17391) insertado.",
+        "L\u00ednea 28: Local 'FREDDY DOLL DURAN' (c\u00f3digo 10675) insertado.",
+        "L\u00ednea 29: Local 'GIOVANNA PADILLA HERRERA' (c\u00f3digo SA17424) insertado.",
+        "L\u00ednea 30: Local 'JUANA ZEOEDA PEREZ' (c\u00f3digo 10685) insertado.",
+        "L\u00ednea 31: Local 'ALEJANDRO MONTERO RODRIGUEZ' (c\u00f3digo SA10670) insertado.",
+        "L\u00ednea 32: Local 'RENE CATALANO CORTES' (c\u00f3digo 10203) insertado.",
+        "L\u00ednea 33: Local 'CLAUDIO OLIVARES GONZALEZ' (c\u00f3digo SA10343) insertado.",
+        "L\u00ednea 34: Local 'PUNTO CERO SPA' (c\u00f3digo 10197) insertado.",
+        "L\u00ednea 35: Local 'WILSON ESTAY CORTES' (c\u00f3digo SA14700) insertado.",
+        "L\u00ednea 36: Local 'ANA YA\u00d1EZ ALVAREZ' (c\u00f3digo 10121) insertado.",
+        "L\u00ednea 38: Local 'GAUDEKIA SANDOVAL JOFRE' (c\u00f3digo 15161) insertado.",
+        "L\u00ednea 39: Local 'SOC COM LOS ESCORPIONES' (c\u00f3digo 15060) insertado.",
+        "L\u00ednea 40: Local 'DORIS ROJAS LORCA' (c\u00f3digo 10308) insertado.",
+        "L\u00ednea 41: Local 'ALMACEN DEYNER ZEBALLOS' (c\u00f3digo 17202) insertado.",
+        "L\u00ednea 42: Local 'FRANCISCO DIAZ CANTO' (c\u00f3digo SA14923) insertado.",
+        "L\u00ednea 43: Local 'CECILIA NAYTE SILVA' (c\u00f3digo 15129) insertado.",
+        "L\u00ednea 44: Local 'SOCIEDAD COMERCIAL RYB' (c\u00f3digo 10292) insertado.",
+        "L\u00ednea 45: Local 'EMPORIO ATACAMA SOC,DE SERV COOLD' (c\u00f3digo 17742) insertado."
     ],
-    "failures": []
+    "failures": [
+        {
+            "line": 2,
+            "codigo": "40681",
+            "nombre": "QUINTEROS MURIANO GLADYS IRIANA DE",
+            "reason": "El c\u00f3digo de local '40681' ya existe (l\u00ednea 2)."
+        },
+        {
+            "line": 3,
+            "codigo": "40397",
+            "nombre": "LUIS PEDRO VARGAS ROJAS",
+            "reason": "El c\u00f3digo de local '40397' ya existe (l\u00ednea 3)."
+        },
+        {
+            "line": 4,
+            "codigo": "40482",
+            "nombre": "HUMBERTO ALFREDO MONTALBAN DIAZ",
+            "reason": "El c\u00f3digo de local '40482' ya existe (l\u00ednea 4)."
+        },
+        {
+            "line": 5,
+            "codigo": "40483",
+            "nombre": "GODOY CASTILLO GUILLERMO",
+            "reason": "El c\u00f3digo de local '40483' ya existe (l\u00ednea 5)."
+        },
+        {
+            "line": 6,
+            "codigo": "40516",
+            "nombre": "BORDONES CORTES SONIA RUTH",
+            "reason": "El c\u00f3digo de local '40516' ya existe (l\u00ednea 6)."
+        },
+        {
+            "line": 7,
+            "codigo": "40560",
+            "nombre": "PRADO MUNOZ MARIA LUZ",
+            "reason": "El c\u00f3digo de local '40560' ya existe (l\u00ednea 7)."
+        },
+        {
+            "line": 8,
+            "codigo": "40659",
+            "nombre": "DURAN CASTILLO MARCIA DE LOURDES",
+            "reason": "El c\u00f3digo de local '40659' ya existe (l\u00ednea 8)."
+        },
+        {
+            "line": 9,
+            "codigo": "40729",
+            "nombre": "DIAZ CAMPUSANO LUIS",
+            "reason": "El c\u00f3digo de local '40729' ya existe (l\u00ednea 9)."
+        },
+        {
+            "line": 10,
+            "codigo": "57117",
+            "nombre": "ANDRES ALFONSO ALFARO GONZALEZ",
+            "reason": "El c\u00f3digo de local '57117' ya existe (l\u00ednea 10)."
+        },
+        {
+            "line": 11,
+            "codigo": "62265",
+            "nombre": "RIVERA OLIVARES XIMENA ELISA",
+            "reason": "El c\u00f3digo de local '62265' ya existe (l\u00ednea 11)."
+        },
+        {
+            "line": 12,
+            "codigo": "73495",
+            "nombre": "GUILLERMO KENNEDY ZAMBRA AGUILERA",
+            "reason": "El c\u00f3digo de local '73495' ya existe (l\u00ednea 12)."
+        },
+        {
+            "line": 13,
+            "codigo": "63673",
+            "nombre": "SARA ENEA FERNANDEZ SCOLA | SUCURSALMK",
+            "reason": "El c\u00f3digo de local '63673' ya existe (l\u00ednea 13)."
+        },
+        {
+            "line": 14,
+            "codigo": "65364",
+            "nombre": "COMERCIALIZADORA MINORISTA JANA SPA",
+            "reason": "El c\u00f3digo de local '65364' ya existe (l\u00ednea 14)."
+        },
+        {
+            "line": 15,
+            "codigo": "88209",
+            "nombre": "COMERCIAL NICOL VENEGAS EIRL",
+            "reason": "El c\u00f3digo de local '88209' ya existe (l\u00ednea 15)."
+        },
+        {
+            "line": 16,
+            "codigo": "92037",
+            "nombre": "MIS RAICES SPA",
+            "reason": "El c\u00f3digo de local '92037' ya existe (l\u00ednea 16)."
+        },
+        {
+            "line": 17,
+            "codigo": "40446",
+            "nombre": "SALDIAS SEPULVEDA NORMA DEL CARMEN",
+            "reason": "El c\u00f3digo de local '40446' ya existe (l\u00ednea 17)."
+        },
+        {
+            "line": 18,
+            "codigo": "61657",
+            "nombre": "GOMEZ ZAMORA DANICA ESTER",
+            "reason": "El c\u00f3digo de local '61657' ya existe (l\u00ednea 18)."
+        },
+        {
+            "line": 19,
+            "codigo": "62673",
+            "nombre": "SOC ROJAS ASTUDILLO LTDA",
+            "reason": "El c\u00f3digo de local '62673' ya existe (l\u00ednea 19)."
+        },
+        {
+            "line": 20,
+            "codigo": "17232",
+            "nombre": "INVERSIONES LV SPA",
+            "reason": "El c\u00f3digo de local '17232' ya existe (l\u00ednea 20)."
+        },
+        {
+            "line": 37,
+            "codigo": "SA9963",
+            "nombre": "PAOLA SEPULVEDA LABRA",
+            "reason": "El c\u00f3digo de local 'SA9963' ya existe (l\u00ednea 37)."
+        }
+    ]
 }

@@ -203,19 +203,17 @@ try {
     }
   }
 
-  // 2) Reusar visita ABIERTA reciente del mismo trío aunque traiga otro guid
+ // 2) Reusar visita ABIERTA del mismo trío aunque traiga otro guid
   if ($visita_id === 0) {
-    $reuse_since = date('Y-m-d H:i:s', strtotime('-6 hours'));
     if ($sel2 = $conn->prepare("
       SELECT id, client_guid
         FROM visita
        WHERE id_usuario=? AND id_formulario=? AND id_local=?
          AND (fecha_fin IS NULL OR fecha_fin='0000-00-00 00:00:00')
-         AND (fecha_inicio IS NULL OR fecha_inicio >= ?)
        ORDER BY id DESC
        LIMIT 1 FOR UPDATE
     ")) {
-      $sel2->bind_param('iiis', $user_id, $form_id, $local_id, $reuse_since);
+      $sel2->bind_param('iii', $user_id, $form_id, $local_id);
       if ($sel2->execute()) {
         $row2_id = null; $row2_guid = null;
         $sel2->bind_result($row2_id, $row2_guid);
@@ -303,15 +301,17 @@ try {
       json_fail(500, 'Error preparando INSERT de visita.');
     }
 
-  } else {
+} else {
     // Si reutilizamos, refrescar lat/lng inicial sólo si estaban en 0 (opcional)
+    $reuse_started_at = $started_at ?: $now;
     if ($upd = $conn->prepare("
       UPDATE visita
-         SET latitud = IFNULL(NULLIF(latitud,0), ?),
-             longitud= IFNULL(NULLIF(longitud,0), ?)
+         SET fecha_inicio = ?,
+             latitud      = IFNULL(NULLIF(latitud,0), ?),
+             longitud     = IFNULL(NULLIF(longitud,0), ?)
        WHERE id=? LIMIT 1
     ")) {
-      $upd->bind_param('ddi', $lat, $lng, $visita_id);
+      $upd->bind_param('sddi', $reuse_started_at, $lat, $lng, $visita_id);
       $upd->execute();
       $upd->close();
     }

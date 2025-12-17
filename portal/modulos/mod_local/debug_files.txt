@@ -5,16 +5,16 @@ Array
             [name] => carga_locales.csv
             [full_path] => carga_locales.csv
             [type] => text/csv
-            [tmp_name] => /tmp/phplt6a8y
+            [tmp_name] => /tmp/phpzpMCb5
             [error] => 0
-            [size] => 2258
+            [size] => 7459
         )
 
 )
 
 Array
 (
-    [csrf_token] => 5822f7acd44397daac9bacfa024f2fc97903f98f84ae8496ed22bc889ccfd3dc
+    [csrf_token] => 0f7146abee33a8aa1b616ab4873888df38d6294b6b3ea5ebd0126a719571d79f
     [empresa_id] => 103
     [division_id] => 13
 )
