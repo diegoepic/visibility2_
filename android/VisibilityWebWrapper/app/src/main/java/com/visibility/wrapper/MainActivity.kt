@@ -5,18 +5,23 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.view.KeyEvent
+import android.view.View
 import android.webkit.GeolocationPermissions
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceError
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.net.http.SslError
+import android.webkit.SslErrorHandler
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -38,6 +43,7 @@ class MainActivity : AppCompatActivity() {
         /** URL base que se cargará siempre al iniciar la app. Cambia este valor para apuntar a otro entorno. */
         const val INITIAL_URL = "https://visibility.cl/visibility2/app/login.php"
         private const val MIME_TYPE_IMAGES = "image/*"
+        private const val MIME_TYPE_VIDEOS = "video/*"
     }
 
     // Permisos
@@ -111,15 +117,43 @@ class MainActivity : AppCompatActivity() {
             domStorageEnabled = true
             databaseEnabled = true
             cacheMode = WebSettings.LOAD_DEFAULT
-            allowContentAccess = true
-            allowFileAccess = true
+            // Se deshabilita el acceso a contenido/archivos locales para reducir superficie de riesgo.
+            allowContentAccess = false
+            allowFileAccess = false
             setGeolocationEnabled(true)
-            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            // Se mantiene modo de compatibilidad para contenidos mixtos; evita bloquear carga legítima
+            // sin permitir todos los escenarios inseguros.
+            mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             mediaPlaybackRequiresUserGesture = false
             userAgentString = userAgentString + " VisibilityWrapper"
         }
 
         binding.webView.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                showWebView()
+            }
+
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?
+            ) {
+                super.onReceivedError(view, request, error)
+                if (request?.isForMainFrame == true) {
+                    showErrorView()
+                }
+            }
+
+            override fun onReceivedSslError(
+                view: WebView?,
+                handler: SslErrorHandler?,
+                error: SslError?
+            ) {
+                handler?.cancel()
+                showErrorView()
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val uri = request?.url ?: return false
                 val scheme = uri.scheme?.lowercase(Locale.ROOT)
@@ -142,10 +176,12 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-
-
                 return false
             }
+        }
+
+        binding.errorView.retryButton.setOnClickListener {
+            binding.webView.loadUrl(INITIAL_URL)
         }
 
         binding.webView.webChromeClient = object : WebChromeClient() {
@@ -190,13 +226,25 @@ class MainActivity : AppCompatActivity() {
         permissions.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
 
     private fun launchFilePicker(fileChooserParams: WebChromeClient.FileChooserParams?) {
-        val captureIntent = createCameraIntent()
-         val mimeType = fileChooserParams?.acceptTypes?.firstOrNull { it.isNotBlank() } ?: MIME_TYPE_IMAGES
+        val acceptTypes = fileChooserParams?.acceptTypes
+            ?.filter { it.isNotBlank() }
+            ?.takeIf { it.isNotEmpty() }
+            ?: listOf(MIME_TYPE_IMAGES)
         val allowMultiple = fileChooserParams?.mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE
-        
+        val isCaptureEnabled = fileChooserParams?.isCaptureEnabled == true
+
+        val captureIntent = createCaptureIntent(acceptTypes)
+        if (isCaptureEnabled && captureIntent != null) {
+            fileChooserLauncher.launch(captureIntent)
+            return
+        }
+
         val contentSelectionIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
-            type = mimeType
+            type = resolveChooserMimeType(acceptTypes)
+            if (acceptTypes.size > 1 && type == "*/*") {
+                putExtra(Intent.EXTRA_MIME_TYPES, acceptTypes.toTypedArray())
+            }
             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, allowMultiple)
         }
 
@@ -212,7 +260,18 @@ class MainActivity : AppCompatActivity() {
         fileChooserLauncher.launch(chooserIntent)
     }
 
-    private fun createCameraIntent(): Intent? {
+    private fun createCaptureIntent(acceptTypes: List<String>): Intent? {
+        val wantsImage = acceptTypes.any { it.startsWith("image") || it == "*/*" }
+        val wantsVideo = acceptTypes.any { it.startsWith("video") }
+
+        return when {
+            wantsImage -> createImageCaptureIntent()
+            wantsVideo -> createVideoCaptureIntent()
+            else -> null
+        }
+    }
+
+    private fun createImageCaptureIntent(): Intent? {
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
         if (intent.resolveActivity(packageManager) == null) return null
 
@@ -234,6 +293,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun createVideoCaptureIntent(): Intent? {
+        val intent = Intent(MediaStore.ACTION_VIDEO_CAPTURE)
+        return if (intent.resolveActivity(packageManager) != null) intent else null
+    }
+
     @Throws(IOException::class)
     private fun createImageFile(): File {
         val timeStamp: String = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
@@ -246,7 +310,7 @@ class MainActivity : AppCompatActivity() {
             val clipData = intent?.clipData
             val dataUri = intent?.data
             when {
-                 clipData != null -> Array(clipData.itemCount) { index -> clipData.getItemAt(index).uri }
+                clipData != null -> Array(clipData.itemCount) { index -> clipData.getItemAt(index).uri }
                 dataUri != null -> arrayOf(dataUri)
                 cameraPhotoUri != null -> arrayOf(cameraPhotoUri!!)
                 else -> null
@@ -259,5 +323,27 @@ class MainActivity : AppCompatActivity() {
         filePathCallback = null
         cameraPhotoUri = null
         pendingFileChooserParams = null
+    }
+
+    private fun resolveChooserMimeType(acceptTypes: List<String>): String {
+        if (acceptTypes.size == 1) return acceptTypes.first()
+
+        val acceptsImages = acceptTypes.any { it.startsWith("image") }
+        val acceptsVideos = acceptTypes.any { it.startsWith("video") }
+        return when {
+            acceptsImages && !acceptsVideos -> MIME_TYPE_IMAGES
+            acceptsVideos && !acceptsImages -> MIME_TYPE_VIDEOS
+            else -> "*/*"
+        }
+    }
+
+    private fun showErrorView() {
+        binding.webView.visibility = View.GONE
+        binding.errorView.root.visibility = View.VISIBLE
+    }
+
+    private fun showWebView() {
+        binding.errorView.root.visibility = View.GONE
+        binding.webView.visibility = View.VISIBLE
     }
 }

@@ -1,4 +1,6 @@
 <resources>
     <string name="app_name">Visibility 2 Wrapper</string>
-    <string name="file_chooser_title">Selecciona una imagen</string>
+    <string name="file_chooser_title">Selecciona un archivo</string>
+    <string name="webview_error_message">No se pudo cargar la página. Revisa tu conexión e inténtalo nuevamente.</string>
+    <string name="retry">Reintentar</string>
 </resources>
