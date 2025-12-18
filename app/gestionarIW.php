@@ -366,6 +366,60 @@ $stmt->close();
   window.IW_REQUIRE_LOCAL = <?= $requiereLocal ? 'true' : 'false' ?>;
   window.IW_ID_LOCAL = 0;
 
+  function syncCsrfInputs(token){
+    if (!token) return;
+    window.CSRF_TOKEN = token;
+    document.querySelectorAll('input[name="csrf_token"]').forEach(el => el.value = token);
+  }
+
+  let csrfRefreshPromise = null;
+  async function refreshCsrfToken(forceRotate = false){
+    if (csrfRefreshPromise) return csrfRefreshPromise;
+    const url = 'csrf_refresh.php' + (forceRotate ? '?rotate=1' : '');
+    csrfRefreshPromise = fetch(url, {
+      credentials: 'same-origin',
+      headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(async res => {
+      const data = await res.json().catch(() => null);
+      if (res.status === 401 || (data && data.error === 'AUTH_EXPIRED')) {
+        showSessionExpired();
+        return null;
+      }
+      if (data && data.csrf_token) { syncCsrfInputs(data.csrf_token); }
+      return data;
+    })
+    .finally(() => { csrfRefreshPromise = null; });
+    return csrfRefreshPromise;
+  }
+
+  async function keepSessionAlive(){
+    try {
+      const res = await fetch('ping.php', {
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      const data = await res.json().catch(() => null);
+      if (res.status === 401 || (data && data.error === 'AUTH_EXPIRED')) {
+        showSessionExpired();
+        return;
+      }
+      if (data && data.csrf_token) { syncCsrfInputs(data.csrf_token); }
+    } catch (e) { /* noop */ }
+  }
+
+  function showSessionExpired(){
+    showToast('Sesión expirada, vuelve a iniciar sesión', 'Sesión expirada');
+    setTimeout(() => { window.location.href = 'login.php'; }, 1400);
+  }
+
+  function isAuthError(status, payload){
+    return status === 401 || (payload && payload.error === 'AUTH_EXPIRED');
+  }
+  function isCsrfError(status, payload){
+    return status === 419 || status === 403 || (payload && payload.error === 'CSRF_INVALID');
+  }
+
   function disableSubmit(){ $('#btnFinalizarIW').prop('disabled', true); }
   function enableSubmit(){ if (uploadsInProgress <= 0 && visitReady) $('#btnFinalizarIW').prop('disabled', false); }
   function checkUploads(){ if (uploadsInProgress <= 0) enableSubmit(); }
@@ -375,6 +429,16 @@ $stmt->close();
     $('#toastBody').text(msg);
     $('#liveToast').toast('show');
   }
+
+  const resumeFromBackground = () => {
+    keepSessionAlive();
+    refreshCsrfToken(true);
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) resumeFromBackground();
+  });
+  window.addEventListener('focus', resumeFromBackground);
+  keepSessionAlive();
 
 function verImagenGrande(url){
   $('#imagenAmpliada').attr('src', normalizePhotoUrl(url || ''));
@@ -480,6 +544,8 @@ function verImagenGrande(url){
     });
 
     const data = await res.json().catch(() => null);
+    if (isAuthError(res.status, data)) { showSessionExpired(); throw new Error('AUTH_EXPIRED'); }
+    if (isCsrfError(res.status, data)) { await refreshCsrfToken(true); throw new Error((data && data.message) || 'CSRF'); }
     if (!res.ok) throw new Error((data && data.message) || `HTTP ${res.status}`);
     window.VISITA_ID = data.visita_id;
     document.getElementById('visita_id').value = data.visita_id;
@@ -500,6 +566,8 @@ function verImagenGrande(url){
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
       });
       const data = await res.json().catch(()=>null);
+      if (isAuthError(res.status, data)) { showSessionExpired(); throw new Error('AUTH_EXPIRED'); }
+      if (isCsrfError(res.status, data)) { await refreshCsrfToken(true); throw new Error((data && data.message) || 'CSRF'); }
       if (!res.ok || !data || data.status!=='success') {
         throw new Error((data && data.message) || `HTTP ${res.status}`);
       }
@@ -662,52 +730,79 @@ function verImagenGrande(url){
           temp.querySelector('img').addEventListener('click', ()=> verImagenGrande(objUrl));
 
           compressImage(blob, 1024, 1024, compressedBlob => {
-            const fd = new FormData();
-            
-            fd.append('csrf_token', window.CSRF_TOKEN);
-            fd.append('id_form_question', qid);
-            fd.append('fotoPregunta', compressedBlob, file.name.replace(/\.[^/.]+$/,'.jpg'));
-            fd.append('iw_token', window.IW_TOKEN);
-            fd.append('visita_id', window.VISITA_ID);
-            fd.append('capture_source', input === camera ? 'camera' : 'gallery');
-
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST','procesar_pregunta_fotoIW.php',true);
-
-            xhr.upload.onprogress = e => {
-              if (!e.lengthComputable) return;
-              const pct = Math.round(e.loaded/e.total*100);
-              const bar = temp.querySelector('.iw-progress > div');
-              const lbl = temp.querySelector('.iw-pct');
-              if (bar) bar.style.width = pct + '%';
-              if (lbl) lbl.textContent = pct + '%';
+            const buildFormData = () => {
+              const fd = new FormData();
+              fd.append('csrf_token', window.CSRF_TOKEN);
+              fd.append('id_form_question', qid);
+              fd.append('fotoPregunta', compressedBlob, file.name.replace(/\.[^/.]+$/,'.jpg'));
+              fd.append('iw_token', window.IW_TOKEN);
+              fd.append('visita_id', window.VISITA_ID);
+              fd.append('capture_source', input === camera ? 'camera' : 'gallery');
+              return fd;
             };
 
             const finishUpload = () => { uploadsInProgress--; checkUploads(); };
 
-            xhr.onload = () => {
-              let res;
-              try { res = JSON.parse(xhr.responseText); } catch { res = {status:'error'}; }
-              if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
-              resetFileInputs(qid);
+            const attemptUpload = async (retried = false) => {
+              const fd = buildFormData();
+              const xhr = new XMLHttpRequest();
+              xhr.open('POST','procesar_pregunta_fotoIW.php',true);
+              xhr.setRequestHeader('X-Requested-With','XMLHttpRequest');
+              xhr.setRequestHeader('Accept','application/json');
 
-              if (res.status==='success'){
-                const wrap2 = document.getElementById(`previewFoto_${qid}`);
-                wrap2.appendChild(buildPreviewItem(qid, res.resp_id, res.fotoUrl));
-              } else {
-                showToast(res.message || 'Error al subir la foto', 'Error');
-              }
-              finishUpload();
+              xhr.upload.onprogress = e => {
+                if (!e.lengthComputable) return;
+                const pct = Math.round(e.loaded/e.total*100);
+                const bar = temp.querySelector('.iw-progress > div');
+                const lbl = temp.querySelector('.iw-pct');
+                if (bar) bar.style.width = pct + '%';
+                if (lbl) lbl.textContent = pct + '%';
+              };
+
+              xhr.onload = async () => {
+                let res;
+                try { res = JSON.parse(xhr.responseText); } catch { res = {status:'error'}; }
+
+                if (isAuthError(xhr.status, res)) {
+                  if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
+                  resetFileInputs(qid);
+                  showSessionExpired();
+                  finishUpload();
+                  return;
+                }
+
+                if (isCsrfError(xhr.status, res) && !retried) {
+                  await refreshCsrfToken(true);
+                  const bar = temp.querySelector('.iw-progress > div');
+                  const lbl = temp.querySelector('.iw-pct');
+                  if (bar) bar.style.width = '0%';
+                  if (lbl) lbl.textContent = '0%';
+                  return attemptUpload(true);
+                }
+
+                if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
+                resetFileInputs(qid);
+
+                if (res.status==='success'){
+                  const wrap2 = document.getElementById(`previewFoto_${qid}`);
+                  wrap2.appendChild(buildPreviewItem(qid, res.resp_id, res.fotoUrl));
+                } else {
+                  showToast(res.message || 'Error al subir la foto', 'Error');
+                }
+                finishUpload();
+              };
+
+              xhr.onerror = () => {
+                if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
+                resetFileInputs(qid);
+                showToast('Error de red al subir la foto','Error');
+                finishUpload();
+              };
+
+              xhr.send(fd);
             };
 
-            xhr.onerror = () => {
-              if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
-              resetFileInputs(qid);
-              showToast('Error de red al subir la foto','Error');
-              finishUpload();
-            };
-
-            xhr.send(fd);
+            attemptUpload(false);
           });
         };
 
@@ -782,9 +877,13 @@ function deleteFotoIW(qid, respId, cardEl) {
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', 'eliminar_pregunta_fotoIW.php', true);
+    xhr.setRequestHeader('X-Requested-With','XMLHttpRequest');
+    xhr.setRequestHeader('Accept','application/json');
     xhr.onload = () => {
       let res;
       try { res = JSON.parse(xhr.responseText); } catch { res = {status:'error'}; }
+      if (isAuthError(xhr.status, res)) { showSessionExpired(); pendingDelete = null; return; }
+      if (isCsrfError(xhr.status, res)) { refreshCsrfToken(true); showToast('Se actualizó la sesión, vuelve a intentar', 'CSRF'); pendingDelete = null; return; }
       if (res.status === 'success') {
         if (cardEl && cardEl.parentNode) cardEl.parentNode.removeChild(cardEl);
         $('#confirmDeleteModal').modal('hide');
@@ -814,9 +913,13 @@ function deleteFotoIW(qid, respId, cardEl) {
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', 'listar_fotos_preguntaIW.php', true);
+    xhr.setRequestHeader('X-Requested-With','XMLHttpRequest');
+    xhr.setRequestHeader('Accept','application/json');
     xhr.onload = () => {
       let res;
       try { res = JSON.parse(xhr.responseText); } catch { res = {status:'error'}; }
+      if (isAuthError(xhr.status, res)) { showSessionExpired(); return; }
+      if (isCsrfError(xhr.status, res)) { refreshCsrfToken(true); return; }
       if (res.status === 'success' && Array.isArray(res.fotos)) {
         const wrap = document.getElementById(`previewFoto_${qid}`);
         res.fotos.forEach(f => wrap.appendChild(buildPreviewItem(qid, f.resp_id, f.fotoUrl)));

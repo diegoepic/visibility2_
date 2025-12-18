@@ -1,8 +1,6 @@
 <?php
 declare(strict_types=1);
 
-
-
 if (PHP_SAPI === 'cli') { return; }
 
 $script = str_replace('\\', '/', $_SERVER['SCRIPT_FILENAME'] ?? '');
@@ -17,15 +15,52 @@ if ($script !== '') {
         .'|procesar_login_pruebas\.php'
         .'|logout\.php'
         .'|logout\.php'
-        .'|ping\.php'              // ⚠ debe poder devolver 401 JSON
-        .'|csrf_refresh\.php'      // ⚠ idem
+        .'|ping\.php'              // debe poder devolver 401 JSON
+        .'|csrf_refresh\.php'      // idem
         .')$#i',
         $script
     );
 }
 if ($isPublic) { return; }
 
-// Sesión segura
+// Peticiones JSON/AJAX
+if (!function_exists('wants_json')) {
+  function wants_json(): bool {
+    return (
+      (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
+      ||
+      (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false)
+      ||
+      (isset($_GET['format']) && $_GET['format'] === 'json')
+    );
+  }
+}
+if (!function_exists('deny_auth_json')) {
+  function deny_auth_json(string $error = 'AUTH_EXPIRED', string $message = 'Sesi贸n expirada, vuelve a iniciar sesi贸n'): void {
+    http_response_code(401);
+    header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode([
+      'status'  => 'error',
+      'error'   => $error,
+      'message' => $message,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+  }
+}
+if (!function_exists('deny_csrf_json')) {
+  function deny_csrf_json(string $message = 'CSRF inv谩lido'): void {
+    http_response_code(419);
+    header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode([
+      'status'  => 'error',
+      'error'   => 'CSRF_INVALID',
+      'message' => $message,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+  }
+}
+
+// Sesi贸n segura
 if (session_status() !== PHP_SESSION_ACTIVE) {
   $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
   session_set_cookie_params([
@@ -39,15 +74,13 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
   session_start();
 }
 
-// Conexión
+// Conexi贸n
 if (!isset($conn) || !($conn instanceof mysqli)) {
   require_once __DIR__ . '/con_.php';
   if (!isset($conn) || !($conn instanceof mysqli)) {
     return;
   }
 }
-
-
 
 $envFile = '/home/visibility/.env_visibility2';
 
@@ -75,16 +108,14 @@ if (is_readable($envFile)) {
             continue;
         }
 
-        // Solo setear si no existe aún
+        // Solo setear si no existe a煤n
         if (getenv($key) === false) {
             putenv("$key=$value");
         }
 
-       
         $_ENV[$key] = $value;
     }
 }
-
 
 // Helpers compartidos
 if (!function_exists('fpr_salt')) {
@@ -105,13 +136,14 @@ if (!function_exists('session_fingerprint')) {
 if (!function_exists('assert_session_is_valid')) {
   function assert_session_is_valid(mysqli $conn): void {
     if (empty($_SESSION['usuario_id'])) {
+      if (wants_json()) { deny_auth_json(); }
       header('Location: /visibility2/app/login.php'); exit;
     }
 
     $uid = (int)$_SESSION['usuario_id'];
     $fpr = session_fingerprint();
 
-    // ¿revocada?
+    // 驴revocada?
     $sql = "SELECT revoked_at
               FROM user_sessions
              WHERE user_id = ? AND session_fpr = ?
@@ -119,7 +151,7 @@ if (!function_exists('assert_session_is_valid')) {
              LIMIT 1";
     $st = $conn->prepare($sql);
     if ($st) {
-      // Ojo: $fpr es binario, "s" funciona; si prefieres, podrías usar "b" + send_long_data.
+      // Ojo: $fpr es binario, "s" funciona; si prefieres, podr铆as usar "b" + send_long_data.
       $st->bind_param("is", $uid, $fpr);
 
       if ($st->execute()) {
@@ -134,9 +166,10 @@ if (!function_exists('assert_session_is_valid')) {
         $st->close();
 
         if ($row && !is_null($row['revoked_at'])) {
-          // Cerrar sesión y volver a login con aviso
+          // Cerrar sesi贸n y volver a login con aviso
           session_unset();
           session_destroy();
+          if (wants_json()) { deny_auth_json('SESSION_REVOKED'); }
           header('Location: /visibility2/app/login.php?session_expired=1'); exit;
         }
       } else {
@@ -149,7 +182,7 @@ if (!function_exists('assert_session_is_valid')) {
       return;
     }
 
-    // Heartbeat (no crítico)
+    // Heartbeat (no cr铆tico)
     $hb = $conn->prepare("UPDATE user_sessions SET last_seen_at = NOW() WHERE user_id = ? AND session_fpr = ?");
     if ($hb) {
       $hb->bind_param("is", $uid, $fpr);
