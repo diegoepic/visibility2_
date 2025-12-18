@@ -1,8 +1,9 @@
 
-// Simple wrapper IndexedDB para cola offline
+// Simple wrapper IndexedDB para cola offline (v2)
+// Ahora incluye máquina de estados y campos extendidos para diagnóstico.
 (function(){
   const DB_NAME = 'v2_offline';
-  const DB_VER  = 7;
+  const DB_VER  = 8;
   const STORE   = 'queue';
 
   function openDB(){
@@ -16,15 +17,64 @@
         } else {
           os = e.currentTarget.transaction.objectStore(STORE);
         }
+
+        // Índices para nueva máquina de estados
         if (!os.indexNames.contains('status'))    os.createIndex('status', 'status', { unique: false });
         if (!os.indexNames.contains('created'))   os.createIndex('created', 'created', { unique: false });
         if (!os.indexNames.contains('type'))      os.createIndex('type', 'type', { unique: false });
         if (!os.indexNames.contains('dedupeKey')) os.createIndex('dedupeKey', 'dedupeKey', { unique: false });
         if (!os.indexNames.contains('nextTry'))   os.createIndex('nextTry', 'nextTry', { unique: false });
+
+        // Migración ligera: normalizar registros existentes a nuevo esquema
+        os.openCursor().onsuccess = ev => {
+          const cur = ev.target.result;
+          if (!cur) return;
+          const val = normalizeTask(cur.value || {});
+          cur.update(val);
+          cur.continue();
+        };
       };
       req.onsuccess = () => res(req.result);
       req.onerror   = () => rej(req.error);
     });
+  }
+
+  function normalizeTask(raw){
+    const now = Date.now();
+    const statusMap = {
+      pending: 'queued',
+      running: 'retry',
+      done:    'success'
+    };
+    const normStatus = raw.status && statusMap[raw.status] ? statusMap[raw.status] : (raw.status || 'queued');
+
+    return Object.assign({
+      id: raw.id || (crypto.randomUUID ? crypto.randomUUID() : String(now)),
+      type: raw.type || 'generic',
+      url: raw.url || '',
+      method: raw.method || 'POST',
+      headers: raw.headers || {},
+      body: raw.body || null,
+      fields: raw.fields || {},
+      files: raw.files || [],
+      status: normStatus,
+      attempts: raw.attempts || 0,
+      nextTry: raw.nextTry || 0,
+      created: raw.created || now,
+      lastTryAt: raw.lastTryAt || raw.lastTry || null,
+      lastHttpStatus: raw.lastHttpStatus || null,
+      lastErrorCode: raw.lastErrorCode || null,
+      lastErrorMessage: raw.lastErrorMessage || raw.lastError || null,
+      lastResponseSnippet: raw.lastResponseSnippet || null,
+      durationMs: raw.durationMs || null,
+      bytesSent: raw.bytesSent || null,
+      progressPct: raw.progressPct || 0,
+      idempotencyKey: raw.idempotencyKey || raw.id || null,
+      dedupeKey: raw.dedupeKey || null,
+      dependsOn: raw.dependsOn || [],
+      meta: raw.meta || {},
+      client_guid: raw.client_guid || null
+    }, raw);
   }
 
   async function add(task){
@@ -34,12 +84,8 @@
       const os = tx.objectStore(STORE);
 
       const doAdd = () => {
-        if (!task.id) task.id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
-        task.created  = Date.now();
-        task.status   = task.status || 'pending';
-        task.attempts = task.attempts || 0;
-        task.nextTry  = task.nextTry || 0;
-        os.add(task);
+        const rec = normalizeTask(task);
+        os.add(rec);
       };
 
       if (task.dedupeKey) {
@@ -61,7 +107,7 @@
     });
   }
 
-  async function listByStatus(status='pending'){
+  async function listByStatus(status='queued'){
     const db = await openDB();
     return new Promise((res, rej) => {
       const t = db.transaction(STORE, 'readonly');
@@ -69,7 +115,7 @@
       const idx = os.index('status');
       const req = idx.getAll(status);
       req.onsuccess = () => {
-        const out = (req.result || []).sort((a,b)=>a.created - b.created);
+        const out = (req.result || []).map(normalizeTask).sort((a,b)=>a.created - b.created);
         res(out);
       };
       req.onerror = () => rej(req.error);
@@ -82,7 +128,7 @@
       const t = db.transaction(STORE, 'readonly');
       const os = t.objectStore(STORE);
       const req = os.get(id);
-      req.onsuccess = () => res(req.result || null);
+      req.onsuccess = () => res(req.result ? normalizeTask(req.result) : null);
       req.onerror   = () => rej(req.error);
     });
   }
@@ -108,7 +154,7 @@
           try { tx.abort(); } catch (_) {}
           return resolve(null);
         }
-        result = { ...current, ...patch, updated: Date.now() };
+        result = normalizeTask({ ...current, ...patch, updated: Date.now() });
         const putReq = os.put(result);
         putReq.onerror = () => { if (!done) { done = true; reject(putReq.error); } };
         // Importante: resolvemos en tx.oncomplete para garantizar persistencia

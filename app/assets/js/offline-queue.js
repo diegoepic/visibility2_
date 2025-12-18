@@ -1,10 +1,30 @@
-
 (function(){
   'use strict';
 
   const BASE          = '/visibility2/app';
   const CSRF_ENDPOINT = BASE + '/csrf_refresh.php';
   const PING_ENDPOINT = BASE + '/ping.php';
+
+  const Status = {
+    QUEUED      : 'queued',
+    RUNNING     : 'running',
+    SUCCESS     : 'success',
+    RETRY       : 'retry',
+    AUTH_PAUSED : 'auth_paused',
+    FATAL       : 'fatal'
+  };
+
+  const ErrorCode = {
+    NET_OFFLINE: 'NET_OFFLINE',
+    TIMEOUT: 'TIMEOUT',
+    HTTP_401_AUTH: 'HTTP_401_AUTH',
+    HTTP_403_CSRF: 'HTTP_403_CSRF',
+    HTTP_5XX_SERVER: 'HTTP_5XX_SERVER',
+    HTTP_4XX_FATAL: 'HTTP_4XX_FATAL',
+    PARSE_ERROR: 'PARSE_ERROR',
+    HTML_LOGIN_REDIRECT_DETECTED: 'HTML_LOGIN_REDIRECT_DETECTED',
+    UNKNOWN: 'UNKNOWN'
+  };
 
   // --------------------------------------------------------------------------------
   // Event bus (para UI Avance)
@@ -31,7 +51,7 @@
     try {
       const r  = await withTimeout((signal) => fetch(CSRF_ENDPOINT, { credentials: 'same-origin', cache: 'no-store', signal }), 6000, 'E_CSRF_TIMEOUT');
       if (r.status === 401) return null; // sin sesión
-      const js = await parseJsonSafe(r);
+      const js = await parseJsonSafe(r, true);
       if (js && js.csrf_token) {
         window.CSRF_TOKEN = js.csrf_token;
         return js.csrf_token;
@@ -44,7 +64,7 @@
     try {
       const r = await withTimeout((signal) => fetch(PING_ENDPOINT, { credentials: 'same-origin', cache: 'no-store', signal }), 6000, 'E_PING_TIMEOUT');
       if (!r.ok) return false;
-      const js = await parseJsonSafe(r);
+      const js = await parseJsonSafe(r, true);
       if (js && js.csrf_token) window.CSRF_TOKEN = js.csrf_token;
       return !!(js && js.status === 'ok');
     } catch(_) { return false; }
@@ -89,7 +109,7 @@
   async function httpPost(task){
     if (!task || !task.url) throw new Error('Task sin URL');
 
-    const timeoutMs = typeof task.timeoutMs === 'number' ? task.timeoutMs : 20000;
+    const timeoutMs = typeof task.timeoutMs === 'number' ? task.timeoutMs : getDefaultTimeout(task.type);
 
     // SIEMPRE refrescamos CSRF para evitar drift
     await refreshCSRF();
@@ -102,11 +122,13 @@
     const fd = buildFormData(task);
     const headers = {};
     if (task.id) headers['X-Idempotency-Key'] = task.id;
+    if (task.idempotencyKey) headers['X-Idempotency-Key'] = task.idempotencyKey;
     if (window.CSRF_TOKEN) headers['X-CSRF-Token'] = window.CSRF_TOKEN;
 
     let r;
+    const started = Date.now();
     try {
-      QueueEvents.emit('queue:dispatch:progress', { job: task, progress: 50 });
+      QueueEvents.emit('queue:dispatch:progress', { job: task, progress: 25 });
       r = await withTimeout((signal) => fetch(url, {
         method: 'POST',
         body: fd,
@@ -115,9 +137,9 @@
         headers,
         signal
       }), timeoutMs, 'E_POST_TIMEOUT');
-      QueueEvents.emit('queue:dispatch:progress', { job: task, progress: 90 });
+      QueueEvents.emit('queue:dispatch:progress', { job: task, progress: 75 });
     } catch (err) {
-      throw new Error(`Network error calling ${url}: ${err && err.message ? err.message : err}`);
+      throw classifyError(err, null);
     }
 
     // Si el servidor dice CSRF inválido, reintenta una sola vez con token fresco
@@ -130,7 +152,8 @@
       }
     }
     const data = await parseJsonSafe(r);
-    return { response: r, data };
+    const duration = Date.now() - started;
+    return { response: r, data, duration };
   }
 
   // --------------------------------------------------------------------------------
@@ -195,17 +218,31 @@
     return /Failed to fetch/i.test(msg) || /NetworkError/i.test(msg) || /timeout/i.test(msg);
   }
 
-  async function parseJsonSafe(response){
+  async function parseJsonSafe(response, allowEmpty=false){
     try {
       const txt = await response.text();
-      if (!txt) return {};
+      if (!txt) return allowEmpty ? {} : null;
+
+      const contentType = response.headers.get('Content-Type') || '';
+      if (!/json/i.test(contentType) && /<html/i.test(txt)) {
+        const err = new Error('HTML detectado');
+        err.code = ErrorCode.HTML_LOGIN_REDIRECT_DETECTED;
+        err.raw = txt.slice(0, 2000);
+        throw err;
+      }
       try {
         return JSON.parse(txt);
       } catch (_) {
-        return { raw: txt };
+        const err = new Error('JSON inválido');
+        err.code = ErrorCode.PARSE_ERROR;
+        err.raw = txt.slice(0, 2000);
+        throw err;
       }
-    } catch (_) {
-      return {};
+    } catch (e) {
+      if (e.code === ErrorCode.HTML_LOGIN_REDIRECT_DETECTED || e.code === ErrorCode.PARSE_ERROR) throw e;
+      const err = new Error('parse fail');
+      err.code = ErrorCode.PARSE_ERROR;
+      throw err;
     }
   }
 
@@ -228,7 +265,7 @@
         local_id: f.id_local || f.idLocal || null,
         idFQ: f.idFQ || f.id_form_question || null
       },
-      task.meta || {}
+      task.meta || {},
     );
     return meta;
   }
@@ -261,6 +298,28 @@
     return js.message || js.error || js.msg || js.detail || 'Respuesta sin confirmar éxito';
   }
 
+  function classifyError(err, response){
+    if (!err) return { code: ErrorCode.UNKNOWN, message: 'Error desconocido' };
+    if (err.code === ErrorCode.HTML_LOGIN_REDIRECT_DETECTED) return { code: ErrorCode.HTML_LOGIN_REDIRECT_DETECTED, message: 'Respuesta HTML (probable login)', snippet: err.raw || null };
+    if (err.code === ErrorCode.PARSE_ERROR) return { code: ErrorCode.PARSE_ERROR, message: 'No se pudo parsear JSON', snippet: err.raw || null };
+
+    if (err.name === 'AbortError') return { code: ErrorCode.TIMEOUT, message: 'Timeout/Abort' };
+    if (isNetworkishError(err)) return { code: ErrorCode.NET_OFFLINE, message: err.message || 'Network error' };
+    const status = err.status || (response && response.status);
+    if (status === 401) return { code: ErrorCode.HTTP_401_AUTH, message: 'Sesión expirada' };
+    if (status === 403 || status === 419) return { code: ErrorCode.HTTP_403_CSRF, message: 'CSRF inválido' };
+    if (status >= 500) return { code: ErrorCode.HTTP_5XX_SERVER, message: 'Error servidor ' + status };
+    if (status && status >= 400) return { code: ErrorCode.HTTP_4XX_FATAL, message: 'Error cliente ' + status };
+    return { code: ErrorCode.UNKNOWN, message: err.message || 'Error' };
+  }
+
+  function getDefaultTimeout(type){
+    if (!type) return 20000;
+    const t = String(type);
+    if (t.includes('foto') || t.includes('upload')) return 45000;
+    return 20000;
+  }
+
   // --------------------------------------------------------------------------------
   // Ejecución de tareas
   // --------------------------------------------------------------------------------
@@ -277,14 +336,18 @@
       if (real) task.fields.visita_id = real;
     }
 
-    const { response: r, data: js } = await httpPost(task);
+    const { response: r, data: js, duration } = await httpPost(task);
     if (r.status === 401 || r.status === 403 || r.status === 419) {
       const authErr = new Error('HTTP ' + r.status);
       authErr.status = r.status;
       authErr.response = js;
       throw authErr;
     }
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (!r.ok) {
+      const e = new Error('HTTP ' + r.status);
+      e.status = r.status;
+      throw e;
+    }
 
     if (!isLogicalSuccess(js)) {
       const err = new Error(`Logical failure (${r.status}): ${logicalErrorMessage(js)}`);
@@ -323,7 +386,7 @@
       QueueEvents.emit('queue:gestion_success', { job: task, response: js });
     }
 
-    return js;
+    return { js, duration, status: r.status };
   }
 
   // --------------------------------------------------------------------------------
@@ -332,82 +395,158 @@
   async function backoff(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
   // --------------------------------------------------------------------------------
-  // Motor de drenaje
+  // Motor de drenaje con mutex
   // --------------------------------------------------------------------------------
   let _draining = false;
+  const mutexKey = 'v2_queue_mutex';
+
+  function tryLock(){
+    const now = Date.now();
+    const exp = now + 30000;
+    const cur = Number(localStorage.getItem(mutexKey) || '0');
+    if (cur && cur > now) return false;
+    try { localStorage.setItem(mutexKey, String(exp)); } catch(_){ return false; }
+    return true;
+  }
+
+  function releaseLock(){
+    try { localStorage.removeItem(mutexKey); } catch(_){ }
+  }
+
+  async function recoverRunning(){
+    try {
+      const running = await AppDB.listByStatus(Status.RUNNING);
+      await Promise.all(running.map(j => AppDB.update(j.id, { status: Status.RETRY, nextTry: Date.now() }))); // recuperar
+    }catch(_){}
+  }
+
+  async function ensureSessionAlive(){
+    const alive = await heartbeat();
+    if (!alive) return false;
+    const csrfOk = await refreshCSRF();
+    return !!csrfOk;
+  }
+
   async function drain(){
     if (_draining) return;
     if (!navigator.onLine) return;
+    if (!tryLock()) return;
 
     _draining = true;
     try {
-      // (1) validar sesión, (2) traer CSRF si está disponible
-      const alive = await heartbeat();
-      if (!alive) { _draining = false; return; }
+      await recoverRunning();
+      const sessionOk = await ensureSessionAlive();
+      if (!sessionOk) {
+        await markAllAuthPaused('Sesión/CSRF inválido');
+        return;
+      }
 
-      const pendings = await AppDB.listByStatus('pending');
+      const pendings = await AppDB.listByStatus(Status.QUEUED);
+      const retries  = await AppDB.listByStatus(Status.RETRY);
+      const jobs = [...pendings, ...retries].sort((a,b)=> (a.nextTry||0)-(b.nextTry||0));
       const now = Date.now();
-      // Para UI: badge/contador
-      QueueEvents.emit('queue:update', { pending: pendings.length });
+      QueueEvents.emit('queue:update', { pending: jobs.length });
 
-      for (const t of pendings) {
+      for (const t of jobs) {
         if (t.nextTry && t.nextTry > now) continue;
+        if (Array.isArray(t.dependsOn) && t.dependsOn.length) {
+          const unmet = t.dependsOn.find(dep => !CompletedDeps.has(dep));
+          if (unmet) continue;
+        } else if (t.dependsOn && typeof t.dependsOn === 'string' && !CompletedDeps.has(t.dependsOn)) {
+          continue;
+        }
 
-        // Dependencias (ej. cerrar_gestion depende de create:<guid>)
-        if (t.dependsOn && !CompletedDeps.has(t.dependsOn)) continue;
-
-        // Rellenar meta si no existe
         t.meta = t.meta || inferMetaFromTask(t);
-
-        // Marca running y anuncia inicio
-        await AppDB.update(t.id, { status: 'running', attempts: (t.attempts||0)+1, lastTry: now });
+        const attempts = (t.attempts||0)+1;
+        const started = Date.now();
+        await AppDB.update(t.id, { status: Status.RUNNING, attempts, lastTryAt: started, progressPct: 10 });
         QueueEvents.emit('queue:dispatch:start', { job: t });
         jr('onStart', t);
 
         try {
-          const js = await processTask(t);
-          // Éxito → eliminar y anunciar
+          const { js, duration, status } = await processTask(t);
+          await AppDB.update(t.id, { status: Status.SUCCESS, durationMs: duration, lastHttpStatus: status, progressPct: 100, lastErrorCode: null, lastErrorMessage: null });
+          QueueEvents.emit('queue:dispatch:success', { job: t, responseStatus: status, response: js });
+          jr('onSuccess', t, js, status);
           await AppDB.remove(t.id);
-          QueueEvents.emit('queue:dispatch:success', { job: t, responseStatus: 200, response: js });
-          jr('onSuccess', t, js);
-          // Back-compat del evento antiguo:
           window.dispatchEvent(new CustomEvent('queue:done', { detail: { id: t.id, type: t.type, response: js } }));
         } catch (err) {
-          // Error → reprogramar con backoff y anunciar
-          const attempts = (t.attempts||0) + 1;
+          const classified = classifyError(err, err && err.response ? { status: err.status } : null);
           const base = Math.min(60000, 1000 * Math.pow(2, attempts));
           const jitter = Math.floor(Math.random() * 300);
           const wait = base + jitter;
-          await AppDB.update(t.id, { status: 'pending', attempts, nextTry: now + wait, lastError: String(err) });
-          QueueEvents.emit('queue:dispatch:error', { job: t, error: String(err) });
-          jr('onError', t, String(err));
+          const snippet = err && err.response && typeof err.response === 'object'
+            ? JSON.stringify(err.response).slice(0,2000)
+            : (err && err.raw ? err.raw.slice(0,2000) : null);
+
+          let nextStatus = Status.RETRY;
+          if ([ErrorCode.HTTP_401_AUTH, ErrorCode.HTTP_403_CSRF, ErrorCode.HTML_LOGIN_REDIRECT_DETECTED].includes(classified.code)) {
+            nextStatus = Status.AUTH_PAUSED;
+          } else if (classified.code === ErrorCode.HTTP_4XX_FATAL) {
+            nextStatus = Status.FATAL;
+          }
+
+          t.status = nextStatus;
+          t.lastErrorCode = classified.code;
+          t.lastErrorMessage = classified.message;
+          await AppDB.update(t.id, {
+            status: nextStatus,
+            attempts,
+            nextTry: Date.now() + wait,
+            lastErrorCode: classified.code,
+            lastErrorMessage: classified.message,
+            lastResponseSnippet: snippet,
+            lastHttpStatus: err && err.status ? err.status : null,
+            durationMs: Date.now() - started,
+            progressPct: 50
+          });
+          QueueEvents.emit('queue:dispatch:error', { job: t, error: classified });
+          jr('onError', t, classified.message, err && err.status ? err.status : null);
           await backoff(200);
         }
       }
 
-      // Actualiza contador al final del ciclo
-      const left = await AppDB.listByStatus('pending');
-      QueueEvents.emit('queue:update', { pending: left.length });
+      const leftQueued = await AppDB.listByStatus(Status.QUEUED);
+      const leftRetry  = await AppDB.listByStatus(Status.RETRY);
+      QueueEvents.emit('queue:update', { pending: leftQueued.length + leftRetry.length });
     } finally {
+      releaseLock();
       _draining = false;
     }
+  }
+
+  async function markAllAuthPaused(reason){
+    try {
+      const queued = await AppDB.listByStatus(Status.QUEUED);
+      const retry  = await AppDB.listByStatus(Status.RETRY);
+      const all = [...queued, ...retry];
+      await Promise.all(all.map(j => AppDB.update(j.id, { status: Status.AUTH_PAUSED, lastErrorCode: ErrorCode.HTTP_401_AUTH, lastErrorMessage: reason })));
+      QueueEvents.emit('queue:update', { pending: all.length });
+      QueueEvents.emit('queue:auth_paused', { reason });
+    } catch(_){}
   }
 
   // --------------------------------------------------------------------------------
   // API pública de la cola
   // --------------------------------------------------------------------------------
   const Queue = {
+    Status,
+    ErrorCode,
     /**
      * Encola una tarea genérica.
-     * @param {{url:string,type:string,fields?:Object,files?:Array,sendCSRF?:boolean,id?:string,dedupeKey?:string,dependsOn?:string,client_guid?:string,meta?:Object}} task
+     * @param {{url:string,type:string,fields?:Object,files?:Array,sendCSRF?:boolean,id?:string,dedupeKey?:string,dependsOn?:string|Array,client_guid?:string,meta?:Object,timeoutMs?:number}} task
      */
     async enqueue(task){
-      task.method   = 'POST';
+      task.method   = task.method || 'POST';
       task.url      = task.url || '';
       task.type     = task.type || 'generic';
       task.sendCSRF = (task.sendCSRF !== false);
+      task.status   = Status.QUEUED;
+      task.dependsOn = task.dependsOn || [];
+      if (!Array.isArray(task.dependsOn) && task.dependsOn) task.dependsOn = [task.dependsOn];
 
       if (!task.id) task.id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+      task.idempotencyKey = task.idempotencyKey || task.id;
 
       // Tareas especiales: create_visita (genera id local y mapea por client_guid)
       if (task.type === 'create_visita') {
@@ -468,9 +607,11 @@
         files,
         sendCSRF: opts.sendCSRF !== false,
         id: opts.id || opts.idempotencyKey || undefined,
+        idempotencyKey: opts.idempotencyKey || opts.id,
         dedupeKey: opts.dedupeKey || undefined,
         dependsOn: opts.dependsOn || undefined,
-        client_guid: opts.client_guid || fields.client_guid || undefined
+        client_guid: opts.client_guid || fields.client_guid || undefined,
+        timeoutMs: opts.timeoutMs
       };
 
       task.meta = Object.assign({}, inferMetaFromTask(task), opts.meta || {});
@@ -483,7 +624,7 @@
     smartPost: async function(url, fdOrFields, options = {}) {
       const type          = options.type || 'generic';
       const needCSRF      = options.sendCSRF !== false;
-      const timeoutMs     = typeof options.timeoutMs === 'number' ? options.timeoutMs : 20000;
+      const timeoutMs     = typeof options.timeoutMs === 'number' ? options.timeoutMs : getDefaultTimeout(type);
       const enqueueOnFail = options.enqueueOnFail !== false;
 
       let fields = {}, files = [];
@@ -503,6 +644,7 @@
         files,
         sendCSRF: needCSRF,
         id: options.id || options.idempotencyKey || undefined,
+        idempotencyKey: options.idempotencyKey || options.id,
         dedupeKey: options.dedupeKey || undefined,
         dependsOn: options.dependsOn || undefined,
         client_guid: options.client_guid || fields.client_guid || undefined,
@@ -541,23 +683,20 @@
           // Ahora el job SIEMPRE tiene id
           QueueEvents.emit('queue:dispatch:start', { job: task });
           jr('onStart', task);
-          const js = await withTimeout(() => processTask(task), timeoutMs, 'E_SMART_TIMEOUT');
+          const { js, status } = await withTimeout(() => processTask(task), timeoutMs, 'E_SMART_TIMEOUT');
 
           QueueEvents.emit('queue:dispatch:success', {
             job: task,
-            responseStatus: 200,
+            responseStatus: status,
             response: js
           });
-          jr('onSuccess', task, js, 200);
+          jr('onSuccess', task, js, status);
           return { queued:false, ok:true, response: js };
         } catch (e) {
-          QueueEvents.emit('queue:dispatch:error', { job: task, error: String(e) });
-          jr('onError', task, String(e), e && e.status ? e.status : null);
-          if (shouldEnqueue && (isNetworkishError(e) || e.status === 401 || e.status === 403 || e.status === 419)) {
-            const id = await this.enqueue(task);
-            return { queued:true, ok:true, id };
-          }
-          if (shouldEnqueue && e && e.name === 'AbortError') {
+          const classified = classifyError(e, e && e.response ? { status: e.status } : null);
+          QueueEvents.emit('queue:dispatch:error', { job: task, error: classified });
+          jr('onError', task, String(classified.message), e && e.status ? e.status : null);
+          if (shouldEnqueue && (isNetworkishError(e) || e.status === 401 || e.status === 403 || e.status === 419 || e.name === 'AbortError')) {
             const id = await this.enqueue(task);
             return { queued:true, ok:true, id };
           }
@@ -591,8 +730,9 @@
       }
 
       try {
-        const pend = await AppDB.listByStatus('pending');
-        QueueEvents.emit('queue:update', { pending: pend.length });
+        const pendQueued = await AppDB.listByStatus(Status.QUEUED);
+        const pendRetry  = await AppDB.listByStatus(Status.RETRY);
+        QueueEvents.emit('queue:update', { pending: pendQueued.length + pendRetry.length });
       } catch(_) {
         QueueEvents.emit('queue:update', {});
       }
@@ -604,7 +744,9 @@
     },
 
     async listPending(){
-      return AppDB.listByStatus('pending');
+      const q = await AppDB.listByStatus(Status.QUEUED);
+      const r = await AppDB.listByStatus(Status.RETRY);
+      return [...q, ...r];
     },
 
     /**
@@ -637,7 +779,7 @@
   // --------------------------------------------------------------------------------
   if (!window.AppDB){
     const QDB_NAME = 'visibility2-queue';
-    const QDB_VER  = 1;
+    const QDB_VER  = 2;
     let _qdb = null;
 
     function qOpen(){
@@ -658,17 +800,17 @@
               if (found) return found.id;
             }
             const id = task.id || (crypto.randomUUID?.() || String(Date.now()));
-            arr.push({ id, status:'pending', attempts:0, createdAt:Date.now(), ...task });
+            arr.push({ id, status:Status.QUEUED, attempts:0, createdAt:Date.now(), ...task });
             mem.save(arr);
             // actualizar badge
-            QueueEvents.emit('queue:update', { pending: arr.filter(t=>t.status==='pending').length });
+            QueueEvents.emit('queue:update', { pending: arr.filter(t=>[Status.QUEUED,Status.RETRY].includes(t.status)).length });
             return id;
           },
           async update(id, patch){
             const arr = mem.all();
             const i = arr.findIndex(t=>t.id===id);
             if (i>=0){ arr[i] = Object.assign({}, arr[i], patch, { updatedAt: Date.now() }); mem.save(arr); }
-            QueueEvents.emit('queue:update', { pending: arr.filter(t=>t.status==='pending').length });
+            QueueEvents.emit('queue:update', { pending: arr.filter(t=>[Status.QUEUED,Status.RETRY].includes(t.status)).length });
             return true;
           },
           async listByStatus(status){
@@ -678,7 +820,7 @@
           async remove(id){
             const arr = mem.all().filter(t=>t.id!==id);
             mem.save(arr);
-            QueueEvents.emit('queue:update', { pending: arr.filter(t=>t.status==='pending').length });
+            QueueEvents.emit('queue:update', { pending: arr.filter(t=>[Status.QUEUED,Status.RETRY].includes(t.status)).length });
             return true;
           }
         };
@@ -708,7 +850,7 @@
           const id = task.id || (crypto.randomUUID?.() || String(Date.now()));
           const rec = Object.assign({
             id,
-            status: 'pending',
+            status: Status.QUEUED,
             attempts: 0,
             createdAt: Date.now()
           }, task);

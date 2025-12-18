@@ -3,7 +3,7 @@
   'use strict';
 
   const DB_NAME = 'v2_journal';
-  const DB_VER  = 7;
+  const DB_VER  = 8;
   const STORE   = 'journal';
 
   function ymdLocal(d){
@@ -61,6 +61,9 @@
       ymd     : ymdLocal(new Date()),
       status  : 'pending',
       progress: 0,
+      attempts: job.attempts || 0,
+      nextTryAt: job.nextTry || null,
+      lastTryAt: job.lastTryAt || null,
       kind    : meta.kind || job.type || 'generic',
 
       local_id : meta.local_id || fields.id_local      || fields.idLocal     || null,
@@ -72,6 +75,7 @@
       http_status: (patch && patch.http_status) || null,
       request_id : (patch && patch.request_id)  || null,
       last_error : (patch && patch.last_error)  || null,
+      last_error_code: (patch && patch.last_error_code) || null,
 
       counts: { photos:0, answers:0 },
 
@@ -84,7 +88,8 @@
       },
 
       vars : {},
-      error: null
+      error: null,
+      lastResponseSnippet: patch && patch.lastResponseSnippet || null
     };
 
     return Object.assign(rec, (patch || {}));
@@ -156,16 +161,16 @@
   async function statsFor(records){
     let pending = 0, running = 0, success = 0, error = 0;
     records.forEach(r => {
-      if      (r.status === 'pending') pending++;
+      if      (['pending','queued','retry'].includes(r.status)) pending++;
       else if (r.status === 'running') running++;
       else if (r.status === 'success') success++;
-      else if (r.status === 'error')   error++;
+      else if (['error','fatal','auth_paused'].includes(r.status))   error++;
     });
     return { pending, running, success, error, total: records.length };
   }
 
   async function onEnqueue(job){
-    const base = normalizeFromQueue(job, { status:'pending', progress:0 });
+    const base = normalizeFromQueue(job, { status: job.status || 'pending', progress:0 });
     if (Array.isArray(job.files)) base.counts.photos = job.files.length;
     return upsert(base);
   }
@@ -174,7 +179,12 @@
     const cur = await get(job.id);
     const rec = normalizeFromQueue(
       job,
-      Object.assign({}, cur || {}, { status:'running', progress:50 })
+      Object.assign({}, cur || {}, {
+        status:'running',
+        progress:50,
+        attempts: (job.attempts || (cur && cur.attempts) || 0),
+        lastTryAt: job.lastTryAt || Date.now()
+      })
     );
     return upsert(rec);
   }
@@ -235,10 +245,11 @@
     const rec = normalizeFromQueue(
       job,
       Object.assign({}, cur || {}, {
-        status  : 'error',
+        status  : job.status || 'error',
         progress: (cur && cur.progress > 50) ? cur.progress : 50,
         error   : String(errorMessage || 'Error'),
         last_error: String(errorMessage || 'Error'),
+        last_error_code: job && job.lastErrorCode || null,
         http_status: httpStatus || (cur && cur.http_status) || null
       })
     );

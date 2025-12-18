@@ -123,9 +123,10 @@
   }
 
   function aggStatus(items){
-    if (items.some(x => x.status === 'error'))   return 'error';
-    if (items.some(x => x.status === 'running')) return 'running';
-    if (items.some(x => x.status === 'pending')) return 'pending';
+    const has = s => items.some(x => x.status === s);
+    if (items.some(x => ['error','fatal','auth_paused'].includes(x.status))) return 'error';
+    if (has('running')) return 'running';
+    if (items.some(x => ['pending','queued','retry'].includes(x.status))) return 'pending';
     return 'success';
   }
 
@@ -310,8 +311,14 @@
             ? ` (${it.counts.photos} foto${it.counts.photos > 1 ? 's' : ''})`
             : '';
           const debugParts = [];
-           // Se ocultan identificadores técnicos que no aportan al ejecutor
           if (it.visita_local_id) debugParts.push(`local:${esc(it.visita_local_id)}`);
+          if (it.request_id)      debugParts.push(`req:${esc(it.request_id)}`);
+          if (it.attempts)        debugParts.push(`reintentos:${esc(String(it.attempts))}`);
+          if (it.nextTryAt) {
+            const nt = new Date(it.nextTryAt);
+            if (!Number.isNaN(nt.getTime())) debugParts.push(`próximo:${fmtTime(nt)}`);
+          }
+          if (it.last_error_code) debugParts.push(`código:${esc(it.last_error_code)}`);
 
           const debugLine = (debugParts.length || it.last_error)
             ? `<div class="jr-debug">${debugParts.join(' · ')}${it.last_error ? ` · err:${esc(it.last_error)}` : ''}</div>`

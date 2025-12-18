@@ -25,8 +25,6 @@ try {
     $uid = (int)$_SESSION['usuario_id'];
     $empresaId = isset($_SESSION['empresa_id']) ? (int)$_SESSION['empresa_id'] : null;
 
-    session_write_close();
-
     // Garantiza un CSRF válido para ayudar al heartbeat
     if (
         empty($_SESSION['csrf_token']) ||
@@ -35,6 +33,8 @@ try {
     ) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     }
+    $csrf = $_SESSION['csrf_token'];
+    session_write_close();
 
     /** @var mysqli|null $conn */
     $db_ok = false;
@@ -50,7 +50,7 @@ try {
         'empresa_id'  => $empresaId,
         'app_version' => getenv('APP_VERSION') ?: 'v2',
         'db_ok'       => $db_ok,
-        'csrf_token'  => $_SESSION['csrf_token'],
+        'csrf_token'  => $csrf,
     ];
 
     http_response_code(200);
