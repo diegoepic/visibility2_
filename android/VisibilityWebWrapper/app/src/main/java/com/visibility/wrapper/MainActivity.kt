@@ -3,14 +3,19 @@ package com.visibility.wrapper
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.DownloadManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import android.view.KeyEvent
+import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
+import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -29,6 +34,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import android.widget.Toast
 
 class MainActivity : AppCompatActivity() {
 
@@ -38,6 +44,7 @@ class MainActivity : AppCompatActivity() {
         /** URL base que se cargará siempre al iniciar la app. Cambia este valor para apuntar a otro entorno. */
         const val INITIAL_URL = "https://visibility.cl/visibility2/app/login.php"
         private const val MIME_TYPE_IMAGES = "image/*"
+        private const val LOG_TAG = "VisibilityWrapper"
     }
 
     // Permisos
@@ -60,6 +67,7 @@ class MainActivity : AppCompatActivity() {
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var pendingFileChooserParams: WebChromeClient.FileChooserParams? = null
     private var cameraPhotoUri: Uri? = null
+    private var pendingDownload: DownloadRequestData? = null
 
     private val locationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grantResults ->
@@ -84,6 +92,17 @@ class MainActivity : AppCompatActivity() {
     private val fileChooserLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
             handleFileChooserResult(result.resultCode, result.data)
+        }
+
+    private val writeStoragePermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val downloadRequest = pendingDownload
+            pendingDownload = null
+            if (granted && downloadRequest != null) {
+                enqueueDownload(downloadRequest)
+            } else if (downloadRequest != null) {
+                Toast.makeText(this, R.string.permission_denied, Toast.LENGTH_SHORT).show()
+            }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -183,6 +202,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+            handleDownloadRequest(url, userAgent, contentDisposition, mimeType)
+        }
+
         binding.webView.loadUrl(INITIAL_URL)
     }
 
@@ -260,4 +283,83 @@ class MainActivity : AppCompatActivity() {
         cameraPhotoUri = null
         pendingFileChooserParams = null
     }
+
+    private fun handleDownloadRequest(
+        url: String?,
+        userAgent: String?,
+        contentDisposition: String?,
+        mimeType: String?
+    ) {
+        if (url.isNullOrBlank()) return
+
+        val request = DownloadRequestData(
+            url = url,
+            userAgent = userAgent.orEmpty(),
+            contentDisposition = contentDisposition.orEmpty(),
+            mimeType = mimeType.orEmpty()
+        )
+
+        if (requiresLegacyWritePermission() && !hasWriteStoragePermission()) {
+            pendingDownload = request
+            writeStoragePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            return
+        }
+
+        enqueueDownload(request)
+    }
+
+    private fun enqueueDownload(request: DownloadRequestData) {
+        if (!URLUtil.isNetworkUrl(request.url)) {
+            Toast.makeText(this, R.string.download_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val filename = URLUtil.guessFileName(
+            request.url,
+            request.contentDisposition,
+            request.mimeType
+        )
+
+        val downloadRequest = DownloadManager.Request(Uri.parse(request.url)).apply {
+            setMimeType(request.mimeType)
+            addRequestHeader("User-Agent", request.userAgent)
+            val cookie = CookieManager.getInstance().getCookie(request.url)
+            if (!cookie.isNullOrBlank()) {
+                addRequestHeader("Cookie", cookie)
+            }
+            setTitle(filename)
+            setDescription(getString(R.string.file_chooser_title))
+            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
+            allowScanningByMediaScanner()
+        }
+
+        val downloadManager = getSystemService(DownloadManager::class.java)
+        if (downloadManager == null) {
+            Toast.makeText(this, R.string.download_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        try {
+            downloadManager.enqueue(downloadRequest)
+        } catch (exception: IllegalArgumentException) {
+            Log.e(LOG_TAG, "Failed to enqueue download request.", exception)
+            Toast.makeText(this, R.string.download_failed, Toast.LENGTH_SHORT).show()
+        } catch (exception: SecurityException) {
+            Log.e(LOG_TAG, "Missing permissions to enqueue download request.", exception)
+            Toast.makeText(this, R.string.permission_denied, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun requiresLegacyWritePermission(): Boolean = Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
+
+    private fun hasWriteStoragePermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+
+    private data class DownloadRequestData(
+        val url: String,
+        val userAgent: String,
+        val contentDisposition: String,
+        val mimeType: String
+    )
 }
