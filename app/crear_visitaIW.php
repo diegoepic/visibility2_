@@ -14,7 +14,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
   echo json_encode(['status'=>'error','message'=>'Método inválido']); exit;
 }
 if (empty($_POST['csrf_token']) || !isset($_SESSION['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-  http_response_code(403);
+  if (function_exists('deny_csrf_json')) { deny_csrf_json(); }
+  http_response_code(419);
   echo json_encode(['status'=>'error','message'=>'CSRF inválido']); exit;
 }
 
