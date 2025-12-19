@@ -1,154 +1,337 @@
 {
     "success": true,
-    "inserted": 24,
-    "failed": 20,
-    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1765985648.csv",
+    "inserted": 3,
+    "failed": 54,
+    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1766074354.csv",
     "successes": [
-        "L\u00ednea 21: Local 'YOVINA TREJOS' (c\u00f3digo 15069) insertado.",
-        "L\u00ednea 22: Local 'DANIELA DEZA GAJARDO' (c\u00f3digo 15181) insertado.",
-        "L\u00ednea 23: Local 'PEDRO DEZA PALLAUTA' (c\u00f3digo 10402) insertado.",
-        "L\u00ednea 24: Local 'ISABEL GONZALEZ CARMONA' (c\u00f3digo 40780) insertado.",
-        "L\u00ednea 25: Local 'LUIS AMERICO MOLINA' (c\u00f3digo 40472) insertado.",
-        "L\u00ednea 26: Local 'SUSANA AROSTICA ROJAS' (c\u00f3digo 10702) insertado.",
-        "L\u00ednea 27: Local 'LUIS VALENZUELA ANDRADE' (c\u00f3digo SA17391) insertado.",
-        "L\u00ednea 28: Local 'FREDDY DOLL DURAN' (c\u00f3digo 10675) insertado.",
-        "L\u00ednea 29: Local 'GIOVANNA PADILLA HERRERA' (c\u00f3digo SA17424) insertado.",
-        "L\u00ednea 30: Local 'JUANA ZEOEDA PEREZ' (c\u00f3digo 10685) insertado.",
-        "L\u00ednea 31: Local 'ALEJANDRO MONTERO RODRIGUEZ' (c\u00f3digo SA10670) insertado.",
-        "L\u00ednea 32: Local 'RENE CATALANO CORTES' (c\u00f3digo 10203) insertado.",
-        "L\u00ednea 33: Local 'CLAUDIO OLIVARES GONZALEZ' (c\u00f3digo SA10343) insertado.",
-        "L\u00ednea 34: Local 'PUNTO CERO SPA' (c\u00f3digo 10197) insertado.",
-        "L\u00ednea 35: Local 'WILSON ESTAY CORTES' (c\u00f3digo SA14700) insertado.",
-        "L\u00ednea 36: Local 'ANA YA\u00d1EZ ALVAREZ' (c\u00f3digo 10121) insertado.",
-        "L\u00ednea 38: Local 'GAUDEKIA SANDOVAL JOFRE' (c\u00f3digo 15161) insertado.",
-        "L\u00ednea 39: Local 'SOC COM LOS ESCORPIONES' (c\u00f3digo 15060) insertado.",
-        "L\u00ednea 40: Local 'DORIS ROJAS LORCA' (c\u00f3digo 10308) insertado.",
-        "L\u00ednea 41: Local 'ALMACEN DEYNER ZEBALLOS' (c\u00f3digo 17202) insertado.",
-        "L\u00ednea 42: Local 'FRANCISCO DIAZ CANTO' (c\u00f3digo SA14923) insertado.",
-        "L\u00ednea 43: Local 'CECILIA NAYTE SILVA' (c\u00f3digo 15129) insertado.",
-        "L\u00ednea 44: Local 'SOCIEDAD COMERCIAL RYB' (c\u00f3digo 10292) insertado.",
-        "L\u00ednea 45: Local 'EMPORIO ATACAMA SOC,DE SERV COOLD' (c\u00f3digo 17742) insertado."
+        "L\u00ednea 23: Local 'PRONTO COPEC - NUNOA' (c\u00f3digo 2424082) insertado.",
+        "L\u00ednea 39: Local 'PRONTO COPEC - PUDAHUEL' (c\u00f3digo 2283646) insertado.",
+        "L\u00ednea 52: Local 'PRONTO COPEC - SAN BERNARDO' (c\u00f3digo 2498989) insertado."
     ],
     "failures": [
         {
             "line": 2,
-            "codigo": "40681",
-            "nombre": "QUINTEROS MURIANO GLADYS IRIANA DE",
-            "reason": "El c\u00f3digo de local '40681' ya existe (l\u00ednea 2)."
+            "codigo": "819781",
+            "nombre": "PRONTO COPEC - BUIN",
+            "reason": "El c\u00f3digo de local '819781' ya existe (l\u00ednea 2)."
         },
         {
             "line": 3,
-            "codigo": "40397",
-            "nombre": "LUIS PEDRO VARGAS ROJAS",
-            "reason": "El c\u00f3digo de local '40397' ya existe (l\u00ednea 3)."
+            "codigo": "673757",
+            "nombre": "PRONTO COPEC - BUIN",
+            "reason": "El c\u00f3digo de local '673757' ya existe (l\u00ednea 3)."
         },
         {
             "line": 4,
-            "codigo": "40482",
-            "nombre": "HUMBERTO ALFREDO MONTALBAN DIAZ",
-            "reason": "El c\u00f3digo de local '40482' ya existe (l\u00ednea 4)."
+            "codigo": "1864923",
+            "nombre": "PRONTO COPEC - CERRILLOS",
+            "reason": "El c\u00f3digo de local '1864923' ya existe (l\u00ednea 4)."
         },
         {
             "line": 5,
-            "codigo": "40483",
-            "nombre": "GODOY CASTILLO GUILLERMO",
-            "reason": "El c\u00f3digo de local '40483' ya existe (l\u00ednea 5)."
+            "codigo": "927451",
+            "nombre": "PRONTO COPEC - CERRILLOS",
+            "reason": "El c\u00f3digo de local '927451' ya existe (l\u00ednea 5)."
         },
         {
             "line": 6,
-            "codigo": "40516",
-            "nombre": "BORDONES CORTES SONIA RUTH",
-            "reason": "El c\u00f3digo de local '40516' ya existe (l\u00ednea 6)."
+            "codigo": "673641",
+            "nombre": "PRONTO COPEC - CERRILLOS",
+            "reason": "El c\u00f3digo de local '673641' ya existe (l\u00ednea 6)."
         },
         {
             "line": 7,
-            "codigo": "40560",
-            "nombre": "PRADO MUNOZ MARIA LUZ",
-            "reason": "El c\u00f3digo de local '40560' ya existe (l\u00ednea 7)."
+            "codigo": "675561",
+            "nombre": "PRONTO COPEC - COLINA",
+            "reason": "El c\u00f3digo de local '675561' ya existe (l\u00ednea 7)."
         },
         {
             "line": 8,
-            "codigo": "40659",
-            "nombre": "DURAN CASTILLO MARCIA DE LOURDES",
-            "reason": "El c\u00f3digo de local '40659' ya existe (l\u00ednea 8)."
+            "codigo": "687497",
+            "nombre": "PRONTO COPEC - COLINA",
+            "reason": "El c\u00f3digo de local '687497' ya existe (l\u00ednea 8)."
         },
         {
             "line": 9,
-            "codigo": "40729",
-            "nombre": "DIAZ CAMPUSANO LUIS",
-            "reason": "El c\u00f3digo de local '40729' ya existe (l\u00ednea 9)."
+            "codigo": "859804",
+            "nombre": "PRONTO COPEC - HUECHURABA",
+            "reason": "El c\u00f3digo de local '859804' ya existe (l\u00ednea 9)."
         },
         {
             "line": 10,
-            "codigo": "57117",
-            "nombre": "ANDRES ALFONSO ALFARO GONZALEZ",
-            "reason": "El c\u00f3digo de local '57117' ya existe (l\u00ednea 10)."
+            "codigo": "677339",
+            "nombre": "PRONTO COPEC - LA CISTERNA",
+            "reason": "El c\u00f3digo de local '677339' ya existe (l\u00ednea 10)."
         },
         {
             "line": 11,
-            "codigo": "62265",
-            "nombre": "RIVERA OLIVARES XIMENA ELISA",
-            "reason": "El c\u00f3digo de local '62265' ya existe (l\u00ednea 11)."
+            "codigo": "1379598",
+            "nombre": "PRONTO COPEC - LA FLORIDA",
+            "reason": "El c\u00f3digo de local '1379598' ya existe (l\u00ednea 11)."
         },
         {
             "line": 12,
-            "codigo": "73495",
-            "nombre": "GUILLERMO KENNEDY ZAMBRA AGUILERA",
-            "reason": "El c\u00f3digo de local '73495' ya existe (l\u00ednea 12)."
+            "codigo": "1489145",
+            "nombre": "PRONTO COPEC - LA FLORIDA",
+            "reason": "El c\u00f3digo de local '1489145' ya existe (l\u00ednea 12)."
         },
         {
             "line": 13,
-            "codigo": "63673",
-            "nombre": "SARA ENEA FERNANDEZ SCOLA | SUCURSALMK",
-            "reason": "El c\u00f3digo de local '63673' ya existe (l\u00ednea 13)."
+            "codigo": "2212701",
+            "nombre": "PRONTO COPEC - LA FLORIDA",
+            "reason": "El c\u00f3digo de local '2212701' ya existe (l\u00ednea 13)."
         },
         {
             "line": 14,
-            "codigo": "65364",
-            "nombre": "COMERCIALIZADORA MINORISTA JANA SPA",
-            "reason": "El c\u00f3digo de local '65364' ya existe (l\u00ednea 14)."
+            "codigo": "1319942",
+            "nombre": "PRONTO COPEC - LA GRANJA",
+            "reason": "El c\u00f3digo de local '1319942' ya existe (l\u00ednea 14)."
         },
         {
             "line": 15,
-            "codigo": "88209",
-            "nombre": "COMERCIAL NICOL VENEGAS EIRL",
-            "reason": "El c\u00f3digo de local '88209' ya existe (l\u00ednea 15)."
+            "codigo": "676263",
+            "nombre": "PRONTO COPEC - LA REINA",
+            "reason": "El c\u00f3digo de local '676263' ya existe (l\u00ednea 15)."
         },
         {
             "line": 16,
-            "codigo": "92037",
-            "nombre": "MIS RAICES SPA",
-            "reason": "El c\u00f3digo de local '92037' ya existe (l\u00ednea 16)."
+            "codigo": "1693001",
+            "nombre": "PRONTO COPEC - LAS CONDES",
+            "reason": "El c\u00f3digo de local '1693001' ya existe (l\u00ednea 16)."
         },
         {
             "line": 17,
-            "codigo": "40446",
-            "nombre": "SALDIAS SEPULVEDA NORMA DEL CARMEN",
-            "reason": "El c\u00f3digo de local '40446' ya existe (l\u00ednea 17)."
+            "codigo": "677890",
+            "nombre": "PRONTO COPEC - LAS CONDES",
+            "reason": "El c\u00f3digo de local '677890' ya existe (l\u00ednea 17)."
         },
         {
             "line": 18,
-            "codigo": "61657",
-            "nombre": "GOMEZ ZAMORA DANICA ESTER",
-            "reason": "El c\u00f3digo de local '61657' ya existe (l\u00ednea 18)."
+            "codigo": "1368885",
+            "nombre": "PRONTO COPEC - LAS CONDES",
+            "reason": "El c\u00f3digo de local '1368885' ya existe (l\u00ednea 18)."
         },
         {
             "line": 19,
-            "codigo": "62673",
-            "nombre": "SOC ROJAS ASTUDILLO LTDA",
-            "reason": "El c\u00f3digo de local '62673' ya existe (l\u00ednea 19)."
+            "codigo": "673685",
+            "nombre": "PRONTO COPEC - LAS CONDES",
+            "reason": "El c\u00f3digo de local '673685' ya existe (l\u00ednea 19)."
         },
         {
             "line": 20,
-            "codigo": "17232",
-            "nombre": "INVERSIONES LV SPA",
-            "reason": "El c\u00f3digo de local '17232' ya existe (l\u00ednea 20)."
+            "codigo": "677012",
+            "nombre": "PRONTO COPEC - MACUL",
+            "reason": "El c\u00f3digo de local '677012' ya existe (l\u00ednea 20)."
+        },
+        {
+            "line": 21,
+            "codigo": "678234",
+            "nombre": "PRONTO COPEC - MACUL",
+            "reason": "El c\u00f3digo de local '678234' ya existe (l\u00ednea 21)."
+        },
+        {
+            "line": 22,
+            "codigo": "2107386",
+            "nombre": "PRONTO COPEC - MAIPU",
+            "reason": "El c\u00f3digo de local '2107386' ya existe (l\u00ednea 22)."
+        },
+        {
+            "line": 24,
+            "codigo": "677027",
+            "nombre": "PRONTO COPEC - NUNOA",
+            "reason": "El c\u00f3digo de local '677027' ya existe (l\u00ednea 24)."
+        },
+        {
+            "line": 25,
+            "codigo": "2250763",
+            "nombre": "PRONTO COPEC - NUNOA",
+            "reason": "El c\u00f3digo de local '2250763' ya existe (l\u00ednea 25)."
+        },
+        {
+            "line": 26,
+            "codigo": "676627",
+            "nombre": "PRONTO COPEC - NUNOA",
+            "reason": "El c\u00f3digo de local '676627' ya existe (l\u00ednea 26)."
+        },
+        {
+            "line": 27,
+            "codigo": "1390428",
+            "nombre": "PRONTO COPEC - PADRE HURTADO",
+            "reason": "El c\u00f3digo de local '1390428' ya existe (l\u00ednea 27)."
+        },
+        {
+            "line": 28,
+            "codigo": "681064",
+            "nombre": "PRONTO COPEC - PEDRO AGUIRRE CERDA",
+            "reason": "El c\u00f3digo de local '681064' ya existe (l\u00ednea 28)."
+        },
+        {
+            "line": 29,
+            "codigo": "1523059",
+            "nombre": "PRONTO COPEC - PENAFLOR",
+            "reason": "El c\u00f3digo de local '1523059' ya existe (l\u00ednea 29)."
+        },
+        {
+            "line": 30,
+            "codigo": "808597",
+            "nombre": "PRONTO COPEC - PENALOLEN",
+            "reason": "El c\u00f3digo de local '808597' ya existe (l\u00ednea 30)."
+        },
+        {
+            "line": 31,
+            "codigo": "2146322",
+            "nombre": "PRONTO COPEC - PENALOLEN",
+            "reason": "El c\u00f3digo de local '2146322' ya existe (l\u00ednea 31)."
+        },
+        {
+            "line": 32,
+            "codigo": "1571285",
+            "nombre": "PRONTO COPEC - PENALOLEN",
+            "reason": "El c\u00f3digo de local '1571285' ya existe (l\u00ednea 32)."
+        },
+        {
+            "line": 33,
+            "codigo": "2328667",
+            "nombre": "PRONTO COPEC - PIRQUE",
+            "reason": "El c\u00f3digo de local '2328667' ya existe (l\u00ednea 33)."
+        },
+        {
+            "line": 34,
+            "codigo": "2016044",
+            "nombre": "PRONTO COPEC - PROVIDENCIA",
+            "reason": "El c\u00f3digo de local '2016044' ya existe (l\u00ednea 34)."
+        },
+        {
+            "line": 35,
+            "codigo": "675319",
+            "nombre": "PRONTO COPEC - PROVIDENCIA",
+            "reason": "El c\u00f3digo de local '675319' ya existe (l\u00ednea 35)."
+        },
+        {
+            "line": 36,
+            "codigo": "678310",
+            "nombre": "PRONTO COPEC - PROVIDENCIA",
+            "reason": "El c\u00f3digo de local '678310' ya existe (l\u00ednea 36)."
         },
         {
             "line": 37,
-            "codigo": "SA9963",
-            "nombre": "PAOLA SEPULVEDA LABRA",
-            "reason": "El c\u00f3digo de local 'SA9963' ya existe (l\u00ednea 37)."
+            "codigo": "1728078",
+            "nombre": "PRONTO COPEC - PROVIDENCIA",
+            "reason": "El c\u00f3digo de local '1728078' ya existe (l\u00ednea 37)."
+        },
+        {
+            "line": 38,
+            "codigo": "677135",
+            "nombre": "PRONTO COPEC - PROVIDENCIA",
+            "reason": "El c\u00f3digo de local '677135' ya existe (l\u00ednea 38)."
+        },
+        {
+            "line": 40,
+            "codigo": "678051",
+            "nombre": "PRONTO COPEC - PUENTE ALTO",
+            "reason": "El c\u00f3digo de local '678051' ya existe (l\u00ednea 40)."
+        },
+        {
+            "line": 41,
+            "codigo": "686206",
+            "nombre": "PRONTO COPEC - PUENTE ALTO",
+            "reason": "El c\u00f3digo de local '686206' ya existe (l\u00ednea 41)."
+        },
+        {
+            "line": 42,
+            "codigo": "1395978",
+            "nombre": "PRONTO COPEC - QUILICURA",
+            "reason": "El c\u00f3digo de local '1395978' ya existe (l\u00ednea 42)."
+        },
+        {
+            "line": 43,
+            "codigo": "1655152",
+            "nombre": "PRONTO COPEC - QUILICURA",
+            "reason": "El c\u00f3digo de local '1655152' ya existe (l\u00ednea 43)."
+        },
+        {
+            "line": 44,
+            "codigo": "987968",
+            "nombre": "PRONTO COPEC - QUINTA NORMAL",
+            "reason": "El c\u00f3digo de local '987968' ya existe (l\u00ednea 44)."
+        },
+        {
+            "line": 45,
+            "codigo": "2246549",
+            "nombre": "PRONTO COPEC - QUINTA NORMAL",
+            "reason": "El c\u00f3digo de local '2246549' ya existe (l\u00ednea 45)."
+        },
+        {
+            "line": 46,
+            "codigo": "1538650",
+            "nombre": "PRONTO COPEC - QUINTA NORMAL",
+            "reason": "El c\u00f3digo de local '1538650' ya existe (l\u00ednea 46)."
+        },
+        {
+            "line": 47,
+            "codigo": "768580",
+            "nombre": "PRONTO COPEC - QUINTA NORMAL",
+            "reason": "El c\u00f3digo de local '768580' ya existe (l\u00ednea 47)."
+        },
+        {
+            "line": 48,
+            "codigo": "990027",
+            "nombre": "PRONTO COPEC - QUINTA NORMAL",
+            "reason": "El c\u00f3digo de local '990027' ya existe (l\u00ednea 48)."
+        },
+        {
+            "line": 49,
+            "codigo": "1870317",
+            "nombre": "PRONTO COPEC - RENCA",
+            "reason": "El c\u00f3digo de local '1870317' ya existe (l\u00ednea 49)."
+        },
+        {
+            "line": 50,
+            "codigo": "1345928",
+            "nombre": "PRONTO COPEC - SAN BERNARDO",
+            "reason": "El c\u00f3digo de local '1345928' ya existe (l\u00ednea 50)."
+        },
+        {
+            "line": 51,
+            "codigo": "675663",
+            "nombre": "PRONTO COPEC - SAN BERNARDO",
+            "reason": "El c\u00f3digo de local '675663' ya existe (l\u00ednea 51)."
+        },
+        {
+            "line": 53,
+            "codigo": "1425529",
+            "nombre": "PRONTO COPEC - SAN MIGUEL",
+            "reason": "El c\u00f3digo de local '1425529' ya existe (l\u00ednea 53)."
+        },
+        {
+            "line": 54,
+            "codigo": "2246410",
+            "nombre": "PRONTO COPEC - SANTIAGO",
+            "reason": "El c\u00f3digo de local '2246410' ya existe (l\u00ednea 54)."
+        },
+        {
+            "line": 55,
+            "codigo": "1350202",
+            "nombre": "PRONTO COPEC - SANTIAGO",
+            "reason": "El c\u00f3digo de local '1350202' ya existe (l\u00ednea 55)."
+        },
+        {
+            "line": 56,
+            "codigo": "2205390",
+            "nombre": "PRONTO COPEC - SANTIAGO",
+            "reason": "El c\u00f3digo de local '2205390' ya existe (l\u00ednea 56)."
+        },
+        {
+            "line": 57,
+            "codigo": "674013",
+            "nombre": "PRONTO COPEC - SANTIAGO",
+            "reason": "El c\u00f3digo de local '674013' ya existe (l\u00ednea 57)."
+        },
+        {
+            "line": 58,
+            "codigo": "678349",
+            "nombre": "PRONTO COPEC - VITACURA",
+            "reason": "El c\u00f3digo de local '678349' ya existe (l\u00ednea 58)."
         }
     ]
 }

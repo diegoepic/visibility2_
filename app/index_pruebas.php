@@ -1625,7 +1625,7 @@ window.initMap=function(){
     const pos = window.ejecutorMarker?.getPosition(); if (pos && !(window.navigator3D && window.navigator3D.active)) window.debouncedPlanRoute(pos.toJSON());
   });
 
-  setMode(loadMode()); // arranca con modo recordado
+ setMode(window.modoLocal || loadMode() || 'prog'); // arranca con modo recordado
   setTimeout(()=>$('#filtroFechaProg').trigger('change'), 200);
 };
 

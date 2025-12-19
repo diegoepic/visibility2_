@@ -1945,45 +1945,58 @@ $(document).ready(function(){
   $('#btnNext1').prop('disabled', true).text('Siguiente »');
 
   // === Paso 1: iniciar visita con soporte OFFLINE ===
-$('#btnNext1').off('click').on('click', async function(){
-  const $btn = $(this);
-  $btn.prop('disabled', true).text('Obteniendo ubicación…');
+ $('#btnNext1').off('click').on('click', async function(){
+    const $btn = $(this);
+    $btn.prop('disabled', true).text('Obteniendo ubicación…');
 
-  // 1) Siempre exigimos GPS fresco
-  try {
-    await ensureFreshGeo();
-  } catch (err) {
-    showGeoError(err);
-    $btn.prop('disabled', false).text('Siguiente »');
-    return;
-  }
+    const estado = $('#estadoGestion').val();
+    const motivo = $('#motivo').val();
+    if (!estado) {
+      alert('Selecciona el estado de la gestión.');
+      $btn.prop('disabled', false).text('Siguiente »');
+      return;
+    }
+    if ((estado === 'pendiente' || estado === 'cancelado') && !motivo) {
+      alert('Debes seleccionar un motivo antes de continuar.');
+      $btn.prop('disabled', false).text('Siguiente »');
+      return;
+    }
 
-  // 2) Preparamos payload e idempotencia
-  const session = ensureVisitSession();
-  const client_guid = session.client_guid;
-  const idempKey    = makeIdempKey();
-  $('#idemp_create').val(idempKey);
+    // 1) Siempre exigimos GPS fresco
+    try {
+      await ensureFreshGeo();
+    } catch (err) {
+      showGeoError(err);
+      $btn.prop('disabled', false).text('Siguiente »');
+      return;
+    }
 
-  const payload = {
-    id_formulario: <?php echo (int)$idCampana; ?>,
-    id_local:      <?php echo (int)$idLocal; ?>,
-    lat:           String($('#latGestion').val() || ''),
-    lng:           String($('#lngGestion').val() || ''),
-    client_guid:   String(client_guid || '')
-  };
+    // 2) Preparamos payload e idempotencia
+    const session = ensureVisitSession();
+    const client_guid = session.client_guid;
+    const idempKey    = makeIdempKey();
+    $('#idemp_create').val(idempKey);
 
-  updateVisitSession({ startPayload: { lat: payload.lat, lng: payload.lng } });
+    const payload = {
+      id_formulario: <?php echo (int)$idCampana; ?>,
+      id_local:      <?php echo (int)$idLocal; ?>,
+      lat:           String($('#latGestion').val() || ''),
+      lng:           String($('#lngGestion').val() || ''),
+      client_guid:   String(client_guid || '')
+    };
 
-  $btn.text('Iniciando visita…');
+    updateVisitSession({ startPayload: { lat: payload.lat, lng: payload.lng } });
 
-  try {
-    const params = new URLSearchParams();
-    params.append('id_formulario', String(payload.id_formulario));
-    params.append('id_local',      String(payload.id_local));
-    params.append('lat',           String(payload.lat ?? ''));
-    params.append('lng',           String(payload.lng ?? ''));
-    params.append('client_guid',   String(payload.client_guid || ''));
-    params.append('csrf_token',    getCSRF());
+    $btn.text('Iniciando visita…');
+
+    try {
+      const params = new URLSearchParams();
+      params.append('id_formulario', String(payload.id_formulario));
+      params.append('id_local',      String(payload.id_local));
+      params.append('lat',           String(payload.lat ?? ''));
+      params.append('lng',           String(payload.lng ?? ''));
+      params.append('client_guid',   String(payload.client_guid || ''));
+      params.append('csrf_token',    getCSRF());
 
     // 3) Promesa de timeout
     const timeoutPromise = new Promise((_, reject) => {
@@ -2100,9 +2113,11 @@ $('#btnNext1').off('click').on('click', async function(){
     $('#fotoCanceladoGenericaContainer').hide(); $('#fotoCanceladoGenerica').val('');
   }
 
-  estadoSelect.on('change', function(){
+   estadoSelect.on('change', function(){
       let val = $(this).val();
       motivoSelect.empty().append('<option value="" disabled selected>Seleccione una opción</option>');
+      motivoSelect.val('');
+      motivoSelect.removeAttr('required');
       motivoContainer.hide(); materialesDiv.hide(); comentarioDiv.hide();
       btnNext1.prop('disabled', false);
       tituloPaso2.text('Paso 2');
@@ -2123,11 +2138,13 @@ $('#btnNext1').off('click').on('click', async function(){
       } else if (val === 'pendiente') {
         motivosPendiente.forEach(function(m){ motivoSelect.append('<option value="'+m.value+'">'+m.text+'</option>'); });
         motivoContainer.show(); comentarioDiv.show();
+        motivoSelect.attr('required', 'required');
         tituloPaso2.text('Paso 2: Motivo, Comentarios y Foto');
         $('#fotoPendienteGenericaContainer').slideDown();
       } else if (val === 'cancelado') {
         motivosCancelado.forEach(function(m){ motivoSelect.append('<option value="'+m.value+'">'+m.text+'</option>'); });
         motivoContainer.show(); comentarioDiv.show();
+        motivoSelect.attr('required', 'required');
         tituloPaso2.text('Paso 2: Motivo, Comentarios y Foto');
         $('#fotoCanceladoGenericaContainer').slideDown();
       } else {

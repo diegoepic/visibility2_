@@ -1,4 +1,4 @@
-const VERSION        = 'v3.0.2';
+const VERSION        = 'v3.0.4';
 const APP_SCOPE      = '/visibility2/app';
 const STATIC_CACHE   = `static-${VERSION}`;
 const RUNTIME_CACHE  = `runtime-${VERSION}`;
