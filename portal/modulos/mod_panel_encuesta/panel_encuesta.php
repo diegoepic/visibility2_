@@ -888,11 +888,41 @@ if ($sel_div>0 || !$is_mc){
     return [...map.entries()].sort((a,b)=> a[1].localeCompare(b[1], 'es'));
   }
 
-  function absUrl(path){
-    if(!path) return '';
-    if(/^https?:\/\//i.test(path)) return path;
-    const p = path.startsWith('/') ? path : '/'+path;
-    return ABS_BASE + p;
+  function buildPhotoCandidates(path){
+    const raw = (path || '').toString().trim();
+    if (!raw) return [];
+    if (/^https?:\/\//i.test(raw)) return [raw];
+    const noSlash = raw.replace(/^\/+/, '');
+    const withSlash = '/' + noSlash;
+    const base = ABS_BASE;
+    const out = [];
+    const add = (u)=>{ if (u && !out.includes(u)) out.push(u); };
+
+    if (noSlash.startsWith('uploads/')) {
+      add(base + '/visibility2/app/' + noSlash);
+      add(base + '/' + noSlash);
+      return out;
+    }
+
+    if (noSlash.startsWith('app/')) {
+      add(base + '/visibility2/' + noSlash);
+      add(base + '/' + noSlash);
+      return out;
+    }
+
+    if (noSlash.startsWith('portal/')) {
+      add(base + '/visibility2/' + noSlash);
+      add(base + '/' + noSlash);
+      return out;
+    }
+
+    if (noSlash.startsWith('visibility2/')) {
+      add(base + '/' + noSlash);
+      return out;
+    }
+
+    add(base + withSlash);
+    return out;
   }
 
   function groupPhotoRows(rows){
@@ -908,7 +938,7 @@ if ($sel_div>0 || !$is_mc){
           out.push(item);
         }
         if (r.respuesta){
-          item.fotos.push(absUrl(r.respuesta));
+          item.fotos.push(r.respuesta);
         }
       } else {
         out.push(r);
@@ -933,9 +963,13 @@ if ($sel_div>0 || !$is_mc){
   function renderThumbs(urls){
     if(!urls || !urls.length) return '';
     const badge = (urls.length>1) ? `<span class="thumb-count">${urls.length}</span>` : '';
-    const imgs = urls.map(u =>
-      `<img class="thumb" data-src="${escapeHtml(u)}" data-full="${escapeHtml(u)}" alt="foto" loading="lazy">`
-    ).join('');
+    const imgs = urls.map(u => {
+      const candidates = buildPhotoCandidates(u);
+      if (!candidates.length) return '';
+      const primary = candidates[0];
+      const fallbacks = candidates.slice(1);
+      return `<img class="thumb" data-src="${escapeHtml(primary)}" data-full="${escapeHtml(primary)}" data-fallbacks="${escapeHtml(JSON.stringify(fallbacks))}" alt="foto" loading="lazy">`;
+    }).join('');
     return `<div class="thumb-wrap">${badge}${imgs}</div>`;
   }
 
@@ -997,7 +1031,7 @@ if ($sel_div>0 || !$is_mc){
           rows.forEach(r=>{
             const isFoto = r.tipo === 7;
             const respCell = isFoto
-              ? (r.fotos && r.fotos.length ? renderThumbs(r.fotos) : (r.respuesta ? renderThumbs([absUrl(r.respuesta)]) : ''))
+              ? (r.fotos && r.fotos.length ? renderThumbs(r.fotos) : (r.respuesta ? renderThumbs([r.respuesta]) : ''))
               : escapeHtml(r.respuesta || '');
             const tr = document.createElement('tr');
             tr.innerHTML = `
@@ -1018,6 +1052,7 @@ if ($sel_div>0 || !$is_mc){
           });
           tb[0].appendChild(frag);
 
+          noteThumbFallbacks();
           $('#resultsTable img.thumb').each(function(){
             if(lazyObserver) lazyObserver.observe(this);
             else {
@@ -1093,6 +1128,37 @@ if ($sel_div>0 || !$is_mc){
     if(!isNaN(p)){ page=p; loadData(); }
   });
 
+  function parseFallbacks(el){
+    const raw = el.getAttribute('data-fallbacks');
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function applyNextFallback(img){
+    const fallbacks = parseFallbacks(img);
+    if (!fallbacks.length) return false;
+    const idx = parseInt(img.getAttribute('data-fallback-idx') || '0', 10);
+    if (idx >= fallbacks.length) return false;
+    img.setAttribute('data-fallback-idx', String(idx + 1));
+    img.src = fallbacks[idx];
+    return true;
+  }
+
+  function noteThumbFallbacks(){
+    $('#resultsTable img.thumb').each(function(){
+      if (this.dataset.fallbackReady === '1') return;
+      this.dataset.fallbackReady = '1';
+      this.addEventListener('error', () => {
+        applyNextFallback(this);
+      });
+    });
+  }
+
   $('#panel-encuesta-filtros').on('submit', function(e){
     e.preventDefault();
     if (!validateDates()) return;
@@ -1111,25 +1177,36 @@ if ($sel_div>0 || !$is_mc){
 
   // ====== Lightbox ======
   const LB = { list: [], idx: 0 };
-  function openLightbox(urls, start){
-    LB.list = urls || [];
+  function openLightbox(items, start){
+    LB.list = items || [];
     LB.idx = Math.max(0, Math.min(start||0, LB.list.length-1));
     updateLB();
     $('#photoModal').modal('show');
   }
   function updateLB(){
     if (!LB.list.length) return;
-    $('#photoModalImg').attr('src', LB.list[LB.idx]);
+    const item = LB.list[LB.idx] || {};
+    const img = $('#photoModalImg');
+    img.attr('src', item.primary || '');
+    img.attr('data-fallbacks', JSON.stringify(item.fallbacks || []));
+    img.attr('data-fallback-idx', '0');
     $('#photoModalCaption').text((LB.idx+1)+' / '+LB.list.length);
   }
   function lbPrev(){ if(LB.list.length){ LB.idx = (LB.idx-1+LB.list.length)%LB.list.length; updateLB(); } }
   function lbNext(){ if(LB.list.length){ LB.idx = (LB.idx+1)%LB.list.length; updateLB(); } }
 
+  $('#photoModalImg').on('error', function(){
+    applyNextFallback(this);
+  });
+
   $(document).on('click', '.thumb', function(){
     const $wrap = $(this).closest('.thumb-wrap');
-    const urls = $wrap.find('.thumb').map((i,el)=>$(el).data('full')).get();
+    const items = $wrap.find('.thumb').map((i,el)=>{
+      const fallbacks = parseFallbacks(el);
+      return { primary: $(el).data('full'), fallbacks };
+    }).get();
     const idx = $wrap.find('.thumb').index(this);
-    openLightbox(urls, idx);
+    openLightbox(items, idx);
   });
   $('#lbPrev').on('click', lbPrev);
   $('#lbNext').on('click', lbNext);
