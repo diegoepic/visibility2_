@@ -35,6 +35,13 @@
     return d.toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit' });
   }
 
+  function fmtRetry(ts){
+    if (!ts) return '';
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return '';
+    return `Reintentará a las ${fmtTime(d)}`;
+  }
+
 
   function fmtDate(ts){
     const d = ts ? new Date(ts) : new Date();
@@ -123,9 +130,11 @@
   }
 
   function aggStatus(items){
-    if (items.some(x => x.status === 'error'))   return 'error';
-    if (items.some(x => x.status === 'running')) return 'running';
-    if (items.some(x => x.status === 'pending')) return 'pending';
+    if (items.some(x => x.status === 'blocked_auth')) return 'blocked_auth';
+    if (items.some(x => x.status === 'blocked_csrf')) return 'blocked_csrf';
+    if (items.some(x => x.status === 'error'))        return 'error';
+    if (items.some(x => x.status === 'running'))      return 'running';
+    if (items.some(x => x.status === 'queued'))       return 'queued';
     return 'success';
   }
 
@@ -210,7 +219,7 @@
       gr.expl       = explFromCounts(gr.kindCounts);
       gr.counts     = {
         total:   gr.items.length,
-        pending: gr.items.filter(x => x.status === 'pending').length
+        pending: gr.items.filter(x => x.status === 'queued').length
       };
       gr.campaigns = uniq(Array.from(gr.campaigns));
 
@@ -231,9 +240,12 @@
   // ---------- HTML para grupos (cola local) ----------
 
   function chipForStatus(st){
-    if (st === 'success') return '<span class="jr-chip jr-chip--ok">Subida</span>';
-    if (st === 'running') return '<span class="jr-chip jr-chip--run">Enviando</span>';
-    if (st === 'error')   return '<span class="jr-chip jr-chip--err">Error</span>';
+    if (st === 'success')      return '<span class="jr-chip jr-chip--ok">Subida OK</span>';
+    if (st === 'running')      return '<span class="jr-chip jr-chip--run">Enviando</span>';
+    if (st === 'blocked_auth') return '<span class="jr-chip jr-chip--block">Requiere login</span>';
+    if (st === 'blocked_csrf') return '<span class="jr-chip jr-chip--block">CSRF inválido</span>';
+    if (st === 'error')        return '<span class="jr-chip jr-chip--err">Error terminal</span>';
+    if (st === 'canceled')     return '<span class="jr-chip jr-chip--cancel">Cancelado</span>';
     return '<span class="jr-chip jr-chip--pend">Pendiente</span>';
   }
 
@@ -247,7 +259,22 @@
       : (gr.names && gr.names.campaign ? esc(gr.names.campaign) : '');
 
     const content = popoverHTML(gr).replace(/"/g, '&quot;');
-    const canRetry = (gr.status !== 'success'); // si todo ok, se desactiva
+    const canRetry = (gr.status !== 'success' && gr.status !== 'blocked_auth' && gr.status !== 'blocked_csrf'); // si todo ok, se desactiva
+    const nextTryAt = gr.items
+      .map(it => it.next_try_at || it.nextTryAt || null)
+      .filter(Boolean)
+      .sort()[0] || null;
+    const retryLine = nextTryAt ? `<div class="jr-subline jr-retry-line">${esc(fmtRetry(nextTryAt))}</div>` : '';
+    const errCodes = gr.items
+      .map(it => it.last_error && it.last_error.code ? it.last_error.code : null)
+      .filter(Boolean);
+    const errCode = errCodes.length ? errCodes[0] : null;
+    const errHttp = gr.items
+      .map(it => it.http_status || (it.last_error && it.last_error.httpStatus))
+      .filter(Boolean)[0] || null;
+    const errLine = (gr.status === 'error' || gr.status === 'blocked_auth' || gr.status === 'blocked_csrf')
+      ? `<div class="jr-error">Fallo: ${esc(errCode || 'ERROR')}${errHttp ? ` · HTTP ${esc(String(errHttp))}` : ''}</div>`
+      : '';
 
     // chip de estado_final (resultado de la gestión, si viene en vars)
     const estadoFinal = gr.vars && gr.vars.estado_final
@@ -276,6 +303,7 @@
             </div>
             ${dir ? `<div class="jr-subline">${dir}</div>` : ''}
             <div class="jr-sub">${campTxt ? `${campTxt} · ` : ''}${esc(gr.expl)}</div>
+            ${retryLine}
           </div>
         </div>
         <div class="jr-right">
@@ -295,6 +323,7 @@
               <i class="fa fa-refresh"></i> Reintentar${gr.counts.pending ? ` (${gr.counts.pending})` : ''}
             </button>
           </div>
+          ${errLine}
         </div>
       </div>
       <div class="jr-details" data-for="${esc(gr.key)}" hidden>
@@ -310,11 +339,16 @@
             ? ` (${it.counts.photos} foto${it.counts.photos > 1 ? 's' : ''})`
             : '';
           const debugParts = [];
-           // Se ocultan identificadores técnicos que no aportan al ejecutor
+          // Se ocultan identificadores técnicos que no aportan al ejecutor
           if (it.visita_local_id) debugParts.push(`local:${esc(it.visita_local_id)}`);
-
-          const debugLine = (debugParts.length || it.last_error)
-            ? `<div class="jr-debug">${debugParts.join(' · ')}${it.last_error ? ` · err:${esc(it.last_error)}` : ''}</div>`
+          const errCode = it.last_error && it.last_error.code ? it.last_error.code : null;
+          const errMsg  = it.last_error && it.last_error.message ? it.last_error.message : null;
+          const errHttp = it.http_status || (it.last_error && it.last_error.httpStatus) || null;
+          if (errCode) debugParts.push(`code:${esc(errCode)}`);
+          if (errHttp) debugParts.push(`HTTP:${esc(String(errHttp))}`);
+          const retryHint = it.next_try_at || it.nextTryAt ? ` · ${esc(fmtRetry(it.next_try_at || it.nextTryAt))}` : '';
+          const debugLine = (debugParts.length || errMsg)
+            ? `<div class="jr-debug">${debugParts.join(' · ')}${errMsg ? ` · ${esc(errMsg)}` : ''}${retryHint}</div>`
             : '';
           return `
             <div class="jr-detail-row">
@@ -328,6 +362,11 @@
                        style="width:${pct(p)}%">
                     ${pct(p)}%
                   </div>
+                </div>
+                <div class="jr-d-actions">
+                  <button class="btn btn-xs btn-link jr-job-detail" data-job-id="${esc(it.id)}">
+                    Ver detalle
+                  </button>
                 </div>
                 ${debugLine}
               </div>
@@ -360,6 +399,41 @@
       </div>
     `;
     document.body.appendChild(wrapper.firstElementChild);
+  }
+
+  function ensureJobModal(){
+    if (document.getElementById('jr-job-modal')) return;
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = `
+      <div class="modal fade" id="jr-job-modal" tabindex="-1" role="dialog" aria-labelledby="jr-job-title">
+        <div class="modal-dialog modal-lg" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                <span aria-hidden="true">&times;</span>
+              </button>
+              <h4 class="modal-title" id="jr-job-title">Detalle de tarea</h4>
+            </div>
+            <div class="modal-body" id="jr-job-body">
+              Cargando detalle...
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(wrapper.firstElementChild);
+  }
+
+  function setJobModalTitle(txt){
+    ensureJobModal();
+    const el = qs('#jr-job-title');
+    if (el) el.textContent = txt || 'Detalle de tarea';
+  }
+
+  function setJobModalBody(html){
+    ensureJobModal();
+    const el = qs('#jr-job-body');
+    el.innerHTML = html;
   }
 
   function setDetailModalTitle(txt){
@@ -677,6 +751,77 @@
       );
     }
   }
+
+  async function showJobDetail(jobId){
+    if (!jobId) return;
+    ensureJobModal();
+    setJobModalTitle('Detalle de tarea');
+    setJobModalBody('<p>Cargando detalle de la tarea...</p>');
+    if (window.jQuery && jQuery.fn && jQuery.fn.modal){
+      jQuery('#jr-job-modal').modal('show');
+    }
+
+    try {
+      const job = await window.AppDB?.get?.(jobId);
+      const jr  = await JournalDB.get(jobId);
+      const events = await JournalDB.listEventsForJob(jobId, 20);
+      const lastError = (jr && jr.last_error) ? jr.last_error : null;
+
+      const title = jr && jr.names && jr.names.local
+        ? `Tarea · ${jr.names.local}`
+        : `Tarea #${jobId}`;
+      setJobModalTitle(title);
+
+      const errLine = lastError
+        ? `<tr><th>Error</th><td>${esc(lastError.code || 'ERROR')} · ${esc(lastError.message || '')}</td></tr>`
+        : '';
+      const retryLine = (jr && jr.next_try_at)
+        ? `<tr><th>Reintento</th><td>${esc(fmtRetry(jr.next_try_at))}</td></tr>`
+        : '';
+      const meta = (job && job.meta) ? job.meta : {};
+
+      const attemptsList = events.length
+        ? `<ul class="list-unstyled">${events.map(ev => `
+            <li>
+              <small>${esc(fmtTime(ev.created))}</small>
+              · ${esc(ev.type || '')}
+              ${ev.http_status ? `· HTTP ${esc(String(ev.http_status))}` : ''}
+              ${ev.error ? `· ${esc(String(ev.error))}` : ''}
+            </li>
+          `).join('')}</ul>`
+        : '<span class="text-muted">Sin historial</span>';
+
+      const html = `
+        <table class="table table-condensed">
+          <tbody>
+            <tr><th>Status</th><td>${esc(String(jr?.status || job?.status || '—'))}</td></tr>
+            <tr><th>Endpoint</th><td>${esc(String(job?.url || '—'))}</td></tr>
+            <tr><th>HTTP</th><td>${esc(String(jr?.http_status || '—'))}</td></tr>
+            <tr><th>Intentos</th><td>${esc(String(jr?.attempts || job?.attempts || 0))}</td></tr>
+            ${errLine}
+            ${retryLine}
+            <tr><th>Idempotency</th><td>${esc(String(meta.idempotencyKey || job?.id || '—'))}</td></tr>
+            <tr><th>client_guid</th><td>${esc(String(meta.client_guid || jr?.client_guid || '—'))}</td></tr>
+            <tr><th>Dependencias</th><td>${esc(String(meta.dependsOn || job?.dependsOn || '—'))}</td></tr>
+          </tbody>
+        </table>
+        <h5>Historial reciente</h5>
+        ${attemptsList}
+        <div class="jr-job-actions">
+          <button class="btn btn-xs btn-default jr-job-retry" data-job-id="${esc(jobId)}"><i class="fa fa-refresh"></i> Reintentar ahora</button>
+          <button class="btn btn-xs btn-danger jr-job-cancel" data-job-id="${esc(jobId)}"><i class="fa fa-ban"></i> Cancelar</button>
+        </div>
+      `;
+      setJobModalBody(html);
+    } catch (err) {
+      setJobModalBody(
+        `<div class="alert alert-danger">
+           No se pudo cargar el detalle de la tarea.<br>
+           <small>${esc(err && err.message ? err.message : String(err))}</small>
+         </div>`
+      );
+    }
+  }
     function hasEndDate(item){
     return Boolean(item && item.tiempos && item.tiempos.fecha_fin);
   }
@@ -811,7 +956,8 @@
     badge(qs('#jr-badge-running'), s.running, 'Enviando');
     badge(qs('#jr-badge-success'), s.success, 'Subidas');
     badge(qs('#jr-badge-error'),   s.error,   'Errores');
-    setGlobalProgress(s.success, s.pending + s.running + s.error + s.success);
+    badge(qs('#jr-badge-blocked'), s.blocked, 'Bloqueadas');
+    setGlobalProgress(s.success, s.pending + s.running + s.error + s.success + s.blocked);
 
     // Complementar con datos del servidor (visitas ya grabadas)
     let serverSection = '';
@@ -1005,6 +1151,14 @@
       return;
     }
 
+    // Detalle de tarea específica
+    if (e.target.closest('.jr-job-detail')) {
+      const jobId = e.target.closest('.jr-job-detail').getAttribute('data-job-id');
+      showJobDetail(jobId);
+      e.preventDefault();
+      return;
+    }
+
     // SERVIDOR: ver detalle profundo de la visita
     const srv = e.target.closest('.jr-item--server');
     if (srv && e.target.closest('.jr-view')){
@@ -1018,9 +1172,35 @@
     }
   });
 
+  // Acciones dentro del modal de tarea
+  document.addEventListener('click', async (e) => {
+    const retryBtn = e.target.closest('.jr-job-retry');
+    if (retryBtn){
+      const jobId = retryBtn.getAttribute('data-job-id');
+      if (jobId && window.AppDB?.update) {
+        await AppDB.update(jobId, { status: 'queued', nextTryAt: Date.now(), updatedAt: Date.now() });
+        await window.Queue?.flushNow?.();
+        await renderToday();
+      }
+      e.preventDefault();
+      return;
+    }
+    const cancelBtn = e.target.closest('.jr-job-cancel');
+    if (cancelBtn){
+      const jobId = cancelBtn.getAttribute('data-job-id');
+      if (jobId && window.Queue?.cancel) {
+        await window.Queue.cancel(jobId, { keepRecord: true });
+        await renderToday();
+      }
+      e.preventDefault();
+      return;
+    }
+  });
+
   // Botones globales
   const $btnFlush = qs('#jr-btn-flush');
   const $btnClear = qs('#jr-btn-clear-today');
+  const $btnExport = qs('#jr-btn-export');
 
   $btnFlush && $btnFlush.addEventListener('click', async () => {
     try { await window.Queue?.flushNow?.(); } catch(_){}
@@ -1031,6 +1211,21 @@
     await JournalDB.clearUploadedFor(ymd);
     await renderToday();
     await renderWeek();
+  });
+
+  $btnExport && $btnExport.addEventListener('click', async () => {
+    try {
+      const payload = await JournalDB.exportRecent(300);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `journal_debug_${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch(_) {}
   });
 
   // Eventos de la cola (actualizan vista en caliente)
@@ -1119,6 +1314,7 @@
   // Init
   (async function init(){
     await JournalDB.openDB();
+    await JournalDB.cleanup({ maxDays: 7, maxEvents: 1000, maxSuccessDays: 3 });
     await renderToday();
     await renderWeek();  
   })();

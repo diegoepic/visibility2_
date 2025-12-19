@@ -18,14 +18,18 @@ try {
     if (!isset($_SESSION['usuario_id'])) {
         session_write_close();
         http_response_code(401);
-        echo json_encode(['ok' => false, 'error' => 'NO_SESSION'], JSON_UNESCAPED_UNICODE);
+        echo json_encode([
+            'ok' => false,
+            'error_code' => 'NO_SESSION',
+            'message' => 'Sesión expirada',
+            'retryable' => false,
+            'session_valid' => false
+        ], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
     $uid = (int)$_SESSION['usuario_id'];
     $empresaId = isset($_SESSION['empresa_id']) ? (int)$_SESSION['empresa_id'] : null;
-
-    session_write_close();
 
     // Garantiza un CSRF válido para ayudar al heartbeat
     if (
@@ -51,7 +55,11 @@ try {
         'app_version' => getenv('APP_VERSION') ?: 'v2',
         'db_ok'       => $db_ok,
         'csrf_token'  => $_SESSION['csrf_token'],
+        'session_valid' => true,
+        'user_session_state' => 'active'
     ];
+
+    session_write_close();
 
     http_response_code(200);
     echo json_encode(['ok' => true] + $resp, JSON_UNESCAPED_UNICODE);

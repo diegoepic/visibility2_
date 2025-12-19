@@ -16,19 +16,21 @@ function wants_json(): bool {
 function respond_ok(array $payload, ?string $redirect = null) {
   if (wants_json()) {
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['status'=>'success'] + $payload, JSON_UNESCAPED_UNICODE);
+    echo json_encode(['ok'=>true,'status'=>'success'] + $payload, JSON_UNESCAPED_UNICODE);
     exit;
   }
   if ($redirect) { header("Location: ".$redirect); exit; }
   header('Content-Type: application/json; charset=utf-8');
-  echo json_encode(['status'=>'success'] + $payload, JSON_UNESCAPED_UNICODE);
+  echo json_encode(['ok'=>true,'status'=>'success'] + $payload, JSON_UNESCAPED_UNICODE);
   exit;
 }
 function respond_err(string $msg, int $http = 400, ?string $redirect = null) {
   if (wants_json()) {
     http_response_code($http);
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['status'=>'error','message'=>$msg], JSON_UNESCAPED_UNICODE);
+    $retryable = ($http >= 500 || in_array($http, [408, 429], true));
+    $code = $http === 401 ? 'NO_SESSION' : ($http === 419 ? 'CSRF_INVALID' : ($http === 403 ? 'FORBIDDEN' : 'ERROR'));
+    echo json_encode(['ok'=>false,'status'=>'error','message'=>$msg,'error_code'=>$code,'retryable'=>$retryable], JSON_UNESCAPED_UNICODE);
     exit;
   }
   if ($redirect) {
@@ -37,7 +39,9 @@ function respond_err(string $msg, int $http = 400, ?string $redirect = null) {
   }
   http_response_code($http);
   header('Content-Type: application/json; charset=utf-8');
-  echo json_encode(['status'=>'error','message'=>$msg], JSON_UNESCAPED_UNICODE);
+  $retryable = ($http >= 500 || in_array($http, [408, 429], true));
+  $code = $http === 401 ? 'NO_SESSION' : ($http === 419 ? 'CSRF_INVALID' : ($http === 403 ? 'FORBIDDEN' : 'ERROR'));
+  echo json_encode(['ok'=>false,'status'=>'error','message'=>$msg,'error_code'=>$code,'retryable'=>$retryable], JSON_UNESCAPED_UNICODE);
   exit;
 }
 
@@ -46,6 +50,14 @@ if (!isset($_SESSION['usuario_id'])) { if (wants_json()) respond_err('Sesión ex
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') { if (wants_json()) respond_err('Método inválido',405); header("Location: index.php"); exit; }
 if (!isset($_POST['csrf_token']) || !isset($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], (string)$_POST['csrf_token'])) {
   respond_err('Token CSRF inválido.',419);
+}
+
+if (getenv('V2_TEST_MODE') === '1') {
+  respond_ok([
+    'visita_id' => 999,
+    'estado_final' => 'completa',
+    'status' => 'success'
+  ]);
 }
 
 /* ---------------- Conexión ---------------- */
