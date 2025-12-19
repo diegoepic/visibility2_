@@ -5,6 +5,9 @@
   const BASE          = '/visibility2/app';
   const CSRF_ENDPOINT = BASE + '/csrf_refresh.php';
   const PING_ENDPOINT = BASE + '/ping.php';
+  const STALE_RUNNING_MS = 6 * 60 * 1000;
+  const HEARTBEAT_INTERVAL_MS = 60 * 1000;
+  const MAX_RESPONSE_SNIPPET = 500;
 
   // --------------------------------------------------------------------------------
   // Event bus (para UI Avance)
@@ -29,25 +32,39 @@
   // --------------------------------------------------------------------------------
   async function refreshCSRF(){
     try {
-      const r  = await withTimeout((signal) => fetch(CSRF_ENDPOINT, { credentials: 'same-origin', cache: 'no-store', signal }), 6000, 'E_CSRF_TIMEOUT');
-      if (r.status === 401) return null; // sin sesión
-      const js = await parseJsonSafe(r);
+      const r  = await withTimeout((signal) => fetch(CSRF_ENDPOINT, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { 'Accept': 'application/json' },
+        signal
+      }), 6000, 'E_CSRF_TIMEOUT');
+      if (r.status === 401) return { ok:false, blocked:'auth' };
+      const parsed = await parseResponseSafe(r);
+      const js = parsed.json;
       if (js && js.csrf_token) {
         window.CSRF_TOKEN = js.csrf_token;
-        return js.csrf_token;
+        return { ok:true, token: js.csrf_token };
       }
+      if (parsed.isHtml) return { ok:false, blocked:'auth' };
     } catch(_) {}
-    return null;
+    return { ok:false };
   }
 
   async function heartbeat(){
     try {
-      const r = await withTimeout((signal) => fetch(PING_ENDPOINT, { credentials: 'same-origin', cache: 'no-store', signal }), 6000, 'E_PING_TIMEOUT');
-      if (!r.ok) return false;
-      const js = await parseJsonSafe(r);
+      const r = await withTimeout((signal) => fetch(PING_ENDPOINT, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { 'Accept': 'application/json' },
+        signal
+      }), 6000, 'E_PING_TIMEOUT');
+      const parsed = await parseResponseSafe(r);
+      const js = parsed.json;
       if (js && js.csrf_token) window.CSRF_TOKEN = js.csrf_token;
-      return !!(js && js.status === 'ok');
-    } catch(_) { return false; }
+      if (r.status === 401 || parsed.isHtml) return { ok:false, blocked:'auth' };
+      if (!r.ok) return { ok:false };
+      return { ok: !!(js && (js.status === 'ok' || js.ok === true)), data: js };
+    } catch(_) { return { ok:false }; }
   }
 
   // --------------------------------------------------------------------------------
@@ -91,8 +108,10 @@
 
     const timeoutMs = typeof task.timeoutMs === 'number' ? task.timeoutMs : 20000;
 
-    // SIEMPRE refrescamos CSRF para evitar drift
-    await refreshCSRF();
+    // Refresca CSRF si es necesario
+    if (task.sendCSRF !== false) {
+      await refreshCSRF();
+    }
 
     let url = task.url;
     if (!/^https?:\/\//i.test(url)) {
@@ -120,17 +139,22 @@
       throw new Error(`Network error calling ${url}: ${err && err.message ? err.message : err}`);
     }
 
+    const parsed = await parseResponseSafe(r);
+    const isCsrfInvalid = r.status === 419 || (parsed.json && /csrf/i.test(parsed.json.error_code || parsed.json.error || parsed.json.message || ''));
+
     // Si el servidor dice CSRF inválido, reintenta una sola vez con token fresco
-    if (r.status === 419 || r.status === 403) {
+    if (isCsrfInvalid && !task.__csrfRetried) {
       const ok = await refreshCSRF();
-      if (ok) {
+      if (ok && ok.ok) {
         const fd2 = buildFormData(task);
         const headers2 = { ...headers, 'X-CSRF-Token': window.CSRF_TOKEN || '' };
+        task.__csrfRetried = true;
         r = await withTimeout((signal) => fetch(url, { method:'POST', body: fd2, credentials:'include', cache:'no-store', headers: headers2, signal }), timeoutMs, 'E_POST_TIMEOUT');
+        const parsedRetry = await parseResponseSafe(r);
+        return { response: r, parsed: parsedRetry };
       }
     }
-    const data = await parseJsonSafe(r);
-    return { response: r, data };
+    return { response: r, parsed };
   }
 
   // --------------------------------------------------------------------------------
@@ -195,17 +219,24 @@
     return /Failed to fetch/i.test(msg) || /NetworkError/i.test(msg) || /timeout/i.test(msg);
   }
 
-  async function parseJsonSafe(response){
+  async function parseResponseSafe(response){
+    let text = '';
+    let contentType = '';
     try {
-      const txt = await response.text();
-      if (!txt) return {};
-      try {
-        return JSON.parse(txt);
-      } catch (_) {
-        return { raw: txt };
-      }
+      contentType = response.headers.get('content-type') || '';
+    } catch(_) {}
+    try {
+      text = await response.text();
     } catch (_) {
-      return {};
+      return { json: null, text: '', isJson: false, isHtml: false, contentType };
+    }
+    const hasHtml = /<html[\s>]/i.test(text || '') || /<!doctype html/i.test(text || '');
+    if (!text) return { json: {}, text: '', isJson: false, isHtml: hasHtml, contentType };
+    try {
+      const js = JSON.parse(text);
+      return { json: js, text, isJson: true, isHtml: false, contentType };
+    } catch (_) {
+      return { json: { raw: text }, text, isJson: false, isHtml: hasHtml || !/application\/json/i.test(contentType), contentType };
     }
   }
 
@@ -261,6 +292,52 @@
     return js.message || js.error || js.msg || js.detail || 'Respuesta sin confirmar éxito';
   }
 
+  function buildLastError(params){
+    const {
+      code,
+      message,
+      httpStatus,
+      url,
+      responseSnippet
+    } = params || {};
+    return {
+      code: code || 'UNKNOWN',
+      message: message || 'Error',
+      httpStatus: httpStatus || null,
+      url: url || null,
+      responseSnippet: responseSnippet ? String(responseSnippet).slice(0, MAX_RESPONSE_SNIPPET) : null
+    };
+  }
+
+  function classifyFailure({ response, parsed, error }){
+    if (error && isNetworkishError(error)) {
+      return { code: 'NETWORK', retryable: true };
+    }
+    if (error && error.name === 'AbortError') {
+      return { code: error.code || 'TIMEOUT', retryable: true };
+    }
+    if (response) {
+      const status = response.status;
+      const isHtml = parsed && parsed.isHtml;
+      if (status === 401 || status === 403 || isHtml) {
+        return { code: 'AUTH_EXPIRED', retryable: false, blocked: 'auth' };
+      }
+      if (status === 419) {
+        return { code: 'CSRF_INVALID', retryable: false, blocked: 'csrf' };
+      }
+      if ([408, 429].includes(status) || status >= 500) {
+        return { code: `HTTP_${status}`, retryable: true };
+      }
+      if (status >= 400) {
+        return { code: `HTTP_${status}`, retryable: false };
+      }
+      if (!isLogicalSuccess(parsed && parsed.json)) {
+        return { code: 'LOGICAL_ERROR', retryable: false };
+      }
+    }
+    return { code: 'UNKNOWN', retryable: false };
+  }
+
   // --------------------------------------------------------------------------------
   // Ejecución de tareas
   // --------------------------------------------------------------------------------
@@ -277,19 +354,13 @@
       if (real) task.fields.visita_id = real;
     }
 
-    const { response: r, data: js } = await httpPost(task);
-    if (r.status === 401 || r.status === 403 || r.status === 419) {
-      const authErr = new Error('HTTP ' + r.status);
-      authErr.status = r.status;
-      authErr.response = js;
-      throw authErr;
-    }
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-
-    if (!isLogicalSuccess(js)) {
-      const err = new Error(`Logical failure (${r.status}): ${logicalErrorMessage(js)}`);
-      err.response = js;
+    const { response: r, parsed } = await httpPost(task);
+    const js = parsed ? parsed.json : null;
+    if (!r.ok || !isLogicalSuccess(js) || (parsed && parsed.isHtml)) {
+      const err = new Error(`HTTP ${r.status}`);
       err.status = r.status;
+      err.response = js;
+      err.parsed = parsed;
       throw err;
     }
 
@@ -323,7 +394,7 @@
       QueueEvents.emit('queue:gestion_success', { job: task, response: js });
     }
 
-    return js;
+    return { data: js, status: r.status, parsed };
   }
 
   // --------------------------------------------------------------------------------
@@ -334,63 +405,150 @@
   // --------------------------------------------------------------------------------
   // Motor de drenaje
   // --------------------------------------------------------------------------------
-  let _draining = false;
+  const queueState = {
+    blocked: null,
+    blockedAt: null
+  };
+  let _drainPromise = null;
+
+  async function recoverStaleRunning(){
+    const running = await AppDB.listByStatus('running');
+    const now = Date.now();
+    await Promise.all(running.map(async (raw) => {
+      const job = AppDB.normalizeJob ? AppDB.normalizeJob(raw) : raw;
+      const startedAt = job.startedAt || job.updatedAt || job.createdAt || 0;
+      if (startedAt && now - startedAt > STALE_RUNNING_MS) {
+        const attempts = (job.attempts || 0) + 1;
+        const lastError = buildLastError({
+          code: 'STALE_RUNNING',
+          message: 'Job estaba en ejecución demasiado tiempo.',
+          httpStatus: null,
+          url: job.url || null
+        });
+        await AppDB.update(job.id, {
+          status: 'queued',
+          attempts,
+          nextTryAt: now + 2000,
+          startedAt: null,
+          lastError,
+          updatedAt: now
+        });
+        QueueEvents.emit('queue:dispatch:error', { job, error: 'STALE_RUNNING' });
+        jr('onError', job, 'STALE_RUNNING');
+      }
+    }));
+  }
+
+  function blockQueue(reason, detail){
+    queueState.blocked = reason;
+    queueState.blockedAt = Date.now();
+    QueueEvents.emit('queue:blocked', { reason, detail });
+  }
+
+  function unblockQueue(){
+    if (!queueState.blocked) return;
+    queueState.blocked = null;
+    queueState.blockedAt = null;
+    QueueEvents.emit('queue:unblocked', {});
+  }
+
+  function computeBackoff(attempts){
+    const base = Math.min(5 * 60 * 1000, 2000 * Math.pow(2, attempts));
+    const jitter = Math.floor(Math.random() * 750);
+    return base + jitter;
+  }
+
   async function drain(){
-    if (_draining) return;
+    if (_drainPromise) return _drainPromise;
     if (!navigator.onLine) return;
 
-    _draining = true;
-    try {
-      // (1) validar sesión, (2) traer CSRF si está disponible
-      const alive = await heartbeat();
-      if (!alive) { _draining = false; return; }
+    _drainPromise = (async () => {
+      try {
+        await recoverStaleRunning();
+        if (queueState.blocked) return;
 
-      const pendings = await AppDB.listByStatus('pending');
-      const now = Date.now();
-      // Para UI: badge/contador
-      QueueEvents.emit('queue:update', { pending: pendings.length });
-
-      for (const t of pendings) {
-        if (t.nextTry && t.nextTry > now) continue;
-
-        // Dependencias (ej. cerrar_gestion depende de create:<guid>)
-        if (t.dependsOn && !CompletedDeps.has(t.dependsOn)) continue;
-
-        // Rellenar meta si no existe
-        t.meta = t.meta || inferMetaFromTask(t);
-
-        // Marca running y anuncia inicio
-        await AppDB.update(t.id, { status: 'running', attempts: (t.attempts||0)+1, lastTry: now });
-        QueueEvents.emit('queue:dispatch:start', { job: t });
-        jr('onStart', t);
-
-        try {
-          const js = await processTask(t);
-          // Éxito → eliminar y anunciar
-          await AppDB.remove(t.id);
-          QueueEvents.emit('queue:dispatch:success', { job: t, responseStatus: 200, response: js });
-          jr('onSuccess', t, js);
-          // Back-compat del evento antiguo:
-          window.dispatchEvent(new CustomEvent('queue:done', { detail: { id: t.id, type: t.type, response: js } }));
-        } catch (err) {
-          // Error → reprogramar con backoff y anunciar
-          const attempts = (t.attempts||0) + 1;
-          const base = Math.min(60000, 1000 * Math.pow(2, attempts));
-          const jitter = Math.floor(Math.random() * 300);
-          const wait = base + jitter;
-          await AppDB.update(t.id, { status: 'pending', attempts, nextTry: now + wait, lastError: String(err) });
-          QueueEvents.emit('queue:dispatch:error', { job: t, error: String(err) });
-          jr('onError', t, String(err));
-          await backoff(200);
+        const hb = await heartbeat();
+        if (!hb.ok) {
+          if (hb.blocked === 'auth') blockQueue('auth', hb.data || null);
+          return;
         }
-      }
 
-      // Actualiza contador al final del ciclo
-      const left = await AppDB.listByStatus('pending');
-      QueueEvents.emit('queue:update', { pending: left.length });
-    } finally {
-      _draining = false;
-    }
+        const pending = await AppDB.listByStatus('queued');
+        const now = Date.now();
+        QueueEvents.emit('queue:update', { pending: pending.length });
+
+        for (const raw of pending) {
+          const t = AppDB.normalizeJob ? AppDB.normalizeJob(raw) : raw;
+          const nextTryAt = t.nextTryAt || t.nextTry || 0;
+          if (nextTryAt && nextTryAt > now) continue;
+          if (t.dependsOn && !CompletedDeps.has(t.dependsOn)) continue;
+
+          t.meta = t.meta || inferMetaFromTask(t);
+
+          const attempts = (t.attempts || 0) + 1;
+          await AppDB.update(t.id, {
+            status: 'running',
+            attempts,
+            startedAt: now,
+            updatedAt: now
+          });
+          QueueEvents.emit('queue:dispatch:start', { job: t });
+          jr('onStart', t);
+
+          try {
+            const result = await processTask(t);
+            await AppDB.remove(t.id);
+            QueueEvents.emit('queue:dispatch:success', { job: t, responseStatus: result.status || 200, response: result.data });
+            jr('onSuccess', t, result.data, result.status);
+            window.dispatchEvent(new CustomEvent('queue:done', { detail: { id: t.id, type: t.type, response: result.data } }));
+          } catch (err) {
+            const parsed = err && err.parsed ? err.parsed : null;
+            const responseStub = err && err.status ? { status: err.status } : null;
+            const failure = classifyFailure({ response: responseStub, parsed, error: err });
+            const maxAttempts = t.maxAttempts || 8;
+            const exhausted = attempts >= maxAttempts;
+            const finalRetryable = failure.retryable && !exhausted;
+            const status = failure.blocked === 'auth' ? 'blocked_auth' : failure.blocked === 'csrf' ? 'blocked_csrf' : finalRetryable ? 'queued' : 'error';
+            const wait = finalRetryable ? computeBackoff(attempts) : 0;
+            const lastError = buildLastError({
+              code: failure.code,
+              message: err && err.message ? err.message : 'Error',
+              httpStatus: err && err.status ? err.status : null,
+              url: t.url || null,
+              responseSnippet: parsed && parsed.text ? parsed.text.slice(0, MAX_RESPONSE_SNIPPET) : null
+            });
+            await AppDB.update(t.id, {
+              status,
+              attempts,
+              nextTryAt: status === 'queued' ? now + wait : null,
+              finishedAt: status === 'error' ? now : null,
+              lastError,
+              updatedAt: now
+            });
+            t.status = status;
+            t.attempts = attempts;
+            t.nextTryAt = status === 'queued' ? now + wait : null;
+            QueueEvents.emit('queue:dispatch:error', { job: t, error: lastError });
+            jr('onError', t, lastError);
+            if (failure.blocked === 'auth') {
+              blockQueue('auth', lastError);
+              break;
+            }
+            if (failure.blocked === 'csrf') {
+              blockQueue('csrf', lastError);
+              break;
+            }
+            await backoff(200);
+          }
+        }
+
+        const left = await AppDB.listByStatus('queued');
+        QueueEvents.emit('queue:update', { pending: left.length });
+      } finally {
+        _drainPromise = null;
+      }
+    })();
+    return _drainPromise;
   }
 
   // --------------------------------------------------------------------------------
@@ -422,6 +580,15 @@
 
       // Meta para UI
       task.meta = task.meta || inferMetaFromTask(task);
+
+      task.status = 'queued';
+      task.createdAt = Date.now();
+      task.updatedAt = Date.now();
+      task.attempts = task.attempts || 0;
+      task.maxAttempts = task.maxAttempts || 8;
+      task.nextTryAt = task.nextTryAt || 0;
+      task.startedAt = null;
+      task.finishedAt = null;
 
       const id = await AppDB.add(task);  // (usa dedupe si viene dedupeKey)
       QueueEvents.emit('queue:enqueue', { job: task, id });
@@ -541,19 +708,35 @@
           // Ahora el job SIEMPRE tiene id
           QueueEvents.emit('queue:dispatch:start', { job: task });
           jr('onStart', task);
-          const js = await withTimeout(() => processTask(task), timeoutMs, 'E_SMART_TIMEOUT');
+          const result = await withTimeout(() => processTask(task), timeoutMs, 'E_SMART_TIMEOUT');
 
           QueueEvents.emit('queue:dispatch:success', {
             job: task,
-            responseStatus: 200,
-            response: js
+            responseStatus: result.status || 200,
+            response: result.data
           });
-          jr('onSuccess', task, js, 200);
-          return { queued:false, ok:true, response: js };
+          jr('onSuccess', task, result.data, result.status || 200);
+          return { queued:false, ok:true, response: result.data };
         } catch (e) {
           QueueEvents.emit('queue:dispatch:error', { job: task, error: String(e) });
-          jr('onError', task, String(e), e && e.status ? e.status : null);
-          if (shouldEnqueue && (isNetworkishError(e) || e.status === 401 || e.status === 403 || e.status === 419)) {
+          const parsed = e && e.parsed ? e.parsed : null;
+          const failure = classifyFailure({ response: e && e.status ? { status: e.status } : null, parsed, error: e });
+          jr('onError', task, buildLastError({
+            code: failure.code,
+            message: String(e),
+            httpStatus: e && e.status ? e.status : null,
+            url: task.url || null,
+            responseSnippet: parsed && parsed.text ? parsed.text.slice(0, MAX_RESPONSE_SNIPPET) : null
+          }), e && e.status ? e.status : null);
+          if (failure.blocked === 'auth') {
+            blockQueue('auth', failure);
+            return { queued:false, ok:false, blocked:'auth' };
+          }
+          if (failure.blocked === 'csrf') {
+            blockQueue('csrf', failure);
+            return { queued:false, ok:false, blocked:'csrf' };
+          }
+          if (shouldEnqueue && (failure.retryable || isNetworkishError(e))) {
             const id = await this.enqueue(task);
             return { queued:true, ok:true, id };
           }
@@ -576,13 +759,21 @@
      * Cancela y elimina una tarea encolada (por ejemplo, foto borrada).
      * También limpia el Journal para que la UI refleje el cambio.
      */
-    async cancel(id){
+    async cancel(id, opts = {}){
       if (!id) return false;
+      const keepRecord = opts.keepRecord === true;
 
       try {
-        await AppDB.remove(id);
-        if (window.JournalDB && typeof JournalDB.remove === 'function') {
-          await JournalDB.remove(id);
+        if (keepRecord) {
+          await AppDB.update(id, { status: 'canceled', finishedAt: Date.now(), updatedAt: Date.now() });
+          if (window.JournalDB && typeof JournalDB.onError === 'function') {
+            await JournalDB.onError({ id, status: 'canceled' }, { code:'CANCELED', message:'Cancelado por usuario' });
+          }
+        } else {
+          await AppDB.remove(id);
+          if (window.JournalDB && typeof JournalDB.remove === 'function') {
+            await JournalDB.remove(id);
+          }
         }
       } catch (err) {
         QueueEvents.emit('queue:dispatch:error', { job: { id }, error: String(err) });
@@ -591,20 +782,19 @@
       }
 
       try {
-        const pend = await AppDB.listByStatus('pending');
+        const pend = await AppDB.listByStatus('queued');
         QueueEvents.emit('queue:update', { pending: pend.length });
       } catch(_) {
         QueueEvents.emit('queue:update', {});
       }
 
-      // Notificar cancelación explícita para que vistas puedan reaccionar
       QueueEvents.emit('queue:cancelled', { job: { id } });
       jr('onCancel', { id });
       return true;
     },
 
     async listPending(){
-      return AppDB.listByStatus('pending');
+      return AppDB.listByStatus('queued');
     },
 
     /**
@@ -620,14 +810,57 @@
      */
     on: QueueEvents.on,
 
-    drain
+    drain,
+    state: queueState,
+    unblock: unblockQueue
   };
 
+  async function resumeFromBackground(){
+    if (!navigator.onLine) return;
+    const hb = await heartbeat();
+    if (!hb.ok) {
+      if (hb.blocked === 'auth') blockQueue('auth', hb.data || null);
+      return;
+    }
+    unblockQueue();
+    await refreshCSRF();
+    await drain();
+  }
+
+  let _heartbeatTimer = null;
+  function ensureHeartbeat(){
+    if (_heartbeatTimer) return;
+    _heartbeatTimer = setInterval(async () => {
+      if (!navigator.onLine || queueState.blocked) return;
+      try {
+        const queued = await AppDB.listByStatus('queued');
+        if (!queued.length) return;
+        const hb = await heartbeat();
+        if (!hb.ok && hb.blocked === 'auth') blockQueue('auth', hb.data || null);
+      } catch(_) {}
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
   window.addEventListener('online', () => setTimeout(drain, 250));
-  document.addEventListener('DOMContentLoaded', () => setTimeout(drain, 600));
+  window.addEventListener('focus', () => { resumeFromBackground(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') resumeFromBackground();
+  });
+  document.addEventListener('DOMContentLoaded', () => {
+    ensureHeartbeat();
+    setTimeout(drain, 600);
+  });
 
   // Export
   window.Queue = Queue;
+  window.Queue._test = {
+    classifyFailure,
+    buildLastError,
+    computeBackoff,
+    parseResponseSafe,
+    recoverStaleRunning,
+    isDraining: () => !!_drainPromise
+  };
   window.Queue.CompletedDeps = CompletedDeps;
   window.Queue.LocalByGuid = LocalByGuid;
 
@@ -658,17 +891,17 @@
               if (found) return found.id;
             }
             const id = task.id || (crypto.randomUUID?.() || String(Date.now()));
-            arr.push({ id, status:'pending', attempts:0, createdAt:Date.now(), ...task });
+            arr.push({ id, status:'queued', attempts:0, createdAt:Date.now(), updatedAt:Date.now(), ...task });
             mem.save(arr);
             // actualizar badge
-            QueueEvents.emit('queue:update', { pending: arr.filter(t=>t.status==='pending').length });
+            QueueEvents.emit('queue:update', { pending: arr.filter(t=>t.status==='queued').length });
             return id;
           },
           async update(id, patch){
             const arr = mem.all();
             const i = arr.findIndex(t=>t.id===id);
             if (i>=0){ arr[i] = Object.assign({}, arr[i], patch, { updatedAt: Date.now() }); mem.save(arr); }
-            QueueEvents.emit('queue:update', { pending: arr.filter(t=>t.status==='pending').length });
+            QueueEvents.emit('queue:update', { pending: arr.filter(t=>t.status==='queued').length });
             return true;
           },
           async listByStatus(status){
@@ -678,7 +911,7 @@
           async remove(id){
             const arr = mem.all().filter(t=>t.id!==id);
             mem.save(arr);
-            QueueEvents.emit('queue:update', { pending: arr.filter(t=>t.status==='pending').length });
+            QueueEvents.emit('queue:update', { pending: arr.filter(t=>t.status==='queued').length });
             return true;
           }
         };
@@ -708,9 +941,10 @@
           const id = task.id || (crypto.randomUUID?.() || String(Date.now()));
           const rec = Object.assign({
             id,
-            status: 'pending',
+            status: 'queued',
             attempts: 0,
-            createdAt: Date.now()
+            createdAt: Date.now(),
+            updatedAt: Date.now()
           }, task);
           // dedupe opcional
           if (task.dedupeKey){

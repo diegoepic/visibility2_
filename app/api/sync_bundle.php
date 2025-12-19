@@ -11,7 +11,13 @@ try {
 
     if (!isset($_SESSION['usuario_id'])) {
         http_response_code(401);
-        echo json_encode(['status' => 'no_session'], JSON_UNESCAPED_UNICODE);
+        echo json_encode([
+            'ok' => false,
+            'status' => 'no_session',
+            'error_code' => 'NO_SESSION',
+            'message' => 'Sesión expirada',
+            'retryable' => false
+        ], JSON_UNESCAPED_UNICODE);
         exit;
     }
 

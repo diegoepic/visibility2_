@@ -17,15 +17,17 @@ if ($script !== '') {
         .'|procesar_login_pruebas\.php'
         .'|logout\.php'
         .'|logout\.php'
-        .'|ping\.php'              // ⚠ debe poder devolver 401 JSON
-        .'|csrf_refresh\.php'      // ⚠ idem
+        .'|ping\.php'              // 72 debe poder devolver 401 JSON
+        .'|csrf_refresh\.php'      // 72 idem
         .')$#i',
         $script
     );
 }
+if (getenv('V2_TEST_MODE') === '1' && preg_match('#/visibility2/app/api/test_session\.php$#i', $script)) { return; }
+
 if ($isPublic) { return; }
 
-// Sesión segura
+// Sesin segura
 if (session_status() !== PHP_SESSION_ACTIVE) {
   $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
   session_set_cookie_params([
@@ -39,7 +41,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
   session_start();
 }
 
-// Conexión
+// Conexin
 if (!isset($conn) || !($conn instanceof mysqli)) {
   require_once __DIR__ . '/con_.php';
   if (!isset($conn) || !($conn instanceof mysqli)) {
@@ -75,7 +77,7 @@ if (is_readable($envFile)) {
             continue;
         }
 
-        // Solo setear si no existe aún
+        // Solo setear si no existe an
         if (getenv($key) === false) {
             putenv("$key=$value");
         }
@@ -104,14 +106,31 @@ if (!function_exists('session_fingerprint')) {
 
 if (!function_exists('assert_session_is_valid')) {
   function assert_session_is_valid(mysqli $conn): void {
+    $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
+    $xhr    = $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '';
+    $wantsJson = (stripos($accept, 'application/json') !== false)
+      || ($xhr === 'XMLHttpRequest')
+      || isset($_SERVER['HTTP_X_OFFLINE_QUEUE'])
+      || isset($_POST['return_json']);
     if (empty($_SESSION['usuario_id'])) {
+      if ($wantsJson) {
+        http_response_code(401);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+          'ok' => false,
+          'error_code' => 'NO_SESSION',
+          'message' => 'Sesin expirada',
+          'retryable' => false
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+      }
       header('Location: /visibility2/app/login.php'); exit;
     }
 
     $uid = (int)$_SESSION['usuario_id'];
     $fpr = session_fingerprint();
 
-    // ¿revocada?
+    // 07revocada?
     $sql = "SELECT revoked_at
               FROM user_sessions
              WHERE user_id = ? AND session_fpr = ?
@@ -119,7 +138,7 @@ if (!function_exists('assert_session_is_valid')) {
              LIMIT 1";
     $st = $conn->prepare($sql);
     if ($st) {
-      // Ojo: $fpr es binario, "s" funciona; si prefieres, podrías usar "b" + send_long_data.
+      // Ojo: $fpr es binario, "s" funciona; si prefieres, podras usar "b" + send_long_data.
       $st->bind_param("is", $uid, $fpr);
 
       if ($st->execute()) {
@@ -134,9 +153,20 @@ if (!function_exists('assert_session_is_valid')) {
         $st->close();
 
         if ($row && !is_null($row['revoked_at'])) {
-          // Cerrar sesión y volver a login con aviso
+          // Cerrar sesin y volver a login con aviso
           session_unset();
           session_destroy();
+          if ($wantsJson) {
+            http_response_code(401);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+              'ok' => false,
+              'error_code' => 'SESSION_REVOKED',
+              'message' => 'Sesin revocada',
+              'retryable' => false
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+          }
           header('Location: /visibility2/app/login.php?session_expired=1'); exit;
         }
       } else {
@@ -149,7 +179,7 @@ if (!function_exists('assert_session_is_valid')) {
       return;
     }
 
-    // Heartbeat (no crítico)
+    // Heartbeat (no crtico)
     $hb = $conn->prepare("UPDATE user_sessions SET last_seen_at = NOW() WHERE user_id = ? AND session_fpr = ?");
     if ($hb) {
       $hb->bind_param("is", $uid, $fpr);

@@ -3,8 +3,9 @@
   'use strict';
 
   const DB_NAME = 'v2_journal';
-  const DB_VER  = 7;
+  const DB_VER  = 8;
   const STORE   = 'journal';
+  const STORE_EVENTS = 'events';
 
   function ymdLocal(d){
     const dt = d instanceof Date ? d : new Date();
@@ -19,12 +20,22 @@
       const req = indexedDB.open(DB_NAME, DB_VER);
       req.onupgradeneeded = (e) => {
         const db = e.target.result;
-        const os = db.createObjectStore(STORE, { keyPath:'id' });
-        os.createIndex('by_ymd',     'ymd',         { unique:false });
-        os.createIndex('by_status',  'status',      { unique:false });
-        os.createIndex('by_created', 'created',     { unique:false });
-        os.createIndex('by_kind',    'kind',        { unique:false });
-        os.createIndex('by_guid',    'client_guid', { unique:false });
+        let os;
+        if (!db.objectStoreNames.contains(STORE)) {
+          os = db.createObjectStore(STORE, { keyPath:'id' });
+        } else {
+          os = e.currentTarget.transaction.objectStore(STORE);
+        }
+        if (!os.indexNames.contains('by_ymd'))     os.createIndex('by_ymd',     'ymd',         { unique:false });
+        if (!os.indexNames.contains('by_status'))  os.createIndex('by_status',  'status',      { unique:false });
+        if (!os.indexNames.contains('by_created')) os.createIndex('by_created', 'created',     { unique:false });
+        if (!os.indexNames.contains('by_kind'))    os.createIndex('by_kind',    'kind',        { unique:false });
+        if (!os.indexNames.contains('by_guid'))    os.createIndex('by_guid',    'client_guid', { unique:false });
+        if (!db.objectStoreNames.contains(STORE_EVENTS)) {
+          const ev = db.createObjectStore(STORE_EVENTS, { keyPath:'id' });
+          ev.createIndex('by_job', 'job_id', { unique:false });
+          ev.createIndex('by_created', 'created', { unique:false });
+        }
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror   = () => reject(req.error);
@@ -59,7 +70,7 @@
       created : now(),
       updated : now(),
       ymd     : ymdLocal(new Date()),
-      status  : 'pending',
+      status  : 'queued',
       progress: 0,
       kind    : meta.kind || job.type || 'generic',
 
@@ -72,6 +83,10 @@
       http_status: (patch && patch.http_status) || null,
       request_id : (patch && patch.request_id)  || null,
       last_error : (patch && patch.last_error)  || null,
+      attempts   : (patch && patch.attempts)    || job.attempts || 0,
+      next_try_at: (patch && patch.next_try_at) || job.nextTryAt || job.nextTry || null,
+      started_at : (patch && patch.started_at)  || job.startedAt || null,
+      finished_at: (patch && patch.finished_at) || job.finishedAt || null,
 
       counts: { photos:0, answers:0 },
 
@@ -105,8 +120,29 @@
       g.onerror = () => reject(g.error);
     }));
   }
-  
-  
+
+  async function addEvent(ev){
+    return tx(STORE_EVENTS, 'readwrite', os => {
+      os.put(ev);
+      return true;
+    });
+  }
+
+  function buildEvent(job, payload){
+    const nowTs = now();
+    return Object.assign({
+      id: `${job.id}:${nowTs}:${Math.random().toString(16).slice(2)}`,
+      job_id: job.id,
+      created: nowTs,
+      type: payload && payload.type ? payload.type : 'attempt',
+      status: payload && payload.status ? payload.status : null,
+      http_status: payload && payload.http_status ? payload.http_status : null,
+      error: payload && payload.error ? payload.error : null,
+      message: payload && payload.message ? payload.message : null,
+      attempts: payload && payload.attempts ? payload.attempts : null,
+      url: payload && payload.url ? payload.url : null
+    }, payload || {});
+  }
 
   async function remove(id){
     return tx(STORE, 'readwrite', os => os.delete(id));
@@ -154,18 +190,19 @@
   }
 
   async function statsFor(records){
-    let pending = 0, running = 0, success = 0, error = 0;
+    let pending = 0, running = 0, success = 0, error = 0, blocked = 0;
     records.forEach(r => {
-      if      (r.status === 'pending') pending++;
+      if      (r.status === 'queued') pending++;
       else if (r.status === 'running') running++;
       else if (r.status === 'success') success++;
       else if (r.status === 'error')   error++;
+      else if (r.status === 'blocked_auth' || r.status === 'blocked_csrf') blocked++;
     });
-    return { pending, running, success, error, total: records.length };
+    return { pending, running, success, error, blocked, total: records.length };
   }
 
   async function onEnqueue(job){
-    const base = normalizeFromQueue(job, { status:'pending', progress:0 });
+    const base = normalizeFromQueue(job, { status:'queued', progress:0 });
     if (Array.isArray(job.files)) base.counts.photos = job.files.length;
     return upsert(base);
   }
@@ -174,8 +211,19 @@
     const cur = await get(job.id);
     const rec = normalizeFromQueue(
       job,
-      Object.assign({}, cur || {}, { status:'running', progress:50 })
+      Object.assign({}, cur || {}, {
+        status:'running',
+        progress:50,
+        attempts: job.attempts || (cur && cur.attempts) || 0,
+        started_at: job.startedAt || Date.now()
+      })
     );
+    await addEvent(buildEvent(job, {
+      type: 'attempt_start',
+      status: 'running',
+      attempts: rec.attempts,
+      url: job.url || null
+    }));
     return upsert(rec);
   }
 
@@ -206,6 +254,7 @@
       last_error: null,
       http_status: httpStatus || 200,
       request_id : (response && (response.request_id || response.req_id)) || null,
+      finished_at: Date.now(),
       visita_id: (response && response.visita_id) ||
                  (cur && cur.visita_id) ||
                  null
@@ -227,21 +276,42 @@
     if (fechaReag)   base.vars.fecha_reagendada = fechaReag;
 
     const rec = normalizeFromQueue(job, base);
+    await addEvent(buildEvent(job, {
+      type: 'attempt_success',
+      status: 'success',
+      http_status: httpStatus || 200,
+      attempts: rec.attempts,
+      url: job.url || null
+    }));
     return upsert(rec);
   }
 
   async function onError(job, errorMessage, httpStatus){
     const cur = await get(job.id);
+    const errObj = (errorMessage && typeof errorMessage === 'object')
+      ? errorMessage
+      : { message: String(errorMessage || 'Error') };
     const rec = normalizeFromQueue(
       job,
       Object.assign({}, cur || {}, {
-        status  : 'error',
+        status  : job.status || 'error',
         progress: (cur && cur.progress > 50) ? cur.progress : 50,
-        error   : String(errorMessage || 'Error'),
-        last_error: String(errorMessage || 'Error'),
-        http_status: httpStatus || (cur && cur.http_status) || null
+        error   : errObj.message || String(errorMessage || 'Error'),
+        last_error: errObj,
+        http_status: httpStatus || (cur && cur.http_status) || errObj.httpStatus || null,
+        next_try_at: job.nextTryAt || (cur && cur.next_try_at) || null,
+        attempts: job.attempts || (cur && cur.attempts) || 0
       })
     );
+    await addEvent(buildEvent(job, {
+      type: 'attempt_error',
+      status: rec.status,
+      http_status: rec.http_status,
+      error: errObj.code || errObj.message || 'ERROR',
+      message: errObj.message || String(errorMessage || 'Error'),
+      attempts: rec.attempts,
+      url: job.url || null
+    }));
     return upsert(rec);
   }
 
@@ -253,6 +323,76 @@
         .map(r => remove(r.id))
     );
     return true;
+  }
+
+  async function cleanup({ maxDays = 7, maxEvents = 1000, maxSuccessDays = 3 } = {}){
+    const cutoff = Date.now() - (maxDays * 24 * 60 * 60 * 1000);
+    const successCutoff = Date.now() - (maxSuccessDays * 24 * 60 * 60 * 1000);
+    const rows = await listRange('2000-01-01', '2999-12-31');
+    await Promise.all(rows.map(async (r) => {
+      if (r.created && r.created < cutoff) {
+        await remove(r.id);
+      }
+      if (r.status === 'success' && r.created && r.created < successCutoff) {
+        await remove(r.id);
+      }
+    }));
+
+    const events = await listEvents(maxEvents + 200);
+    if (events.length > maxEvents) {
+      const overflow = events.slice(0, events.length - maxEvents);
+      await tx(STORE_EVENTS, 'readwrite', os => {
+        overflow.forEach(ev => os.delete(ev.id));
+      });
+    }
+  }
+
+  async function listEvents(limit = 200){
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const t   = db.transaction(STORE_EVENTS, 'readonly');
+      const os  = t.objectStore(STORE_EVENTS);
+      const idx = os.index('by_created');
+      const out = [];
+      const req = idx.openCursor(null, 'prev');
+      req.onsuccess = () => {
+        const cur = req.result;
+        if (!cur || out.length >= limit) {
+          resolve(out);
+          return;
+        }
+        out.push(cur.value);
+        cur.continue();
+      };
+      req.onerror = () => resolve(out);
+    });
+  }
+
+  async function listEventsForJob(jobId, limit = 50){
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const t   = db.transaction(STORE_EVENTS, 'readonly');
+      const os  = t.objectStore(STORE_EVENTS);
+      const idx = os.index('by_job');
+      const range = IDBKeyRange.only(jobId);
+      const out = [];
+      const req = idx.openCursor(range, 'prev');
+      req.onsuccess = () => {
+        const cur = req.result;
+        if (!cur || out.length >= limit) {
+          resolve(out);
+          return;
+        }
+        out.push(cur.value);
+        cur.continue();
+      };
+      req.onerror = () => resolve(out);
+    });
+  }
+
+  async function exportRecent(limit = 200){
+    const events = await listEvents(limit);
+    return { exported_at: new Date().toISOString(), events };
   }
 
   // ---- Resolver nombres extendiendo agenda a todo el rango cacheado ----
@@ -363,6 +503,10 @@
     onSuccess,
     onError,
     clearUploadedFor,
+    cleanup,
+    listEvents,
+    listEventsForJob,
+    exportRecent,
     resolveNamesIfPossible
   };
 })();

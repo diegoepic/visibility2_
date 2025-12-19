@@ -33,7 +33,7 @@ function abs_url(string $rel): string {
 /* ---------------- Helpers varios ---------------- */
 function json_fail(int $code, string $msg, array $extra = []): void {
   http_response_code($code);
-  echo json_encode(['status'=>'error','message'=>$msg] + $extra, JSON_UNESCAPED_UNICODE);
+  echo json_encode(['ok'=>false,'status'=>'error','message'=>$msg] + $extra, JSON_UNESCAPED_UNICODE);
   exit;
 }
 function post_str($k, $default=null){ return isset($_POST[$k]) && $_POST[$k]!=='' ? trim((string)$_POST[$k]) : $default; }
@@ -78,23 +78,38 @@ function sanitize_idempotency_key(): void {
 allow_cors_and_options();
 
 /* ---------------- Seguridad básica ---------------- */
-if (!isset($_SESSION['usuario_id'])) { json_fail(401, 'Sesión no iniciada'); }
+if (!isset($_SESSION['usuario_id'])) { json_fail(401, 'Sesión no iniciada', ['error_code' => 'NO_SESSION', 'retryable' => false]); }
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
   header('Allow: POST, OPTIONS');
-  json_fail(405, 'Método inválido');
+  json_fail(405, 'Método inválido', ['error_code' => 'METHOD_NOT_ALLOWED', 'retryable' => false]);
 }
 $csrf = read_csrf();
 if (empty($csrf) || empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $csrf)) {
-  json_fail(419, 'CSRF inválido o ausente');
+  json_fail(419, 'CSRF inválido o ausente', ['error_code' => 'CSRF_INVALID', 'retryable' => false]);
 }
 $usuario_id = (int)$_SESSION['usuario_id'];
 $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
+
+if (getenv('V2_TEST_MODE') === '1') {
+  echo json_encode([
+    'ok' => true,
+    'status' => 'success',
+    'url' => APP_BASE . '/uploads/test.jpg',
+    'relative' => 'uploads/test.jpg',
+    'absolute' => APP_BASE . '/uploads/test.jpg',
+    'id_foto' => 1,
+    'idMat' => 1,
+    'idFQ' => 1,
+    'visita_id' => 999
+  ], JSON_UNESCAPED_UNICODE);
+  exit;
+}
 
 /* ---------------- DB ---------------- */
 /** @var mysqli $conn */
 if (!isset($conn) || !($conn instanceof mysqli)) {
   require_once __DIR__ . '/con_.php';
-  if (!isset($conn) || !($conn instanceof mysqli)) { json_fail(500, 'Sin conexión a BD'); }
+  if (!isset($conn) || !($conn instanceof mysqli)) { json_fail(500, 'Sin conexión a BD', ['error_code' => 'DB_ERROR', 'retryable' => true]); }
 }
 @$conn->set_charset('utf8mb4');
 
@@ -114,10 +129,10 @@ $fotoLng      = post_float('lng', 0.0);
 $client_guid  = post_str('client_guid', '');       // para reconciliar visitas offline
 
 if ($idCampana<=0 || $idLocal<=0 || $idFQ<=0) {
-  json_fail(400, 'Parámetros insuficientes (falta campaña/local/FQ)');
+  json_fail(400, 'Parámetros insuficientes (falta campaña/local/FQ)', ['error_code' => 'VALIDATION', 'retryable' => false]);
 }
 if (!isset($_FILES['foto']) || $_FILES['foto']['error'] !== UPLOAD_ERR_OK) {
-  json_fail(400, 'No se recibió la imagen o hubo un error al subirla');
+  json_fail(400, 'No se recibió la imagen o hubo un error al subirla', ['error_code' => 'UPLOAD_ERROR', 'retryable' => false]);
 }
 
 /* ---------------- Permisos: FQ pertenece a usuario/empresa/local/formulario ---------------- */
@@ -136,8 +151,8 @@ if ($st = $conn->prepare("
   }
   $st->close();
 }
-if (!$perm_ok) { json_fail(403, 'Sin permiso sobre este material/local o no existe'); }
-if ($fq_form !== $idCampana) { json_fail(403, 'El FQ no pertenece a la campaña indicada'); }
+if (!$perm_ok) { json_fail(403, 'Sin permiso sobre este material/local o no existe', ['error_code' => 'FORBIDDEN', 'retryable' => false]); }
+if ($fq_form !== $idCampana) { json_fail(403, 'El FQ no pertenece a la campaña indicada', ['error_code' => 'FORBIDDEN', 'retryable' => false]); }
 
 /* ---------------- Resolver división si no vino ---------------- */
 if ($division_id <= 0) {
@@ -459,11 +474,12 @@ try {
   if ($savedPath && is_file($savedPath)) @unlink($savedPath);
   if ($savedPath && is_file($savedPath.'.json')) @unlink($savedPath.'.json');
   error_log('upload_material_foto_pruebas.php: '.$e->getMessage());
-  json_fail(500, 'No se pudo procesar la foto: '.$e->getMessage());
+  json_fail(500, 'No se pudo procesar la foto: '.$e->getMessage(), ['error_code' => 'UPLOAD_ERROR', 'retryable' => true]);
 }
 
 /* ---------------- Responder (idempotente) ---------------- */
 idempo_store_and_reply($conn, 'upload_material_foto', 200, [
+  'ok'        => true,
   'status'    => 'success',
   'url'       => $absUrl,     // principal ABSOLUTA (coincide con lo que almacenamos)
   'relative'  => $relUrl,     // por compatibilidad
