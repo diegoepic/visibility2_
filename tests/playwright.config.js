@@ -8,7 +8,7 @@ module.exports = defineConfig({
     headless: true
   },
   webServer: {
-    command: 'php -S 127.0.0.1:8002 -t /workspace',
+    command: 'bash -lc "ln -sfn /workspace/visibility2_ /workspace/visibility2 && php -S 127.0.0.1:8002 -t /workspace"',
     reuseExistingServer: false,
     timeout: 20000,
     env: {

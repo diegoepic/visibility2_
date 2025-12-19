@@ -20,11 +20,20 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/mod_panel_encuesta/panel_encuesta_helpers.php';
 
+$debugId = panel_encuesta_request_id();
+header('X-Request-Id: '.$debugId);
+
 $user_div   = (int)($_SESSION['division_id'] ?? 0);
 $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
 
 // ==== parámetros (POST preferido, fallback GET) ====
 $SRC = $_POST ?: $_GET;
+$csrf_token = $SRC['csrf_token'] ?? '';
+if (!panel_encuesta_validate_csrf(is_string($csrf_token) ? $csrf_token : '')) {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=UTF-8');
+    exit('Token CSRF inválido.');
+}
 
 // WHERE + params centralizados (incluye qfilters, rango por fecha_fin, etc.)
 list($whereSql, $types, $params, $metaFilters) =
@@ -32,6 +41,12 @@ list($whereSql, $types, $params, $metaFilters) =
         'foto_only'             => false,
         'enforce_date_fallback' => true,   // últimos 30 días si no hay fechas ni campaña
     ]);
+
+if (!empty($metaFilters['range_risky_no_scope'])) {
+    http_response_code(400);
+    header('Content-Type: text/plain; charset=UTF-8');
+    exit('Rango demasiado amplio sin filtros adicionales. Acota fechas o selecciona campaña.');
+}
 
 // ====== stream CSV ======
 $fname = 'panel_encuesta_' . date('Ymd_His') . '.csv';
@@ -57,6 +72,15 @@ function make_abs_url($path)
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $host   = $_SERVER['HTTP_HOST'] ?? 'www.visibility.cl';
     return $scheme . '://' . $host . $p;
+}
+
+function csv_safe($value): string
+{
+    $v = (string)$value;
+    if (preg_match('/^[=+\\-@]/', $v)) {
+        return "'" . $v;
+    }
+    return $v;
 }
 
 // Límite de filas (respuestas) a exportar
@@ -259,7 +283,7 @@ if (!empty($questions)) {
 }
 
 // Escribimos cabecera (aunque no haya datos, para que el CSV tenga estructura)
-fputcsv($out, $headers);
+fputcsv($out, array_map('csv_safe', $headers));
 
 // ==== Escribir filas por visita ====
 foreach ($visits as $visit) {
@@ -293,7 +317,7 @@ foreach ($visits as $visit) {
         }
     }
 
-    fputcsv($out, $row);
+    fputcsv($out, array_map('csv_safe', $row));
     $visitCount++;
 }
 

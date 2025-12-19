@@ -1,7 +1,11 @@
 const { spawn } = require('child_process');
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 
 const ROOT = '/workspace';
+const LEGACY_ROOT = path.join(ROOT, 'visibility2');
+const CURRENT_ROOT = path.join(ROOT, 'visibility2_');
 const PORT = 8001;
 const BASE = `http://127.0.0.1:${PORT}/visibility2/app`;
 
@@ -24,6 +28,9 @@ async function request(path, options = {}, cookieJar = {}) {
 }
 
 async function run() {
+  if (!fs.existsSync(LEGACY_ROOT)) {
+    fs.symlinkSync(CURRENT_ROOT, LEGACY_ROOT, 'dir');
+  }
   const server = spawn('php', ['-S', `127.0.0.1:${PORT}`, '-t', ROOT], {
     env: { ...process.env, V2_TEST_MODE: '1' },
     stdio: 'inherit'

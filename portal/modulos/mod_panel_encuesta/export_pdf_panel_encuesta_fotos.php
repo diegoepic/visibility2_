@@ -31,10 +31,19 @@ error_reporting(E_ALL);
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/mod_panel_encuesta/panel_encuesta_helpers.php';
 
+$debugId = panel_encuesta_request_id();
+header('X-Request-Id: '.$debugId);
+
 $user_div   = (int)($_SESSION['division_id'] ?? 0);
 $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
 
 $SRC = $_POST ?: $_GET;
+$csrf_token = $SRC['csrf_token'] ?? '';
+if (!panel_encuesta_validate_csrf(is_string($csrf_token) ? $csrf_token : '')) {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=UTF-8');
+    exit('Token CSRF inválido.');
+}
 
 // -----------------------------------------------------------------------------
 // Filtros compartidos con el panel (SOLO fotos)
@@ -44,6 +53,12 @@ list($whereSql, $types, $params, $metaFilters) =
         'foto_only'             => true,
         'enforce_date_fallback' => true,
     ]);
+
+if (!empty($metaFilters['range_risky_no_scope'])) {
+    http_response_code(400);
+    header('Content-Type: text/plain; charset=UTF-8');
+    exit('Rango demasiado amplio sin filtros adicionales. Acota fechas o selecciona campaña.');
+}
 
 // Límite duro para no matar el servidor ni Dompdf
 $MAX_ROWS = 250;

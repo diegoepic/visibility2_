@@ -1,6 +1,56 @@
 <?php
 declare(strict_types=1);
 
+function panel_encuesta_get_csrf_token(): string {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return (string)$_SESSION['csrf_token'];
+}
+
+function panel_encuesta_validate_csrf(?string $token): bool {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    if (empty($_SESSION['csrf_token']) || $token === null || $token === '') {
+        return false;
+    }
+    return hash_equals((string)$_SESSION['csrf_token'], (string)$token);
+}
+
+function panel_encuesta_request_id(): string {
+    $hdr = $_SERVER['HTTP_X_REQUEST_ID'] ?? '';
+    if (is_string($hdr) && preg_match('/^[a-f0-9\\-]{8,64}$/i', $hdr)) {
+        return $hdr;
+    }
+    return bin2hex(random_bytes(8));
+}
+
+function panel_encuesta_json_response(
+    string $status,
+    array $data = [],
+    string $message = '',
+    ?string $errorCode = null,
+    ?string $debugId = null,
+    array $meta = []
+): void {
+    header('Content-Type: application/json; charset=UTF-8');
+    if ($debugId) {
+        header('X-Request-Id: '.$debugId);
+    }
+    echo json_encode([
+        'status' => $status,
+        'data' => $data,
+        'message' => $message,
+        'error_code' => $errorCode,
+        'debug_id' => $debugId,
+        'meta' => $meta,
+    ], JSON_UNESCAPED_UNICODE);
+}
+
 function build_panel_encuesta_filters(
     int $empresa_id,
     int $user_div,
@@ -49,6 +99,10 @@ function build_panel_encuesta_filters(
     $qfilters = json_decode($qfilters_raw, true);
     if (!is_array($qfilters)) {
         $qfilters = [];
+    }
+    $qfiltersMatch = strtolower(trim((string)($src['qfilters_match'] ?? 'all')));
+    if (!in_array($qfiltersMatch, ['all', 'any'], true)) {
+        $qfiltersMatch = 'all';
     }
 
     // Limitar cantidad de filtros (guardrail)
@@ -169,6 +223,7 @@ function build_panel_encuesta_filters(
 
     // -------- qfilters avanzados: foco + EXISTS --------
     if ($qfilters) {
+        $qfilterExists = [];
         // 1) Foco (las mismas preguntas que estás filtrando)
         $focusOr     = [];
         $focusTypes  = '';
@@ -323,7 +378,7 @@ function build_panel_encuesta_filters(
                 if ($num) $cond='('.implode(' AND ',$num).')';
             }
 
-            $where[]="EXISTS (
+            $qfilterExists[]="EXISTS (
               SELECT 1 FROM form_question_responses $fqri
               JOIN form_questions $fqi ON $fqi.id=$fqri.id_form_question
               LEFT JOIN form_question_options $oi ON $oi.id=$fqri.id_option
@@ -335,6 +390,15 @@ function build_panel_encuesta_filters(
         }
         $types .= $qtypes;
         $params= array_merge($params,$qparams);
+        if (!empty($qfilterExists)) {
+            if ($qfiltersMatch === 'any') {
+                $where[] = '(' . implode(' OR ', $qfilterExists) . ')';
+            } else {
+                foreach ($qfilterExists as $expr) {
+                    $where[] = $expr;
+                }
+            }
+        }
     }
 
     // Solo fotos (para export PDF de fotos)
@@ -360,6 +424,7 @@ function build_panel_encuesta_filters(
         'range_risky_no_scope'   => $rangeRiskyNoScope,
         'default_range_days'     => (int)$opts['default_range_days'],
         'max_range_days_no_scope'=> (int)$opts['max_range_days_no_scope'],
+        'qfilters_match'         => $qfiltersMatch,
     ];
 
     return [$whereSql, $types, $params, $meta];
