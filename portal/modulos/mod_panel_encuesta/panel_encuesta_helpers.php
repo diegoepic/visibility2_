@@ -51,6 +51,102 @@ function panel_encuesta_json_response(
     ], JSON_UNESCAPED_UNICODE);
 }
 
+function panel_encuesta_abs_base(): string
+{
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? 'www.visibility.cl';
+    return $scheme . '://' . $host;
+}
+
+function panel_encuesta_photo_candidates(?string $path): array
+{
+    $raw = trim((string)($path ?? ''));
+    if ($raw === '') {
+        return [];
+    }
+
+    if (preg_match('~^https?://~i', $raw)) {
+        return [$raw];
+    }
+
+    $noSlash = ltrim($raw, '/');
+    $withSlash = '/' . $noSlash;
+    $base = panel_encuesta_abs_base();
+    $out = [];
+    $add = static function (?string $url) use (&$out): void {
+        if ($url && !in_array($url, $out, true)) {
+            $out[] = $url;
+        }
+    };
+
+    if (str_starts_with($noSlash, 'uploads/')) {
+        $add($base . '/visibility2/app/' . $noSlash);
+        $add($base . '/' . $noSlash);
+        return $out;
+    }
+
+    if (str_starts_with($noSlash, 'app/')) {
+        $add($base . '/visibility2/' . $noSlash);
+        $add($base . '/' . $noSlash);
+        return $out;
+    }
+
+    if (str_starts_with($noSlash, 'portal/')) {
+        $add($base . '/visibility2/' . $noSlash);
+        $add($base . '/' . $noSlash);
+        return $out;
+    }
+
+    if (str_starts_with($noSlash, 'visibility2/')) {
+        $add($base . '/' . $noSlash);
+        return $out;
+    }
+
+    $add($base . $withSlash);
+    return $out;
+}
+
+function panel_encuesta_photo_fs_path(?string $url): ?string
+{
+    $raw = trim((string)($url ?? ''));
+    if ($raw === '') {
+        return null;
+    }
+
+    $path = $raw;
+    if (preg_match('~^https?://~i', $path)) {
+        $parts = @parse_url($path);
+        $path = $parts['path'] ?? '';
+        if ($path === '') {
+            return null;
+        }
+    }
+
+    $docroot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/');
+    if ($docroot === '') {
+        return null;
+    }
+
+    $path = ($path[0] ?? '') === '/' ? $path : ('/' . $path);
+    $fs = realpath($docroot . $path);
+    if (!$fs || !is_file($fs)) {
+        return null;
+    }
+
+    return $fs;
+}
+
+function panel_encuesta_resolve_photo_url(?string $path): ?string
+{
+    $candidates = panel_encuesta_photo_candidates($path);
+    foreach ($candidates as $candidate) {
+        if (panel_encuesta_photo_fs_path($candidate)) {
+            return $candidate;
+        }
+    }
+    return $candidates[0] ?? null;
+}
+
 function build_panel_encuesta_filters(
     int $empresa_id,
     int $user_div,

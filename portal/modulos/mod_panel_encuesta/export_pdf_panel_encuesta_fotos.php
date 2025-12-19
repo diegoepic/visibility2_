@@ -125,32 +125,6 @@ $rowCount = 0;
 // -----------------------------------------------------------------------------
 
 /**
- * Devuelve una URL absoluta (https://host/...) a partir de una ruta relativa.
- */
-function pe_make_abs_url(?string $path): ?string
-{
-    if ($path === null) {
-        return null;
-    }
-    $p = trim($path);
-    if ($p === '') {
-        return null;
-    }
-
-    // Ya es absoluta
-    if (preg_match('~^https?://~i', $p)) {
-        return $p;
-    }
-
-    // Normalizar para evitar dobles slash
-    $p = ltrim($p, '/');
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host   = $_SERVER['HTTP_HOST'] ?? 'www.visibility.cl';
-
-    return $scheme . '://' . $host . '/' . $p;
-}
-
-/**
  * Genera un thumbnail en JPEG embebido como data URI para Dompdf.
  * - $fotoUrl es la ruta tal como viene de la BD (ej: visibility2/app/uploads/.../img.webp)
  * - Si no se puede leer o convertir, devuelve null.
@@ -161,25 +135,8 @@ function pe_build_thumb_data_uri(?string $fotoUrl, int $maxW = 240, int $maxH = 
     if (!$fotoUrl) {
         return null;
     }
-
-    $docroot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/');
-    if ($docroot === '') {
-        return null;
-    }
-
-    // Normalizar a ruta absoluta en filesystem
-    $path = $fotoUrl;
-    if (preg_match('~^https?://~i', $path)) {
-        $parts = @parse_url($path);
-        $path  = $parts['path'] ?? '';
-        if ($path === '') {
-            return null;
-        }
-    }
-
-    $p  = ($path[0] ?? '') === '/' ? $path : ('/' . $path);
-    $fs = realpath($docroot . $p);
-    if (!$fs || !is_file($fs)) {
+    $fs = panel_encuesta_photo_fs_path($fotoUrl);
+    if ($fs === null) {
         return null;
     }
 
@@ -276,8 +233,9 @@ while ($r = $rs->fetch_assoc()) {
         continue; // si no tiene ruta de foto, no tiene sentido en este reporte
     }
 
-    $thumbDataUri = pe_build_thumb_data_uri($fotoUrl);
-    $linkUrl      = pe_make_abs_url($fotoUrl);
+    $resolvedUrl = panel_encuesta_resolve_photo_url($fotoUrl);
+    $thumbDataUri = pe_build_thumb_data_uri($resolvedUrl ?? $fotoUrl);
+    $linkUrl = $resolvedUrl;
 
     $rows[] = [
         'thumb'        => $thumbDataUri,

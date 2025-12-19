@@ -95,19 +95,6 @@ $st->execute();
 $rs = $st->get_result();
 
 /**
- * Convierte una ruta/URL relativa en URL absoluta http(s) para mostrar
- * y usar como href.
- */
-function make_abs_url_panel($path){
-    if(!$path) return $path;
-    if (preg_match('~^https?://~i', $path)) return $path;
-    $p = ($path[0] ?? '') === '/' ? $path : ('/'.$path);
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host   = $_SERVER['HTTP_HOST'] ?? 'www.visibility.cl';
-    return $scheme.'://'.$host.$p;
-}
-
-/**
  * Dado un URL absoluta de foto, intenta resolverla a ruta local absoluta
  * (ej: /home/visibility/public_html/visibility2/app/uploads/...)
  * para que Dompdf lea el archivo directamente del disco.
@@ -118,21 +105,8 @@ function panel_encuesta_pdf_img_src($url){
     if (!$url) return $url;
 
     // Obtenemos el path de la URL, ej: /visibility2/app/uploads/uploads_fotos_pregunta/...
-    $parts = @parse_url($url);
-    $path  = $parts['path'] ?? '';
-    if (!$path) {
-        return $url;
-    }
-
-    $docroot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/');
-    if ($docroot === '') {
-        return $url;
-    }
-
-    // Ruta real en filesystem
-    $fs = realpath($docroot.$path);
-    if (!$fs || !is_file($fs)) {
-        // Si no la encontramos, que Dompdf intente con la URL HTTP
+    $fs = panel_encuesta_photo_fs_path($url);
+    if (!$fs) {
         return $url;
     }
 
@@ -213,10 +187,8 @@ while($r = $rs->fetch_assoc()){
         ];
     }
 
-    $u = (string)($r['foto_url'] ?? '');
-    if ($u !== '') {
-        // Normalizamos a URL absoluta http(s)
-        $u = make_abs_url_panel($u);
+    $u = panel_encuesta_resolve_photo_url($r['foto_url'] ?? null);
+    if ($u !== null && $u !== '') {
         $groups[$key]['fotos'][] = $u;
     }
 
