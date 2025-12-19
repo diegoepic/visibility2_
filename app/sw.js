@@ -1,7 +1,8 @@
-const VERSION        = 'v3.0.4';
+const VERSION        = 'v3.1.0';
 const APP_SCOPE      = '/visibility2/app';
 const STATIC_CACHE   = `static-${VERSION}`;
 const RUNTIME_CACHE  = `runtime-${VERSION}`;
+const RUNTIME_MAX_ITEMS = 80;
 
 //archivos guardados en cache
 const STATIC_ASSETS = [
@@ -109,6 +110,7 @@ async function networkFirst(request, navFallback = `${APP_SCOPE}/index_pruebas.p
     const res = await fetch(request);
     if (request.method === 'GET' && res && res.ok) {
       await cache.put(request, res.clone());
+      trimCache(RUNTIME_CACHE, RUNTIME_MAX_ITEMS);
     }
     return res;
   } catch (_) {
@@ -122,6 +124,14 @@ async function networkFirst(request, navFallback = `${APP_SCOPE}/index_pruebas.p
     }
     return new Response('Offline', { status: 503, statusText: 'Offline' });
   }
+}
+
+async function trimCache(name, maxItems) {
+  const cache = await caches.open(name);
+  const keys = await cache.keys();
+  if (keys.length <= maxItems) return;
+  const toDelete = keys.slice(0, keys.length - maxItems);
+  await Promise.all(toDelete.map(k => cache.delete(k)));
 }
 
 // Ruteo de fetch
