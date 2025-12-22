@@ -1323,7 +1323,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 });
 
 $(document).ready(function(){
-  function canAddMaterial() { return ![6, 9].includes(Number(window.campaignDivision)); }
+  function canAddMaterial() { return ![6, 9, 21].includes(Number(window.campaignDivision)); }
   $('.conditional-question').each(function(){ if ($(this).css('display') === 'none') { $(this).find('input, select, textarea').removeAttr('required'); } });
 
   let currentStep = 1;
