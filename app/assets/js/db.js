@@ -1,9 +1,52 @@
 
-// Simple wrapper IndexedDB para cola offline
+// Wrapper IndexedDB para cola offline (estado robusto)
 (function(){
   const DB_NAME = 'v2_offline';
-  const DB_VER  = 7;
+  const DB_VER  = 8;
   const STORE   = 'queue';
+
+  const STATUS_ALIASES = {
+    pending: 'queued',
+    done: 'success'
+  };
+
+  function normalizeStatus(status){
+    const s = String(status || '').toLowerCase();
+    return STATUS_ALIASES[s] || s || 'queued';
+  }
+
+  function normalizeJob(job){
+    if (!job || typeof job !== 'object') return null;
+    const normalized = {
+      id: job.id || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+      type: job.type || 'generic',
+      createdAt: job.createdAt || job.created || Date.now(),
+      updatedAt: job.updatedAt || job.updated || Date.now(),
+      status: normalizeStatus(job.status || 'queued'),
+      attempts: Number.isFinite(job.attempts) ? job.attempts : 0,
+      maxAttempts: Number.isFinite(job.maxAttempts) ? job.maxAttempts : 8,
+      nextTryAt: job.nextTryAt || job.nextTry || 0,
+      startedAt: job.startedAt || job.lastTry || null,
+      finishedAt: job.finishedAt || null,
+      lastError: job.lastError || null,
+      fields: job.fields || null,
+      files: job.files || null,
+      url: job.url || '',
+      method: job.method || 'POST',
+      timeoutMs: job.timeoutMs || null,
+      sendCSRF: job.sendCSRF !== false,
+      dedupeKey: job.dedupeKey || (job.meta && job.meta.dedupeKey) || null,
+      dependsOn: job.dependsOn || (job.meta && job.meta.dependsOn) || null,
+      client_guid: job.client_guid || null,
+      meta: job.meta || {}
+    };
+
+    if (!normalized.meta) normalized.meta = {};
+    if (!normalized.meta.idempotencyKey && job.id) normalized.meta.idempotencyKey = job.id;
+    if (!normalized.meta.dedupeKey && normalized.dedupeKey) normalized.meta.dedupeKey = normalized.dedupeKey;
+    if (!normalized.meta.dependsOn && normalized.dependsOn) normalized.meta.dependsOn = normalized.dependsOn;
+    return normalized;
+  }
 
   function openDB(){
     return new Promise((res, rej) => {
@@ -17,10 +60,11 @@
           os = e.currentTarget.transaction.objectStore(STORE);
         }
         if (!os.indexNames.contains('status'))    os.createIndex('status', 'status', { unique: false });
-        if (!os.indexNames.contains('created'))   os.createIndex('created', 'created', { unique: false });
+        if (!os.indexNames.contains('createdAt')) os.createIndex('createdAt', 'createdAt', { unique: false });
         if (!os.indexNames.contains('type'))      os.createIndex('type', 'type', { unique: false });
         if (!os.indexNames.contains('dedupeKey')) os.createIndex('dedupeKey', 'dedupeKey', { unique: false });
-        if (!os.indexNames.contains('nextTry'))   os.createIndex('nextTry', 'nextTry', { unique: false });
+        if (!os.indexNames.contains('nextTryAt')) os.createIndex('nextTryAt', 'nextTryAt', { unique: false });
+        if (!os.indexNames.contains('updatedAt')) os.createIndex('updatedAt', 'updatedAt', { unique: false });
       };
       req.onsuccess = () => res(req.result);
       req.onerror   = () => rej(req.error);
@@ -33,20 +77,22 @@
       const tx = db.transaction(STORE, 'readwrite');
       const os = tx.objectStore(STORE);
 
+      const rec = normalizeJob(task);
+      rec.status = normalizeStatus(rec.status || 'queued');
+      rec.createdAt = rec.createdAt || Date.now();
+      rec.updatedAt = Date.now();
+      rec.attempts = rec.attempts || 0;
+      rec.nextTryAt = rec.nextTryAt || 0;
+
       const doAdd = () => {
-        if (!task.id) task.id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
-        task.created  = Date.now();
-        task.status   = task.status || 'pending';
-        task.attempts = task.attempts || 0;
-        task.nextTry  = task.nextTry || 0;
-        os.add(task);
+        os.add(rec);
       };
 
-      if (task.dedupeKey) {
+      if (rec.dedupeKey) {
         const idx = os.index('dedupeKey');
-        const r = idx.getAll(task.dedupeKey);
+        const r = idx.getAll(rec.dedupeKey);
         r.onsuccess = () => {
-          const dup = (r.result || []).find(it => ['pending','running'].includes(it.status));
+          const dup = (r.result || []).find(it => ['queued','running'].includes(normalizeStatus(it.status)));
           if (dup) { res(dup.id); try { tx.abort(); } catch(_e){} return; }
           doAdd();
         };
@@ -55,21 +101,39 @@
         doAdd();
       }
 
-      tx.oncomplete = () => res(task.id);
+      tx.oncomplete = () => res(rec.id);
       tx.onabort    = () => { /* abort esperado en dedupe */ };
       tx.onerror    = () => rej(tx.error);
     });
   }
 
-  async function listByStatus(status='pending'){
+  async function listByStatus(status='queued'){
     const db = await openDB();
+    const normalizedStatus = normalizeStatus(status);
     return new Promise((res, rej) => {
       const t = db.transaction(STORE, 'readonly');
       const os = t.objectStore(STORE);
       const idx = os.index('status');
-      const req = idx.getAll(status);
+      const req = idx.getAll(normalizedStatus);
+      req.onsuccess = async () => {
+        const out = (req.result || [])
+          .map(normalizeJob)
+          .filter(Boolean)
+          .sort((a,b)=>a.createdAt - b.createdAt);
+        res(out);
+      };
+      req.onerror = () => rej(req.error);
+    });
+  }
+
+  async function listAll(){
+    const db = await openDB();
+    return new Promise((res, rej) => {
+      const t = db.transaction(STORE, 'readonly');
+      const os = t.objectStore(STORE);
+      const req = os.getAll();
       req.onsuccess = () => {
-        const out = (req.result || []).sort((a,b)=>a.created - b.created);
+        const out = (req.result || []).map(normalizeJob).filter(Boolean);
         res(out);
       };
       req.onerror = () => rej(req.error);
@@ -82,7 +146,7 @@
       const t = db.transaction(STORE, 'readonly');
       const os = t.objectStore(STORE);
       const req = os.get(id);
-      req.onsuccess = () => res(req.result || null);
+      req.onsuccess = () => res(normalizeJob(req.result || null));
       req.onerror   = () => rej(req.error);
     });
   }
@@ -101,17 +165,16 @@
       req.onerror = () => { if (!done) { done = true; reject(req.error); } };
 
       req.onsuccess = () => {
-        const current = req.result;
+        const current = normalizeJob(req.result);
         if (!current) {
-          // No existe -> abortamos transacción y devolvemos null
           done = true;
           try { tx.abort(); } catch (_) {}
           return resolve(null);
         }
-        result = { ...current, ...patch, updated: Date.now() };
+        result = { ...current, ...patch, updatedAt: Date.now() };
+        if (patch && patch.status) result.status = normalizeStatus(patch.status);
         const putReq = os.put(result);
         putReq.onerror = () => { if (!done) { done = true; reject(putReq.error); } };
-        // Importante: resolvemos en tx.oncomplete para garantizar persistencia
       };
 
       tx.oncomplete = () => { if (!done) { done = true; resolve(result); } };
@@ -130,5 +193,13 @@
     });
   }
 
-  window.AppDB = { add, listByStatus, get, update, remove };
+  window.AppDB = {
+    add,
+    listByStatus,
+    listAll,
+    get,
+    update,
+    remove,
+    normalizeJob
+  };
 })();

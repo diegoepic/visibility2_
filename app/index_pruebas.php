@@ -16,6 +16,67 @@ $precacheLimit  = $precacheLimit > 0 ? $precacheLimit : 10;
 $googleMapsApiKey = getenv('GOOGLE_MAPS_API_KEY');
 $googleMapsApiKey = is_string($googleMapsApiKey) ? trim($googleMapsApiKey) : '';
 
+$TEST_MODE = getenv('V2_TEST_MODE') === '1';
+if ($TEST_MODE) {
+    $today = date('Y-m-d');
+    $campanas = [[
+        'id_campana' => 1,
+        'nombre_campana' => 'Campaña Test',
+        'estado' => '1',
+        'fechaInicio' => $today,
+        'fechaTermino' => $today
+    ]];
+    $compCampanas = [];
+    $locales = [[
+        'fechaPropuesta' => $today,
+        'codigoLocal'    => 'T-001',
+        'cadena'         => 'Cadena Test',
+        'direccionLocal' => 'Dirección Test 123',
+        'nombreLocal'    => 'Local Test',
+        'vendedor'       => 'Tester',
+        'idLocal'        => 1,
+        'latitud'        => -33.4489,
+        'lng'            => -70.6693,
+        'totalCampanas'  => 1,
+        'campanasIds'    => ['1'],
+        'is_priority'    => 0
+    ]];
+    $locales_reag = [[
+        'fechaPropuesta' => $today,
+        'codigoLocal'    => 'T-002',
+        'cadena'         => 'Cadena Test',
+        'direccionLocal' => 'Dirección Test 456',
+        'nombreLocal'    => 'Local Reag',
+        'vendedor'       => 'Tester',
+        'idLocal'        => 2,
+        'latitud'        => -33.4495,
+        'lng'            => -70.6702,
+        'totalCampanas'  => 1,
+        'campanasIds'    => ['1'],
+        'is_priority'    => 1
+    ]];
+    $locales_por_dia = [$today => $locales];
+    $locales_reag_por_dia = [$today => $locales_reag];
+    $coordenadas_locales_programados = [[
+        'idLocal'        => 1,
+        'nombre_local'   => 'Cadena Test - Dirección Test 123',
+        'latitud'        => -33.4489,
+        'lng'            => -70.6693,
+        'visitado'       => false,
+        'markerColor'    => 'red',
+        'fechaPropuesta' => $today
+    ]];
+    $coordenadas_locales_reag = [[
+        'idLocal'        => 2,
+        'nombre_local'   => 'Cadena Test - Dirección Test 456',
+        'latitud'        => -33.4495,
+        'lng'            => -70.6702,
+        'visitado'       => false,
+        'markerColor'    => 'blue',
+        'fechaPropuesta' => $today
+    ]];
+} else {
+
 $sql_campaigns = "
     SELECT DISTINCT 
         f.id AS id_campana,
@@ -260,6 +321,7 @@ foreach ($locales_reag as $local) {
         'fechaPropuesta' => $local['fechaPropuesta']
     ];
 }
+}
 ?>
 <!DOCTYPE html>
 <html lang="es" class="no-js">
@@ -395,8 +457,12 @@ foreach ($locales_reag as $local) {
       .nav-banner .nav-main{ color:#e2e8f0; } .nav-banner .nav-sub{ color:#94a3b8; }
     }
 
-    #journalPanel .panel-heading{ flex-wrap:wrap; }
-    
+    #journalPanel .panel-heading{
+      align-items:flex-start;
+      flex-wrap:wrap;
+      row-gap:6px;
+      padding-bottom:8px;
+    }
   
     #journalPanel .panel-heading .label{
       display:inline-block;
@@ -410,6 +476,12 @@ foreach ($locales_reag as $local) {
       display:flex;
       gap:6px;
       flex-wrap:wrap;
+      flex-basis:100%;
+      justify-content:flex-end;
+    }
+
+    #journalPanel .panel-heading + .panel-body{
+      padding-top:85px;
     }
     
     #journalPanel .nav { position: static !important; }
@@ -529,7 +601,7 @@ if (isset($_SESSION['success'])) {
          </div>
 
          <div class="row" style="margin-bottom: 15px;">
-            <button type="button" class="btn btn-info" style="margin-left: 3.5%;" onclick="window.location.reload();">
+            <button type="button" class="btn btn-info" id="btnActualizar" style="margin-left: 3.5%;" onclick="window.location.reload();">
                 <i class="fa fa-refresh"></i> Actualizar
             </button>
             <!-- Sidebar: Campañas Programadas -->
@@ -867,18 +939,17 @@ if (isset($_SESSION['success'])) {
         <div class="row" id="journalRow">
           <div class="col-sm-12">
             <div class="panel panel-default" id="journalPanel">
-              <div class="panel-heading" style="display:flex; align-items:left; flex-wrap:wrap;">
-                
-              
+              <div class="panel-heading" style="display:flex; align-items:left; flex-wrap:wrap; gap:6px;">
+                <span class="label label-default" id="jr-badge-pending">Pendientes: 0</span>
+                <span class="label label-warning" id="jr-badge-running">Enviando: 0</span>
                 <span class="label label-success" id="jr-badge-success">Subidas: 0</span>
-               <!--  <span class="label label-warning" id="jr-badge-running">Enviando: 0</span> -->
                 <span class="label label-danger"  id="jr-badge-error">Errores: 0</span>
-                  <!-- Actividades complementarias 
-                <div style="margin-left:auto; display:flex; gap:6px;">
+                <span class="label label-warning" id="jr-badge-blocked">Bloqueadas: 0</span>
+                <div style="margin-left:auto; display:flex; gap:6px; flex-wrap:wrap;">
                   <button class="btn btn-xs btn-default" id="jr-btn-flush"><i class="fa fa-upload"></i> Reintentar ahora</button>
                   <button class="btn btn-xs btn-default" id="jr-btn-clear-today"><i class="fa fa-eraser"></i> Limpiar subidas (hoy)</button>
+                  <button class="btn btn-xs btn-default" id="jr-btn-export"><i class="fa fa-download"></i> Exportar diagnóstico</button>
                 </div>
-                -->
               </div>
               <div class="panel-body">
                 <ul class="nav nav-tabs" role="tablist">
@@ -1205,7 +1276,12 @@ window.autoRecalc    = true;   // toggle "Auto"
 window.voiceEnabled  = false;  // toggle "Voz"
 function savePref(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 function loadPref(k,f){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):f; }catch(e){ return f; } }
-function rememberMode(m){ savePref('v2_mode', m); }  function loadMode(){ return loadPref('v2_mode','prog'); }
+function rememberMode(m){ savePref('v2_mode', m); }
+function loadMode(){ return loadPref('v2_mode','prog'); }
+function hasReagendadosData(){
+  if (window.markersReag && Object.keys(window.markersReag).length) return true;
+  return $('#panelReagendados table tbody tr').length > 0;
+}
 function rememberDate(mode, date){ savePref('v2_date_'+mode, date); }  function loadDate(mode){ return loadPref('v2_date_'+mode, ''); }
 // Excluidos
 function exclKey(modo, fecha, id){ return `${modo}|${fecha}|${id}`; }
@@ -1217,6 +1293,7 @@ loadExcluded();
 const GOOGLE_MAPS_API_KEY = window.__GOOGLE_MAPS_API_KEY || '';
 const MAP_ID = "YOUR_VECTOR_MAP_ID"; 
 const MAPS_LIBRARIES = 'geometry';
+const IS_TEST_MODE = <?php echo $TEST_MODE ? 'true' : 'false'; ?>;
 let mapsScriptPromise = null;
 let mapsRetryTimer = null;
 
@@ -1237,6 +1314,25 @@ function scheduleMapsRetry(){
 function loadGoogleMapsSdk(){
   if (window.google && window.google.maps) return Promise.resolve(window.google.maps);
   if (mapsScriptPromise) return mapsScriptPromise;
+  if (IS_TEST_MODE){
+    window.google = {
+      maps: {
+        Map: function(){ this.setCenter=()=>{}; this.setZoom=()=>{}; this.fitBounds=()=>{}; this.addListener=()=>{}; },
+        Marker: function(opts){ this._map = opts.map; this.setMap=(m)=>{ this._map=m; }; this.getMap=()=>this._map; this.setPosition=()=>{}; this.getPosition=()=>({ toJSON:()=>({lat:0,lng:0}) }); },
+        InfoWindow: function(){ this.open=()=>{}; },
+        LatLng: function(lat,lng){ this.lat=()=>lat; this.lng=()=>lng; this.toJSON=()=>({lat,lng}); },
+        LatLngBounds: function(){ this.extend=()=>{}; },
+        TrafficLayer: function(){ this._map=null; this.getMap=()=>this._map; this.setMap=(m)=>{ this._map=m; }; },
+        geometry: { spherical: { computeDistanceBetween: ()=>0 }, encoding: { encodePath: ()=>' ', decodePath: ()=>[] } },
+        DirectionsService: function(){ this.route=(req, cb)=>cb({ routes:[{ legs: [], overview_path: [] }]}, 'OK'); },
+        DirectionsStatus: { OK: 'OK' },
+        SymbolPath: { CIRCLE: 'CIRCLE' },
+        event: { trigger: ()=>{} },
+        TravelMode: { DRIVING: 'DRIVING' }
+      }
+    };
+    return Promise.resolve(window.google.maps);
+  }
   if (!GOOGLE_MAPS_API_KEY){
     return Promise.reject(new Error('Falta la Google Maps API key.'));
   }
@@ -1431,11 +1527,14 @@ function ensureDateSelectedFor(mode){
   if (!$sel.val()) { const first = $sel.find('option:first').val(); if (first) $sel.val(first); }
 }
 function setMode(mode){
-  window.modoLocal = mode; rememberMode(mode);
-  if (mode === 'prog') { $('#panelReagendados').hide(); $('#panelProgramados').show(); }
+  const desired = mode || 'prog';
+  const finalMode = (desired === 'reag' && !hasReagendadosData()) ? 'prog' : desired;
+  window.modoLocal = finalMode;
+  rememberMode(finalMode);
+  if (finalMode === 'prog') { $('#panelReagendados').hide(); $('#panelProgramados').show(); }
   else { $('#panelProgramados').hide(); $('#panelReagendados').show(); }
   hideAllMarkers(window.markersProg); hideAllMarkers(window.markersReag);
-  ensureDateSelectedFor(mode); applyFilters();
+  ensureDateSelectedFor(finalMode); applyFilters();
   const pos = window.ejecutorMarker?.getPosition();
   if (pos && !(window.navigator3D && window.navigator3D.active)) { window.debouncedPlanRoute(pos.toJSON()); }
 }
@@ -1587,6 +1686,7 @@ window.initMap=function(){
   });
 
   // Botones
+  $('#btnActualizar').on('click', function(){ rememberMode('prog'); });
   $('#btnCentrar').on('click', ()=>{
     if(!navigator.geolocation) return;
     $('#loadingIndicator').show();

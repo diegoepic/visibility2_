@@ -11,7 +11,13 @@ try {
 
     if (!isset($_SESSION['usuario_id'])) {
         http_response_code(401);
-        echo json_encode(['status' => 'no_session'], JSON_UNESCAPED_UNICODE);
+        echo json_encode([
+            'ok' => false,
+            'status' => 'no_session',
+            'error_code' => 'NO_SESSION',
+            'message' => 'Sesión expirada',
+            'retryable' => false
+        ], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -27,7 +33,7 @@ try {
     $empresa_id  = (int)($_SESSION['empresa_id']  ?? 0);
     $division_id = (int)($_SESSION['division_id'] ?? 0);
 
-    // -------- Par谩metros de rango de fechas
+    // -------- Parámetros de rango de fechas
     $tz  = new DateTimeZone('America/Santiago');
     $now = new DateTime('now', $tz);
 
@@ -44,7 +50,7 @@ try {
     if (!empty($_GET['delta_since'])) {
         $tmp = date_create((string)$_GET['delta_since']);
         if ($tmp !== false) {
-            $deltaSince = $tmp->format('Y-m-d H:i:00'); // minuto-resoluci贸n
+            $deltaSince = $tmp->format('Y-m-d H:i:00'); // minuto-resolución
         }
     }
 
@@ -63,7 +69,7 @@ try {
         ];
     };
 
-    // -------- 1) Campa帽as relevantes (para ETag y alcance)
+    // -------- 1) Campañas relevantes (para ETag y alcance)
     $sqlCamp = "
         SELECT DISTINCT
             f.id,
@@ -253,7 +259,7 @@ try {
         }
     }
 
-    // material (por divisi贸n)
+    // material (por división)
     $stmt = $conn->prepare(
         "SELECT MAX(COALESCE(updated_at, '1970-01-01 00:00:00')) AS mx FROM material WHERE (id_division = ? OR ? = 0)"
     );

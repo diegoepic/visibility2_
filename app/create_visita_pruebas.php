@@ -21,12 +21,12 @@ require_once __DIR__ . '/lib/idempotency.php';
 /* -------------------- Helpers -------------------- */
 function json_fail(int $code, string $message, array $extra = []): void {
   http_response_code($code);
-  echo json_encode(['status'=>'error','message'=>$message] + $extra, JSON_UNESCAPED_UNICODE);
+  echo json_encode(['ok'=>false,'status'=>'error','message'=>$message] + $extra, JSON_UNESCAPED_UNICODE);
   exit;
 }
 function json_ok(array $payload): void {
   http_response_code(200);
-  echo json_encode(['status'=>'ok'] + $payload, JSON_UNESCAPED_UNICODE);
+  echo json_encode(['ok'=>true,'status'=>'ok'] + $payload, JSON_UNESCAPED_UNICODE);
   exit;
 }
 function get_header_lower(string $name): ?string {
@@ -111,7 +111,7 @@ if ($method !== 'POST') {
 
 /* -------------------- Seguridad base -------------------- */
 if (!isset($_SESSION['usuario_id'])) {
-  json_fail(401, 'No autenticado.');
+  json_fail(401, 'No autenticado.', ['error_code' => 'NO_SESSION', 'retryable' => false]);
 }
 $user_id = (int)$_SESSION['usuario_id'];
 $empresa_id = isset($_SESSION['empresa_id']) ? (int)$_SESSION['empresa_id'] : null; // por si se usa en el futuro
@@ -120,7 +120,22 @@ session_write_close();
 
 $csrf = read_csrf();
 if (empty($csrf) || empty($csrf_session) || !hash_equals($csrf_session, $csrf)) {
-  json_fail(419, 'CSRF inválido o ausente.');
+  json_fail(419, 'CSRF inválido o ausente.', ['error_code' => 'CSRF_INVALID', 'retryable' => false]);
+}
+
+if (getenv('V2_TEST_MODE') === '1') {
+  sanitize_idempotency_key();
+  $key = $_SERVER['HTTP_X_IDEMPOTENCY_KEY'] ?? ($_POST['X_Idempotency_Key'] ?? 'test_key');
+  if (!isset($_SESSION['test_idempo'])) $_SESSION['test_idempo'] = [];
+  if (isset($_SESSION['test_idempo'][$key])) {
+    json_ok($_SESSION['test_idempo'][$key] + ['idempotent' => true]);
+  }
+  $payload = [
+    'visita_id' => 1000 + count($_SESSION['test_idempo']),
+    'client_guid' => $client_guid ?: 'test-guid'
+  ];
+  $_SESSION['test_idempo'][$key] = $payload;
+  json_ok($payload);
 }
 
 /* -------------------- Inputs -------------------- */
@@ -138,7 +153,7 @@ $started_at_in = isset($_POST['started_at']) ? trim((string)$_POST['started_at']
 $started_at    = normalize_datetime($started_at_in);
 
 if ($form_id <= 0 || $local_id <= 0) {
-  json_fail(400, 'Parámetros inválidos: id_formulario/idCampana e id_local/idLocal son requeridos.');
+  json_fail(400, 'Parámetros inválidos: id_formulario/idCampana e id_local/idLocal son requeridos.', ['error_code' => 'VALIDATION', 'retryable' => false]);
 }
 
 /* -------------------- Permisos mínimos -------------------- */
@@ -155,7 +170,7 @@ if ($st = $conn->prepare("
   $st->close();
 }
 if (!$perm_ok) {
-  json_fail(403, 'No tienes permisos para crear una visita en este local/campaña.');
+  json_fail(403, 'No tienes permisos para crear una visita en este local/campaña.', ['error_code' => 'FORBIDDEN', 'retryable' => false]);
 }
 
 /* -------------------- Idempotencia (claim) -------------------- */
@@ -194,7 +209,9 @@ try {
             json_fail(409, 'client_guid ya fue usado en una visita cerrada. Genera un GUID nuevo.', [
               'code'        => 'GUID_REUSED',
               'client_guid' => $client_guid,
-              'visita_id'   => (int)$row_id
+              'visita_id'   => (int)$row_id,
+              'retryable'   => false,
+              'error_code'  => 'GUID_REUSED'
             ]);
           }
         }
