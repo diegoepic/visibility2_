@@ -288,6 +288,14 @@ input[type=file][id^="fotoPregunta_"] {
 .preview-container .upload-instance img.thumbnail:hover{ box-shadow:0 2px 8px rgba(0,0,0,.2); }
 .preview-container .upload-instance .alert{ width:100px; padding:4px 6px; font-size:.85rem; text-align:center; margin-top:4px; box-sizing:border-box; }
 
+/* C) Preview fotos estado (pendiente/cancelado) */
+.estado-preview { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+.estado-preview .upload-instance{ display:flex; flex-direction:column; align-items:center; width:100px; }
+.estado-preview .upload-instance img.thumbnail{ width:100px; height:100px; object-fit:cover; border:1px solid #ccc; border-radius:4px; margin-top:4px; }
+.estado-preview .upload-instance .upload-bar{ width:0%; height:4px; background:#4caf50; transition:width .2s ease; border-radius:2px; }
+.estado-preview .upload-instance .upload-bar.error{ background:#f44336; }
+.estado-preview .upload-instance .alert{ width:100px; padding:4px 6px; font-size:.85rem; text-align:center; margin-top:4px; box-sizing:border-box; }
+
 /* Otros */
 .form-group { border: 1px solid #d0d7de; border-radius: 8px; padding: 12px; background: #fff; }
 .modal-img { width: 300px!important; height: 500px!important; }
@@ -408,6 +416,7 @@ input[type=file][id^="fotoPregunta_"] {
                  <!-- Offline/Idempotencia -->
                  <input type="hidden" id="client_guid" name="client_guid" value="">
                  <input type="hidden" id="idemp_create" value="">
+                 <div id="estadoFotoHidden" style="display:none;"></div>
 
                  <!-- Paso 1 -->
                  <div class="wizard-step" id="step-1">
@@ -575,11 +584,13 @@ input[type=file][id^="fotoPregunta_"] {
                     <!-- Evidencias específicas/genéricas -->
                     <div class="form-group" id="fotoLocalCerradoContainer" style="display: none;">
                         <label for="fotoLocalCerrado">Subir foto de fachada (Local Cerrado):</label>
-                        <input type="file" class="form-control" id="fotoLocalCerrado" name="fotoLocalCerrado" accept="image/*">
+                        <input type="file" class="form-control" id="fotoLocalCerrado" name="fotoLocalCerrado" accept="image/*" data-estado-foto="local_cerrado">
+                        <div class="estado-preview" id="estadoPreview_fotoLocalCerrado"></div>
                     </div>
                     <div class="form-group" id="fotoLocalNoExisteContainer" style="display: none;">
                         <label for="fotoLocalNoExiste">Subir foto del lugar (Local no existe):</label>
-                        <input type="file" class="form-control" id="fotoLocalNoExiste" name="fotoLocalNoExiste" accept="image/*">
+                        <input type="file" class="form-control" id="fotoLocalNoExiste" name="fotoLocalNoExiste" accept="image/*" data-estado-foto="local_no_existe">
+                        <div class="estado-preview" id="estadoPreview_fotoLocalNoExiste"></div>
                     </div>
                     <div class="form-group" id="fotoMuebleNoSalaContainer" style="display: none;">
                       <label for="fotoMuebleNoSala">Subir foto del mueble (no está en la sala):</label>
@@ -587,15 +598,19 @@ input[type=file][id^="fotoPregunta_"] {
                              class="form-control"
                              id="fotoMuebleNoSala"
                              name="fotoMuebleNoSala"
-                             accept="image/*">
+                             accept="image/*"
+                             data-estado-foto="mueble_no_esta_en_sala">
+                      <div class="estado-preview" id="estadoPreview_fotoMuebleNoSala"></div>
                     </div>
                     <div class="form-group" id="fotoPendienteGenericaContainer" style="display: none;">
                       <label for="fotoPendienteGenerica">Subir foto (Evidencia estado Pendiente):</label>
-                      <input type="file" class="form-control" id="fotoPendienteGenerica" name="fotoPendienteGenerica" accept="image/*">
+                      <input type="file" class="form-control" id="fotoPendienteGenerica" name="fotoPendienteGenerica" accept="image/*" data-estado-foto="pendiente_generica">
+                      <div class="estado-preview" id="estadoPreview_fotoPendienteGenerica"></div>
                     </div>
                     <div class="form-group" id="fotoCanceladoGenericaContainer" style="display: none;">
                       <label for="fotoCanceladoGenerica">Subir foto (Evidencia estado Cancelado):</label>
-                      <input type="file" class="form-control" id="fotoCanceladoGenerica" name="fotoCanceladoGenerica" accept="image/*">
+                      <input type="file" class="form-control" id="fotoCanceladoGenerica" name="fotoCanceladoGenerica" accept="image/*" data-estado-foto="cancelado_generica">
+                      <div class="estado-preview" id="estadoPreview_fotoCanceladoGenerica"></div>
                     </div>
 
                      <br>
@@ -1656,6 +1671,276 @@ async function subirFotoPregunta(id_form_question, id_local) {
 }
 }
 
+/* === Foto de estado (pendiente/cancelado) === */
+const ESTADO_FOTO_ENDPOINT = '/visibility2/app/upload_estado_foto_pruebas.php';
+
+function getEstadoPreviewFor(inputEl){
+  if (!inputEl) return null;
+  const id = inputEl.id || '';
+  return document.getElementById(`estadoPreview_${id}`) || inputEl.parentNode.querySelector('.estado-preview');
+}
+
+function clearEstadoFotoEvidence(){
+  const hidden = document.getElementById('estadoFotoHidden');
+  if (hidden) hidden.innerHTML = '';
+  document.querySelectorAll('.estado-preview .upload-instance').forEach(async (el) => {
+    const queuedId = el.dataset.queuedId;
+    if (queuedId && window.Queue && typeof Queue.cancel === 'function') {
+      try { await Queue.cancel(queuedId); } catch(_){}
+    }
+  });
+  document.querySelectorAll('.estado-preview').forEach(p => p.innerHTML = '');
+}
+
+function hasEstadoFotoEvidence(){
+  const hiddenIds = document.querySelectorAll('#estadoFotoHidden input[name="estado_foto_ids[]"]').length;
+  const queued = document.querySelectorAll('.estado-preview .upload-instance[data-queued-id]').length;
+  const $inputsVisibles = $(
+    '#fotoLocalCerrado:visible, #fotoLocalNoExiste:visible, #fotoMuebleNoSala:visible, #fotoPendienteGenerica:visible, #fotoCanceladoGenerica:visible'
+  );
+  let hasFile = false;
+  $inputsVisibles.each(function(){ if (this.files && this.files.length) { hasFile = true; return false; } });
+  return hiddenIds > 0 || queued > 0 || hasFile;
+}
+
+function appendEstadoHidden({ fotoId, kind, estado, motivo, debugId }){
+  if (!fotoId) return;
+  const hidden = document.getElementById('estadoFotoHidden');
+  if (!hidden) return;
+
+  const idInput = document.createElement('input');
+  idInput.type = 'hidden';
+  idInput.name = 'estado_foto_ids[]';
+  idInput.value = String(fotoId);
+  if (debugId) idInput.dataset.debugId = debugId;
+  hidden.appendChild(idInput);
+
+  const kindInput = document.createElement('input');
+  kindInput.type = 'hidden';
+  kindInput.name = 'estado_foto_kinds[]';
+  kindInput.value = kind || '';
+  if (debugId) kindInput.dataset.debugId = debugId;
+  hidden.appendChild(kindInput);
+
+  const estadoInput = document.createElement('input');
+  estadoInput.type = 'hidden';
+  estadoInput.name = 'estado_foto_estados[]';
+  estadoInput.value = estado || '';
+  if (debugId) estadoInput.dataset.debugId = debugId;
+  hidden.appendChild(estadoInput);
+
+  const motivoInput = document.createElement('input');
+  motivoInput.type = 'hidden';
+  motivoInput.name = 'estado_foto_motivos[]';
+  motivoInput.value = motivo || '';
+  if (debugId) motivoInput.dataset.debugId = debugId;
+  hidden.appendChild(motivoInput);
+}
+
+async function subirFotoEstado(inputEl){
+  const file = inputEl?.files?.[0];
+  if (!file) return;
+
+  const estadoGestion = ($('#estadoGestion').val() || '').toString().toLowerCase();
+  if (!['pendiente', 'cancelado'].includes(estadoGestion)) {
+    alert('Selecciona Pendiente o Cancelado antes de subir la foto.');
+    inputEl.value = '';
+    return;
+  }
+
+  const motivo = ($('#motivo').val() || '').toString();
+  const comentario = ($('#comentario').val() || '').toString();
+  const observacionText = comentario.trim();
+
+  const clientGuid = (document.getElementById('client_guid')?.value || '').trim() || ensureClientGuid();
+  const visitaReal = await ensureRealVisitaId('estado_foto');
+  if (visitaReal) { $('#visita_id').val(visitaReal); }
+
+  const debugId = `estado-${uuidv4()}`;
+  const startTs = performance.now();
+  const coords = { lat: cachedPhotoCoords.lat || '', lng: cachedPhotoCoords.lng || '' };
+
+  let meta = await extractPhotoMeta(file);
+  meta.capture_source = inputEl.dataset.captureSource || 'gallery';
+
+  let compressed;
+  try { compressed = await compressFile(file); } catch { compressed = file; }
+
+  const payloadBytes = compressed.size || file.size || 0;
+
+  const preview = getEstadoPreviewFor(inputEl);
+  const uploadInstance = document.createElement('div');
+  uploadInstance.className = 'upload-instance';
+  uploadInstance.dataset.debugId = debugId;
+  preview?.appendChild(uploadInstance);
+
+  const img = document.createElement('img');
+  img.src = URL.createObjectURL(compressed);
+  img.className = 'thumbnail';
+  uploadInstance.appendChild(img);
+
+  const bar = document.createElement('div');
+  bar.className = 'upload-bar';
+  uploadInstance.appendChild(bar);
+
+  const fd = new FormData();
+  fd.append('visita_id', $('#visita_id').val());
+  fd.append('client_guid', clientGuid);
+  fd.append('id_formulario', String(<?php echo (int)$idCampana; ?>));
+  fd.append('id_local', String(<?php echo (int)$idLocal; ?>));
+  fd.append('estado', estadoGestion);
+  fd.append('motivo', motivo);
+  fd.append('observacion_text', observacionText);
+  fd.append('foto', new File([compressed], file.name, { type: compressed.type || file.type }));
+  fd.append('lat', coords.lat);
+  fd.append('lng', coords.lng);
+  fd.append('debug_id', debugId);
+  fd.append('exif_datetime', meta.exif_datetime);
+  fd.append('exif_lat', meta.exif_lat);
+  fd.append('exif_lng', meta.exif_lng);
+  fd.append('exif_altitude', meta.exif_altitude);
+  fd.append('exif_img_direction', meta.exif_img_direction);
+  fd.append('exif_make', meta.exif_make);
+  fd.append('exif_model', meta.exif_model);
+  fd.append('exif_software', meta.exif_software);
+  fd.append('exif_lens_model', meta.exif_lens_model);
+  fd.append('exif_fnumber', meta.exif_fnumber);
+  fd.append('exif_exposure_time', meta.exif_exposure_time);
+  fd.append('exif_iso', meta.exif_iso);
+  fd.append('exif_focal_length', meta.exif_focal_length);
+  fd.append('exif_orientation', meta.exif_orientation);
+  fd.append('capture_source', meta.capture_source);
+  fd.append('meta_json', meta.meta_json);
+  fd.append('csrf_token', window.CSRF_TOKEN || '');
+
+  const idempo = (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random()));
+  fd.append('X_Idempotency_Key', idempo);
+
+  const dependsOn = visitaReal ? undefined : `create:${clientGuid}`;
+  const metaPayload = {
+    kind: `estado_foto_${estadoGestion}`,
+    estado: estadoGestion,
+    motivo,
+    debug_id: debugId,
+    payload_bytes: payloadBytes,
+    local_id: <?php echo (int)$idLocal; ?>,
+    local_name: <?php echo json_encode($nombreLocal, JSON_UNESCAPED_UNICODE); ?>,
+    campaign_name: <?php echo json_encode($nombreCampanaDB, JSON_UNESCAPED_UNICODE); ?>
+  };
+
+  try {
+    const QueueObj =
+      (window.Queue && typeof window.Queue.smartPost === 'function') ? window.Queue :
+      (window.OfflineQueue && typeof window.OfflineQueue.smartPost === 'function') ? window.OfflineQueue :
+      null;
+
+    if (!QueueObj) {
+      mcToast('danger', 'Queue no disponible', 'Revisa que /visibility2/app/assets/js/offline-queue.js esté cargado antes de este script.');
+      throw new Error('Queue not available');
+    }
+
+    const { queued, ok, response, id: queuedId } = await QueueObj.smartPost(
+      ESTADO_FOTO_ENDPOINT,
+      fd,
+      {
+        type: 'upload_estado_foto',
+        sendCSRF: true,
+        idempotencyKey: idempo,
+        dependsOn,
+        client_guid: clientGuid,
+        dedupeKey: `estadoFoto:${clientGuid}:${estadoGestion}:${debugId}`,
+        meta: metaPayload
+      }
+    );
+
+    if (queued) {
+      uploadInstance.dataset.queuedId = queuedId;
+      const badge = document.createElement('div');
+      badge.className = 'label label-info';
+      badge.style.display = 'inline-block';
+      badge.style.marginTop = '6px';
+      badge.textContent = 'En cola';
+      uploadInstance.appendChild(badge);
+
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'btn btn-xs btn-warning';
+      cancel.style.marginLeft = '8px';
+      cancel.textContent = 'Cancelar';
+      cancel.onclick = async () => {
+        try {
+          const cancelled = await (window.Queue && typeof Queue.cancel === 'function'
+            ? Queue.cancel(queuedId)
+            : AppDB.remove(queuedId));
+          if (!cancelled) throw new Error('cancel_failed');
+          $(uploadInstance).fadeOut(150, () => uploadInstance.remove());
+          mcToast('info', 'Cancelado', 'Se eliminó la foto de la cola.');
+        } catch {
+          mcToast('danger', 'Error', 'No se pudo cancelar la tarea en cola.');
+        }
+      };
+      uploadInstance.appendChild(cancel);
+    } else if (ok && response && response.foto_visita_id) {
+      bar.style.width = '100%';
+      appendEstadoHidden({
+        fotoId: response.foto_visita_id,
+        kind: response.kind || metaPayload.kind,
+        estado: estadoGestion,
+        motivo,
+        debugId
+      });
+      const okMsg = document.createElement('div');
+      okMsg.className = 'alert alert-success';
+      okMsg.style.marginTop = '8px';
+      okMsg.textContent = 'Foto subida correctamente.';
+      uploadInstance.appendChild(okMsg);
+      setTimeout(() => { $(okMsg).fadeOut(300, () => okMsg.remove()); }, 2000);
+    } else {
+      bar.classList.add('error');
+      mcToast('warning', 'Aviso', 'No se pudo confirmar la subida. Quedó en cola.');
+    }
+
+    const elapsed = Math.round(performance.now() - startTs);
+    console.info('[estado_foto]', {
+      debug_id: debugId,
+      bytes: payloadBytes,
+      elapsed_ms: elapsed,
+      queued: !!queued,
+      ok: !!ok
+    });
+  } catch (err) {
+    bar.classList.add('error');
+    console.error('[estado_foto] upload error', err);
+    mcToast('danger', 'Error', 'No se pudo subir la foto de estado.');
+  } finally {
+    inputEl.value = '';
+  }
+}
+
+window.addEventListener('queue:dispatch:success', (ev) => {
+  const d = ev.detail || {};
+  const job = d.job || {};
+  if ((job.type || d.type) !== 'upload_estado_foto') return;
+  const resp = d.response || {};
+  const debugId = job.meta && job.meta.debug_id ? job.meta.debug_id : resp.debug_id;
+  if (!debugId || !resp.foto_visita_id) return;
+
+  const instance = document.querySelector(`.estado-preview .upload-instance[data-debug-id="${debugId}"]`);
+  if (instance) {
+    instance.dataset.queuedId = '';
+    const badge = instance.querySelector('.label-info');
+    if (badge) badge.remove();
+  }
+
+  appendEstadoHidden({
+    fotoId: resp.foto_visita_id,
+    kind: resp.kind || (job.meta && job.meta.kind) || '',
+    estado: (job.meta && job.meta.estado) || '',
+    motivo: (job.meta && job.meta.motivo) || '',
+    debugId
+  });
+});
+
 function verImagenGrande(url) {
   let modalImg = document.getElementById('imagenAmpliada');
   modalImg.src = url;
@@ -2111,6 +2396,7 @@ $(document).ready(function(){
     $('#fotoMuebleNoSalaContainer').hide(); $('#fotoMuebleNoSala').val('');
     $('#fotoPendienteGenericaContainer').hide(); $('#fotoPendienteGenerica').val('');
     $('#fotoCanceladoGenericaContainer').hide(); $('#fotoCanceladoGenerica').val('');
+    clearEstadoFotoEvidence();
   }
 
    estadoSelect.on('change', function(){
@@ -2297,6 +2583,10 @@ $(document).ready(function(){
   $(document).on('change', 'input[id^="fotoPregunta_"]', function () {
     const qId = this.id.split('_').pop();
     subirFotoPregunta(qId, <?php echo $idLocal; ?>);
+  });
+
+  $(document).on('change', '#fotoLocalCerrado, #fotoLocalNoExiste, #fotoMuebleNoSala, #fotoPendienteGenerica, #fotoCanceladoGenerica', function () {
+    subirFotoEstado(this);
   });
   
   $(document).on('change', '.question-container input[type=radio]', function(){ onDependencyChange($(this), false); });
@@ -2683,16 +2973,7 @@ document.getElementById('btnFinalizar')?.addEventListener('click', async functio
 
   const estado = $('#estadoGestion').val();
   if (estado === 'pendiente' || estado === 'cancelado') {
-    const $inputsVisibles = $(
-      '#fotoLocalCerrado:visible, ' +
-      '#fotoLocalNoExiste:visible, ' +
-      '#fotoMuebleNoSala:visible, ' +
-      '#fotoPendienteGenerica:visible, ' +
-      '#fotoCanceladoGenerica:visible'
-    );
-    let hasFile = false;
-    $inputsVisibles.each(function(){ if (this.files && this.files.length > 0) { hasFile = true; return false; } });
-    if (!hasFile) { alert('Debes subir al menos una foto de evidencia.'); return; }
+    if (!hasEstadoFotoEvidence()) { alert('Debes subir al menos una foto de evidencia.'); return; }
   }
 
   if (typeof validarMateriales === 'function' && !validarMateriales()) { return; }

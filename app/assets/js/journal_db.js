@@ -62,9 +62,33 @@
 
   function now(){ return Date.now(); }
 
+  function buildSafePayload(job){
+    const fields = job.fields || {};
+    const safe = {};
+    const omit = ['csrf_token', 'foto', 'fotoPregunta', 'fotos', 'file', 'blob', 'X_Idempotency_Key'];
+    Object.entries(fields).forEach(([k, v]) => {
+      const key = String(k || '');
+      if (omit.includes(key)) return;
+      if (typeof v === 'string' && v.length > 200) {
+        safe[key] = v.slice(0, 200) + '…';
+        return;
+      }
+      if (Array.isArray(v)) {
+        safe[key] = v.length > 10 ? v.slice(0, 10) : v;
+        return;
+      }
+      safe[key] = v;
+    });
+    if (Array.isArray(job.files)) {
+      safe.__files = job.files.length;
+    }
+    return Object.keys(safe).length ? safe : null;
+  }
+
   function normalizeFromQueue(job, patch){
     const meta   = job.meta   || {};
     const fields = job.fields || {};
+    const payload_summary = meta.payload_summary || buildSafePayload(job);
     const rec = {
       id: job.id,
       created : now(),
@@ -98,7 +122,7 @@
         campaign : meta.campaign_name   || meta.nombre_campana || fields.nombreCampana || null
       },
 
-      vars : {},
+      vars : Object.assign({}, meta.vars || {}, payload_summary ? { payload_summary } : {}),
       error: null
     };
 

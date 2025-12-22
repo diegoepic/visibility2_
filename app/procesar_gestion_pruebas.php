@@ -129,6 +129,8 @@ $valores       = (isset($_POST['valor']) && is_array($_POST['valor'])) ? $_POST[
 $observaciones = (isset($_POST['observacion']) && is_array($_POST['observacion'])) ? $_POST['observacion'] : [];
 $motivoSelect  = (isset($_POST['motivoSelect']) && is_array($_POST['motivoSelect'])) ? $_POST['motivoSelect'] : [];
 $motivoNoImpl  = (isset($_POST['motivoNoImplementado']) && is_array($_POST['motivoNoImplementado'])) ? $_POST['motivoNoImplementado'] : [];
+$estadoFotoIds = (isset($_POST['estado_foto_ids']) && is_array($_POST['estado_foto_ids'])) ? array_values(array_filter(array_map('intval', $_POST['estado_foto_ids']))) : [];
+$estadoFotoKinds = (isset($_POST['estado_foto_kinds']) && is_array($_POST['estado_foto_kinds'])) ? $_POST['estado_foto_kinds'] : [];
 
 $idCampana     = isset($_POST['idCampana']) ? intval($_POST['idCampana']) : 0;
 $nombreCampana = isset($_POST['nombreCampana']) ? trim((string)$_POST['nombreCampana']) : '';
@@ -306,6 +308,25 @@ function insertGestionVisita(
   $stmt->close();
 }
 
+function insertEstadoFotoVisita(
+  mysqli $conn, int $visita_id, int $usuario_id, int $idCampana, int $idLocal,
+  string $url, float $fotoLat, float $fotoLng, string $kind
+) {
+  $hasKind = table_has_col($conn, 'fotoVisita', 'kind');
+  $cols = ['visita_id','url','id_usuario','id_formulario','id_local','id_material','id_formularioQuestion','fotoLat','fotoLng'];
+  $ph   = ['?','?','?','?','?','NULL','NULL','?','?'];
+  $types = 'isiiidd';
+  $args  = [$visita_id,$url,$usuario_id,$idCampana,$idLocal,$fotoLat,$fotoLng];
+  if ($hasKind) { $cols[] = 'kind'; $ph[] = '?'; $types .= 's'; $args[] = $kind; }
+  $sql = "INSERT INTO fotoVisita (".implode(',', $cols).") VALUES (".implode(',', $ph).")";
+  $stmt = $conn->prepare($sql);
+  if (!$stmt) throw new Exception('Prep fotoVisita estado: '.$conn->error);
+  $refs = []; $refs[] = $types; foreach ($args as &$v) { $refs[] = &$v; }
+  if (!@$stmt->bind_param(...$refs)) { $stmt->close(); throw new Exception('Bind fotoVisita estado: '.$conn->error); }
+  if (!$stmt->execute()) { $err=$stmt->error; $stmt->close(); throw new Exception('Insert fotoVisita estado: '.$err); }
+  $stmt->close();
+}
+
 /* ========================================================
  * A) Resolver visita_id (acepta client_guid)
  * ====================================================== */
@@ -478,13 +499,32 @@ try {
   }
   elseif ($estadoGestion === 'pendiente') {
     $fotoUrl = null; $obsGeneral = $motivo.($comentario!=='' ? ' - '.$comentario : '');
+    if (!empty($estadoFotoIds)) {
+      $placeholders = implode(',', array_fill(0, count($estadoFotoIds), '?'));
+      $sqlFotos = "SELECT id, url FROM fotoVisita WHERE visita_id=? AND id IN ($placeholders) ORDER BY id ASC";
+      $stmtF = $conn->prepare($sqlFotos);
+      if ($stmtF) {
+        $types = 'i' . str_repeat('i', count($estadoFotoIds));
+        $args = array_merge([$visita_id], $estadoFotoIds);
+        $refs = []; $refs[] = $types; foreach ($args as &$v) { $refs[] = &$v; }
+        if (@$stmtF->bind_param(...$refs) && $stmtF->execute()) {
+          $resF = $stmtF->get_result();
+          if ($rowF = $resF->fetch_assoc()) { $fotoUrl = (string)$rowF['url']; }
+        }
+        $stmtF->close();
+      }
+    }
+
     if ($motivo === 'local_cerrado' && isset($_FILES['fotoLocalCerrado']) && $_FILES['fotoLocalCerrado']['error']===UPLOAD_ERR_OK) {
-      $up = guardarFotoUnitaria($_FILES['fotoLocalCerrado'],'local_cerrado','localcerrado_',$idLocal); $fotoUrl=$up['url']; $obsGeneral.=" | Foto: ".$fotoUrl;
+      $up = guardarFotoUnitaria($_FILES['fotoLocalCerrado'],'local_cerrado','localcerrado_',$idLocal); $fotoUrl=$up['url'];
+      insertEstadoFotoVisita($conn,$visita_id,$usuario_id,$idCampana,$idLocal,$fotoUrl,0.0,0.0,'estado_pendiente');
     } elseif ($motivo === 'local_no_existe' && isset($_FILES['fotoLocalNoExiste']) && $_FILES['fotoLocalNoExiste']['error']===UPLOAD_ERR_OK) {
-      $up = guardarFotoUnitaria($_FILES['fotoLocalNoExiste'],'local_no_existe','localnoexiste_',$idLocal); $fotoUrl=$up['url']; $obsGeneral.=" | Foto: ".$fotoUrl;
+      $up = guardarFotoUnitaria($_FILES['fotoLocalNoExiste'],'local_no_existe','localnoexiste_',$idLocal); $fotoUrl=$up['url'];
+      insertEstadoFotoVisita($conn,$visita_id,$usuario_id,$idCampana,$idLocal,$fotoUrl,0.0,0.0,'estado_pendiente');
     } elseif (isset($_FILES['fotoPendienteGenerica']) && $_FILES['fotoPendienteGenerica']['error']===UPLOAD_ERR_OK) {
-      $up = guardarFotoUnitaria($_FILES['fotoPendienteGenerica'],'pendiente_generica','pendiente_',$idLocal); $fotoUrl=$up['url']; $obsGeneral.=" | Foto: ".$fotoUrl;
-    } else { throw new Exception("Debe adjuntar al menos una foto para el estado Pendiente."); }
+      $up = guardarFotoUnitaria($_FILES['fotoPendienteGenerica'],'pendiente_generica','pendiente_',$idLocal); $fotoUrl=$up['url'];
+      insertEstadoFotoVisita($conn,$visita_id,$usuario_id,$idCampana,$idLocal,$fotoUrl,0.0,0.0,'estado_pendiente');
+    } elseif (!$fotoUrl) { throw new Exception("Debe adjuntar al menos una foto para el estado Pendiente."); }
 
     $stmtP = $conn->prepare("UPDATE formularioQuestion SET fechaVisita=?, countVisita=countVisita+1, observacion=?, pregunta='en proceso' WHERE id_formulario=? AND id_local=? AND id_usuario=?");
     if (!$stmtP) throw new Exception("Error update pendiente: ".$conn->error);
@@ -497,11 +537,29 @@ try {
   }
   elseif ($estadoGestion === 'cancelado') {
     $estadoNum = 2; $fotoUrl = null; $obsGeneral = $motivo.($comentario!=='' ? ' - '.$comentario : '');
+    if (!empty($estadoFotoIds)) {
+      $placeholders = implode(',', array_fill(0, count($estadoFotoIds), '?'));
+      $sqlFotos = "SELECT id, url FROM fotoVisita WHERE visita_id=? AND id IN ($placeholders) ORDER BY id ASC";
+      $stmtF = $conn->prepare($sqlFotos);
+      if ($stmtF) {
+        $types = 'i' . str_repeat('i', count($estadoFotoIds));
+        $args = array_merge([$visita_id], $estadoFotoIds);
+        $refs = []; $refs[] = $types; foreach ($args as &$v) { $refs[] = &$v; }
+        if (@$stmtF->bind_param(...$refs) && $stmtF->execute()) {
+          $resF = $stmtF->get_result();
+          if ($rowF = $resF->fetch_assoc()) { $fotoUrl = (string)$rowF['url']; }
+        }
+        $stmtF->close();
+      }
+    }
+
     if ($motivo === 'mueble_no_esta_en_sala' && isset($_FILES['fotoMuebleNoSala']) && $_FILES['fotoMuebleNoSala']['error']===UPLOAD_ERR_OK) {
-      $up = guardarFotoUnitaria($_FILES['fotoMuebleNoSala'],'mueble_no_existe','mueble_',$idLocal); $fotoUrl=$up['url']; $obsGeneral.=" | Foto Mueble: ".$fotoUrl;
+      $up = guardarFotoUnitaria($_FILES['fotoMuebleNoSala'],'mueble_no_existe','mueble_',$idLocal); $fotoUrl=$up['url'];
+      insertEstadoFotoVisita($conn,$visita_id,$usuario_id,$idCampana,$idLocal,$fotoUrl,0.0,0.0,'estado_cancelado');
     } elseif (isset($_FILES['fotoCanceladoGenerica']) && $_FILES['fotoCanceladoGenerica']['error']===UPLOAD_ERR_OK) {
-      $up = guardarFotoUnitaria($_FILES['fotoCanceladoGenerica'],'cancelado_generica','cancelado_',$idLocal); $fotoUrl=$up['url']; $obsGeneral.=" | Foto: ".$fotoUrl;
-    } else { throw new Exception("Debe adjuntar al menos una foto para el estado Cancelado."); }
+      $up = guardarFotoUnitaria($_FILES['fotoCanceladoGenerica'],'cancelado_generica','cancelado_',$idLocal); $fotoUrl=$up['url'];
+      insertEstadoFotoVisita($conn,$visita_id,$usuario_id,$idCampana,$idLocal,$fotoUrl,0.0,0.0,'estado_cancelado');
+    } elseif (!$fotoUrl) { throw new Exception("Debe adjuntar al menos una foto para el estado Cancelado."); }
 
     $stmtC = $conn->prepare("UPDATE formularioQuestion SET estado=?, fechaVisita=?, countVisita=countVisita+1, observacion=?, pregunta='cancelado' WHERE id_formulario=? AND id_local=? AND id_usuario=?");
     if (!$stmtC) throw new Exception("Error update cancelado: ".$conn->error);

@@ -145,13 +145,14 @@
   }
 
   function countByKind(items){
-    const c = { materialPhotos:0, surveyPhotos:0, answers:0, create:0, other:0 };
+    const c = { materialPhotos:0, surveyPhotos:0, estadoPhotos:0, answers:0, create:0, other:0 };
     for (const it of items){
       const kind = (it.kind || '').toLowerCase();
       const phts = (it.counts && it.counts.photos) ? Number(it.counts.photos) : 0;
 
       if (kind.includes('upload_material'))        c.materialPhotos += (phts || 1);
       else if (kind.includes('pregunta_foto'))     c.surveyPhotos   += (phts || 1);
+      else if (kind.includes('estado_foto') || kind.includes('upload_estado_foto')) c.estadoPhotos += (phts || 1);
       else if (kind.includes('procesar_gestion'))  c.answers        += 1;
       else if (kind.includes('create_visita'))     c.create         += 1;
       else                                         c.other          += 1;
@@ -161,10 +162,40 @@
 
   const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
 
+  function safePayloadFromJob(job){
+    const fields = job && job.fields ? job.fields : {};
+    const safe = {};
+    const omit = ['csrf_token', 'foto', 'fotoPregunta', 'fotos', 'file', 'blob', 'X_Idempotency_Key'];
+    Object.entries(fields || {}).forEach(([k, v]) => {
+      if (omit.includes(k)) return;
+      if (typeof v === 'string' && v.length > 200) {
+        safe[k] = v.slice(0, 200) + '…';
+        return;
+      }
+      if (Array.isArray(v)) {
+        safe[k] = v.length > 10 ? v.slice(0, 10) : v;
+        return;
+      }
+      safe[k] = v;
+    });
+    if (Array.isArray(job?.files)) safe.__files = job.files.length;
+    return Object.keys(safe).length ? safe : null;
+  }
+
+  function estadoFotoLabel(kind, payload){
+    const k = (kind || '').toLowerCase();
+    const st = (payload && payload.estado) ? String(payload.estado).toLowerCase() : '';
+    if (k.includes('pendiente') || st === 'pendiente') return 'Foto estado: Pendiente';
+    if (k.includes('cancelado') || st === 'cancelado') return 'Foto estado: Cancelado';
+    if (k.includes('estado_foto') || k.includes('upload_estado_foto')) return 'Foto estado';
+    return '';
+  }
+
   function explFromCounts(c){
     const parts = [];
     if (c.materialPhotos) parts.push(plural(c.materialPhotos, 'foto de material', 'fotos de materiales'));
     if (c.surveyPhotos)   parts.push(plural(c.surveyPhotos,   'foto de encuesta', 'fotos de encuesta'));
+    if (c.estadoPhotos)   parts.push(plural(c.estadoPhotos,   'foto de estado', 'fotos de estado'));
     if (c.answers)        parts.push(plural(c.answers,        'gestión/respuesta', 'gestiones/respuestas'));
     if (c.create)         parts.push(plural(c.create,         'creación de visita', 'creaciones de visita'));
     if (c.other)          parts.push(plural(c.other,          'tarea', 'tareas'));
@@ -176,6 +207,7 @@
     const bullets = [
       c.materialPhotos ? `<li><b>Fotos de materiales</b>: ${c.materialPhotos}</li>` : '',
       c.surveyPhotos   ? `<li><b>Fotos de encuesta</b>: ${c.surveyPhotos}</li>`     : '',
+      c.estadoPhotos   ? `<li><b>Fotos de estado</b>: ${c.estadoPhotos}</li>`       : '',
       c.answers        ? `<li><b>Gestión/Respuestas</b>: ${c.answers}</li>`         : '',
       c.create         ? `<li><b>Creación de visita</b>: ${c.create}</li>`          : '',
       c.other          ? `<li><b>Otras tareas</b>: ${c.other}</li>`                 : ''
@@ -329,9 +361,13 @@
       <div class="jr-details" data-for="${esc(gr.key)}" hidden>
         ${gr.items.map(it => {
           const p = (it.status === 'success' ? 100 : (it.progress || 0));
+          const payloadSummary = it.vars && it.vars.payload_summary ? it.vars.payload_summary : null;
+          const estadoLabel = estadoFotoLabel(it.kind || '', payloadSummary);
           const kind =
             (it.kind || '').includes('upload_material') ? 'Fotos de materiales' :
             (it.kind || '').includes('pregunta_foto')   ? 'Fotos de encuesta'   :
+            ((it.kind || '').includes('estado_foto') || (it.kind || '').includes('upload_estado_foto'))
+              ? (estadoLabel || 'Foto estado') :
             (it.kind || '').includes('procesar_gestion')? 'Gestión / respuestas' :
             (it.kind || '').includes('create_visita')   ? 'Creación de visita'  :
             (it.kind || 'Tarea');
@@ -787,9 +823,18 @@
               · ${esc(ev.type || '')}
               ${ev.http_status ? `· HTTP ${esc(String(ev.http_status))}` : ''}
               ${ev.error ? `· ${esc(String(ev.error))}` : ''}
+              ${ev.message ? `· ${esc(String(ev.message))}` : ''}
+              ${ev.url ? `· ${esc(String(ev.url))}` : ''}
             </li>
           `).join('')}</ul>`
         : '<span class="text-muted">Sin historial</span>';
+
+      const payloadSummary = (jr && jr.vars && jr.vars.payload_summary) || safePayloadFromJob(job);
+      const payloadJson = payloadSummary ? JSON.stringify(payloadSummary, null, 2) : '';
+      const payloadBlock = payloadSummary
+        ? `<h5>Payload (safe)</h5>
+           <pre class="jr-payload" data-job-id="${esc(jobId)}" style="display:none;">${esc(payloadJson)}</pre>`
+        : `<p class="text-muted">Sin payload disponible.</p>`;
 
       const html = `
         <table class="table table-condensed">
@@ -807,9 +852,16 @@
         </table>
         <h5>Historial reciente</h5>
         ${attemptsList}
+        ${payloadBlock}
         <div class="jr-job-actions">
           <button class="btn btn-xs btn-default jr-job-retry" data-job-id="${esc(jobId)}"><i class="fa fa-refresh"></i> Reintentar ahora</button>
           <button class="btn btn-xs btn-danger jr-job-cancel" data-job-id="${esc(jobId)}"><i class="fa fa-ban"></i> Cancelar</button>
+          <button class="btn btn-xs btn-default jr-job-payload" data-job-id="${esc(jobId)}" ${payloadSummary ? '' : 'disabled'}>
+            <i class="fa fa-eye"></i> Ver payload (safe)
+          </button>
+          <button class="btn btn-xs btn-default jr-job-copy-error" data-error-text="${esc(lastError ? (lastError.message || '') : '')}" ${lastError ? '' : 'disabled'}>
+            <i class="fa fa-copy"></i> Copiar error
+          </button>
         </div>
       `;
       setJobModalBody(html);
@@ -1191,6 +1243,38 @@
       if (jobId && window.Queue?.cancel) {
         await window.Queue.cancel(jobId, { keepRecord: true });
         await renderToday();
+      }
+      e.preventDefault();
+      return;
+    }
+    const payloadBtn = e.target.closest('.jr-job-payload');
+    if (payloadBtn){
+      const jobId = payloadBtn.getAttribute('data-job-id');
+      const pre = document.querySelector(`.jr-payload[data-job-id="${jobId}"]`);
+      if (pre){
+        const isHidden = pre.style.display === 'none' || pre.style.display === '';
+        pre.style.display = isHidden ? 'block' : 'none';
+      }
+      e.preventDefault();
+      return;
+    }
+    const copyBtn = e.target.closest('.jr-job-copy-error');
+    if (copyBtn){
+      const text = copyBtn.getAttribute('data-error-text') || '';
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const area = document.createElement('textarea');
+          area.value = text;
+          document.body.appendChild(area);
+          area.select();
+          document.execCommand('copy');
+          document.body.removeChild(area);
+        }
+        mcToast('success', 'Copiado', 'El error fue copiado al portapapeles.');
+      } catch (_) {
+        mcToast('danger', 'Error', 'No se pudo copiar el error.');
       }
       e.preventDefault();
       return;
