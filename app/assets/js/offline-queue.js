@@ -187,6 +187,32 @@
     }
   };
 
+  const EstadoFotos = {
+    key: 'v2_estado_foto_map', // { "estadoFoto:<guid>:<local>:<form>": foto_visita_id }
+    load(){ try { return JSON.parse(localStorage.getItem(this.key) || '{}'); } catch(_) { return {}; } },
+    save(m){ localStorage.setItem(this.key, JSON.stringify(m)); },
+    makeKey(clientGuid, localId, formId){
+      return `estadoFoto:${clientGuid || 'noguid'}:${localId || 0}:${formId || 0}`;
+    },
+    set(clientGuid, localId, formId, fotoId){
+      const m = this.load();
+      const key = this.makeKey(clientGuid, localId, formId);
+      m[key] = fotoId;
+      this.save(m);
+      return key;
+    },
+    get(clientGuid, localId, formId){
+      const key = this.makeKey(clientGuid, localId, formId);
+      return this.load()[key] || null;
+    },
+    del(clientGuid, localId, formId){
+      const m = this.load();
+      const key = this.makeKey(clientGuid, localId, formId);
+      delete m[key];
+      this.save(m);
+    }
+  };
+
   // --------------------------------------------------------------------------------
   // Helpers varios
   // --------------------------------------------------------------------------------
@@ -354,6 +380,22 @@
       if (real) task.fields.visita_id = real;
     }
 
+    const typeStr = String(task.type || '');
+    const urlStr  = String(task.url || '').toLowerCase();
+    const isGestionTask =
+      typeStr === 'procesar_gestion' ||
+      typeStr === 'procesar_gestion_pruebas' ||
+      urlStr.includes('procesar_gestion_pruebas.php') ||
+      urlStr.includes('procesar_gestion.php');
+
+    if (isGestionTask && task.fields && !task.fields.foto_visita_id_estado) {
+      const cg = task.fields.client_guid || task.client_guid || '';
+      const localId = task.fields.id_local || task.fields.idLocal || null;
+      const formId  = task.fields.id_formulario || task.fields.idCampana || null;
+      const mappedFoto = EstadoFotos.get(cg, localId, formId);
+      if (mappedFoto) task.fields.foto_visita_id_estado = mappedFoto;
+    }
+
     const { response: r, parsed } = await httpPost(task);
     const js = parsed ? parsed.json : null;
     if (!r.ok || !isLogicalSuccess(js) || (parsed && parsed.isHtml)) {
@@ -378,14 +420,6 @@
 
     // Si es una tarea de PROCESAR GESTIÓN, marcamos que la agenda debe refrescarse
     //    Esto se usará en bootstrap_index_cache.js para forzar un sync_bundle()
-    const typeStr = String(task.type || '');
-    const urlStr  = String(task.url || '').toLowerCase();
-    const isGestionTask =
-      typeStr === 'procesar_gestion' ||
-      typeStr === 'procesar_gestion_pruebas' ||
-      urlStr.includes('procesar_gestion_pruebas.php') ||
-      urlStr.includes('procesar_gestion.php');
-
     if (isGestionTask) {
       try {
         localStorage.setItem('v2_agenda_needs_refresh', '1');
@@ -394,7 +428,46 @@
       QueueEvents.emit('queue:gestion_success', { job: task, response: js });
     }
 
+    const isEstadoFoto =
+      typeStr === 'upload_estado_foto' ||
+      urlStr.includes('upload_estado_foto_pruebas.php');
+
+    if (isEstadoFoto && js && js.foto_visita_id) {
+      const f = task.fields || {};
+      const cg = f.client_guid || task.client_guid || js.client_guid || '';
+      const localId = f.id_local || f.idLocal || null;
+      const formId  = f.id_formulario || f.idCampana || null;
+      EstadoFotos.set(cg, localId, formId, js.foto_visita_id);
+      await patchQueuedGestiones(cg, localId, formId, js.foto_visita_id);
+      QueueEvents.emit('queue:estado_foto_success', { job: task, response: js });
+    }
+
     return { data: js, status: r.status, parsed };
+  }
+
+  async function patchQueuedGestiones(clientGuid, localId, formId, fotoId){
+    if (!clientGuid || !localId || !formId || !fotoId) return;
+    const queued = await AppDB.listByStatus('queued');
+    await Promise.all(queued.map(async (raw) => {
+      const t = AppDB.normalizeJob ? AppDB.normalizeJob(raw) : raw;
+      const tType = String(t.type || '');
+      const tUrl  = String(t.url || '').toLowerCase();
+      const isGestion =
+        tType === 'procesar_gestion' ||
+        tType === 'procesar_gestion_pruebas' ||
+        tUrl.includes('procesar_gestion_pruebas.php') ||
+        tUrl.includes('procesar_gestion.php');
+      if (!isGestion || !t.fields) return;
+      const tGuid = t.fields.client_guid || t.client_guid || '';
+      const tLocal = t.fields.id_local || t.fields.idLocal || null;
+      const tForm  = t.fields.id_formulario || t.fields.idCampana || null;
+      if (tGuid !== clientGuid || Number(tLocal) !== Number(localId) || Number(tForm) !== Number(formId)) return;
+      if (t.fields.foto_visita_id_estado === fotoId) return;
+      await AppDB.update(t.id, {
+        fields: Object.assign({}, t.fields, { foto_visita_id_estado: fotoId }),
+        updatedAt: Date.now()
+      });
+    }));
   }
 
   // --------------------------------------------------------------------------------
@@ -863,6 +936,7 @@
   };
   window.Queue.CompletedDeps = CompletedDeps;
   window.Queue.LocalByGuid = LocalByGuid;
+  window.Queue.EstadoFotos = EstadoFotos;
 
   // --------------------------------------------------------------------------------
   // Fallback de AppDB (IndexedDB) por si no viene provisto en assets/js/db.js

@@ -408,6 +408,7 @@ input[type=file][id^="fotoPregunta_"] {
                  <!-- Offline/Idempotencia -->
                  <input type="hidden" id="client_guid" name="client_guid" value="">
                  <input type="hidden" id="idemp_create" value="">
+                 <input type="hidden" id="foto_visita_id_estado" name="foto_visita_id_estado" value="">
 
                  <!-- Paso 1 -->
                  <div class="wizard-step" id="step-1">
@@ -576,10 +577,12 @@ input[type=file][id^="fotoPregunta_"] {
                     <div class="form-group" id="fotoLocalCerradoContainer" style="display: none;">
                         <label for="fotoLocalCerrado">Subir foto de fachada (Local Cerrado):</label>
                         <input type="file" class="form-control" id="fotoLocalCerrado" name="fotoLocalCerrado" accept="image/*">
+                        <div class="estado-foto-status" id="estadoFotoStatus_fotoLocalCerrado"></div>
                     </div>
                     <div class="form-group" id="fotoLocalNoExisteContainer" style="display: none;">
                         <label for="fotoLocalNoExiste">Subir foto del lugar (Local no existe):</label>
                         <input type="file" class="form-control" id="fotoLocalNoExiste" name="fotoLocalNoExiste" accept="image/*">
+                        <div class="estado-foto-status" id="estadoFotoStatus_fotoLocalNoExiste"></div>
                     </div>
                     <div class="form-group" id="fotoMuebleNoSalaContainer" style="display: none;">
                       <label for="fotoMuebleNoSala">Subir foto del mueble (no está en la sala):</label>
@@ -588,14 +591,17 @@ input[type=file][id^="fotoPregunta_"] {
                              id="fotoMuebleNoSala"
                              name="fotoMuebleNoSala"
                              accept="image/*">
+                      <div class="estado-foto-status" id="estadoFotoStatus_fotoMuebleNoSala"></div>
                     </div>
                     <div class="form-group" id="fotoPendienteGenericaContainer" style="display: none;">
                       <label for="fotoPendienteGenerica">Subir foto (Evidencia estado Pendiente):</label>
                       <input type="file" class="form-control" id="fotoPendienteGenerica" name="fotoPendienteGenerica" accept="image/*">
+                      <div class="estado-foto-status" id="estadoFotoStatus_fotoPendienteGenerica"></div>
                     </div>
                     <div class="form-group" id="fotoCanceladoGenericaContainer" style="display: none;">
                       <label for="fotoCanceladoGenerica">Subir foto (Evidencia estado Cancelado):</label>
                       <input type="file" class="form-control" id="fotoCanceladoGenerica" name="fotoCanceladoGenerica" accept="image/*">
+                      <div class="estado-foto-status" id="estadoFotoStatus_fotoCanceladoGenerica"></div>
                     </div>
 
                      <br>
@@ -1236,6 +1242,8 @@ const QUEUE_META_BASE = {
   campaign_name: <?php echo json_encode($nombreCampanaDB, JSON_UNESCAPED_UNICODE); ?>,
   local_id: <?php echo (int)$idLocal; ?>
 };
+const ESTADO_FOTO_LOCAL_ID = <?php echo (int)$idLocal; ?>;
+const ESTADO_FOTO_FORM_ID = <?php echo (int)$idCampana; ?>;
 async function queueCreateVisita(payload, idempKey) {
   const session = ensureVisitSession();
   const visitaLocal = session.visita_local_id || ('local-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now()));
@@ -1254,6 +1262,16 @@ async function queueCreateVisita(payload, idempKey) {
     meta: QUEUE_META_BASE
   });
 }
+function syncEstadoFotoHiddenFromStorage() {
+  const hidden = document.getElementById('foto_visita_id_estado');
+  if (!hidden) return null;
+  const cg = document.getElementById('client_guid')?.value || ensureClientGuid();
+  if (!hidden.value) {
+    const mapped = estadoFotoMapId(cg);
+    if (mapped) hidden.value = String(mapped);
+  }
+  return hidden.value || null;
+}
 async function queueProcesarGestion(formEl, meta={}) {
   const cg = document.getElementById('client_guid').value || ensureClientGuid();
   // Asegura que el hidden exista con valor
@@ -1263,6 +1281,7 @@ async function queueProcesarGestion(formEl, meta={}) {
     hid.type = 'hidden'; hid.name = 'client_guid'; hid.id = 'client_guid'; hid.value = cg;
     formEl.appendChild(hid);
   }
+  syncEstadoFotoHiddenFromStorage();
   return OfflineQueue.enqueueForm('/visibility2/app/procesar_gestion_pruebas.php', formEl, {
     type: 'procesar_gestion',
     client_guid: cg,
@@ -1771,6 +1790,210 @@ async function uploadFile(file, url, idFQ, onProgress, meta = {}, extra = {}) {
   }
 }
 
+function estadoFotoMapId(clientGuid) {
+  try {
+    if (window.Queue && Queue.EstadoFotos) {
+      return Queue.EstadoFotos.get(clientGuid, ESTADO_FOTO_LOCAL_ID, ESTADO_FOTO_FORM_ID);
+    }
+  } catch(_) {}
+  return null;
+}
+function setEstadoFotoMapId(clientGuid, fotoId) {
+  try {
+    if (window.Queue && Queue.EstadoFotos) {
+      Queue.EstadoFotos.set(clientGuid, ESTADO_FOTO_LOCAL_ID, ESTADO_FOTO_FORM_ID, fotoId);
+    }
+  } catch(_) {}
+}
+function clearEstadoFotoMapId(clientGuid) {
+  try {
+    if (window.Queue && Queue.EstadoFotos) {
+      Queue.EstadoFotos.del(clientGuid, ESTADO_FOTO_LOCAL_ID, ESTADO_FOTO_FORM_ID);
+    }
+  } catch(_) {}
+}
+
+function setEstadoFotoHidden(fotoId, { clientGuid, inputId } = {}) {
+  const hidden = document.getElementById('foto_visita_id_estado');
+  if (!hidden) return;
+  hidden.value = fotoId ? String(fotoId) : '';
+  hidden.dataset.queuedId = '';
+  if (inputId) hidden.dataset.lastInputId = inputId;
+  if (clientGuid && fotoId) setEstadoFotoMapId(clientGuid, fotoId);
+}
+
+function setEstadoFotoQueued(queuedId, { inputId } = {}) {
+  const hidden = document.getElementById('foto_visita_id_estado');
+  if (!hidden) return;
+  hidden.dataset.queuedId = queuedId ? String(queuedId) : '';
+  if (inputId) hidden.dataset.lastInputId = inputId;
+}
+
+function clearEstadoFotoState() {
+  const hidden = document.getElementById('foto_visita_id_estado');
+  if (!hidden) return;
+  hidden.value = '';
+  hidden.dataset.queuedId = '';
+  hidden.dataset.lastInputId = '';
+  const cg = document.getElementById('client_guid')?.value || '';
+  if (cg) clearEstadoFotoMapId(cg);
+  document.querySelectorAll('.estado-foto-status').forEach(el => { el.innerHTML = ''; });
+}
+
+function estadoFotoTipoForInput(inputId) {
+  if (['fotoMuebleNoSala', 'fotoCanceladoGenerica'].includes(inputId)) return 'cancelado';
+  if (['fotoLocalCerrado', 'fotoLocalNoExiste', 'fotoPendienteGenerica'].includes(inputId)) return 'pendiente';
+  const estado = ($('#estadoGestion').val() || '').toLowerCase();
+  return estado === 'cancelado' ? 'cancelado' : 'pendiente';
+}
+
+function renderEstadoFotoStatus(inputId, { src, message, variant }) {
+  const container = document.getElementById(`estadoFotoStatus_${inputId}`);
+  if (!container) return;
+  container.innerHTML = '';
+  if (src) {
+    const img = document.createElement('img');
+    img.src = src;
+    img.className = 'thumbnail';
+    container.appendChild(img);
+  }
+  const msg = document.createElement('div');
+  msg.className = `alert alert-${variant || 'info'}`;
+  msg.style.marginTop = '8px';
+  msg.textContent = message || '';
+  container.appendChild(msg);
+}
+
+async function subirFotoEstado(inputElem) {
+  const file = inputElem.files && inputElem.files[0];
+  if (!file) return;
+  pendingUploads++;
+  updateFinalizeButton();
+
+  const clientGuid = ensureClientGuid();
+  const estadoTipo = estadoFotoTipoForInput(inputElem.id);
+  if (!['pendiente', 'cancelado'].includes(estadoTipo)) {
+    alert('El estado seleccionado no admite foto de evidencia.');
+    pendingUploads--;
+    updateFinalizeButton();
+    return;
+  }
+
+  const hidden = document.getElementById('foto_visita_id_estado');
+  const prevQueued = hidden?.dataset.queuedId;
+  if (prevQueued && window.Queue && typeof Queue.cancel === 'function') {
+    try { await Queue.cancel(prevQueued); } catch(_) {}
+  }
+
+  let compressed = file;
+  try { compressed = await compressFile(file); } catch(_) {}
+
+  const meta = await extractPhotoMeta(file);
+  meta.capture_source = inputElem.dataset.captureSource || 'unknown';
+  const coords = { lat: cachedPhotoCoords.lat || '', lng: cachedPhotoCoords.lng || '' };
+
+  const previewUrl = URL.createObjectURL(compressed);
+  const statusEl = document.getElementById(`estadoFotoStatus_${inputElem.id}`);
+  if (statusEl) {
+    statusEl.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = previewUrl;
+    img.className = 'thumbnail';
+    statusEl.appendChild(img);
+    const bar = document.createElement('div');
+    bar.className = 'upload-bar';
+    statusEl.appendChild(bar);
+  }
+
+  const visitaReal = await ensureRealVisitaId('estado_foto');
+  if (visitaReal) { $('#visita_id').val(visitaReal); }
+
+  const online = await isReallyOnline().catch(() => false);
+  const allowOnline = online && (visitaReal || clientGuid);
+  const idempo = makeIdempKey();
+
+  const fd = new FormData();
+  if (visitaReal) fd.append('visita_id', String(visitaReal));
+  fd.append('client_guid', clientGuid);
+  fd.append('id_formulario', String(ESTADO_FOTO_FORM_ID));
+  fd.append('id_local', String(ESTADO_FOTO_LOCAL_ID));
+  fd.append('estado_tipo', estadoTipo);
+  fd.append('lat_foto', coords.lat);
+  fd.append('lng_foto', coords.lng);
+  fd.append('file', new File([compressed], file.name, { type: compressed.type || file.type }));
+  fd.append('csrf_token', window.CSRF_TOKEN || '');
+  fd.append('exif_datetime', meta.exif_datetime || '');
+  fd.append('exif_lat', meta.exif_lat || '');
+  fd.append('exif_lng', meta.exif_lng || '');
+  fd.append('exif_altitude', meta.exif_altitude || '');
+  fd.append('exif_img_direction', meta.exif_img_direction || '');
+  fd.append('exif_make', meta.exif_make || '');
+  fd.append('exif_model', meta.exif_model || '');
+  fd.append('exif_software', meta.exif_software || '');
+  fd.append('exif_lens_model', meta.exif_lens_model || '');
+  fd.append('exif_fnumber', meta.exif_fnumber || '');
+  fd.append('exif_exposure_time', meta.exif_exposure_time || '');
+  fd.append('exif_iso', meta.exif_iso || '');
+  fd.append('exif_focal_length', meta.exif_focal_length || '');
+  fd.append('exif_orientation', meta.exif_orientation || '');
+  fd.append('capture_source', meta.capture_source || 'unknown');
+  fd.append('meta_json', meta.meta_json || '{}');
+  fd.append('X_Idempotency_Key', idempo);
+
+  try {
+    if (allowOnline) {
+      try {
+        const resp = await new Promise((res, rej) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', '/visibility2/app/upload_estado_foto_pruebas.php');
+          xhr.upload.onprogress = e => {
+            if (e.lengthComputable && statusEl) {
+              const bar = statusEl.querySelector('.upload-bar');
+              if (bar) bar.style.width = Math.round(e.loaded / e.total * 100) + '%';
+            }
+          };
+          xhr.onload = () => xhr.status < 300 ? res(JSON.parse(xhr.response)) : rej(xhr.responseText);
+          xhr.onerror = () => rej(xhr.statusText);
+          try { xhr.setRequestHeader('X-CSRF-Token', window.CSRF_TOKEN || ''); } catch(_) {}
+          try { xhr.setRequestHeader('X-Idempotency-Key', idempo); } catch(_) {}
+          xhr.send(fd);
+        });
+
+        if (resp && resp.ok && resp.foto_visita_id) {
+          setEstadoFotoHidden(resp.foto_visita_id, { clientGuid, inputId: inputElem.id });
+          renderEstadoFotoStatus(inputElem.id, { src: resp.url ? normalizeAppUrl(resp.url) : previewUrl, message: 'Subida OK', variant: 'success' });
+          inputElem.value = '';
+          return;
+        }
+      } catch (err) {
+        console.error('Estado foto upload error', err);
+      }
+    }
+
+    const { id } = await OfflineQueue.enqueueFromForm(
+      '/visibility2/app/upload_estado_foto_pruebas.php',
+      fd,
+      {
+        type: 'upload_estado_foto',
+        idempotencyKey: idempo,
+        client_guid: clientGuid,
+        dependsOn: `create:${clientGuid}`,
+        meta: Object.assign({}, QUEUE_META_BASE, { estado_tipo: estadoTipo })
+      }
+    );
+    setEstadoFotoQueued(id, { inputId: inputElem.id });
+    renderEstadoFotoStatus(inputElem.id, { src: previewUrl, message: 'En cola', variant: 'info' });
+    inputElem.value = '';
+    mcToast('info', 'Offline', 'La foto se subirá al recuperar conexión.');
+  } catch (err) {
+    console.error('No se pudo encolar foto estado', err);
+    renderEstadoFotoStatus(inputElem.id, { src: previewUrl, message: 'No se pudo encolar la foto', variant: 'danger' });
+  } finally {
+    pendingUploads--;
+    updateFinalizeButton();
+  }
+}
+
 function syncOfflineMetaInputs(container, idFQ, metas = []) {
   if (!container) return;
   container.innerHTML = '';
@@ -1925,6 +2148,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const mapped = resolveVisitaIdFromMappings(sess.client_guid);
   if (mapped) { updateVisitSession({ visita_id: mapped }); }
   document.querySelectorAll('.file-input').forEach(input=>{ setupFileInput(input); });
+  document.querySelectorAll('#fotoLocalCerrado, #fotoLocalNoExiste, #fotoMuebleNoSala, #fotoPendienteGenerica, #fotoCanceladoGenerica')
+    .forEach(input => input.addEventListener('change', () => subirFotoEstado(input)));
+
+  const cg = document.getElementById('client_guid')?.value || ensureClientGuid();
+  const mappedEstado = estadoFotoMapId(cg);
+  if (mappedEstado) {
+    setEstadoFotoHidden(mappedEstado, { clientGuid: cg });
+    const visible = $('#fotoLocalCerrado:visible, #fotoLocalNoExiste:visible, #fotoMuebleNoSala:visible, #fotoPendienteGenerica:visible, #fotoCanceladoGenerica:visible');
+    if (visible.length) {
+      renderEstadoFotoStatus(visible[0].id, { message: 'Foto sincronizada', variant: 'success' });
+    }
+  }
 });
 
 $(document).ready(function(){
@@ -2111,6 +2346,7 @@ $(document).ready(function(){
     $('#fotoMuebleNoSalaContainer').hide(); $('#fotoMuebleNoSala').val('');
     $('#fotoPendienteGenericaContainer').hide(); $('#fotoPendienteGenerica').val('');
     $('#fotoCanceladoGenericaContainer').hide(); $('#fotoCanceladoGenerica').val('');
+    clearEstadoFotoState();
   }
 
    estadoSelect.on('change', function(){
@@ -2359,6 +2595,23 @@ function onAddMaterialSuccess(ev){
 }
 
 window.addEventListener('queue:dispatch:success', onAddMaterialSuccess);
+
+window.addEventListener('queue:done', (ev) => {
+  const d = ev.detail || {};
+  if (d.type !== 'upload_estado_foto') return;
+  if (!d.response || !d.response.foto_visita_id) return;
+  const hidden = document.getElementById('foto_visita_id_estado');
+  const clientGuid = document.getElementById('client_guid')?.value || ensureClientGuid();
+  const inputId = hidden?.dataset?.lastInputId || $('#fotoLocalCerrado:visible, #fotoLocalNoExiste:visible, #fotoMuebleNoSala:visible, #fotoPendienteGenerica:visible, #fotoCanceladoGenerica:visible')[0]?.id;
+  setEstadoFotoHidden(d.response.foto_visita_id, { clientGuid, inputId });
+  if (inputId) {
+    renderEstadoFotoStatus(inputId, {
+      src: d.response.url ? normalizeAppUrl(d.response.url) : null,
+      message: 'Foto sincronizada',
+      variant: 'success'
+    });
+  }
+});
 
 // Compatibilidad con evento legacy “queue:done” (opcional pero recomendado):
 window.addEventListener('queue:done', (ev)=>{
@@ -2683,6 +2936,10 @@ document.getElementById('btnFinalizar')?.addEventListener('click', async functio
 
   const estado = $('#estadoGestion').val();
   if (estado === 'pendiente' || estado === 'cancelado') {
+    syncEstadoFotoHiddenFromStorage();
+    const hiddenEstado = document.getElementById('foto_visita_id_estado');
+    const fotoEstadoId = hiddenEstado && hiddenEstado.value ? parseInt(hiddenEstado.value, 10) : 0;
+    const queuedEstado = hiddenEstado && hiddenEstado.dataset ? hiddenEstado.dataset.queuedId : '';
     const $inputsVisibles = $(
       '#fotoLocalCerrado:visible, ' +
       '#fotoLocalNoExiste:visible, ' +
@@ -2692,7 +2949,10 @@ document.getElementById('btnFinalizar')?.addEventListener('click', async functio
     );
     let hasFile = false;
     $inputsVisibles.each(function(){ if (this.files && this.files.length > 0) { hasFile = true; return false; } });
-    if (!hasFile) { alert('Debes subir al menos una foto de evidencia.'); return; }
+    if (!fotoEstadoId && !queuedEstado && !hasFile) {
+      alert('Debes subir al menos una foto de evidencia.');
+      return;
+    }
   }
 
   if (typeof validarMateriales === 'function' && !validarMateriales()) { return; }
@@ -2709,6 +2969,7 @@ document.getElementById('btnFinalizar')?.addEventListener('click', async functio
     document.getElementById('loadingOverlay').style.display = 'none';
     return;
   }
+  syncEstadoFotoHiddenFromStorage();
 const online = await isReallyOnline();
   if (online) {
     const clientGuid = ensureClientGuid();
