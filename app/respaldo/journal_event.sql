@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS journal_event (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  event_id VARCHAR(128) NOT NULL,
+  job_id VARCHAR(128) NOT NULL,
+  created_at DATETIME NOT NULL,
+  type VARCHAR(64) NOT NULL,
+  status VARCHAR(64) DEFAULT NULL,
+  http_status INT DEFAULT NULL,
+  error_code VARCHAR(255) DEFAULT NULL,
+  message TEXT DEFAULT NULL,
+  attempts INT DEFAULT NULL,
+  url TEXT DEFAULT NULL,
+  payload JSON DEFAULT NULL,
+  user_id INT NOT NULL,
+  empresa_id INT NOT NULL,
+  created_ts TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uniq_event_id (event_id),
+  KEY idx_user_created (user_id, created_at),
+  KEY idx_empresa_created (empresa_id, created_at),
+  KEY idx_job_id (job_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
