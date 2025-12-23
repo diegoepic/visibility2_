@@ -4,6 +4,8 @@
   const BASE                     = '/visibility2/app';
   const JOURNAL_SERVER_ENDPOINT  = BASE + '/api/journal_server.php';
   const JOURNAL_DETAIL_ENDPOINT  = BASE + '/api/journal_server_detalle.php';
+  const EXPORT_DIAGNOSTIC_ENDPOINT = BASE + '/api/export_diagnostico.php';
+  const CSRF_ENDPOINT            = BASE + '/csrf_refresh.php';
 
   const qs  = s => document.querySelector(s);
   const qsa = s => Array.from(document.querySelectorAll(s));
@@ -26,6 +28,33 @@
         default:  return ch;
       }
     });
+  }
+
+  function showMessage(title, msg, type){
+    if (window.swal) {
+      window.swal(title, msg, type);
+    } else if (window.alert) {
+      window.alert(title ? `${title}: ${msg}` : msg);
+    }
+  }
+
+  async function ensureCsrfToken(){
+    if (window.CSRF_TOKEN) return window.CSRF_TOKEN;
+    try {
+      const res = await fetch(CSRF_ENDPOINT, {
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        const js = await res.json();
+        if (js && js.csrf_token) {
+          window.CSRF_TOKEN = js.csrf_token;
+          return js.csrf_token;
+        }
+      }
+    } catch(_){}
+    return window.CSRF_TOKEN || null;
   }
 
 
@@ -1214,29 +1243,45 @@
   });
 
   $btnExport && $btnExport.addEventListener('click', async () => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      showMessage('Sin conexión', 'Sin conexión, no se puede exportar diagnóstico', 'warning');
+      return;
+    }
+
+    if (typeof fetch !== 'function') {
+      showMessage('Error', 'No se puede exportar diagnóstico en este navegador.', 'error');
+      return;
+    }
+
     try {
-      const payload = await JournalDB.exportRecent(300);
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-            const filename = `journal_debug_${Date.now()}.json`;
-      if (window.AndroidDownloader && typeof window.AndroidDownloader.saveBase64 === 'function') {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const result = reader.result || '';
-          const base64 = String(result).split(',')[1] || '';
-          window.AndroidDownloader.saveBase64(base64, blob.type, filename);
-        };
-        reader.readAsDataURL(blob);
-        return;
+      const payload = (JournalDB.buildDiagnosticPayload)
+        ? await JournalDB.buildDiagnosticPayload(300)
+        : await JournalDB.exportRecent(300);
+
+      const csrfToken = await ensureCsrfToken();
+      if (csrfToken) payload.csrf_token = csrfToken;
+
+      const headers = { 'Content-Type': 'application/json' };
+      if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+      const res = await fetch(EXPORT_DIAGNOSTIC_ENDPOINT, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers,
+        body: JSON.stringify(payload)
+      });
+
+      const js = await res.json().catch(() => null);
+      if (res.ok && js && js.ok) {
+        const msg = js.saved_path ? `Guardado en servidor: ${js.saved_path}` : 'Diagnóstico guardado en servidor.';
+        showMessage('Diagnóstico exportado', msg, 'success');
+      } else {
+        const msg = (js && (js.message || js.error || js.error_code)) || 'No se pudo exportar el diagnóstico.';
+        showMessage('Error', msg, 'error');
       }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch(_) {}
+    } catch(_) {
+      showMessage('Error', 'No se pudo exportar el diagnóstico.', 'error');
+    }
   });
 
   // Eventos de la cola (actualizan vista en caliente)
