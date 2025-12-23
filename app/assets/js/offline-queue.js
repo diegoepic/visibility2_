@@ -35,9 +35,14 @@
       const r  = await withTimeout((signal) => fetch(CSRF_ENDPOINT, {
         credentials: 'same-origin',
         cache: 'no-store',
-        headers: { 'Accept': 'application/json' },
+        headers: {
+          'Accept': 'application/json',
+          'X-Offline-Queue': '1'
+        },
         signal
       }), 6000, 'E_CSRF_TIMEOUT');
+      
+      
       if (r.status === 401) return { ok:false, blocked:'auth' };
       const parsed = await parseResponseSafe(r);
       const js = parsed.json;
@@ -50,12 +55,15 @@
     return { ok:false };
   }
 
-  async function heartbeat(){
+   async function heartbeat(){
     try {
       const r = await withTimeout((signal) => fetch(PING_ENDPOINT, {
         credentials: 'same-origin',
         cache: 'no-store',
-        headers: { 'Accept': 'application/json' },
+        headers: {
+          'Accept': 'application/json',
+          'X-Offline-Queue': '1'
+        },
         signal
       }), 6000, 'E_PING_TIMEOUT');
       const parsed = await parseResponseSafe(r);
@@ -119,7 +127,9 @@
     }
 
     const fd = buildFormData(task);
-    const headers = {};
+        const headers = {
+      'X-Offline-Queue': '1'
+    };
     if (task.id) headers['X-Idempotency-Key'] = task.id;
     if (window.CSRF_TOKEN) headers['X-CSRF-Token'] = window.CSRF_TOKEN;
 

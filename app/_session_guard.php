@@ -105,12 +105,13 @@ if (!function_exists('session_fingerprint')) {
 }
 
 if (!function_exists('assert_session_is_valid')) {
-  function assert_session_is_valid(mysqli $conn): void {
+   function assert_session_is_valid(mysqli $conn): void {
     $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
     $xhr    = $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '';
+    $offlineQueue = isset($_SERVER['HTTP_X_OFFLINE_QUEUE']);
     $wantsJson = (stripos($accept, 'application/json') !== false)
       || ($xhr === 'XMLHttpRequest')
-      || isset($_SERVER['HTTP_X_OFFLINE_QUEUE'])
+      || $offlineQueue
       || isset($_POST['return_json']);
     if (empty($_SESSION['usuario_id'])) {
       if ($wantsJson) {
@@ -153,6 +154,9 @@ if (!function_exists('assert_session_is_valid')) {
         $st->close();
 
         if ($row && !is_null($row['revoked_at'])) {
+          if ($offlineQueue) {
+            return;
+          }
           // Cerrar sesin y volver a login con aviso
           session_unset();
           session_destroy();
