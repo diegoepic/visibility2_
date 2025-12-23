@@ -4,6 +4,9 @@
   const BASE                     = '/visibility2/app';
   const JOURNAL_SERVER_ENDPOINT  = BASE + '/api/journal_server.php';
   const JOURNAL_DETAIL_ENDPOINT  = BASE + '/api/journal_server_detalle.php';
+  const JOURNAL_UPLOAD_ENDPOINT  = BASE + '/api/journal_upload.php';
+  const JOURNAL_UPLOAD_KEY       = 'v2_journal_last_upload';
+  const JOURNAL_UPLOAD_MIN_MS    = 60 * 1000;
 
   const qs  = s => document.querySelector(s);
   const qsa = s => Array.from(document.querySelectorAll(s));
@@ -1239,6 +1242,39 @@
     } catch(_) {}
   });
 
+  async function pushJournalEvents(opts = {}){
+    try {
+      const now = Date.now();
+      const last = Number(localStorage.getItem(JOURNAL_UPLOAD_KEY) || 0);
+      if (!opts.force && (now - last) < JOURNAL_UPLOAD_MIN_MS) return false;
+      if (!navigator.onLine) return false;
+
+      const payload = await JournalDB.exportUnuploaded(300);
+      const events = Array.isArray(payload?.events) ? payload.events : [];
+      if (!events.length) {
+        localStorage.setItem(JOURNAL_UPLOAD_KEY, String(now));
+        return false;
+      }
+
+      const r = await fetch(JOURNAL_UPLOAD_ENDPOINT, {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exported_at: payload.exported_at, events })
+      });
+
+      if (!r.ok) return false;
+      const js = await r.json();
+      const ids = Array.isArray(js?.ids) ? js.ids : [];
+      if (ids.length) await JournalDB.markEventsUploaded(ids);
+      localStorage.setItem(JOURNAL_UPLOAD_KEY, String(Date.now()));
+      return true;
+    } catch(_) {
+      return false;
+    }
+  }
+
   // Eventos de la cola (actualizan vista en caliente)
   function safeJob(e){
     return (e && e.detail && e.detail.job)
@@ -1296,6 +1332,7 @@
         }
       }
     } catch(_){}
+    try { await pushJournalEvents(); } catch(_){}
   });
 
   window.addEventListener('queue:dispatch:error',    async (e) => {
@@ -1304,6 +1341,11 @@
     if (!job) return;
     await JournalDB.onError(job, msg);
     await renderToday();
+    await pushJournalEvents();
+  });
+
+  window.addEventListener('online', async () => {
+    await pushJournalEvents({ force: true });
   });
 
   window.addEventListener('queue:update',            async () => {

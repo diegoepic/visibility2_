@@ -134,6 +134,7 @@
       id: `${job.id}:${nowTs}:${Math.random().toString(16).slice(2)}`,
       job_id: job.id,
       created: nowTs,
+      uploaded_at: null,
       type: payload && payload.type ? payload.type : 'attempt',
       status: payload && payload.status ? payload.status : null,
       http_status: payload && payload.http_status ? payload.http_status : null,
@@ -395,6 +396,36 @@
     return { exported_at: new Date().toISOString(), events };
   }
 
+  async function exportUnuploaded(limit = 200){
+    const events = await listEvents(limit);
+    const pending = events.filter(ev => !ev.uploaded_at);
+    return { exported_at: new Date().toISOString(), events: pending };
+  }
+
+  async function markEventsUploaded(ids){
+    if (!Array.isArray(ids) || ids.length === 0) return 0;
+    const idSet = new Set(ids);
+    return tx(STORE_EVENTS, 'readwrite', os => new Promise((resolve) => {
+      let updated = 0;
+      const req = os.openCursor();
+      req.onsuccess = () => {
+        const cur = req.result;
+        if (!cur){
+          resolve(updated);
+          return;
+        }
+        const val = cur.value;
+        if (idSet.has(val.id)) {
+          val.uploaded_at = Date.now();
+          cur.update(val);
+          updated++;
+        }
+        cur.continue();
+      };
+      req.onerror = () => resolve(updated);
+    }));
+  }
+
   // ---- Resolver nombres extendiendo agenda a todo el rango cacheado ----
   async function _scanAgendaAnyDay(localId){
     try{
@@ -507,6 +538,8 @@
     listEvents,
     listEventsForJob,
     exportRecent,
+    exportUnuploaded,
+    markEventsUploaded,
     resolveNamesIfPossible
   };
 })();
