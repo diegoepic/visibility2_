@@ -1,5 +1,4 @@
 <?php
-// export_pdf_panel_encuesta.php
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -19,11 +18,20 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 require_once $_SERVER['DOCUMENT_ROOT'].'/visibility2/portal/modulos/db.php';
 require_once $_SERVER['DOCUMENT_ROOT'].'/visibility2/portal/modulos/mod_panel_encuesta/panel_encuesta_helpers.php';
 
+$debugId = panel_encuesta_request_id();
+header('X-Request-Id: '.$debugId);
+
 $user_div   = (int)($_SESSION['division_id'] ?? 0);
 $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
 
 // ==== parámetros (POST preferido, fallback GET) ====
 $SRC = $_POST ?: $_GET;
+$csrf_token = $SRC['csrf_token'] ?? '';
+if (!panel_encuesta_validate_csrf(is_string($csrf_token) ? $csrf_token : '')) {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=UTF-8');
+    exit('Token CSRF inválido.');
+}
 
 // Tipo de salida (antes de definir límites)
 $output = $SRC['output'] ?? 'pdf';
@@ -35,6 +43,12 @@ list($whereSql, $types, $params, $metaFilters) =
         'foto_only'            => true,
         'enforce_date_fallback'=> true
     ]);
+
+if (!empty($metaFilters['range_risky_no_scope'])) {
+    http_response_code(400);
+    header('Content-Type: text/plain; charset=UTF-8');
+    exit('Rango demasiado amplio sin filtros adicionales. Acota fechas o selecciona campaña.');
+}
 
 // ====== límites según tipo de salida ======
 // PDF: más bajo para no reventar Dompdf
@@ -80,19 +94,6 @@ $st->execute();
 $rs = $st->get_result();
 
 /**
- * Convierte una ruta/URL relativa en URL absoluta http(s) para mostrar
- * y usar como href.
- */
-function make_abs_url_panel($path){
-    if(!$path) return $path;
-    if (preg_match('~^https?://~i', $path)) return $path;
-    $p = ($path[0] ?? '') === '/' ? $path : ('/'.$path);
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host   = $_SERVER['HTTP_HOST'] ?? 'www.visibility.cl';
-    return $scheme.'://'.$host.$p;
-}
-
-/**
  * Dado un URL absoluta de foto, intenta resolverla a ruta local absoluta
  * (ej: /home/visibility/public_html/visibility2/app/uploads/...)
  * para que Dompdf lea el archivo directamente del disco.
@@ -103,21 +104,8 @@ function panel_encuesta_pdf_img_src($url){
     if (!$url) return $url;
 
     // Obtenemos el path de la URL, ej: /visibility2/app/uploads/uploads_fotos_pregunta/...
-    $parts = @parse_url($url);
-    $path  = $parts['path'] ?? '';
-    if (!$path) {
-        return $url;
-    }
-
-    $docroot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/');
-    if ($docroot === '') {
-        return $url;
-    }
-
-    // Ruta real en filesystem
-    $fs = realpath($docroot.$path);
-    if (!$fs || !is_file($fs)) {
-        // Si no la encontramos, que Dompdf intente con la URL HTTP
+    $fs = panel_encuesta_photo_fs_path($url);
+    if (!$fs) {
         return $url;
     }
 
@@ -198,10 +186,8 @@ while($r = $rs->fetch_assoc()){
         ];
     }
 
-    $u = (string)($r['foto_url'] ?? '');
-    if ($u !== '') {
-        // Normalizamos a URL absoluta http(s)
-        $u = make_abs_url_panel($u);
+    $u = panel_encuesta_resolve_photo_url($r['foto_url'] ?? null);
+    if ($u !== null && $u !== '') {
         $groups[$key]['fotos'][] = $u;
     }
 

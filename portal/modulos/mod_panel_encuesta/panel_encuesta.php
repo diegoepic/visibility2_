@@ -5,6 +5,9 @@ if (session_status() === PHP_SESSION_NONE) {
 
 if (!isset($_SESSION['usuario_id'])) { header("Location: /visibility2/portal/login.php"); exit; }
 
+require_once __DIR__ . '/panel_encuesta_helpers.php';
+$csrf_token = panel_encuesta_get_csrf_token();
+
 date_default_timezone_set('America/Santiago');
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -144,6 +147,7 @@ if ($sel_div>0 || !$is_mc){
   .qf-title{font-weight:600;}
   .qf-badges .badge{margin-right:.25rem; margin-bottom:.25rem;}
   .select2-container--default .select2-selection--multiple .select2-selection__choice{max-width:98%; overflow:hidden; text-overflow:ellipsis;}
+  .filter-chip{display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; border:1px solid #e5e7eb; background:#f1f5f9; color:#334155; margin:0 6px 6px 0; font-size:.75rem;}
 
   /* Loader / estado de carga */
   #panel-encuesta-table-wrapper.is-loading{
@@ -173,6 +177,7 @@ if ($sel_div>0 || !$is_mc){
   <div class="card">
     <!-- ahora es un <form> real para poder usar submit/Enter -->
     <form class="sticky-toolbar d-flex align-items-end flex-wrap" id="panel-encuesta-filtros">
+      <input type="hidden" name="csrf_token" id="csrf_token" value="<?=htmlspecialchars($csrf_token)?>">
       <?php if ($is_mc): ?>
         <div class="mr-3 mb-2">
           <label class="mb-1"><small>División</small></label>
@@ -252,10 +257,17 @@ if ($sel_div>0 || !$is_mc){
           <small class="text-muted">Añade una o más preguntas y configura el filtro de su respuesta aquí…</small>
         </div>
         <small class="text-muted d-block mt-1">
-          <strong>Importante:</strong> el panel solo muestra visitas que cumplen 
+          <strong>Importante:</strong> por defecto el panel solo muestra visitas que cumplen 
           <strong>todas</strong> las condiciones de las preguntas seleccionadas.
-          Si en una visita hay al menos una preguntas del filtro que no se respondió en la visita, esa gestión no aparecerá en los resultados.
+          Si en una visita hay al menos una pregunta del filtro que no se respondió en la visita, esa gestión no aparecerá en los resultados.
+          Puedes activar <strong>Incluir parciales</strong> para ver visitas que cumplan al menos una condición.
         </small>
+        <div class="form-check mt-1">
+          <input class="form-check-input" type="checkbox" id="f_qfilters_match" value="any">
+          <label class="form-check-label small text-muted" for="f_qfilters_match">
+            Incluir parciales (mostrar visitas que cumplan al menos una condición).
+          </label>
+        </div>
       </div>
 
       <div class="mr-2 mb-2">
@@ -307,6 +319,9 @@ if ($sel_div>0 || !$is_mc){
         <button id="btnBuscar" type="submit" class="btn btn-primary btn-sm">
           <i class="fa fa-search"></i> Buscar
         </button>
+        <button id="btnResetFilters" type="button" class="btn btn-outline-secondary btn-sm">
+          <i class="fa fa-eraser"></i> Limpiar todo
+        </button>
 
         <div class="btn-group btn-group-sm mt-1">
           <button id="btnCSV" type="button" class="btn btn-outline-secondary">
@@ -354,6 +369,8 @@ if ($sel_div>0 || !$is_mc){
         <div class="ml-auto text-muted mb-2" id="infoTotal"></div>
       </div>
 
+      <div id="activeFilters" class="mb-2 small text-muted"></div>
+
       <div id="panel-encuesta-table-wrapper">
         <div class="table-responsive">
           <table class="table table-sm table-bordered table-hover" id="resultsTable">
@@ -400,6 +417,9 @@ if ($sel_div>0 || !$is_mc){
       <div class="modal-body text-center p-0 position-relative">
         <img id="photoModalImg" src="" alt="" style="max-width:100%; max-height:80vh;">
         <div id="photoModalCaption" class="position-absolute text-white-50 small" style="right:10px; bottom:8px;"></div>
+        <a id="photoModalOpen" class="btn btn-sm btn-light position-absolute" style="left:10px; bottom:8px;" target="_blank" rel="noopener">
+          Abrir en nueva pestaña
+        </a>
       </div>
     </div>
   </div>
@@ -432,6 +452,11 @@ if ($sel_div>0 || !$is_mc){
 
   const ABS_BASE = (window.location.origin || (location.protocol + '//' + location.host));
   const DEFAULT_RANGE_DAYS = 7; // mismo criterio que el backend (últimos 7 días)
+  const EXPORT_LIMITS = {
+    csv: 50000,
+    fotosPdf: 250,
+    fotosHtml: 4000
+  };
 
   function escapeHtml(s){
     return (s||'').toString().replace(/[&<>"'`=\/]/g,function(c){
@@ -536,10 +561,11 @@ if ($sel_div>0 || !$is_mc){
           subdivision: $('#f_subdivision').val(),
           tipo: $('#f_tipo').val() || 0,
           form_id: $('#f_form').val(),
-          global: isGlobalMode() ? 1 : 0
+          global: isGlobalMode() ? 1 : 0,
+          csrf_token: $('#csrf_token').val()
         }),
         processResults: data => ({
-          results: data.map(r => ({
+          results: (data && data.data ? data.data : data).map(r => ({
             id: r.id,
             text: r.text,
             campana: r.campana || null,
@@ -696,11 +722,13 @@ if ($sel_div>0 || !$is_mc){
     const $box = $('#qfilters').empty();
     if (QFILTERS.size === 0){
       $box.html('<small class="text-muted">Añade una o más preguntas y configura el filtro de su respuesta aquí…</small>');
+      renderActiveFilters();
       return;
     }
     QFILTERS.forEach((entry, key) => {
       $box.append( renderQFilterControl(key, entry) );
     });
+    renderActiveFilters();
   }
 
   $(document).on('click', '.qf-remove', function(){
@@ -724,9 +752,11 @@ if ($sel_div>0 || !$is_mc){
         division: $('#f_division').val(),
         subdivision: $('#f_subdivision').val(),
         tipo: $('#f_tipo').val() || 0,
-        form_id: $('#f_form').val()
+        form_id: $('#f_form').val(),
+        csrf_token: $('#csrf_token').val()
       }, resp => {
-        if (resp && resp.id){ resolve(resp); } else { reject(); }
+        const payload = resp && resp.data ? resp.data : resp;
+        if (payload && payload.id){ resolve(payload); } else { reject(); }
       }).fail(xhr=>{ showError('No se pudo cargar metadatos', xhr.responseText||'Error inesperado'); reject(); });
     });
   }
@@ -747,21 +777,22 @@ if ($sel_div>0 || !$is_mc){
     const $box = $(`.qf-stats[data-key="${key}"]`).html('<span class="text-muted">Cargando…</span>');
 
     $.getJSON('ajax_pregunta_stats.php', {
-      mode: meta.mode, id: meta.id, tipo: meta.tipo, ...scope
+      mode: meta.mode, id: meta.id, tipo: meta.tipo, csrf_token: $('#csrf_token').val(), ...scope
     }, stat => {
-      if (!stat) { $box.html('<span class="text-danger">Sin datos</span>'); return; }
-      if (meta.tipo === 5 && stat.numeric) {
+      const payload = stat && stat.data ? stat.data : stat;
+      if (!payload) { $box.html('<span class="text-danger">Sin datos</span>'); return; }
+      if (meta.tipo === 5 && payload.numeric) {
         $box.html(`
           <div class="small">
-            <strong>Total:</strong> ${stat.numeric.count} ·
-            <strong>Min:</strong> ${stat.numeric.min ?? '-'} ·
-            <strong>Max:</strong> ${stat.numeric.max ?? '-'} ·
-            <strong>Prom:</strong> ${stat.numeric.avg ?? '-'}</strong>
+            <strong>Total:</strong> ${payload.numeric.count} ·
+            <strong>Min:</strong> ${payload.numeric.min ?? '-'} ·
+            <strong>Max:</strong> ${payload.numeric.max ?? '-'} ·
+            <strong>Prom:</strong> ${payload.numeric.avg ?? '-'}</strong>
           </div>
         `);
         return;
       }
-      const buckets = (stat.buckets || []);
+      const buckets = (payload.buckets || []);
       if (!buckets.length) { $box.html('<span class="text-muted">Sin buckets</span>'); return; }
       const rows = buckets.map(b => `
         <div class="d-flex align-items-center mb-1">
@@ -782,7 +813,20 @@ if ($sel_div>0 || !$is_mc){
   $('#f_division, #f_subdivision, #f_form, #f_tipo, #f_desde, #f_hasta, #f_distrito, #f_jv, #f_usuario, #f_codigo')
     .on('change', function(){
       QFILTERS.forEach(({meta}, key) => { fetchQStats(key, meta); });
+      renderActiveFilters();
     });
+
+  $('#f_codigo').on('keyup', function(){
+    renderActiveFilters();
+  });
+
+  $('#f_qfilters_match').on('change', function(){
+    renderActiveFilters();
+  });
+
+  $('#btnResetFilters').on('click', function(){
+    window.location.href = 'panel_encuesta.php';
+  });
 
   $(document).on('change', '.qf-bool', function(){
     const key = $(this).data('key');
@@ -859,10 +903,65 @@ if ($sel_div>0 || !$is_mc){
       qset_ids: qset_ids,
       vset_ids: vset_ids,
       qfilters: JSON.stringify(collectQFilters()),
+      qfilters_match: $('#f_qfilters_match').is(':checked') ? 'any' : 'all',
+      csrf_token: $('#csrf_token').val(),
       page: page,
       limit: $('#f_limit').val(),
       facets: 1
     };
+  }
+
+  function renderActiveFilters(){
+    const chips = [];
+    const getLabel = $sel => $sel.find('option:selected').text();
+
+    if ($('#f_division').length && $('#f_division').val() !== '0') {
+      chips.push(`División: ${escapeHtml(getLabel($('#f_division')))}`);
+    }
+    if ($('#f_subdivision').val() !== '0') {
+      chips.push(`Subdivisión: ${escapeHtml(getLabel($('#f_subdivision')))}`);
+    }
+    if ($('#f_tipo').val() !== '0') {
+      chips.push(`Tipo: ${escapeHtml(getLabel($('#f_tipo')))}`);
+    }
+    if ($('#f_form').val() !== '0') {
+      chips.push(`Campaña: ${escapeHtml(getLabel($('#f_form')))}`);
+    }
+
+    const preguntaCount = ($('#f_preguntas').val() || []).length;
+    if (preguntaCount > 0) {
+      chips.push(`Preguntas: ${preguntaCount}`);
+    }
+    if (QFILTERS.size > 0) {
+      const matchLabel = $('#f_qfilters_match').is(':checked') ? 'parciales' : 'todas';
+      chips.push(`Filtros: ${QFILTERS.size} (${matchLabel})`);
+    }
+
+    const desde = $('#f_desde').val();
+    const hasta = $('#f_hasta').val();
+    if (desde || hasta) {
+      chips.push(`Rango: ${escapeHtml(desde || '...')} → ${escapeHtml(hasta || '...')}`);
+    }
+
+    if ($('#f_distrito').val() !== '0') {
+      chips.push(`Distrito: ${escapeHtml(getLabel($('#f_distrito')))}`);
+    }
+    if ($('#f_jv').val() !== '0') {
+      chips.push(`Jefe: ${escapeHtml(getLabel($('#f_jv')))}`);
+    }
+    if ($('#f_usuario').val() !== '0') {
+      chips.push(`Usuario: ${escapeHtml(getLabel($('#f_usuario')))}`);
+    }
+    if ($('#f_codigo').val()) {
+      chips.push(`Cód. Local: ${escapeHtml($('#f_codigo').val())}`);
+    }
+
+    if (!chips.length) {
+      $('#activeFilters').html('Sin filtros activos.');
+      return;
+    }
+
+    $('#activeFilters').html(chips.map(c => `<span class="filter-chip">${c}</span>`).join(''));
   }
 
   function toQuery(obj){
@@ -888,11 +987,41 @@ if ($sel_div>0 || !$is_mc){
     return [...map.entries()].sort((a,b)=> a[1].localeCompare(b[1], 'es'));
   }
 
-  function absUrl(path){
-    if(!path) return '';
-    if(/^https?:\/\//i.test(path)) return path;
-    const p = path.startsWith('/') ? path : '/'+path;
-    return ABS_BASE + p;
+  function buildPhotoCandidates(path){
+    const raw = (path || '').toString().trim();
+    if (!raw) return [];
+    if (/^https?:\/\//i.test(raw)) return [raw];
+    const noSlash = raw.replace(/^\/+/, '');
+    const withSlash = '/' + noSlash;
+    const base = ABS_BASE;
+    const out = [];
+    const add = (u)=>{ if (u && !out.includes(u)) out.push(u); };
+
+    if (noSlash.startsWith('uploads/')) {
+      add(base + '/visibility2/app/' + noSlash);
+      add(base + '/' + noSlash);
+      return out;
+    }
+
+    if (noSlash.startsWith('app/')) {
+      add(base + '/visibility2/' + noSlash);
+      add(base + '/' + noSlash);
+      return out;
+    }
+
+    if (noSlash.startsWith('portal/')) {
+      add(base + '/visibility2/' + noSlash);
+      add(base + '/' + noSlash);
+      return out;
+    }
+
+    if (noSlash.startsWith('visibility2/')) {
+      add(base + '/' + noSlash);
+      return out;
+    }
+
+    add(base + withSlash);
+    return out;
   }
 
   function groupPhotoRows(rows){
@@ -908,7 +1037,7 @@ if ($sel_div>0 || !$is_mc){
           out.push(item);
         }
         if (r.respuesta){
-          item.fotos.push(absUrl(r.respuesta));
+          item.fotos.push(r.respuesta);
         }
       } else {
         out.push(r);
@@ -933,9 +1062,13 @@ if ($sel_div>0 || !$is_mc){
   function renderThumbs(urls){
     if(!urls || !urls.length) return '';
     const badge = (urls.length>1) ? `<span class="thumb-count">${urls.length}</span>` : '';
-    const imgs = urls.map(u =>
-      `<img class="thumb" data-src="${escapeHtml(u)}" data-full="${escapeHtml(u)}" alt="foto" loading="lazy">`
-    ).join('');
+    const imgs = urls.map(u => {
+      const candidates = buildPhotoCandidates(u);
+      if (!candidates.length) return '';
+      const primary = candidates[0];
+      const fallbacks = candidates.slice(1);
+      return `<img class="thumb" data-src="${escapeHtml(primary)}" data-full="${escapeHtml(primary)}" data-fallbacks="${escapeHtml(JSON.stringify(fallbacks))}" alt="foto" loading="lazy">`;
+    }).join('');
     return `<div class="thumb-wrap">${badge}${imgs}</div>`;
   }
 
@@ -972,6 +1105,7 @@ if ($sel_div>0 || !$is_mc){
 
   function loadData(){
     const p = buildParams();
+    renderActiveFilters();
     $('#resultsTable tbody').html('<tr><td colspan="12" class="text-center text-muted">Cargando…</td></tr>');
     $('#infoTotal').text('');
     showLoading();
@@ -986,6 +1120,13 @@ if ($sel_div>0 || !$is_mc){
       dataType: 'json',
       timeout: 60000, // 60s para controlar mejor los timeouts
       success: function(resp, textStatus, jqXHR){
+        if (resp && resp.status && resp.status !== 'ok') {
+          const msg = resp.message || 'Error al cargar resultados.';
+          showError('No se pudo cargar', msg);
+          $('#resultsTable tbody').html('<tr><td colspan="12" class="text-center text-muted">Sin resultados</td></tr>');
+          hideLoading();
+          return;
+        }
         const tb = $('#resultsTable tbody').empty();
         let rows = resp && resp.data ? resp.data : [];
         rows = groupPhotoRows(rows);
@@ -997,7 +1138,7 @@ if ($sel_div>0 || !$is_mc){
           rows.forEach(r=>{
             const isFoto = r.tipo === 7;
             const respCell = isFoto
-              ? (r.fotos && r.fotos.length ? renderThumbs(r.fotos) : (r.respuesta ? renderThumbs([absUrl(r.respuesta)]) : ''))
+              ? (r.fotos && r.fotos.length ? renderThumbs(r.fotos) : (r.respuesta ? renderThumbs([r.respuesta]) : ''))
               : escapeHtml(r.respuesta || '');
             const tr = document.createElement('tr');
             tr.innerHTML = `
@@ -1018,6 +1159,7 @@ if ($sel_div>0 || !$is_mc){
           });
           tb[0].appendChild(frag);
 
+          noteThumbFallbacks();
           $('#resultsTable img.thumb').each(function(){
             if(lazyObserver) lazyObserver.observe(this);
             else {
@@ -1058,6 +1200,10 @@ if ($sel_div>0 || !$is_mc){
           }
         }
 
+        if (resp.total > EXPORT_LIMITS.csv) {
+          extras.push(`CSV limitado a ${EXPORT_LIMITS.csv.toLocaleString('es-CL')} filas`);
+        }
+
         const infoBase = `Total: ${Number(resp.total).toLocaleString('es-CL')} registros`;
         const info = extras.length ? infoBase + ' · ' + extras.join(' · ') : infoBase;
         $('#infoTotal').text(info);
@@ -1093,6 +1239,37 @@ if ($sel_div>0 || !$is_mc){
     if(!isNaN(p)){ page=p; loadData(); }
   });
 
+  function parseFallbacks(el){
+    const raw = el.getAttribute('data-fallbacks');
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function applyNextFallback(img){
+    const fallbacks = parseFallbacks(img);
+    if (!fallbacks.length) return false;
+    const idx = parseInt(img.getAttribute('data-fallback-idx') || '0', 10);
+    if (idx >= fallbacks.length) return false;
+    img.setAttribute('data-fallback-idx', String(idx + 1));
+    img.src = fallbacks[idx];
+    return true;
+  }
+
+  function noteThumbFallbacks(){
+    $('#resultsTable img.thumb').each(function(){
+      if (this.dataset.fallbackReady === '1') return;
+      this.dataset.fallbackReady = '1';
+      this.addEventListener('error', () => {
+        applyNextFallback(this);
+      });
+    });
+  }
+
   $('#panel-encuesta-filtros').on('submit', function(e){
     e.preventDefault();
     if (!validateDates()) return;
@@ -1111,25 +1288,42 @@ if ($sel_div>0 || !$is_mc){
 
   // ====== Lightbox ======
   const LB = { list: [], idx: 0 };
-  function openLightbox(urls, start){
-    LB.list = urls || [];
+  function openLightbox(items, start){
+    LB.list = items || [];
     LB.idx = Math.max(0, Math.min(start||0, LB.list.length-1));
     updateLB();
     $('#photoModal').modal('show');
   }
   function updateLB(){
     if (!LB.list.length) return;
-    $('#photoModalImg').attr('src', LB.list[LB.idx]);
+    const item = LB.list[LB.idx] || {};
+    const img = $('#photoModalImg');
+    img.attr('src', item.primary || '');
+    img.attr('data-fallbacks', JSON.stringify(item.fallbacks || []));
+    img.attr('data-fallback-idx', '0');
     $('#photoModalCaption').text((LB.idx+1)+' / '+LB.list.length);
+    $('#photoModalOpen')
+      .attr('href', item.primary || '')
+      .toggleClass('d-none', !item.primary);
   }
   function lbPrev(){ if(LB.list.length){ LB.idx = (LB.idx-1+LB.list.length)%LB.list.length; updateLB(); } }
   function lbNext(){ if(LB.list.length){ LB.idx = (LB.idx+1)%LB.list.length; updateLB(); } }
 
+  $('#photoModalImg').on('error', function(){
+    const swapped = applyNextFallback(this);
+    if (swapped) {
+      $('#photoModalOpen').attr('href', this.src || '');
+    }
+  });
+
   $(document).on('click', '.thumb', function(){
     const $wrap = $(this).closest('.thumb-wrap');
-    const urls = $wrap.find('.thumb').map((i,el)=>$(el).data('full')).get();
+    const items = $wrap.find('.thumb').map((i,el)=>{
+      const fallbacks = parseFallbacks(el);
+      return { primary: $(el).data('full'), fallbacks };
+    }).get();
     const idx = $wrap.find('.thumb').index(this);
-    openLightbox(urls, idx);
+    openLightbox(items, idx);
   });
   $('#lbPrev').on('click', lbPrev);
   $('#lbNext').on('click', lbNext);
@@ -1434,6 +1628,7 @@ if ($sel_div>0 || !$is_mc){
   // ========= Inicialización =========
   initPreguntaSelect2();
   refreshPresetsMenu();
+  renderActiveFilters();
   runRedBullAutofill().finally(() => {
     // dejamos que el usuario presione Buscar manualmente
   });

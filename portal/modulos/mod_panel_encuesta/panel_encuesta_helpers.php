@@ -1,6 +1,152 @@
 <?php
 declare(strict_types=1);
 
+function panel_encuesta_get_csrf_token(): string {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return (string)$_SESSION['csrf_token'];
+}
+
+function panel_encuesta_validate_csrf(?string $token): bool {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    if (empty($_SESSION['csrf_token']) || $token === null || $token === '') {
+        return false;
+    }
+    return hash_equals((string)$_SESSION['csrf_token'], (string)$token);
+}
+
+function panel_encuesta_request_id(): string {
+    $hdr = $_SERVER['HTTP_X_REQUEST_ID'] ?? '';
+    if (is_string($hdr) && preg_match('/^[a-f0-9\\-]{8,64}$/i', $hdr)) {
+        return $hdr;
+    }
+    return bin2hex(random_bytes(8));
+}
+
+function panel_encuesta_json_response(
+    string $status,
+    array $data = [],
+    string $message = '',
+    ?string $errorCode = null,
+    ?string $debugId = null,
+    array $meta = []
+): void {
+    header('Content-Type: application/json; charset=UTF-8');
+    if ($debugId) {
+        header('X-Request-Id: '.$debugId);
+    }
+    echo json_encode([
+        'status' => $status,
+        'data' => $data,
+        'message' => $message,
+        'error_code' => $errorCode,
+        'debug_id' => $debugId,
+        'meta' => $meta,
+    ], JSON_UNESCAPED_UNICODE);
+}
+
+function panel_encuesta_abs_base(): string
+{
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? 'www.visibility.cl';
+    return $scheme . '://' . $host;
+}
+
+function panel_encuesta_photo_candidates(?string $path): array
+{
+    $raw = trim((string)($path ?? ''));
+    if ($raw === '') {
+        return [];
+    }
+
+    if (preg_match('~^https?://~i', $raw)) {
+        return [$raw];
+    }
+
+    $noSlash = ltrim($raw, '/');
+    $withSlash = '/' . $noSlash;
+    $base = panel_encuesta_abs_base();
+    $out = [];
+    $add = static function (?string $url) use (&$out): void {
+        if ($url && !in_array($url, $out, true)) {
+            $out[] = $url;
+        }
+    };
+
+    if (str_starts_with($noSlash, 'uploads/')) {
+        $add($base . '/visibility2/app/' . $noSlash);
+        $add($base . '/' . $noSlash);
+        return $out;
+    }
+
+    if (str_starts_with($noSlash, 'app/')) {
+        $add($base . '/visibility2/' . $noSlash);
+        $add($base . '/' . $noSlash);
+        return $out;
+    }
+
+    if (str_starts_with($noSlash, 'portal/')) {
+        $add($base . '/visibility2/' . $noSlash);
+        $add($base . '/' . $noSlash);
+        return $out;
+    }
+
+    if (str_starts_with($noSlash, 'visibility2/')) {
+        $add($base . '/' . $noSlash);
+        return $out;
+    }
+
+    $add($base . $withSlash);
+    return $out;
+}
+
+function panel_encuesta_photo_fs_path(?string $url): ?string
+{
+    $raw = trim((string)($url ?? ''));
+    if ($raw === '') {
+        return null;
+    }
+
+    $path = $raw;
+    if (preg_match('~^https?://~i', $path)) {
+        $parts = @parse_url($path);
+        $path = $parts['path'] ?? '';
+        if ($path === '') {
+            return null;
+        }
+    }
+
+    $docroot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/');
+    if ($docroot === '') {
+        return null;
+    }
+
+    $path = ($path[0] ?? '') === '/' ? $path : ('/' . $path);
+    $fs = realpath($docroot . $path);
+    if (!$fs || !is_file($fs)) {
+        return null;
+    }
+
+    return $fs;
+}
+
+function panel_encuesta_resolve_photo_url(?string $path): ?string
+{
+    $candidates = panel_encuesta_photo_candidates($path);
+    foreach ($candidates as $candidate) {
+        if (panel_encuesta_photo_fs_path($candidate)) {
+            return $candidate;
+        }
+    }
+    return $candidates[0] ?? null;
+}
+
 function build_panel_encuesta_filters(
     int $empresa_id,
     int $user_div,
@@ -49,6 +195,10 @@ function build_panel_encuesta_filters(
     $qfilters = json_decode($qfilters_raw, true);
     if (!is_array($qfilters)) {
         $qfilters = [];
+    }
+    $qfiltersMatch = strtolower(trim((string)($src['qfilters_match'] ?? 'all')));
+    if (!in_array($qfiltersMatch, ['all', 'any'], true)) {
+        $qfiltersMatch = 'all';
     }
 
     // Limitar cantidad de filtros (guardrail)
@@ -169,6 +319,7 @@ function build_panel_encuesta_filters(
 
     // -------- qfilters avanzados: foco + EXISTS --------
     if ($qfilters) {
+        $qfilterExists = [];
         // 1) Foco (las mismas preguntas que estás filtrando)
         $focusOr     = [];
         $focusTypes  = '';
@@ -323,7 +474,7 @@ function build_panel_encuesta_filters(
                 if ($num) $cond='('.implode(' AND ',$num).')';
             }
 
-            $where[]="EXISTS (
+            $qfilterExists[]="EXISTS (
               SELECT 1 FROM form_question_responses $fqri
               JOIN form_questions $fqi ON $fqi.id=$fqri.id_form_question
               LEFT JOIN form_question_options $oi ON $oi.id=$fqri.id_option
@@ -335,6 +486,15 @@ function build_panel_encuesta_filters(
         }
         $types .= $qtypes;
         $params= array_merge($params,$qparams);
+        if (!empty($qfilterExists)) {
+            if ($qfiltersMatch === 'any') {
+                $where[] = '(' . implode(' OR ', $qfilterExists) . ')';
+            } else {
+                foreach ($qfilterExists as $expr) {
+                    $where[] = $expr;
+                }
+            }
+        }
     }
 
     // Solo fotos (para export PDF de fotos)
@@ -360,6 +520,7 @@ function build_panel_encuesta_filters(
         'range_risky_no_scope'   => $rangeRiskyNoScope,
         'default_range_days'     => (int)$opts['default_range_days'],
         'max_range_days_no_scope'=> (int)$opts['max_range_days_no_scope'],
+        'qfilters_match'         => $qfiltersMatch,
     ];
 
     return [$whereSql, $types, $params, $meta];

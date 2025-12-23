@@ -6,8 +6,15 @@ if (session_status() === PHP_SESSION_NONE) {
 
 if (!isset($_SESSION['usuario_id'])) {
     http_response_code(401);
-    header('Content-Type: text/plain; charset=UTF-8');
-    exit("Sesión expirada");
+    header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode([
+        'status' => 'error',
+        'data' => [],
+        'message' => 'Sesión expirada',
+        'error_code' => 'session_expired',
+        'debug_id' => null,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
 date_default_timezone_set('America/Santiago');
@@ -16,10 +23,9 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-header('Content-Type: application/json; charset=UTF-8');
-
 // Helper común del panel
 require_once __DIR__ . '/panel_encuesta_helpers.php';
+header('Content-Type: application/json; charset=UTF-8');
 if (!function_exists('panel_encuesta_tipo_texto')) {
     function panel_encuesta_tipo_texto($t){
         $t = (int)$t;
@@ -37,6 +43,8 @@ if (!function_exists('panel_encuesta_tipo_texto')) {
 }
 
 $t0 = microtime(true);
+$debugId = panel_encuesta_request_id();
+header('X-Request-Id: '.$debugId);
 
 $user_div   = (int)($_SESSION['division_id'] ?? 0);
 $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
@@ -69,6 +77,15 @@ $page         = max(1, (int)($_GET['page']  ?? 1));
 $limit        = max(1, min($MAX_LIMIT, (int)($_GET['limit'] ?? 50)));
 $offset       = ($page-1)*$limit;
 $want_facets  = (int)($_GET['facets'] ?? 0) === 1;
+$csrf_token   = $_GET['csrf_token'] ?? '';
+
+if (!panel_encuesta_validate_csrf(is_string($csrf_token) ? $csrf_token : '')) {
+    http_response_code(403);
+    panel_encuesta_json_response('error', [], 'Token CSRF inválido.', 'csrf_invalid', $debugId);
+    exit;
+}
+
+require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 
 // Arrays de preguntas
 $qset_ids = $_GET['qset_ids'] ?? [];
@@ -87,6 +104,10 @@ $qfilters_raw = $_GET['qfilters'] ?? '[]';
 $qfilters = json_decode($qfilters_raw, true);
 if (!is_array($qfilters)) {
     $qfilters = [];
+}
+$qfilters_match = strtolower(trim((string)($_GET['qfilters_match'] ?? 'all')));
+if (!in_array($qfilters_match, ['all', 'any'], true)) {
+    $qfilters_match = 'all';
 }
 
 // Limitar cantidad de filtros avanzados
@@ -186,6 +207,10 @@ $params = [];
 $where[] = 'f.id_empresa=?';
 $types  .= 'i';
 $params[] = $empresa_id;
+
+// Excluir campañas / preguntas soft-borradas
+$where[] = 'f.deleted_at IS NULL';
+$where[] = 'fq.deleted_at IS NULL';
 
 // División (MC puede elegir, otros fijos)
 if ($is_mc) {
@@ -322,6 +347,7 @@ if ($qfilters) {
     // EXISTS por cada filtro
     $qtypes  = '';
     $qparams = [];
+    $qexists = [];
 
     foreach ($qfilters as $f) {
         $mode  = $f['mode'] ?? 'exact';
@@ -482,7 +508,7 @@ if ($qfilters) {
             }
         }
 
-        $where[] = "EXISTS (
+        $qexists[] = "EXISTS (
                       SELECT 1
                         FROM form_question_responses r2
                         JOIN form_questions fq2       ON fq2.id = r2.id_form_question
@@ -496,6 +522,15 @@ if ($qfilters) {
 
     $types  .= $qtypes;
     $params  = array_merge($params, $qparams);
+    if (!empty($qexists)) {
+        if ($qfilters_match === 'any') {
+            $where[] = '(' . implode(' OR ', $qexists) . ')';
+        } else {
+            foreach ($qexists as $expr) {
+                $where[] = $expr;
+            }
+        }
+    }
 }
 
 $whereSql = $where ? ('WHERE '.implode(' AND ',$where)) : '';
@@ -711,12 +746,16 @@ if (function_exists('log_panel_encuesta_query') && isset($conn) && ($conn instan
 }
 
 echo json_encode([
+    'status'     => 'ok',
     'data'       => $rows,
     'total'      => $total,
     'page'       => $page,
     'per_page'   => $limit,
     'facets'     => $facets,
-    'meta' => [
+    'message'    => '',
+    'error_code' => null,
+    'debug_id'   => $debugId,
+    'meta'       => [
         'count_limit_rows' => $COUNT_LIMIT_ROWS,
         'max_total_rows'   => $MAX_TOTAL_ROWS,
         'truncated_total'  => $truncated ? 1 : 0,
@@ -729,6 +768,7 @@ echo json_encode([
             'has_scope'         => $hasScope ? 1 : 0,
             'risky_no_scope'    => $rangeRiskyNoScope ? 1 : 0,
             'max_days_no_scope' => $MAX_RANGE_DAYS_NO_SCOPE
-        ]
+        ],
+        'qfilters_match' => $qfilters_match
     ]
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

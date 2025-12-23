@@ -7,7 +7,13 @@ if (session_status() === PHP_SESSION_NONE) {
 if (!isset($_SESSION['usuario_id'])) {
     http_response_code(401);
     header('Content-Type: application/json; charset=UTF-8');
-    echo json_encode(['error' => 'Sesión expirada']);
+    echo json_encode([
+        'status' => 'error',
+        'data' => [],
+        'message' => 'Sesión expirada',
+        'error_code' => 'session_expired',
+        'debug_id' => null,
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -17,10 +23,12 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-header('Content-Type: application/json; charset=UTF-8');
-
 // Conexión (por si este script se llama directo)
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
+require_once __DIR__ . '/panel_encuesta_helpers.php';
+header('Content-Type: application/json; charset=UTF-8');
+$debugId = panel_encuesta_request_id();
+header('X-Request-Id: '.$debugId);
 
 $t0 = microtime(true);
 
@@ -45,18 +53,25 @@ $distrito     = (int)($_GET['distrito'] ?? 0);
 $jv           = (int)($_GET['jv'] ?? 0);
 $usuario      = (int)($_GET['usuario'] ?? 0);
 $codigo       = trim($_GET['codigo'] ?? '');
+$csrf_token   = $_GET['csrf_token'] ?? '';
+
+if (!panel_encuesta_validate_csrf(is_string($csrf_token) ? $csrf_token : '')) {
+    http_response_code(403);
+    panel_encuesta_json_response('error', [], 'Token CSRF inválido.', 'csrf_invalid', $debugId);
+    exit;
+}
 
 // Validaciones básicas de ID
 if ($mode !== 'vset' && (int)$qid_raw <= 0) {
     http_response_code(400);
-    echo json_encode(['error' => 'id inválido']);
+    panel_encuesta_json_response('error', [], 'id inválido', 'invalid_id', $debugId);
     exit;
 }
 if ($mode === 'vset') {
     $qid_raw = strtolower(trim((string)$qid_raw));
     if (!preg_match('/^[a-f0-9]{32}$/', $qid_raw)) {
         http_response_code(400);
-        echo json_encode(['error' => 'hash inválido']);
+        panel_encuesta_json_response('error', [], 'hash inválido', 'invalid_hash', $debugId);
         exit;
     }
 }
@@ -367,4 +382,10 @@ $out['meta'] = [
 $ms = (microtime(true) - $t0) * 1000;
 header('X-QueryTime-ms: '.number_format($ms, 1, '.', ''));
 
-echo json_encode($out, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+echo json_encode([
+    'status' => 'ok',
+    'data' => $out,
+    'message' => '',
+    'error_code' => null,
+    'debug_id' => $debugId
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

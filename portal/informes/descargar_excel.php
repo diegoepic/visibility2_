@@ -449,10 +449,45 @@ GROUP_CONCAT(
 // -----------------------------------------------------------------------------
 
 function generarExcel($campaign, $locales, $encuesta, $archivo = null, $inline = false, $fotosLocales = [], $maxFotosLocales = 0) {
-    // Normalizar URLs de imágenes en las respuestas de encuesta:
-    // - Si el valor empieza con /visibility2/ (en mayúsculas o minúsculas)
-    // - Convertir el path a minúsculas
-    // - Agregar prefijo https://www.visibility.cl/
+    $normalizarUrlEncuesta = function (string $url): string {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+
+        // Si ya es absoluta, devolver tal cual
+        if (preg_match('#^https?://#i', $url)) {
+            return $url;
+        }
+
+        // Solo intentar normalizar si parece ruta de imagen
+        if (!preg_match('#(uploads|visibility2|app/|pregunta_)\b#i', $url)
+            && !preg_match('#\.(webp|jpe?g|png|gif)$#i', $url)) {
+            return $url;
+        }
+
+        $url     = str_replace('\\', '/', $url);
+        $url     = ltrim($url, '/');
+        $urlLow  = strtolower($url);
+        $baseUrl = 'https://www.visibility.cl/';
+
+        if (preg_match('#^visibility2/#i', $url)) {
+            return $baseUrl . $urlLow;
+        }
+        if (preg_match('#^app/#i', $url)) {
+            return $baseUrl . 'visibility2/' . $urlLow;
+        }
+        if (preg_match('#^uploads_fotos_pregunta/#i', $url)) {
+            return $baseUrl . 'visibility2/app/uploads/' . $urlLow;
+        }
+        if (preg_match('#^uploads/#i', $url)) {
+            return $baseUrl . 'visibility2/app/' . $urlLow;
+        }
+
+        return $baseUrl . 'visibility2/app/' . $urlLow;
+    };
+
+    // Normalizar URLs de imágenes en las respuestas de encuesta
     foreach ($encuesta as &$fila) {
         foreach ($fila as $col => $valor) {
             $valorStr = trim((string)($valor ?? ''));
@@ -468,12 +503,9 @@ function generarExcel($campaign, $locales, $encuesta, $archivo = null, $inline =
                 if ($p === '') {
                     continue;
                 }
-
-                // Coincidir /visibility2/... sin importar mayúsculas/minúsculas
-                if (preg_match('#^/?visibility2/#i', $p)) {
-                    $p       = strtolower($p);        // todo a minúsculas
-                    $p       = ltrim($p, '/');        // quitar slash inicial
-                    $p       = 'https://www.visibility.cl/' . $p;
+$normalized = $normalizarUrlEncuesta($p);
+                if ($normalized !== $p) {
+                    $p       = $normalized;
                     $changed = true;
                 }
             }

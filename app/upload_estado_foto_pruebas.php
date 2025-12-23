@@ -177,11 +177,12 @@ $idLocal      = post_int('id_local', 0);
 if ($idLocal <= 0) { $idLocal = post_int('idLocal', 0); }
 $visita_id    = post_int('visita_id', 0);
 $client_guid  = post_str('client_guid', '');
-$estado       = strtolower((string)post_str('estado', ''));
-$motivo       = post_str('motivo', '');
-$obsText      = post_str('observacion_text', '');
-$fotoLat      = post_float('lat', 0.0);
-$fotoLng      = post_float('lng', 0.0);
+$estado       = strtolower((string)post_str('estado_tipo', ''));
+if ($estado === '') { $estado = strtolower((string)post_str('estado', '')); }
+$fotoLat      = post_float('lat_foto', 0.0);
+if ($fotoLat === 0.0) { $fotoLat = post_float('lat', 0.0); }
+$fotoLng      = post_float('lng_foto', 0.0);
+if ($fotoLng === 0.0) { $fotoLng = post_float('lng', 0.0); }
 $debug_id     = post_str('debug_id', '');
 
 if ($idCampana<=0 || $idLocal<=0) {
@@ -190,7 +191,9 @@ if ($idCampana<=0 || $idLocal<=0) {
 if (!in_array($estado, ['pendiente','cancelado'], true)) {
   json_fail(400, 'Estado inválido para foto de evidencia', ['error_code' => 'VALIDATION', 'retryable' => false]);
 }
-if (!isset($_FILES['foto']) || $_FILES['foto']['error'] !== UPLOAD_ERR_OK) {
+if ((!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK)
+  && (!isset($_FILES['foto']) || $_FILES['foto']['error'] !== UPLOAD_ERR_OK)
+) {
   json_fail(400, 'No se recibió la imagen o hubo un error al subirla', ['error_code' => 'UPLOAD_ERROR', 'retryable' => false]);
 }
 
@@ -282,8 +285,11 @@ if ($meta_json_raw !== null && $meta_json_raw !== '') {
 $kind = $estado === 'pendiente' ? 'estado_pendiente' : 'estado_cancelado';
 $prefix = $estado === 'pendiente' ? 'pendiente_' : 'cancelado_';
 $savedPath = null;
+$dateDir = date('Y-m-d');
+$subdir = $dateDir . '/estado_' . $estado . '/local_' . $idLocal;
 try {
-  $up = guardarFotoEstado($_FILES['foto'], 'estado', $prefix, $idLocal);
+  $file = isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK ? $_FILES['file'] : $_FILES['foto'];
+  $up = guardarFotoEstado($file, $subdir, $prefix, $idLocal);
   $savedPath = $up['path'];
   $relUrl = norm_rel_url($up['url']);
   $absUrl = abs_url($relUrl);
@@ -340,9 +346,7 @@ try {
 
   $meta_payload = [
     'kind' => $kind,
-    'estado' => $estado,
-    'motivo' => $motivo,
-    'observacion_text' => $obsText,
+    'estado_tipo' => $estado,
     'debug_id' => $debug_id,
     'sha1' => $sha1,
     'size' => $size
@@ -398,9 +402,7 @@ try {
         'id_formulario'        => $idCampana,
         'id_local'             => $idLocal,
         'kind'                 => $kind,
-        'estado'               => $estado,
-        'motivo'               => $motivo,
-        'observacion_text'     => $obsText,
+        'estado_tipo'          => $estado,
         'fotoLat'              => $fotoLat,
         'fotoLng'              => $fotoLng,
         'sha1'                 => $sha1,
@@ -434,6 +436,7 @@ idempo_store_and_reply($conn, 'upload_estado_foto', 200, [
   'sha1'      => $sha1,
   'size'      => $size,
   'visita_id' => $visita_id,
+  'client_guid' => $client_guid,
   'debug_id'  => $debug_id
 ]);
 exit;

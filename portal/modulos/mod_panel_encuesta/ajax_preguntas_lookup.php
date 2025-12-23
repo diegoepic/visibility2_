@@ -6,8 +6,15 @@ if (session_status() === PHP_SESSION_NONE) {
 
 if (!isset($_SESSION['usuario_id'])) {
     http_response_code(401);
-    header('Content-Type: text/plain; charset=UTF-8');
-    exit("Sesión expirada");
+    header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode([
+        'status' => 'error',
+        'data' => [],
+        'message' => 'Sesión expirada',
+        'error_code' => 'session_expired',
+        'debug_id' => null,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
 date_default_timezone_set('America/Santiago');
@@ -16,10 +23,12 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-header('Content-Type: application/json; charset=UTF-8');
-
 // Conexión
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
+require_once __DIR__ . '/panel_encuesta_helpers.php';
+header('Content-Type: application/json; charset=UTF-8');
+$debugId = panel_encuesta_request_id();
+header('X-Request-Id: '.$debugId);
 
 $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
 $user_div   = (int)($_SESSION['division_id'] ?? 0);
@@ -31,6 +40,13 @@ $subdivision = (int)($_GET['subdivision'] ?? 0);
 $tipo        = (int)($_GET['tipo'] ?? 0);      // 0 => (1,3)
 $form_id     = (int)($_GET['form_id'] ?? 0);
 $global      = (int)($_GET['global'] ?? 0);
+$csrf_token  = $_GET['csrf_token'] ?? '';
+
+if (!panel_encuesta_validate_csrf(is_string($csrf_token) ? $csrf_token : '')) {
+    http_response_code(403);
+    panel_encuesta_json_response('error', [], 'Token CSRF inválido.', 'csrf_invalid', $debugId);
+    exit;
+}
 
 // Si form_id = 0, forzamos modo global (por set / vset)
 if ($form_id === 0) {
@@ -264,4 +280,10 @@ while ($r = $rs->fetch_assoc()) {
 }
 $st->close();
 
-echo json_encode($out, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+echo json_encode([
+    'status' => 'ok',
+    'data' => $out,
+    'message' => '',
+    'error_code' => null,
+    'debug_id' => $debugId
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
