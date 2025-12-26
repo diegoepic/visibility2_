@@ -35,9 +35,14 @@ if (!function_exists('e')) {
 if (!isset($_GET['id']) || !filter_var($_GET['id'], FILTER_VALIDATE_INT)) {
     die('ID de formulario inválido.');
 }
-$formulario_id  = intval($_GET['id']);
-$inline         = isset($_GET['inline']) && $_GET['inline'] === '1';
-$incluirFotos   = !isset($_GET['fotos']) || $_GET['fotos'] === '1' || strtolower((string)$_GET['fotos']) === 'true';
+$formulario_id         = intval($_GET['id']);
+$inline                = isset($_GET['inline']) && $_GET['inline'] === '1';
+$incluirFotosMaterial  = !isset($_GET['fotos'])
+    || $_GET['fotos'] === '1'
+    || strtolower((string)$_GET['fotos']) === 'true';
+$incluirFotosEncuesta  = !isset($_GET['fotos_encuesta'])
+    || $_GET['fotos_encuesta'] === '1'
+    || strtolower((string)$_GET['fotos_encuesta']) === 'true';
 
 
 $stmt_form = $conn->prepare("SELECT nombre FROM formulario WHERE id = ? LIMIT 1");
@@ -713,6 +718,46 @@ HTML;
 }
 
 
+function removerFotosDeEncuesta(array $encuesta): array {
+    $esUrlFoto = function (string $valor): bool {
+        $v = trim($valor);
+        if ($v === '') {
+            return false;
+        }
+
+        return preg_match('#https?://#i', $v)
+            || preg_match('#\.(?:jpe?g|png|gif|webp)(?:\?.*)?$#i', $v)
+            || preg_match('#\buploads#i', $v)
+            || preg_match('#\bvisibility2\b#i', $v);
+    };
+
+    foreach ($encuesta as &$fila) {
+        foreach ($fila as $col => $valor) {
+            $valorStr = (string)($valor ?? '');
+            if ($valorStr === '') {
+                continue;
+            }
+
+            $partsFiltradas = [];
+            foreach (preg_split('/\s*;\s*/', $valorStr) as $parte) {
+                if ($parte === '') {
+                    continue;
+                }
+                if ($esUrlFoto($parte)) {
+                    continue;
+                }
+                $partsFiltradas[] = $parte;
+            }
+
+            $fila[$col] = $partsFiltradas ? implode('; ', $partsFiltradas) : '';
+        }
+    }
+    unset($fila);
+
+    return $encuesta;
+}
+
+
 // -----------------------------------------------------------------------------
 // Punto de entrada
 // -----------------------------------------------------------------------------
@@ -745,12 +790,16 @@ switch (strtolower(trim($modalidad))) {
 
 $fotosLocales    = [];
 $maxFotosLocales = 0;
-if ($incluirFotos && !empty($localesDetails)) {
+if ($incluirFotosMaterial && !empty($localesDetails)) {
     $fqIds        = array_column($localesDetails, 'id_formularioQuestion');
     $fotosLocales = getFotosImplementaciones($formulario_id, $fqIds);
     foreach ($fotosLocales as $lista) {
         $maxFotosLocales = max($maxFotosLocales, count($lista));
     }
+}
+
+if (!$incluirFotosEncuesta && !empty($encuestaPivot)) {
+    $encuestaPivot = removerFotosDeEncuesta($encuestaPivot);
 }
 
 // Normaliza número de local en caso necesario
