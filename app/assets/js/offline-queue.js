@@ -17,6 +17,25 @@
     on(name, handler){ window.addEventListener(name, handler); }
   };
 
+  function broadcastGestionSuccess(payload){
+    const body = Object.assign({
+      message: 'La gestión se subió correctamente.',
+      ts: Date.now()
+    }, payload || {});
+
+    try { sessionStorage.setItem('v2_gestion_success', JSON.stringify(body)); } catch(_) {}
+    try { localStorage.setItem('v2_gestion_success_pending', JSON.stringify(body)); } catch(_) {}
+    try { localStorage.setItem('v2_gestion_success_broadcast', JSON.stringify(body)); } catch(_) {}
+
+    try {
+      if ('BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('v2-events');
+        bc.postMessage({ type:'gestion_completed', payload: body });
+        bc.close();
+      }
+    } catch(_) {}
+  }
+
   // Atajo para llamar a JournalDB.* si existe
   function jr(fnName, ...args){
     try {
@@ -302,6 +321,38 @@
     return js.message || js.error || js.msg || js.detail || 'Respuesta sin confirmar éxito';
   }
 
+  async function handleGestionTaskSuccess(task, response){
+    try {
+      const f    = task.fields || {};
+      const meta = task.meta   || {};
+      const formId  = Number(meta.form_id || f.id_formulario || f.idCampana || f.id_campana || f.campana || 0);
+      const localId = Number(meta.local_id || f.id_local || f.idLocal || f.local_id || 0);
+      if (!formId || !localId) return;
+
+      let ymd = (response?.fecha_propuesta || response?.fecha_visita || response?.fecha_reagendada || f.fechaPropuesta || f.fecha_visita || f.fecha_reagendada || '').slice(0,10);
+      if ((!ymd || ymd.length < 8) && window.V2Cache && typeof V2Cache.findAgendaDate === 'function') {
+        try { ymd = await V2Cache.findAgendaDate(formId, localId); } catch(_) {}
+      }
+      if (!ymd) ymd = new Date().toISOString().slice(0,10);
+
+      const visitaId = response?.visita_id || response?.id_visita || f.visita_id || null;
+      const payload = {
+        form_id: formId,
+        local_id: localId,
+        ymd,
+        visita_id: visitaId,
+        client_guid: task.client_guid || f.client_guid || null,
+        estado: response?.estado_final || response?.estado_gestion || null
+      };
+
+      if (window.V2Cache && typeof V2Cache.markDone === 'function') {
+        try { await V2Cache.markDone(formId, localId, ymd, payload); } catch(_) {}
+      }
+
+      broadcastGestionSuccess(payload);
+    } catch(_) {}
+  }
+
   function buildLastError(params){
     const {
       code,
@@ -402,6 +453,7 @@
       } catch(_) {}
       // Evento específico por si queremos enganchar UI o métricas
       QueueEvents.emit('queue:gestion_success', { job: task, response: js });
+      await handleGestionTaskSuccess(task, js);
     }
 
     return { data: js, status: r.status, parsed };
