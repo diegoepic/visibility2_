@@ -49,9 +49,25 @@
 
   const formatDate = (str='') => str || '—';
 
+  const normalizeImgUrl = rawUrl => {
+    const trimmed = String(rawUrl || '').trim();
+    if (!trimmed) return '';
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+
+    let path = trimmed
+      .replace(/^\.+\//, '') // remove leading ./ or ../
+      .replace(/^\/+/, '');
+
+    path = path.replace(/^visibility2\//i, '');
+
+    if (path.startsWith('app/')) return '/visibility2/' + path;
+
+    return '/visibility2/app/' + path;
+  };
+
   const formatImg = url => {
-    if (!url) return '';
-    const src = url.startsWith('http') ? url : '/visibility2/app/' + url.replace(/^\/+/, '');
+    const src = normalizeImgUrl(url);
+    if (!src) return '';
     return `<img src="${esc(src)}" class="rounded mr-1 mb-1" style="width:60px;height:60px;object-fit:cover;cursor:pointer" aria-label="Abrir foto" role="button" onclick="$('#photoModalImg').attr('src','${esc(src)}');$('#photoModal').modal('show');">`;
   };
 
@@ -297,9 +313,9 @@
       <div class="card mb-3">
         <div class="card-header bg-white d-flex justify-content-between align-items-center">
           <div><i class="fas fa-clipboard-check text-primary mr-2"></i>Encuesta</div>
-          <button class="btn btn-outline-secondary btn-sm" data-toggle="collapse" data-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">Mostrar / ocultar</button>
+          <button class="btn btn-outline-secondary btn-sm" data-toggle="collapse" data-target="#${collapseId}" aria-expanded="true" aria-controls="${collapseId}">Mostrar / ocultar</button>
         </div>
-        <div id="${collapseId}" class="collapse">
+        <div id="${collapseId}" class="collapse show">
           <div class="card-body p-0">
             <div class="table-responsive" style="max-height:240px;overflow:auto;">
               <table class="table table-sm table-striped mb-0">
