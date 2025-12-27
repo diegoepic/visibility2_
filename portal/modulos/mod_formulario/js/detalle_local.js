@@ -48,6 +48,10 @@
   };
 
   const formatDate = (str='') => str || '—';
+  const formatValor = valor => {
+    if (valor === null || valor === undefined || valor === '') return '—';
+    return `<span class="badge badge-pill badge-primary">${esc(valor)}</span>`;
+  };
 
   const normalizeImgUrl = rawUrl => {
     const trimmed = String(rawUrl || '').trim();
@@ -294,6 +298,7 @@
           id: r.id,
           question: r.question_text,
           answer: ansHtml || '<span class="text-muted">—</span>',
+          valor: formatValor(r.valor),
           fecha: r.created_at,
           visita: v.secuencia
         });
@@ -304,6 +309,7 @@
       <td>${r.visita}</td>
       <td>${esc(r.question || '')}</td>
       <td>${r.answer}</td>
+      <td>${r.valor}</td>
       <td>${esc(r.fecha || '')}</td>
     </tr>`).join('');
 
@@ -319,8 +325,8 @@
           <div class="card-body p-0">
             <div class="table-responsive" style="max-height:240px;overflow:auto;">
               <table class="table table-sm table-striped mb-0">
-                <thead class="thead-light"><tr><th>Visita</th><th>Pregunta</th><th>Respuesta</th><th>Fecha</th></tr></thead>
-                <tbody>${body || '<tr><td colspan="4" class="text-center text-muted">Sin respuestas.</td></tr>'}</tbody>
+                <thead class="thead-light"><tr><th>Visita</th><th>Pregunta</th><th>Respuesta</th><th>Valor</th><th>Fecha</th></tr></thead>
+                <tbody>${body || '<tr><td colspan="5" class="text-center text-muted">Sin respuestas.</td></tr>'}</tbody>
               </table>
             </div>
           </div>
@@ -414,8 +420,71 @@
     const impls = d.implementaciones || [];
     const hist = d.historial || [];
     const visitas = d.visitas || [];
+    const visitasFinalizadas = visitas.filter(v => !!v.fecha_fin);
+    const flags = d.flags || {};
+
+    const soloImplementacion = flags.has_impl_any && !flags.has_audit;
+    const soloAuditoria = flags.has_audit && !flags.has_impl_any;
+
+    const mostrarImplementacion = !soloAuditoria;
+    const mostrarEncuesta = !soloImplementacion;
 
     injectStyles();
+
+    const columnaMapa = `
+      ${buildMiniMapCard(resumen)}
+      <div class="card mb-3">
+        <div class="card-header bg-white"><i class="fas fa-stream text-primary mr-2"></i>Estado del local</div>
+        <div class="card-body">
+          ${buildTimeline(hist)}
+        </div>
+      </div>`;
+
+    const columnaImplementacion = `
+      ${buildTables(impls, hist)}
+      <h5 class="mt-4 mb-3 text-center"><i class="fas fa-walking text-primary mr-2"></i>Visitas finalizadas</h5>
+      ${buildVisitas(visitasFinalizadas)}
+      ${buildMaterials(visitasFinalizadas)}
+    `;
+
+    const columnaEncuesta = `
+      <h5 class="mt-4 mb-3"><i class="fas fa-walking text-primary mr-2"></i>Visitas finalizadas</h5>
+      ${buildVisitas(visitasFinalizadas)}
+      ${buildEncuesta(visitasFinalizadas)}
+    `;
+
+    let contenido;
+
+    if (soloImplementacion) {
+      contenido = `
+        <div class="row">
+          <div class="col-12">
+            ${columnaImplementacion}
+          </div>
+        </div>`;
+    } else if (soloAuditoria) {
+      contenido = `
+        <div class="row">
+          <div class="col-lg-8">
+            ${columnaEncuesta}
+          </div>
+          <div class="col-lg-4">
+            ${columnaMapa}
+          </div>
+        </div>`;
+    } else {
+      contenido = `
+        <div class="row">
+          <div class="col-lg-8">
+            ${columnaImplementacion}
+            ${mostrarEncuesta ? buildEncuesta(visitasFinalizadas) : ''}
+          </div>
+          <div class="col-lg-4">
+            ${columnaMapa}
+            ${mostrarImplementacion ? buildMaterials(visitasFinalizadas) : ''}
+          </div>
+        </div>`;
+    }
 
     return `
       <div class="modal-header bg-primary text-white">
@@ -425,24 +494,7 @@
       <div class="modal-body p-0">
         ${buildSummary(resumen, loc, d.modo || 'sin_datos')}
         <div class="p-3">
-          <div class="row">
-            <div class="col-lg-8">
-              ${buildTables(impls, hist)}
-              <h5 class="mt-4 mb-3"><i class="fas fa-walking text-primary mr-2"></i>Visitas</h5>
-              ${buildVisitas(visitas)}
-              ${buildEncuesta(visitas)}
-            </div>
-            <div class="col-lg-4">
-              ${buildMiniMapCard(resumen)}
-              <div class="card mb-3">
-                <div class="card-header bg-white"><i class="fas fa-stream text-primary mr-2"></i>Estado del local</div>
-                <div class="card-body">
-                  ${buildTimeline(hist)}
-                </div>
-              </div>
-              ${buildMaterials(visitas)}
-            </div>
-          </div>
+          ${contenido}
         </div>
         <div class="modal fade" id="photoModal" tabindex="-1" role="dialog" aria-label="Visor de fotos">
           <div class="modal-dialog modal-dialog-centered" role="document">
