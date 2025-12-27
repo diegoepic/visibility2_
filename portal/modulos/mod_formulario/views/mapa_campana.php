@@ -138,7 +138,7 @@ $mapKey = $viewData['mapKey'];
   <div id="mapGestiones"></div>
 
   <div class="modal fade" id="detalleLocalModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
       <div class="modal-content" id="detalleLocalContent"></div>
     </div>
   </div>
