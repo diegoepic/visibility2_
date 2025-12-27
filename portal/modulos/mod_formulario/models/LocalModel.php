@@ -71,7 +71,7 @@ class LocalModel
     public function getLocalesPage(array $filters): array
     {
         $idCampana  = (int)$filters['idCampana'];
-        $empresaId  = (int)$filters['empresaId'];
+        $empresaId  = (int)($filters['empresaId'] ?? $filters['empresa_id'] ?? 0);
         $filterCodigo = $filters['filterCodigo'] ?? '';
         $filterEstado = $filters['filterEstado'] ?? '';
         $filterUserId = (int)($filters['filterUserId'] ?? 0);

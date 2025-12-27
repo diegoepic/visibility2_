@@ -189,6 +189,8 @@ class DetalleLocalModel
         $stH->bind_param('iii',$empresaId,$campanaId,$localId);
         $stH->execute(); $historial=$stH->get_result()->fetch_all(MYSQLI_ASSOC); $stH->close();
 
+        $visitas = $this->buildVisitasDetalle($empresaId, $campanaId, $localId);
+
         return [
             'local' => [
                 'id' => $localId,
@@ -214,6 +216,135 @@ class DetalleLocalModel
             ],
             'implementaciones' => $implementaciones,
             'historial' => $historial,
+            'visitas' => $visitas,
         ];
+    }
+
+    private function buildVisitasDetalle(int $empresaId, int $campanaId, int $localId): array
+    {
+        $visitas = [];
+
+        // Visitas registradas
+        $stmtV = $this->conn->prepare(
+            "SELECT v.id, v.fecha_inicio, v.fecha_fin, v.latitud, v.longitud, COALESCE(u.usuario,'—') AS usuario
+             FROM visita v
+             LEFT JOIN usuario u ON u.id = v.id_usuario
+             JOIN formulario f ON f.id = v.id_formulario AND f.id_empresa = ?
+             WHERE v.id_formulario = ? AND v.id_local = ?
+             ORDER BY v.fecha_inicio DESC"
+        );
+        $stmtV->bind_param('iii', $empresaId, $campanaId, $localId);
+        $stmtV->execute();
+        $resV = $stmtV->get_result();
+        while ($row = $resV->fetch_assoc()) {
+            $visitas[] = $row;
+        }
+        $stmtV->close();
+
+        // Visitas solo auditoría (gestion_visita sin visita)
+        $existingIds = array_column($visitas, 'id');
+        $stmtExtra = $this->conn->prepare(
+            "SELECT DISTINCT gv.visita_id AS id, COALESCE(u.usuario,'—') AS usuario
+             FROM gestion_visita gv
+             JOIN usuario u ON u.id = gv.id_usuario
+             JOIN formulario f ON f.id = gv.id_formulario AND f.id_empresa = ?
+             WHERE gv.id_formulario = ? AND gv.id_local = ? AND gv.visita_id IS NOT NULL"
+        );
+        $stmtExtra->bind_param('iii', $empresaId, $campanaId, $localId);
+        $stmtExtra->execute();
+        $resE = $stmtExtra->get_result();
+        while ($row = $resE->fetch_assoc()) {
+            $vid = (int)$row['id'];
+            if (!in_array($vid, $existingIds, true)) {
+                $visitas[] = [
+                    'id' => $vid,
+                    'fecha_inicio' => null,
+                    'fecha_fin' => null,
+                    'latitud' => null,
+                    'longitud' => null,
+                    'usuario' => $row['usuario'] . ' (solo auditoría)',
+                ];
+            }
+        }
+        $stmtExtra->close();
+
+        usort($visitas, function ($a, $b) {
+            $ta = $a['fecha_inicio'] ? strtotime($a['fecha_inicio']) : PHP_INT_MIN;
+            $tb = $b['fecha_inicio'] ? strtotime($b['fecha_inicio']) : PHP_INT_MIN;
+            return $tb <=> $ta;
+        });
+
+        $totalVisitas = count($visitas);
+        foreach ($visitas as $idx => &$v) {
+            $vid = (int)$v['id'];
+
+            $stmtClass = $this->conn->prepare(
+                "SELECT gv.estado_gestion, gv.observacion, gv.foto_url
+                 FROM gestion_visita gv
+                 JOIN formulario f ON f.id = gv.id_formulario AND f.id_empresa = ?
+                 WHERE gv.visita_id = ? AND gv.id_formulario = ? AND gv.id_local = ? AND gv.id_formularioQuestion = 0"
+            );
+            $stmtClass->bind_param('iiii', $empresaId, $vid, $campanaId, $localId);
+            $stmtClass->execute();
+            $v['estado_local'] = $stmtClass->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmtClass->close();
+
+            $stmtImpOk = $this->conn->prepare(
+                "SELECT gv.id, gv.id_formularioQuestion, m.nombre AS material, gv.valor_real, gv.observacion
+                 FROM gestion_visita gv
+                 LEFT JOIN material m ON m.id = gv.id_material
+                 JOIN formulario f ON f.id = gv.id_formulario AND f.id_empresa = ?
+                 WHERE gv.visita_id = ? AND gv.id_formulario = ? AND gv.id_local = ? AND gv.valor_real > 0
+                 ORDER BY gv.fecha_visita ASC"
+            );
+            $stmtImpOk->bind_param('iiii', $empresaId, $vid, $campanaId, $localId);
+            $stmtImpOk->execute();
+            $v['implementaciones_ok'] = $stmtImpOk->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmtImpOk->close();
+
+            foreach ($v['implementaciones_ok'] as &$impl) {
+                $stmtF = $this->conn->prepare(
+                    "SELECT url FROM fotoVisita
+                     WHERE visita_id = ? AND id_formulario = ? AND id_local = ? AND id_formularioQuestion = ?"
+                );
+                $stmtF->bind_param('iiii', $vid, $campanaId, $localId, $impl['id_formularioQuestion']);
+                $stmtF->execute();
+                $impl['fotos'] = $stmtF->get_result()->fetch_all(MYSQLI_ASSOC);
+                $stmtF->close();
+            }
+            unset($impl);
+
+            $stmtImpNo = $this->conn->prepare(
+                "SELECT gv.id, gv.id_formularioQuestion, m.nombre AS material, gv.observacion AS observacion_no_impl
+                 FROM gestion_visita gv
+                 LEFT JOIN material m ON m.id = gv.id_material
+                 JOIN formulario f ON f.id = gv.id_formulario AND f.id_empresa = ?
+                 WHERE gv.visita_id = ? AND gv.id_formulario = ? AND gv.id_local = ?
+                   AND gv.valor_real = 0 AND gv.id_formularioQuestion <> 0
+                 ORDER BY gv.fecha_visita ASC"
+            );
+            $stmtImpNo->bind_param('iiii', $empresaId, $vid, $campanaId, $localId);
+            $stmtImpNo->execute();
+            $v['implementaciones_no'] = $stmtImpNo->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmtImpNo->close();
+
+            $stmtR = $this->conn->prepare(
+                "SELECT fqr.id, fq.question_text, fqr.answer_text, fqr.created_at
+                 FROM form_question_responses fqr
+                 JOIN form_questions fq ON fq.id = fqr.id_form_question
+                 JOIN formulario f ON f.id = fq.id_formulario AND f.id_empresa = ?
+                 WHERE fqr.visita_id = ? AND fqr.id_local = ? AND fq.id_formulario = ?
+                 ORDER BY fqr.created_at ASC"
+            );
+            $stmtR->bind_param('iiii', $empresaId, $vid, $localId, $campanaId);
+            $stmtR->execute();
+            $v['respuestas'] = $stmtR->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmtR->close();
+
+            $v['secuencia'] = $totalVisitas - $idx;
+        }
+        unset($v);
+
+        return $visitas;
     }
 }
