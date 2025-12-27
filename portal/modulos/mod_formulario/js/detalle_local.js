@@ -49,8 +49,13 @@
 
   const formatDate = (str='') => str || '—';
   const formatValor = valor => {
-    if (valor === null || valor === undefined || valor === '') return '—';
-    return `<span class="badge badge-pill badge-primary">${esc(valor)}</span>`;
+    if (valor === null || valor === undefined || valor === '') {
+      return { html: '', hasValor: false };
+    }
+    return {
+      html: `<span class="badge badge-pill badge-primary">${esc(valor)}</span>`,
+      hasValor: true
+    };
   };
 
   const normalizeImgUrl = rawUrl => {
@@ -294,40 +299,76 @@
         const isYesNo = ['SI','NO','Si','No','sí','no'].includes(ans);
         const badge = isYesNo ? `<span class="badge badge-${ans.toLowerCase().startsWith('s') ? 'success' : 'danger'}">${esc(ans)}</span>` : '';
         const ansHtml = isImage(ans) ? formatImg(ans.startsWith('/') ? ans : ans) : (badge || esc(ans).replace(/\n/g,'<br>'));
+        const valor = formatValor(r.valor);
         rows.push({
           id: r.id,
           question: r.question_text,
           answer: ansHtml || '<span class="text-muted">—</span>',
-          valor: formatValor(r.valor),
+          valorHtml: valor.html,
+          hasValor: valor.hasValor,
           fecha: r.created_at,
           visita: v.secuencia
         });
       });
     });
 
-    const body = rows.map(r=>`<tr>
-      <td>${r.visita}</td>
-      <td>${esc(r.question || '')}</td>
-      <td>${r.answer}</td>
-      <td>${r.valor}</td>
-      <td>${esc(r.fecha || '')}</td>
-    </tr>`).join('');
+    const renderTable = (dataRows, opts = {}) => {
+      const { scrollable = true } = opts;
+      const tableBody = dataRows.map(r=>`<tr>
+        <td>${r.visita}</td>
+        <td>${esc(r.question || '')}</td>
+        <td>
+          <div class="d-flex flex-column flex-sm-row flex-wrap">
+            <div class="mr-sm-2 mb-1 mb-sm-0">${r.answer}</div>
+            ${r.hasValor ? `<div class="d-inline-flex align-items-center">${r.valorHtml}</div>` : ''}
+          </div>
+        </td>
+        <td>${esc(r.fecha || '')}</td>
+      </tr>`).join('');
 
+      const wrapperStyle = scrollable ? 'style="max-height:60vh;overflow:auto;"' : '';
+      return `
+        <div class="table-responsive" ${wrapperStyle}>
+          <table class="table table-sm table-striped mb-0">
+            <thead class="thead-light"><tr><th>Visita</th><th>Pregunta</th><th>Respuesta</th><th>Fecha</th></tr></thead>
+            <tbody>${tableBody || '<tr><td colspan="4" class="text-center text-muted">Sin respuestas.</td></tr>'}</tbody>
+          </table>
+        </div>`;
+    };
+
+    const compactTable = renderTable(rows, { scrollable: true });
+    const fullTable = renderTable(rows, { scrollable: false });
     const collapseId = 'encuestaCollapse';
+    const fullModalId = 'encuestaFullModal';
 
     return `
       <div class="card mb-3">
         <div class="card-header bg-white d-flex justify-content-between align-items-center">
           <div><i class="fas fa-clipboard-check text-primary mr-2"></i>Encuesta</div>
-          <button class="btn btn-outline-secondary btn-sm" data-toggle="collapse" data-target="#${collapseId}" aria-expanded="true" aria-controls="${collapseId}">Mostrar / ocultar</button>
+          <div class="btn-group" role="group" aria-label="Acciones de encuesta">
+            <button class="btn btn-outline-secondary btn-sm" data-toggle="collapse" data-target="#${collapseId}" aria-expanded="true" aria-controls="${collapseId}">Mostrar / ocultar</button>
+            <button class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#${fullModalId}" ${rows.length ? '' : 'disabled'}>
+              Ver en pantalla completa
+            </button>
+          </div>
         </div>
         <div id="${collapseId}" class="collapse show">
           <div class="card-body p-0">
-            <div class="table-responsive" style="max-height:240px;overflow:auto;">
-              <table class="table table-sm table-striped mb-0">
-                <thead class="thead-light"><tr><th>Visita</th><th>Pregunta</th><th>Respuesta</th><th>Valor</th><th>Fecha</th></tr></thead>
-                <tbody>${body || '<tr><td colspan="5" class="text-center text-muted">Sin respuestas.</td></tr>'}</tbody>
-              </table>
+            ${compactTable}
+          </div>
+        </div>
+      </div>
+      <div class="modal fade" id="${fullModalId}" tabindex="-1" role="dialog" aria-labelledby="${fullModalId}Label" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="${fullModalId}Label"><i class="fas fa-clipboard-check text-primary mr-2"></i>Encuesta completa</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                <span aria-hidden="true">&times;</span>
+              </button>
+            </div>
+            <div class="modal-body">
+              ${fullTable}
             </div>
           </div>
         </div>
