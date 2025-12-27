@@ -329,7 +329,7 @@ class DetalleLocalModel
             $stmtImpNo->close();
 
             $stmtR = $this->conn->prepare(
-                "SELECT fqr.id, fq.question_text, fqr.answer_text, fqr.created_at
+                "SELECT fqr.id, fq.question_text, fqr.answer_text, fqr.valor, fqr.created_at
                  FROM form_question_responses fqr
                  JOIN form_questions fq ON fq.id = fqr.id_form_question
                  JOIN formulario f ON f.id = fq.id_formulario AND f.id_empresa = ?
