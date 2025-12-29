@@ -1,0 +1,177 @@
+{
+    "exported_at": "2025-12-26T21:48:46.543Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/29.0 Chrome/136.0.0.0 Mobile Safari/537.36",
+    "sw_version": "v3.1.5",
+    "stats": {
+        "today": {
+            "ymd": "2025-12-26",
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        },
+        "overall": {
+            "pending": 0,
+            "running": 1,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 1
+        }
+    },
+    "queue": {
+        "total_records": 1,
+        "last_created_at": 1766518950650,
+        "last_updated_at": 1766518958738
+    },
+    "recent_events": [
+        {
+            "id": "idemp-1766518942626-fac8d85fb9c82:1766518958728:c7ab1dfd47a41",
+            "job_id": "idemp-1766518942626-fac8d85fb9c82",
+            "created": 1766518958728,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1766436204488-b295279ce7ca6:1766436206987:f4218eba3b63a8",
+            "job_id": "idemp-1766436204488-b295279ce7ca6",
+            "created": 1766436206987,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1766436204488-b295279ce7ca6:1766436206304:1ba94c6b19cd5",
+            "job_id": "idemp-1766436204488-b295279ce7ca6",
+            "created": 1766436206304,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1766407275698-823adddb4bbc1:1766407278797:f3fbe1709ff06",
+            "job_id": "idemp-1766407275698-823adddb4bbc1",
+            "created": 1766407278797,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1766407275698-823adddb4bbc1:1766407277566:c98ee173fed44",
+            "job_id": "idemp-1766407275698-823adddb4bbc1",
+            "created": 1766407277566,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "b4e54dbf-37db-45fa-90f8-024bb3fb0062:1766162714528:a5dd7a6d33f9e",
+            "job_id": "b4e54dbf-37db-45fa-90f8-024bb3fb0062",
+            "created": 1766162714528,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 2,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "b4e54dbf-37db-45fa-90f8-024bb3fb0062:1766162713625:9872d5b0c0dd4",
+            "job_id": "b4e54dbf-37db-45fa-90f8-024bb3fb0062",
+            "created": 1766162713625,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 2,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "b4e54dbf-37db-45fa-90f8-024bb3fb0062:1766162687957:7427d5ad58bba8",
+            "job_id": "b4e54dbf-37db-45fa-90f8-024bb3fb0062",
+            "created": 1766162687957,
+            "type": "attempt_error",
+            "status": "running",
+            "http_status": null,
+            "error": "STALE_RUNNING",
+            "message": "STALE_RUNNING",
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "b4e54dbf-37db-45fa-90f8-024bb3fb0062:1766162687952:605d686623bd38",
+            "job_id": "b4e54dbf-37db-45fa-90f8-024bb3fb0062",
+            "created": 1766162687952,
+            "type": "attempt_error",
+            "status": "running",
+            "http_status": null,
+            "error": "STALE_RUNNING",
+            "message": "STALE_RUNNING",
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "b4e54dbf-37db-45fa-90f8-024bb3fb0062:1766161577983:c3d98ae57c1e",
+            "job_id": "b4e54dbf-37db-45fa-90f8-024bb3fb0062",
+            "created": 1766161577983,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "idemp-1766161491682-9c284cdf938a9:1766161493697:f6f5f85a9ff8f",
+            "job_id": "idemp-1766161491682-9c284cdf938a9",
+            "created": 1766161493697,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1766161491682-9c284cdf938a9:1766161493054:47922530376a88",
+            "job_id": "idemp-1766161491682-9c284cdf938a9",
+            "created": 1766161493054,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        }
+    ],
+    "csrf_token": "585e037ff33f4864b4216cd481b26ccbdf485d498c41cf8465ee0f318024b934"
+}

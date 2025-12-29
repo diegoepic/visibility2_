@@ -1,0 +1,32 @@
+{
+    "exported_at": "2025-12-26T15:48:47.897Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+    "sw_version": "v3.1.5",
+    "stats": {
+        "today": {
+            "ymd": "2025-12-26",
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        },
+        "overall": {
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        }
+    },
+    "queue": {
+        "total_records": 0,
+        "last_created_at": null,
+        "last_updated_at": null
+    },
+    "recent_events": [],
+    "csrf_token": "c647062e318532b4aada4c77cc5ac418399f616f5e6a8f84c5c27b0205f82483"
+}

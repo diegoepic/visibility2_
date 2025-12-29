@@ -395,6 +395,41 @@
     return { exported_at: new Date().toISOString(), events };
   }
 
+  async function buildDiagnosticPayload(limit = 200){
+    const nowIso   = new Date().toISOString();
+    const ua       = (typeof navigator !== 'undefined' && navigator && navigator.userAgent) ? navigator.userAgent : null;
+    const online   = (typeof navigator !== 'undefined' && navigator) ? navigator.onLine : null;
+    const swVer    = (typeof window !== 'undefined' && window) ? (window.SW_VERSION || null) : null;
+
+    const todayYmd   = ymdLocal(new Date());
+    const todayRows  = await listByYMD(todayYmd);
+    const todayStats = await statsFor(todayRows);
+
+    const allRows    = await listRange('2000-01-01', '2999-12-31');
+    const totalStats = await statsFor(allRows);
+
+    const events     = await listEvents(limit);
+
+    const queueSnapshot = {
+      total_records: allRows.length,
+      last_created_at: allRows.length ? Math.max(...allRows.map(r => r.created || 0)) : null,
+      last_updated_at: allRows.length ? Math.max(...allRows.map(r => r.updated || r.created || 0)) : null
+    };
+
+    return {
+      exported_at : nowIso,
+      navigator_onLine: online,
+      user_agent  : ua,
+      sw_version  : swVer,
+      stats: {
+        today: Object.assign({ ymd: todayYmd }, todayStats),
+        overall: totalStats
+      },
+      queue: queueSnapshot,
+      recent_events: events
+    };
+  }
+
   // ---- Resolver nombres extendiendo agenda a todo el rango cacheado ----
   async function _scanAgendaAnyDay(localId){
     try{
@@ -507,6 +542,7 @@
     listEvents,
     listEventsForJob,
     exportRecent,
+    buildDiagnosticPayload,
     resolveNamesIfPossible
   };
 })();

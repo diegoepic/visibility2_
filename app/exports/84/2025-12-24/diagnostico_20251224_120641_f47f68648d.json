@@ -1,0 +1,261 @@
+{
+    "exported_at": "2025-12-24T15:05:08.752Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 15; SM-A065M Build/AP3A.240905.015.A2; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/143.0.7499.115 Mobile Safari/537.36 median",
+    "sw_version": "v3.1.4",
+    "stats": {
+        "today": {
+            "ymd": "2025-12-24",
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        },
+        "overall": {
+            "pending": 1,
+            "running": 0,
+            "success": 2,
+            "error": 0,
+            "blocked": 0,
+            "total": 3
+        }
+    },
+    "queue": {
+        "total_records": 3,
+        "last_created_at": 1766512203024,
+        "last_updated_at": 1766588699725
+    },
+    "recent_events": [
+        {
+            "id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55:1766588699711:1302aa997f35",
+            "job_id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55",
+            "created": 1766588699711,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Network error calling /visibility2/app/procesar_gestion_pruebas.php: E_POST_TIMEOUT",
+            "attempts": 6,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55:1766588699709:6c7a9a6e2c78c",
+            "job_id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55",
+            "created": 1766588699709,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Network error calling /visibility2/app/procesar_gestion_pruebas.php: E_POST_TIMEOUT",
+            "attempts": 6,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55:1766588678929:68ab0e0684f93",
+            "job_id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55",
+            "created": 1766588678929,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 5,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55:1766588678928:82220d0a5ff45",
+            "job_id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55",
+            "created": 1766588678928,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 5,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55:1766512819320:4982055f04548",
+            "job_id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55",
+            "created": 1766512819320,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Network error calling /visibility2/app/procesar_gestion_pruebas.php: E_POST_TIMEOUT",
+            "attempts": 5,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55:1766512797839:8d50de724238b",
+            "job_id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55",
+            "created": 1766512797839,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 4,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55:1766512772710:dd4d95fbb19e8",
+            "job_id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55",
+            "created": 1766512772710,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Network error calling /visibility2/app/procesar_gestion_pruebas.php: Failed to fetch",
+            "attempts": 4,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55:1766512761253:49a947344716e8",
+            "job_id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55",
+            "created": 1766512761253,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 3,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55:1766512755338:ce5f22c3671f88",
+            "job_id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55",
+            "created": 1766512755338,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Network error calling /visibility2/app/procesar_gestion_pruebas.php: E_POST_TIMEOUT",
+            "attempts": 3,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55:1766512734765:b2397d80851d98",
+            "job_id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55",
+            "created": 1766512734765,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 2,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55:1766512658375:6623d3cb310e",
+            "job_id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55",
+            "created": 1766512658375,
+            "type": "attempt_error",
+            "status": "running",
+            "http_status": null,
+            "error": "STALE_RUNNING",
+            "message": "STALE_RUNNING",
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55:1766512203455:2e2ad6d818af6",
+            "job_id": "78df460c-3e8a-46ca-98a5-1a8d43f20d55",
+            "created": 1766512203455,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "09d9e056-55d0-4222-8d57-ae75bbdab7ee:1766510731249:4ad2910c5e5588",
+            "job_id": "09d9e056-55d0-4222-8d57-ae75bbdab7ee",
+            "created": 1766510731249,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "09d9e056-55d0-4222-8d57-ae75bbdab7ee:1766510729270:db29313fa2598",
+            "job_id": "09d9e056-55d0-4222-8d57-ae75bbdab7ee",
+            "created": 1766510729270,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "26fe14d5-2705-4550-bba2-ca201a241ff4:1766417684044:152bb807538e",
+            "job_id": "26fe14d5-2705-4550-bba2-ca201a241ff4",
+            "created": 1766417684044,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 2,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "26fe14d5-2705-4550-bba2-ca201a241ff4:1766417683204:97beceedcfbd98",
+            "job_id": "26fe14d5-2705-4550-bba2-ca201a241ff4",
+            "created": 1766417683204,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 2,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "26fe14d5-2705-4550-bba2-ca201a241ff4:1766417516383:899d834afa5a68",
+            "job_id": "26fe14d5-2705-4550-bba2-ca201a241ff4",
+            "created": 1766417516383,
+            "type": "attempt_error",
+            "status": "running",
+            "http_status": null,
+            "error": "STALE_RUNNING",
+            "message": "STALE_RUNNING",
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "26fe14d5-2705-4550-bba2-ca201a241ff4:1766417516382:0685f09c9d0308",
+            "job_id": "26fe14d5-2705-4550-bba2-ca201a241ff4",
+            "created": 1766417516382,
+            "type": "attempt_error",
+            "status": "running",
+            "http_status": null,
+            "error": "STALE_RUNNING",
+            "message": "STALE_RUNNING",
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "26fe14d5-2705-4550-bba2-ca201a241ff4:1766417010921:7064831caae3e",
+            "job_id": "26fe14d5-2705-4550-bba2-ca201a241ff4",
+            "created": 1766417010921,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        }
+    ],
+    "csrf_token": "c53f7a78908d0c6e38893c9fa985139d2a0f04e46e03cbe7d451136c6067df84"
+}

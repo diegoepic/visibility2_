@@ -198,6 +198,7 @@ function getParentQuestionId($conn, $id_dependency_option) {
     <!-- Offline libs -->
     <script src="/visibility2/app/assets/js/db.js"></script>
     <script src="assets/js/journal_db.js"></script>
+    <script src="/visibility2/app/assets/js/v2_cache.js"></script>
     <script src="/visibility2/app/assets/js/offline-queue.js"></script>
     <script>
       if ('serviceWorker' in navigator) {

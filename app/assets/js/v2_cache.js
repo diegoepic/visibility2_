@@ -1,9 +1,9 @@
 (function(){
   'use strict';
-  window.SW_VERSION = window.SW_VERSION || 'v3.1.2';
+  window.SW_VERSION = window.SW_VERSION || 'v3.1.5';
 
   const DB_NAME    = 'visibility2-v2';
-  const DB_VERSION = 6; 
+  const DB_VERSION = 7;
   
   let _db = null;
   let _useLS = false;
@@ -39,6 +39,12 @@
         }
         if (!db.objectStoreNames.contains('questions_by_form')) {
           db.createObjectStore('questions_by_form', { keyPath:'formulario_id' });
+        }
+
+        // v7: gestiones completadas (para filtrar locales programados)
+        if (!db.objectStoreNames.contains('done')) {
+          const osDone = db.createObjectStore('done', { keyPath:'key' });
+          osDone.createIndex('by_date', 'ymd', { unique:false });
         }
       };
       req.onsuccess = ()=>{
@@ -182,12 +188,20 @@
   // ---------- Lectura por fecha (tarjetas del index) ----------
   async function listToday(ymd){
     if (!ymd) return [];
+
+    const doneRows = await listDoneForDate(ymd);
+    const doneKeys = new Set((doneRows||[]).map(d => d && d.key));
+
     if (_useLS){
       const all = lsGet('agenda', null) || {};
       const out = [];
       Object.keys(all).forEach(k=>{
         const it = all[k];
-        if (it && it.fechaPropuesta === ymd) out.push(it);
+        if (!it || it.fechaPropuesta !== ymd) return;
+        const idF = it.camp?.id_formulario || it.id_formulario || 0;
+        const idL = it.local?.id_local || it.id_local || 0;
+        const key = _doneKey(ymd, idF, idL);
+        if (!doneKeys.has(key)) out.push(it);
       });
       out.sort(_cmpAgenda);
       return out;
@@ -204,7 +218,11 @@
           resolve(out);
           return;
         }
-        out.push(c.value);
+        const it  = c.value;
+        const idF = it.camp?.id_formulario || it.id_formulario || 0;
+        const idL = it.local?.id_local || it.id_local || 0;
+        const key = _doneKey(ymd, idF, idL);
+        if (!doneKeys.has(key)) out.push(it);
         c.continue();
       };
       req.onerror = ()=> resolve([]);
@@ -215,6 +233,99 @@
     const la = (a.local?.cadena || '') + (a.local?.direccion || '');
     const lb = (b.local?.cadena || '') + (b.local?.direccion || '');
     return la.localeCompare(lb);
+  }
+
+  function _doneKey(ymd, formId, localId){
+    const f = Number(formId || 0);
+    const l = Number(localId || 0);
+    const d = (ymd || '').slice(0,10) || new Date().toISOString().slice(0,10);
+    return `${d}|${f}|${l}`;
+  }
+
+  async function markDone(formId, localId, ymd, extra={}){
+    const key = _doneKey(ymd, formId, localId);
+    const rec = {
+      key,
+      ymd: key.split('|')[0],
+      form_id: Number(formId||0),
+      local_id: Number(localId||0),
+      visita_id: extra.visita_id || extra.visitaId || null,
+      client_guid: extra.client_guid || extra.guid || null,
+      estado: extra.estado || null,
+      saved_at: Date.now()
+    };
+    await put('done', key, rec);
+    return rec;
+  }
+
+  async function isDone(formId, localId, ymd){
+    const rec = await get('done', _doneKey(ymd, formId, localId));
+    return !!rec;
+  }
+
+  async function listDoneForDate(ymd){
+    if (!ymd) return [];
+    if (_useLS){
+      const all = lsGet('done', null) || {};
+      const out = [];
+      Object.keys(all).forEach(k=>{
+        const it = all[k];
+        if (it && it.ymd === ymd) out.push(it);
+      });
+      return out;
+    }
+    return withStore('done','readonly', os=> new Promise((resolve)=>{
+      const idx   = os.index('by_date');
+      const range = IDBKeyRange.only(ymd);
+      const out   = [];
+      const req   = idx.openCursor(range);
+      req.onsuccess = ()=>{
+        const c = req.result;
+        if (!c){ resolve(out); return; }
+        out.push(c.value);
+        c.continue();
+      };
+      req.onerror = ()=> resolve([]);
+    }));
+  }
+
+  async function findAgendaDate(formId, localId){
+    const fid = Number(formId || 0);
+    const lid = Number(localId || 0);
+    if (!fid || !lid) return null;
+
+    if (_useLS){
+      const all = lsGet('agenda', null) || {};
+      let found = null;
+      Object.keys(all).forEach(k=>{
+        const it = all[k];
+        const f = it?.camp?.id_formulario || it?.id_formulario || 0;
+        const l = it?.local?.id_local || it?.id_local || 0;
+        if (f === fid && l === lid) {
+          const ymd = (it.fechaPropuesta || '').slice(0,10);
+          if (!found || (ymd && ymd < found)) found = ymd || found;
+        }
+      });
+      return found;
+    }
+
+    return withStore('agenda','readonly', os=> new Promise((resolve)=>{
+      let best = null;
+      const req = os.openCursor();
+      req.onsuccess = ()=>{
+        const cur = req.result;
+        if (!cur){ resolve(best); return; }
+        const it = cur.value || {};
+        const f  = it.camp?.id_formulario || it.id_formulario || 0;
+        const l  = it.local?.id_local || it.id_local || 0;
+        if (f === fid && l === lid){
+          const ymd = (it.fechaPropuesta || '').slice(0,10);
+          if (!best || (ymd && ymd < best)) best = ymd || best;
+        }
+        cur.continue();
+      };
+      req.onerror = ()=> resolve(best);
+    }));
   }
 
   // ---------- Preguntas por formulario ----------
@@ -399,6 +510,10 @@
     del,
     upsertBundle,
     listToday,
+    markDone,
+    isDone,
+    listDoneForDate,
+    findAgendaDate,
     getQuestions,
     getAssignments,
 

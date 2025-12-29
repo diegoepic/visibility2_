@@ -502,7 +502,8 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                       <div class="dropdown-menu dropdown-menu-right">
                        <a class="dropdown-item download-excel-trigger"
                            href="#"
-                           data-id="<?= (int)$rowP['id_campana']; ?>">
+                           data-id="<?= (int)$rowP['id_campana']; ?>"
+                           data-modalidad="<?= htmlspecialchars($rowP['modalidad'], ENT_QUOTES, 'UTF-8'); ?>">
                            DESCARGAR DATA
                         </a>
                         <!--a class="dropdown-item"
@@ -710,6 +711,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                       href="#"
                       class="position-absolute download-link download-excel-trigger"
                       data-id="<?php echo $rowIpt['id_campana']; ?>"
+                      data-modalidad=""
                       title="Descargar Excel"
                       style="top:10px; right:10px;"
                     >
@@ -1109,13 +1111,28 @@ $('#formChangeRef').submit(function(e){
         </button>
       </div>
       <div class="modal-body">
-        <div class="custom-control custom-radio mb-2">
-          <input type="radio" id="excelPhotosCon" name="excelPhotosOption" value="1" class="custom-control-input" checked>
-          <label class="custom-control-label" for="excelPhotosCon">Con fotos de implementación</label>
+        <div id="excelFotosImplementacionGroup" class="mb-3">
+          <p class="mb-2 font-weight-bold" id="excelFotosImplementacionTitle">Fotos de implementación</p>
+          <div class="custom-control custom-radio mb-2">
+            <input type="radio" id="excelPhotosMaterialCon" name="excelPhotosMaterialOption" value="1" class="custom-control-input" checked>
+            <label class="custom-control-label" for="excelPhotosMaterialCon" id="excelFotosImplementacionLabelCon">Con fotos de implementación</label>
+          </div>
+          <div class="custom-control custom-radio">
+            <input type="radio" id="excelPhotosMaterialSin" name="excelPhotosMaterialOption" value="0" class="custom-control-input">
+            <label class="custom-control-label" for="excelPhotosMaterialSin" id="excelFotosImplementacionLabelSin">Sin fotos de implementación</label>
+          </div>
         </div>
-        <div class="custom-control custom-radio">
-          <input type="radio" id="excelPhotosSin" name="excelPhotosOption" value="0" class="custom-control-input">
-          <label class="custom-control-label" for="excelPhotosSin">Sin fotos de implementación</label>
+
+        <div id="excelFotosEncuestaGroup">
+          <p class="mb-2 font-weight-bold" id="excelFotosEncuestaTitle">Fotos de encuesta</p>
+          <div class="custom-control custom-radio mb-2">
+            <input type="radio" id="excelPhotosEncuestaCon" name="excelPhotosEncuestaOption" value="1" class="custom-control-input" checked>
+            <label class="custom-control-label" for="excelPhotosEncuestaCon" id="excelFotosEncuestaLabelCon">Con fotos de encuesta</label>
+          </div>
+          <div class="custom-control custom-radio">
+            <input type="radio" id="excelPhotosEncuestaSin" name="excelPhotosEncuestaOption" value="0" class="custom-control-input">
+            <label class="custom-control-label" for="excelPhotosEncuestaSin" id="excelFotosEncuestaLabelSin">Sin fotos de encuesta</label>
+          </div>
         </div>
       </div>
       <div class="modal-footer py-2">
@@ -1129,21 +1146,83 @@ $('#formChangeRef').submit(function(e){
 </div>
 
 <script>
-// Modal para descargar Excel con o sin fotos
+// Modal para descargar Excel con opciones de fotos
 let campanaDescargaExcel = null;
+let campanaModalidadExcel = '';
+
+const actualizarModalDescargaExcel = (modalidad) => {
+  const modo = (modalidad || '').toLowerCase();
+
+  const $grupoImpl = $('#excelFotosImplementacionGroup');
+  const $grupoEncuesta = $('#excelFotosEncuestaGroup');
+
+  const setTextosImpl = (textoBase) => {
+    const capitalizado = textoBase.charAt(0).toUpperCase() + textoBase.slice(1);
+    $('#excelFotosImplementacionTitle').text(capitalizado);
+    $('#excelFotosImplementacionLabelCon').text(`Con ${textoBase}`);
+    $('#excelFotosImplementacionLabelSin').text(`Sin ${textoBase}`);
+  };
+
+  const setTextosEncuesta = () => {
+    $('#excelFotosEncuestaTitle').text('Fotos de encuesta');
+    $('#excelFotosEncuestaLabelCon').text('Con fotos de encuesta');
+    $('#excelFotosEncuestaLabelSin').text('Sin fotos de encuesta');
+  };
+
+  // Estado inicial
+  $grupoImpl.hide();
+  $grupoEncuesta.hide();
+  setTextosImpl('fotos de implementación');
+  setTextosEncuesta();
+
+  switch (modo) {
+    case 'solo_auditoria':
+      $grupoEncuesta.show();
+      break;
+    case 'retiro':
+      setTextosImpl('fotos de retiro');
+      $grupoImpl.show();
+      break;
+    case 'implementacion_auditoria':
+      $grupoImpl.show();
+      $grupoEncuesta.show();
+      break;
+    case 'solo_implementacion':
+    default:
+      $grupoImpl.show();
+      break;
+  }
+
+  $('#excelPhotosMaterialCon').prop('checked', true);
+  $('#excelPhotosEncuestaCon').prop('checked', true);
+};
 
 $(document).on('click', '.download-excel-trigger', function (e) {
   e.preventDefault();
   campanaDescargaExcel = $(this).data('id') || null;
-  $('#excelPhotosCon').prop('checked', true);
+  campanaModalidadExcel = $(this).data('modalidad') || '';
+
+  actualizarModalDescargaExcel(campanaModalidadExcel);
   $('#modalDescargaExcel').modal('show');
 });
 
 $('#btnDescargarExcelConfirm').on('click', function () {
   if (!campanaDescargaExcel) return;
 
-  const fotos = $("input[name='excelPhotosOption']:checked").val() || '1';
-  const url = `/visibility2/portal/informes/descargar_excel.php?id=${encodeURIComponent(campanaDescargaExcel)}&fotos=${fotos}`;
+  const params = new URLSearchParams();
+  params.set('id', campanaDescargaExcel);
+
+  if ($('#excelFotosImplementacionGroup').is(':visible')) {
+    const fotosMaterial = $("input[name='excelPhotosMaterialOption']:checked").val() || '1';
+    params.set('fotos', fotosMaterial);
+  }
+
+  if ($('#excelFotosEncuestaGroup').is(':visible')) {
+    const fotosEncuesta = $("input[name='excelPhotosEncuestaOption']:checked").val() || '1';
+    params.set('fotos_encuesta', fotosEncuesta);
+  }
+
+  const url = `/visibility2/portal/informes/descargar_excel.php?${params.toString()}`;
 
   $('#modalDescargaExcel').modal('hide');
   window.open(url, '_blank');

@@ -1,0 +1,163 @@
+{
+    "exported_at": "2025-12-23T20:39:13.646Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 16; SM-A566E Build/BP2A.250605.031.A3; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/143.0.7499.35 Mobile Safari/537.36 VisibilityWrapper",
+    "sw_version": "v3.1.2",
+    "stats": {
+        "today": {
+            "ymd": "2025-12-23",
+            "pending": 0,
+            "running": 0,
+            "success": 2,
+            "error": 0,
+            "blocked": 0,
+            "total": 2
+        },
+        "overall": {
+            "pending": 0,
+            "running": 0,
+            "success": 2,
+            "error": 0,
+            "blocked": 0,
+            "total": 2
+        }
+    },
+    "queue": {
+        "total_records": 2,
+        "last_created_at": 1766515240468,
+        "last_updated_at": 1766515451710
+    },
+    "recent_events": [
+        {
+            "id": "a9f67e94-0002-4774-aacd-c5c888f7065d:1766515451692:9780ca2af72c8",
+            "job_id": "a9f67e94-0002-4774-aacd-c5c888f7065d",
+            "created": 1766515451692,
+            "uploaded_at": null,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "a9f67e94-0002-4774-aacd-c5c888f7065d:1766515451691:77644c5d41f4d",
+            "job_id": "a9f67e94-0002-4774-aacd-c5c888f7065d",
+            "created": 1766515451691,
+            "uploaded_at": null,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "a9f67e94-0002-4774-aacd-c5c888f7065d:1766515450543:f59f5157adfe08",
+            "job_id": "a9f67e94-0002-4774-aacd-c5c888f7065d",
+            "created": 1766515450543,
+            "uploaded_at": null,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "a9f67e94-0002-4774-aacd-c5c888f7065d:1766515450543:ac5bcbbfd64528",
+            "job_id": "a9f67e94-0002-4774-aacd-c5c888f7065d",
+            "created": 1766515450543,
+            "uploaded_at": null,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "d92ff619-a16b-4a27-9835-a0fe9db668fe:1766515264811:f2124ae0b3e198",
+            "job_id": "d92ff619-a16b-4a27-9835-a0fe9db668fe",
+            "created": 1766515264811,
+            "uploaded_at": null,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "d92ff619-a16b-4a27-9835-a0fe9db668fe:1766515264810:81a29a2db222f",
+            "job_id": "d92ff619-a16b-4a27-9835-a0fe9db668fe",
+            "created": 1766515264810,
+            "uploaded_at": null,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "d92ff619-a16b-4a27-9835-a0fe9db668fe:1766515261105:9492a1ee7922f",
+            "job_id": "d92ff619-a16b-4a27-9835-a0fe9db668fe",
+            "created": 1766515261105,
+            "uploaded_at": null,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "d92ff619-a16b-4a27-9835-a0fe9db668fe:1766515261105:03e961077f7258",
+            "job_id": "d92ff619-a16b-4a27-9835-a0fe9db668fe",
+            "created": 1766515261105,
+            "uploaded_at": null,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "a9f67e94-0002-4774-aacd-c5c888f7065d:1766515246215:bdca009c44444",
+            "job_id": "a9f67e94-0002-4774-aacd-c5c888f7065d",
+            "created": 1766515246215,
+            "uploaded_at": null,
+            "type": "attempt_error",
+            "status": "blocked_auth",
+            "http_status": 401,
+            "error": "AUTH_EXPIRED",
+            "message": "HTTP 401",
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "a9f67e94-0002-4774-aacd-c5c888f7065d:1766515245470:9528968f890bd8",
+            "job_id": "a9f67e94-0002-4774-aacd-c5c888f7065d",
+            "created": 1766515245470,
+            "uploaded_at": null,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        }
+    ],
+    "csrf_token": "20d56cf504cdd67719eae62ee4df99207188508f23404cfbfd1f0463f76cf85a"
+}

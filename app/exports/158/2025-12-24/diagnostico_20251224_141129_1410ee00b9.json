@@ -1,0 +1,81 @@
+{
+    "exported_at": "2025-12-24T17:11:30.169Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/29.0 Chrome/136.0.0.0 Mobile Safari/537.36",
+    "sw_version": "v3.1.5",
+    "stats": {
+        "today": {
+            "ymd": "2025-12-24",
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        },
+        "overall": {
+            "pending": 0,
+            "running": 0,
+            "success": 1,
+            "error": 0,
+            "blocked": 0,
+            "total": 1
+        }
+    },
+    "queue": {
+        "total_records": 1,
+        "last_created_at": 1766500260646,
+        "last_updated_at": 1766500671183
+    },
+    "recent_events": [
+        {
+            "id": "94ec1c3d-06b2-4ab7-b8ac-1fd4c5bd0bef:1766500671179:cc4a956bb35868",
+            "job_id": "94ec1c3d-06b2-4ab7-b8ac-1fd4c5bd0bef",
+            "created": 1766500671179,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 2,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "94ec1c3d-06b2-4ab7-b8ac-1fd4c5bd0bef:1766500670423:f7f3d8e0d53de",
+            "job_id": "94ec1c3d-06b2-4ab7-b8ac-1fd4c5bd0bef",
+            "created": 1766500670423,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 2,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "94ec1c3d-06b2-4ab7-b8ac-1fd4c5bd0bef:1766500661278:8e60dd480d3de8",
+            "job_id": "94ec1c3d-06b2-4ab7-b8ac-1fd4c5bd0bef",
+            "created": 1766500661278,
+            "type": "attempt_error",
+            "status": "running",
+            "http_status": null,
+            "error": "STALE_RUNNING",
+            "message": "STALE_RUNNING",
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "94ec1c3d-06b2-4ab7-b8ac-1fd4c5bd0bef:1766500261345:6aec0fce53b2f",
+            "job_id": "94ec1c3d-06b2-4ab7-b8ac-1fd4c5bd0bef",
+            "created": 1766500261345,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        }
+    ],
+    "csrf_token": "b2769a1ca87e209af3461aaf83b31e5548eeeb4482d63aa1c61d20688b1aeaa0"
+}
