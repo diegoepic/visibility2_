@@ -10,6 +10,7 @@
   // tab o el proceso del navegador se interrumpe inesperadamente.
   const STALE_RUNNING_MS = 2 * 60 * 1000;
   const HEARTBEAT_INTERVAL_MS = 60 * 1000;
+  const AUTH_RECOVERY_INTERVAL_MS = 30 * 1000;
   const MAX_RESPONSE_SNIPPET = 500;
 
   // --------------------------------------------------------------------------------
@@ -472,7 +473,8 @@
   // --------------------------------------------------------------------------------
   const queueState = {
     blocked: null,
-    blockedAt: null
+    blockedAt: null,
+    authRecoveryTimer: null
   };
   let _drainPromise = null;
 
@@ -504,17 +506,67 @@
     }));
   }
 
+  function stopAuthRecovery(){
+    if (queueState.authRecoveryTimer){
+      clearInterval(queueState.authRecoveryTimer);
+      queueState.authRecoveryTimer = null;
+    }
+  }
+
+  async function requeueBlocked(reason){
+    const status = reason === 'auth' ? 'blocked_auth' : reason === 'csrf' ? 'blocked_csrf' : null;
+    if (!status || !window.AppDB) return;
+    const blocked = await AppDB.listByStatus(status);
+    const now = Date.now();
+    await Promise.all(blocked.map(job => AppDB.update(job.id, {
+      status: 'queued',
+      startedAt: null,
+      nextTryAt: now + 1500,
+      updatedAt: now,
+      lastError: buildLastError({ code: 'RECOVERED', message: 'Reintento tras recuperación de autenticación/CSRF', url: job.url })
+    })));
+    QueueEvents.emit('queue:update', { pending: blocked.length });
+  }
+
   function blockQueue(reason, detail){
     queueState.blocked = reason;
     queueState.blockedAt = Date.now();
     QueueEvents.emit('queue:blocked', { reason, detail });
+    if (reason === 'auth') {
+      stopAuthRecovery();
+      queueState.authRecoveryTimer = setInterval(() => {
+        try { attemptAuthRecovery(); } catch(_){}
+      }, AUTH_RECOVERY_INTERVAL_MS);
+    }
   }
 
   function unblockQueue(){
     if (!queueState.blocked) return;
+    const reason = queueState.blocked;
+    stopAuthRecovery();
     queueState.blocked = null;
     queueState.blockedAt = null;
     QueueEvents.emit('queue:unblocked', {});
+    if (reason === 'auth' || reason === 'csrf') {
+      requeueBlocked(reason).catch(()=>{});
+    }
+  }
+
+  async function attemptAuthRecovery(){
+    if (queueState.blocked !== 'auth') return;
+    const hb = await heartbeat();
+    if (hb && hb.ok) {
+      await requeueBlocked('auth');
+      unblockQueue();
+      await drain();
+      return;
+    }
+    const refreshed = await refreshCSRF();
+    if (refreshed && refreshed.ok) {
+      await requeueBlocked('auth');
+      unblockQueue();
+      await drain();
+    }
   }
 
   function computeBackoff(attempts){
