@@ -5,7 +5,10 @@
   const BASE          = '/visibility2/app';
   const CSRF_ENDPOINT = BASE + '/csrf_refresh.php';
   const PING_ENDPOINT = BASE + '/ping.php';
-  const STALE_RUNNING_MS = 6 * 60 * 1000;
+  // Tiempo máximo permitido para un job en estado "running" antes de re-encolarlo.
+  // Se reduce a 2 minutos para evitar que las tareas se queden colgadas cuando el
+  // tab o el proceso del navegador se interrumpe inesperadamente.
+  const STALE_RUNNING_MS = 2 * 60 * 1000;
   const HEARTBEAT_INTERVAL_MS = 60 * 1000;
   const MAX_RESPONSE_SNIPPET = 500;
 
@@ -522,11 +525,14 @@
 
   async function drain(){
     if (_drainPromise) return _drainPromise;
-    if (!navigator.onLine) return;
 
     _drainPromise = (async () => {
       try {
+        // Siempre recupera trabajos "running" estancados aunque estemos offline para
+        // que queden listos cuando vuelva la conexión.
         await recoverStaleRunning();
+
+        if (!navigator.onLine) return;
         if (queueState.blocked) return;
 
         const hb = await heartbeat();
@@ -893,12 +899,25 @@
   function ensureHeartbeat(){
     if (_heartbeatTimer) return;
     _heartbeatTimer = setInterval(async () => {
-      if (!navigator.onLine || queueState.blocked) return;
       try {
+        // Recupera "running" cada latido aunque no haya trabajos encolados
+        // para evitar colas congeladas con cero pendientes.
+        const running = await AppDB.listByStatus('running');
+        if (running.length) {
+          await recoverStaleRunning();
+        }
+
+        if (!navigator.onLine || queueState.blocked) return;
+
         const queued = await AppDB.listByStatus('queued');
-        if (!queued.length) return;
+        if (!queued.length && !running.length) return;
+
         const hb = await heartbeat();
         if (!hb.ok && hb.blocked === 'auth') blockQueue('auth', hb.data || null);
+        else if (hb.ok) {
+          // Si acabamos de limpiar trabajos, intenta drenar sin esperar
+          if (running.length || queued.length) drain();
+        }
       } catch(_) {}
     }, HEARTBEAT_INTERVAL_MS);
   }
