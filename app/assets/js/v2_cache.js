@@ -1,6 +1,6 @@
 (function(){
   'use strict';
-  window.SW_VERSION = window.SW_VERSION || 'v3.1.5';
+  window.SW_VERSION = window.SW_VERSION || 'v3.1.6';
 
   const DB_NAME    = 'visibility2-v2';
   const DB_VERSION = 7;

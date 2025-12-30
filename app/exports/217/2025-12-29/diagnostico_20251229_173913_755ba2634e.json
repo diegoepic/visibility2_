@@ -1,0 +1,237 @@
+{
+    "exported_at": "2025-12-29T20:39:12.610Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36",
+    "sw_version": "v3.1.6",
+    "stats": {
+        "today": {
+            "ymd": "2025-12-29",
+            "pending": 5,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 7
+        },
+        "overall": {
+            "pending": 5,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 7
+        }
+    },
+    "queue": {
+        "total_records": 7,
+        "last_created_at": 1767033666892,
+        "last_updated_at": 1767040728765
+    },
+    "recent_events": [
+        {
+            "id": "idemp-1767032483464-17b1cd82503a58:1767040728757:a69164e80f25e8",
+            "job_id": "idemp-1767032483464-17b1cd82503a58",
+            "created": 1767040728757,
+            "type": "attempt_error",
+            "status": "canceled",
+            "http_status": 200,
+            "error": "CANCELED",
+            "message": "Cancelado por usuario",
+            "attempts": 0,
+            "url": null
+        },
+        {
+            "id": "f96283e6-e881-49b5-88f2-6bfc99776462:1767040501321:521a702ea1dc28",
+            "job_id": "f96283e6-e881-49b5-88f2-6bfc99776462",
+            "created": 1767040501321,
+            "type": "attempt_error",
+            "status": "canceled",
+            "http_status": null,
+            "error": "CANCELED",
+            "message": "Cancelado por usuario",
+            "attempts": 0,
+            "url": null
+        },
+        {
+            "id": "f96283e6-e881-49b5-88f2-6bfc99776462:1767040499941:808cef6e0a6a6",
+            "job_id": "f96283e6-e881-49b5-88f2-6bfc99776462",
+            "created": 1767040499941,
+            "type": "attempt_error",
+            "status": "canceled",
+            "http_status": null,
+            "error": "CANCELED",
+            "message": "Cancelado por usuario",
+            "attempts": 0,
+            "url": null
+        },
+        {
+            "id": "83fe3141-d652-403a-9ee4-d79ea03c6426:1767033667592:b0459ca579e1f8",
+            "job_id": "83fe3141-d652-403a-9ee4-d79ea03c6426",
+            "created": 1767033667592,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Error: Network error calling /visibility2/app/procesar_pregunta_foto_pruebas.php: Failed to fetch",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "83fe3141-d652-403a-9ee4-d79ea03c6426:1767033667332:2e88811363908",
+            "job_id": "83fe3141-d652-403a-9ee4-d79ea03c6426",
+            "created": 1767033667332,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "1826ad3b-d278-4ea6-9715-c4ef0f6f44da:1767033613220:cc719c3d88fdc",
+            "job_id": "1826ad3b-d278-4ea6-9715-c4ef0f6f44da",
+            "created": 1767033613220,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Error: Network error calling /visibility2/app/procesar_pregunta_foto_pruebas.php: Failed to fetch",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "1826ad3b-d278-4ea6-9715-c4ef0f6f44da:1767033612959:6b4886c0df2338",
+            "job_id": "1826ad3b-d278-4ea6-9715-c4ef0f6f44da",
+            "created": 1767033612959,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "f96283e6-e881-49b5-88f2-6bfc99776462:1767032940261:76b8d016643e3",
+            "job_id": "f96283e6-e881-49b5-88f2-6bfc99776462",
+            "created": 1767032940261,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Error: Network error calling /visibility2/app/procesar_pregunta_foto_pruebas.php: Failed to fetch",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "e120d6c3-b73b-4700-9d29-2c113429cf92:1767032940259:ab5b0b9c625318",
+            "job_id": "e120d6c3-b73b-4700-9d29-2c113429cf92",
+            "created": 1767032940259,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Error: Network error calling /visibility2/app/procesar_pregunta_foto_pruebas.php: Failed to fetch",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "9696841d-e51d-4410-a4e9-d5a87071c3ae:1767032940255:d6d1fa7f48a98",
+            "job_id": "9696841d-e51d-4410-a4e9-d5a87071c3ae",
+            "created": 1767032940255,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Error: Network error calling /visibility2/app/procesar_pregunta_foto_pruebas.php: Failed to fetch",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "idemp-1767032483464-17b1cd82503a58:1767032940195:b3bbeaee118cf8",
+            "job_id": "idemp-1767032483464-17b1cd82503a58",
+            "created": 1767032940195,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "9696841d-e51d-4410-a4e9-d5a87071c3ae:1767032939872:5ace30c562816",
+            "job_id": "9696841d-e51d-4410-a4e9-d5a87071c3ae",
+            "created": 1767032939872,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "e120d6c3-b73b-4700-9d29-2c113429cf92:1767032939805:9e7d7e1b37491",
+            "job_id": "e120d6c3-b73b-4700-9d29-2c113429cf92",
+            "created": 1767032939805,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "f96283e6-e881-49b5-88f2-6bfc99776462:1767032939794:a6021274792c4",
+            "job_id": "f96283e6-e881-49b5-88f2-6bfc99776462",
+            "created": 1767032939794,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "idemp-1767032483464-17b1cd82503a58:1767032939351:35e4813c66a8b",
+            "job_id": "idemp-1767032483464-17b1cd82503a58",
+            "created": 1767032939351,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1767032483464-17b1cd82503a58:1767032529515:a9da4b78cc8ff",
+            "job_id": "idemp-1767032483464-17b1cd82503a58",
+            "created": 1767032529515,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Error: Network error calling /visibility2/app/create_visita_pruebas.php: E_POST_TIMEOUT",
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1767032483464-17b1cd82503a58:1767032503508:020dcbdc06073",
+            "job_id": "idemp-1767032483464-17b1cd82503a58",
+            "created": 1767032503508,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        }
+    ],
+    "csrf_token": "547a83a14531c92dd5917503ad9007981cca91c282c3ced5e8c6403387780d3f"
+}

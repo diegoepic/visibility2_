@@ -25,10 +25,10 @@ if ($division) {
     $filtros .= " AND f.id_division = $division";
 }
 if (!empty($fecha_inicio)) {
-    $filtros .= " AND DATE(fq.fechaVisita) >= '" . mysqli_real_escape_string($conn, $fecha_inicio) . "'";
+    $filtros .= " AND DATE(fq.fechaPropuesta) >= '" . mysqli_real_escape_string($conn, $fecha_inicio) . "'";
 }
 if (!empty($fecha_fin)) {
-    $filtros .= " AND DATE(fq.fechaVisita) <= '" . mysqli_real_escape_string($conn, $fecha_fin) . "'";
+    $filtros .= " AND DATE(fq.fechaPropuesta) <= '" . mysqli_real_escape_string($conn, $fecha_fin) . "'";
 }
 
 if ($ejecutor) {
@@ -39,6 +39,7 @@ if ($ejecutor) {
 $query = "
     SELECT 
         l.id as 'ID Resultado',
+        DATE(fq.fechaPropuesta) as FechaPlanificada,        
         DATE(fq.fechaVisita) as Fecha,
         YEAR(fq.fechaVisita) as Año,
         MONTH(fq.fechaVisita) as Mes,

@@ -1,19 +1,61 @@
 {
     "success": true,
-    "inserted": 10,
-    "failed": 0,
-    "reportUrl": "",
+    "inserted": 27,
+    "failed": 4,
+    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1767013823.csv",
     "successes": [
-        "L\u00ednea 2: Local 'MARY ANGELA VALENZUELA HERNANDEZ' (c\u00f3digo 15139026-9) insertado.",
-        "L\u00ednea 3: Local 'MARGARITA DE LAS ROSAS ACEVEDO' (c\u00f3digo 76057306-K) insertado.",
-        "L\u00ednea 4: Local 'IMPERIO MASCOTAS YUSTIN VALENTINA' (c\u00f3digo 76757541-6) insertado.",
-        "L\u00ednea 5: Local 'COMERCIAL C&C LIMITADA' (c\u00f3digo 77795449-0) insertado.",
-        "L\u00ednea 6: Local 'COMERCIAL LA FACTORIA SPA' (c\u00f3digo 77821255-2) insertado.",
-        "L\u00ednea 7: Local 'JORGE REINALDO LOPEZ ACUNA' (c\u00f3digo 8853133-7) insertado.",
-        "L\u00ednea 8: Local 'RETAMAL GARCIA GAMALIER FRANCISCO' (c\u00f3digo 9237457-2) insertado.",
-        "L\u00ednea 9: Local 'ROMAN VERA ANA VERONICA' (c\u00f3digo 9725241-6) insertado.",
-        "L\u00ednea 10: Local 'INVERSIONES C&R SPA' (c\u00f3digo 77545485-7) insertado.",
-        "L\u00ednea 11: Local 'EMPORIO NABO CAMP SPA' (c\u00f3digo 78078893-3) insertado."
+        "L\u00ednea 2: Local 'ARAYA FUENZALIDA GLORIA ISABEL' (c\u00f3digo 23008) insertado.",
+        "L\u00ednea 3: Local 'PANADERIA Y PASTELERIA LAS PRIMAS SPA' (c\u00f3digo 65634) insertado.",
+        "L\u00ednea 4: Local 'AMASANDERIA LARIZA EVELIN AGAVANA CONDORCHUA EIRL' (c\u00f3digo 95345) insertado.",
+        "L\u00ednea 5: Local 'JALDIN CALICHO MIGUEL' (c\u00f3digo 92227) insertado.",
+        "L\u00ednea 6: Local 'FRIAS CABRERA YESHIKA PATRICIA' (c\u00f3digo 62808) insertado.",
+        "L\u00ednea 7: Local 'FRIAS CABRERA YESHIKA PATRICIA' (c\u00f3digo 62965) insertado.",
+        "L\u00ednea 8: Local 'LOPEZ MAMANI MARIA ELENA' (c\u00f3digo 16823) insertado.",
+        "L\u00ednea 10: Local 'CASTRO NAHUE OLIVA LEANDRA' (c\u00f3digo 71884) insertado.",
+        "L\u00ednea 11: Local 'CASTRO NAHUE OLIVA LEANDRA' (c\u00f3digo 12780) insertado.",
+        "L\u00ednea 12: Local 'POCOMUCHA HUAROC PEPE' (c\u00f3digo 74472) insertado.",
+        "L\u00ednea 13: Local 'CLAUDIA MACARENA GARCIA FERNANDEZ' (c\u00f3digo 23091) insertado.",
+        "L\u00ednea 14: Local 'QUINONEZ AYAVIRI MARIO FREDDY' (c\u00f3digo 17980) insertado.",
+        "L\u00ednea 15: Local 'ARAVENA GONZALEZ CARLOS ENRIQUE' (c\u00f3digo 12731) insertado.",
+        "L\u00ednea 16: Local 'YUFLA AYAVIRE ELIZABETH' (c\u00f3digo 93707) insertado.",
+        "L\u00ednea 18: Local 'DARIO CHIRI MAMANI' (c\u00f3digo 39444) insertado.",
+        "L\u00ednea 19: Local 'RODRIGUEZ ARREDONDO VERONICA ANDREA' (c\u00f3digo 97538) insertado.",
+        "L\u00ednea 20: Local 'GARCIA CHALLAPA VICKY MONICA' (c\u00f3digo 17481) insertado.",
+        "L\u00ednea 22: Local 'CALIZAYA CONDO ELFFI' (c\u00f3digo 24327) insertado.",
+        "L\u00ednea 23: Local 'MINIMARKET RODRIGO VERGARA' (c\u00f3digo SA0029) insertado.",
+        "L\u00ednea 24: Local 'SOC. COM Y PANIFICADORA DANILU SPA' (c\u00f3digo 96544) insertado.",
+        "L\u00ednea 25: Local 'MINIMARKET D YA SPA' (c\u00f3digo SA0030) insertado.",
+        "L\u00ednea 26: Local 'MUNOZ MUNOZ PEDRO JOSE' (c\u00f3digo 23055) insertado.",
+        "L\u00ednea 27: Local 'MINIMARKET F Y C' (c\u00f3digo 97843) insertado.",
+        "L\u00ednea 28: Local 'PATINO SANQUEA GUILDA' (c\u00f3digo 67154) insertado.",
+        "L\u00ednea 29: Local 'HERNANDEZ VALLE HILDA OBDULIA' (c\u00f3digo 64324) insertado.",
+        "L\u00ednea 30: Local 'EVER MARCOS MAMANI PORTILLO' (c\u00f3digo 94112) insertado.",
+        "L\u00ednea 32: Local 'ELISEO CONDORI QUINONES' (c\u00f3digo 97741) insertado."
     ],
-    "failures": []
+    "failures": [
+        {
+            "line": 9,
+            "codigo": "97238",
+            "nombre": "JUAN MIGUEL FLORES TICONA",
+            "reason": "El c\u00f3digo de local '97238' ya existe (l\u00ednea 9)."
+        },
+        {
+            "line": 17,
+            "codigo": "65600",
+            "nombre": "AMALIA AMARAZA CHOQUE",
+            "reason": "El c\u00f3digo de local '65600' ya existe (l\u00ednea 17)."
+        },
+        {
+            "line": 21,
+            "codigo": "23008",
+            "nombre": "ARAYA FUENZALIDA GLORIA ISABEL",
+            "reason": "El c\u00f3digo de local '23008' ya existe (l\u00ednea 21)."
+        },
+        {
+            "line": 31,
+            "codigo": "86061",
+            "nombre": "A Y C SOCIEDAD COMERCIAL SPA",
+            "reason": "El c\u00f3digo de local '86061' ya existe (l\u00ednea 31)."
+        }
+    ]
 }
