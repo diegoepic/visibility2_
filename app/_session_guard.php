@@ -5,6 +5,8 @@ declare(strict_types=1);
 
 if (PHP_SAPI === 'cli') { return; }
 
+require_once __DIR__ . '/lib/api_helpers.php';
+
 $script = str_replace('\\', '/', $_SERVER['SCRIPT_FILENAME'] ?? '');
 $isPublic = false;
 if ($script !== '') {
@@ -106,24 +108,12 @@ if (!function_exists('session_fingerprint')) {
 
 if (!function_exists('assert_session_is_valid')) {
    function assert_session_is_valid(mysqli $conn): void {
-    $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
-    $xhr    = $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '';
     $offlineQueue = isset($_SERVER['HTTP_X_OFFLINE_QUEUE']);
-    $wantsJson = (stripos($accept, 'application/json') !== false)
-      || ($xhr === 'XMLHttpRequest')
-      || $offlineQueue
-      || isset($_POST['return_json']);
+    $wantsJson = is_api_request() || $offlineQueue || isset($_POST['return_json']);
+
     if (empty($_SESSION['usuario_id'])) {
       if ($wantsJson) {
-        http_response_code(401);
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
-          'ok' => false,
-          'error_code' => 'NO_SESSION',
-          'message' => 'Sesin expirada',
-          'retryable' => false
-        ], JSON_UNESCAPED_UNICODE);
-        exit;
+        api_auth_expired();
       }
       header('Location: /visibility2/app/login.php'); exit;
     }
@@ -161,15 +151,7 @@ if (!function_exists('assert_session_is_valid')) {
           session_unset();
           session_destroy();
           if ($wantsJson) {
-            http_response_code(401);
-            header('Content-Type: application/json; charset=utf-8');
-            echo json_encode([
-              'ok' => false,
-              'error_code' => 'SESSION_REVOKED',
-              'message' => 'Sesin revocada',
-              'retryable' => false
-            ], JSON_UNESCAPED_UNICODE);
-            exit;
+            api_auth_expired('Sesión revocada');
           }
           header('Location: /visibility2/app/login.php?session_expired=1'); exit;
         }
