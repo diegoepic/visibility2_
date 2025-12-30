@@ -2,6 +2,8 @@
 declare(strict_types=1);
 ini_set('display_errors', '0');
 
+require_once __DIR__ . '/../lib/api_helpers.php';
+
 header('Content-Type: application/json; charset=UTF-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
@@ -10,15 +12,7 @@ try {
     if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 
     if (!isset($_SESSION['usuario_id'])) {
-        http_response_code(401);
-        echo json_encode([
-            'ok' => false,
-            'status' => 'no_session',
-            'error_code' => 'NO_SESSION',
-            'message' => 'Sesión expirada',
-            'retryable' => false
-        ], JSON_UNESCAPED_UNICODE);
-        exit;
+        api_auth_expired();
     }
 
     require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';
@@ -33,7 +27,7 @@ try {
     $empresa_id  = (int)($_SESSION['empresa_id']  ?? 0);
     $division_id = (int)($_SESSION['division_id'] ?? 0);
 
-    // -------- Parámetros de rango de fechas
+    // -------- Parmetros de rango de fechas
     $tz  = new DateTimeZone('America/Santiago');
     $now = new DateTime('now', $tz);
 
@@ -50,7 +44,7 @@ try {
     if (!empty($_GET['delta_since'])) {
         $tmp = date_create((string)$_GET['delta_since']);
         if ($tmp !== false) {
-            $deltaSince = $tmp->format('Y-m-d H:i:00'); // minuto-resolución
+            $deltaSince = $tmp->format('Y-m-d H:i:00'); // minuto-resolucin
         }
     }
 
@@ -69,7 +63,7 @@ try {
         ];
     };
 
-    // -------- 1) Campañas relevantes (para ETag y alcance)
+    // -------- 1) Campa09as relevantes (para ETag y alcance)
     $sqlCamp = "
         SELECT DISTINCT
             f.id,
@@ -259,7 +253,7 @@ try {
         }
     }
 
-    // material (por división)
+    // material (por divisin)
     $stmt = $conn->prepare(
         "SELECT MAX(COALESCE(updated_at, '1970-01-01 00:00:00')) AS mx FROM material WHERE (id_division = ? OR ? = 0)"
     );

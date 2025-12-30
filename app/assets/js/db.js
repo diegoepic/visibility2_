@@ -2,8 +2,9 @@
 // Wrapper IndexedDB para cola offline (estado robusto)
 (function(){
   const DB_NAME = 'v2_offline';
-  const DB_VER  = 8;
+  const DB_VER  = 9;
   const STORE   = 'queue';
+  const STORE_META = 'meta';
 
   const STATUS_ALIASES = {
     pending: 'queued',
@@ -28,6 +29,10 @@
       nextTryAt: job.nextTryAt || job.nextTry || 0,
       startedAt: job.startedAt || job.lastTry || null,
       finishedAt: job.finishedAt || null,
+      lastHeartbeatAt: job.lastHeartbeatAt || job.updatedAt || job.startedAt || null,
+      workerId: job.workerId || null,
+      status_history: Array.isArray(job.status_history) ? job.status_history.slice(-5) : [],
+      trace_id_last: job.trace_id_last || null,
       lastError: job.lastError || null,
       fields: job.fields || null,
       files: job.files || null,
@@ -65,9 +70,35 @@
         if (!os.indexNames.contains('dedupeKey')) os.createIndex('dedupeKey', 'dedupeKey', { unique: false });
         if (!os.indexNames.contains('nextTryAt')) os.createIndex('nextTryAt', 'nextTryAt', { unique: false });
         if (!os.indexNames.contains('updatedAt')) os.createIndex('updatedAt', 'updatedAt', { unique: false });
+
+        if (!db.objectStoreNames.contains(STORE_META)) {
+          db.createObjectStore(STORE_META, { keyPath: 'key' });
+        }
       };
       req.onsuccess = () => res(req.result);
       req.onerror   = () => rej(req.error);
+    });
+  }
+
+  async function putMeta(key, value){
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_META, 'readwrite');
+      const os = tx.objectStore(STORE_META);
+      os.put({ key, value, updatedAt: Date.now() });
+      tx.oncomplete = () => resolve(value);
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function getMeta(key){
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_META, 'readonly');
+      const os = tx.objectStore(STORE_META);
+      const req = os.get(key);
+      req.onsuccess = () => resolve(req.result ? req.result.value : null);
+      req.onerror = () => reject(req.error);
     });
   }
 
@@ -200,6 +231,8 @@
     get,
     update,
     remove,
-    normalizeJob
+    normalizeJob,
+    putMeta,
+    getMeta
   };
 })();

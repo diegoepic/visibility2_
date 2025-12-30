@@ -12,6 +12,9 @@
   const HEARTBEAT_INTERVAL_MS = 60 * 1000;
   const AUTH_RECOVERY_INTERVAL_MS = 30 * 1000;
   const MAX_RESPONSE_SNIPPET = 500;
+  const WORKER_ID = (crypto.randomUUID && crypto.randomUUID()) || ('w-' + Date.now() + '-' + Math.random().toString(16).slice(2));
+  const LEASE_TTL_MS = 45 * 1000;
+  const LEASE_RENEW_MS = 15 * 1000;
 
   // --------------------------------------------------------------------------------
   // Event bus (para UI Avance)
@@ -56,7 +59,7 @@
   async function refreshCSRF(){
     try {
       const r  = await withTimeout((signal) => fetch(CSRF_ENDPOINT, {
-        credentials: 'same-origin',
+        credentials: 'include',
         cache: 'no-store',
         headers: {
           'Accept': 'application/json',
@@ -81,7 +84,7 @@
    async function heartbeat(){
     try {
       const r = await withTimeout((signal) => fetch(PING_ENDPOINT, {
-        credentials: 'same-origin',
+        credentials: 'include',
         cache: 'no-store',
         headers: {
           'Accept': 'application/json',
@@ -151,7 +154,8 @@
 
     const fd = buildFormData(task);
         const headers = {
-      'X-Offline-Queue': '1'
+      'X-Offline-Queue': '1',
+      'Accept': 'application/json'
     };
     if (task.id) headers['X-Idempotency-Key'] = task.id;
     if (window.CSRF_TOKEN) headers['X-CSRF-Token'] = window.CSRF_TOKEN;
@@ -159,6 +163,7 @@
     let r;
     try {
       QueueEvents.emit('queue:dispatch:progress', { job: task, progress: 50 });
+      await touchHeartbeat(task.id);
       r = await withTimeout((signal) => fetch(url, {
         method: 'POST',
         body: fd,
@@ -167,6 +172,7 @@
         headers,
         signal
       }), timeoutMs, 'E_POST_TIMEOUT');
+      await touchHeartbeat(task.id);
       QueueEvents.emit('queue:dispatch:progress', { job: task, progress: 90 });
     } catch (err) {
       throw new Error(`Network error calling ${url}: ${err && err.message ? err.message : err}`);
@@ -243,6 +249,37 @@
     });
 
     return Promise.race([p, timeoutPromise]).finally(() => clearTimeout(tid));
+  }
+
+  async function getLeaderLock(){
+    try { return window.AppDB && typeof AppDB.getMeta === 'function' ? await AppDB.getMeta('queue_leader') : null; } catch(_){ return null; }
+  }
+
+  async function tryAcquireLeader(){
+    if (!window.AppDB || typeof AppDB.putMeta !== 'function') return true;
+    const now = Date.now();
+    const lock = await getLeaderLock();
+    if (lock && lock.workerId && lock.expiresAt && lock.expiresAt > now && lock.workerId !== WORKER_ID) {
+      return false;
+    }
+    await AppDB.putMeta('queue_leader', { workerId: WORKER_ID, acquiredAt: now, expiresAt: now + LEASE_TTL_MS });
+    return true;
+  }
+
+  async function renewLeader(){
+    if (!window.AppDB || typeof AppDB.putMeta !== 'function') return true;
+    const lock = await getLeaderLock();
+    if (!lock || lock.workerId !== WORKER_ID) return false;
+    const now = Date.now();
+    await AppDB.putMeta('queue_leader', { workerId: WORKER_ID, acquiredAt: lock.acquiredAt || now, expiresAt: now + LEASE_TTL_MS });
+    return true;
+  }
+
+  async function touchHeartbeat(jobId){
+    if (!jobId || !window.AppDB || typeof AppDB.update !== 'function') return;
+    try {
+      await AppDB.update(jobId, { lastHeartbeatAt: Date.now(), workerId: WORKER_ID });
+    } catch(_){ }
   }
 
   function isNetworkishError(err){
@@ -384,11 +421,20 @@
     if (response) {
       const status = response.status;
       const isHtml = parsed && parsed.isHtml;
+      const redirected = typeof response.redirected === 'boolean' ? response.redirected : false;
+      if (redirected) {
+        return { code: 'AUTH_EXPIRED', retryable: false, blocked: 'auth' };
+      }
       if (status === 401 || status === 403 || isHtml) {
         return { code: 'AUTH_EXPIRED', retryable: false, blocked: 'auth' };
       }
       if (status === 419) {
         return { code: 'CSRF_INVALID', retryable: false, blocked: 'csrf' };
+      }
+      if (!parsed || parsed.isJson === false) {
+        if (status === 200 || status === 0 || isHtml) {
+          return { code: 'AUTH_EXPIRED', retryable: false, blocked: 'auth' };
+        }
       }
       if ([408, 429].includes(status) || status >= 500) {
         return { code: `HTTP_${status}`, retryable: true };
@@ -483,8 +529,8 @@
     const now = Date.now();
     await Promise.all(running.map(async (raw) => {
       const job = AppDB.normalizeJob ? AppDB.normalizeJob(raw) : raw;
-      const startedAt = job.startedAt || job.updatedAt || job.createdAt || 0;
-      if (startedAt && now - startedAt > STALE_RUNNING_MS) {
+      const hbAt = job.lastHeartbeatAt || job.startedAt || job.updatedAt || job.createdAt || 0;
+      if (hbAt && now - hbAt > STALE_RUNNING_MS) {
         const attempts = (job.attempts || 0) + 1;
         const lastError = buildLastError({
           code: 'STALE_RUNNING',
@@ -497,6 +543,7 @@
           attempts,
           nextTryAt: now + 2000,
           startedAt: null,
+          lastHeartbeatAt: null,
           lastError,
           updatedAt: now
         });
@@ -537,6 +584,7 @@
       queueState.authRecoveryTimer = setInterval(() => {
         try { attemptAuthRecovery(); } catch(_){}
       }, AUTH_RECOVERY_INTERVAL_MS);
+      try { window.location.assign('/visibility2/app/login.php?session_expired=1'); } catch(_) {}
     }
   }
 
@@ -584,6 +632,10 @@
         // que queden listos cuando vuelva la conexión.
         await recoverStaleRunning();
 
+        const leaderOk = await tryAcquireLeader();
+        if (!leaderOk) return;
+        await renewLeader();
+
         if (!navigator.onLine) return;
         if (queueState.blocked) return;
 
@@ -610,7 +662,13 @@
             status: 'running',
             attempts,
             startedAt: now,
-            updatedAt: now
+            updatedAt: now,
+            lastHeartbeatAt: now,
+            workerId: WORKER_ID,
+            status_history: [
+              ...(Array.isArray(t.status_history) ? t.status_history.slice(-4) : []),
+              { status: 'running', ts: now, workerId: WORKER_ID }
+            ]
           });
           QueueEvents.emit('queue:dispatch:start', { job: t });
           jr('onStart', t);
@@ -952,6 +1010,9 @@
     if (_heartbeatTimer) return;
     _heartbeatTimer = setInterval(async () => {
       try {
+        await renewLeader();
+        const leaderOk = await tryAcquireLeader();
+        if (!leaderOk) return;
         // Recupera "running" cada latido aunque no haya trabajos encolados
         // para evitar colas congeladas con cero pendientes.
         const running = await AppDB.listByStatus('running');
@@ -1041,6 +1102,8 @@
             const out = mem.all().filter(t=>t.status===status).sort((a,b)=> (a.createdAt||0)-(b.createdAt||0));
             return out;
           },
+          async getMeta(){ return null; },
+          async putMeta(_k,v){ return v; },
           async remove(id){
             const arr = mem.all().filter(t=>t.id!==id);
             mem.save(arr);

@@ -3,8 +3,10 @@ declare(strict_types=1);
 /**
  * /visibility2/app/ping.php
  * Verifica sesión viva + conectividad a DB. Devuelve JSON y evita cache.
- * Si no hay sesión => 401 {status:"no_session"} para que el frnt pause la cola.
+ * Si no hay sesión => 401 JSON con AUTH_EXPIRED para que el front pause la cola.
  */
+
+require_once __DIR__ . '/lib/api_helpers.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -17,15 +19,7 @@ try {
     // Si no hay sesión, 401 para que Queue.drain() se detenga
     if (!isset($_SESSION['usuario_id'])) {
         session_write_close();
-        http_response_code(401);
-        echo json_encode([
-            'ok' => false,
-            'error_code' => 'NO_SESSION',
-            'message' => 'Sesión expirada',
-            'retryable' => false,
-            'session_valid' => false
-        ], JSON_UNESCAPED_UNICODE);
-        exit;
+        api_auth_expired();
     }
 
     $uid = (int)$_SESSION['usuario_id'];
@@ -56,21 +50,17 @@ try {
         'db_ok'       => $db_ok,
         'csrf_token'  => $_SESSION['csrf_token'],
         'session_valid' => true,
-        'user_session_state' => 'active'
+        'user_session_state' => 'active',
+        'trace_id' => api_trace_id(),
+        'ts' => api_ts(),
     ];
 
     session_write_close();
 
     http_response_code(200);
-    echo json_encode(['ok' => true] + $resp, JSON_UNESCAPED_UNICODE);
+    echo json_encode(['ok' => true, 'code' => 'OK'] + $resp, JSON_UNESCAPED_UNICODE);
     exit;
 
 } catch (Throwable $e) {
-    http_response_code(500);
-    echo json_encode([
-        'status'  => 'error',
-        'message' => 'Ping failed',
-    ], JSON_UNESCAPED_UNICODE);
-    error_log('ping.php error: ' . $e->getMessage());
-    exit;
+    api_error_response('HTTP_500', 'Ping failed', 500, ['exception' => $e->getMessage()]);
 }
