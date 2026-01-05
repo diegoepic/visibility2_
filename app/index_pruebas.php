@@ -1361,6 +1361,15 @@ function secondsFromDuration(d){ if (typeof d==='string' && d.endsWith('s')) ret
 function decode(encoded){ return google.maps.geometry.encoding.decodePath(encoded).map(ll=>({lat:ll.lat(), lng:ll.lng()})); }
 function fmtKm(m){ return (m>=1000) ? (m/1000).toFixed(1)+' km' : Math.round(m)+' m'; }
 
+// Cache sencillo para rutas (clave: origen|destino|paradas|optimizar)
+const ROUTE_CACHE_TTL_MS = 5*60*1000;
+const routeCache = new Map();
+function routeCacheKey({origin,destination,waypoints,optimize}){
+  const fmt = (p)=>`${p.lat.toFixed(6)},${p.lng.toFixed(6)}`;
+  const ways = (waypoints||[]).map(fmt).join(';');
+  return `${fmt(origin)}|${fmt(destination)}|${ways}|${optimize?'1':'0'}`;
+}
+
 // Pinta polilíneas por tráfico (Routes v2)
 function buildTrafficPolylines(map, route){
   (map.__trafficSegs||[]).forEach(s=>s.setMap(null));
@@ -1398,64 +1407,81 @@ function renderIndicacionesFromRoute(route){
   });
 }
 
-// Motor unificado (Routes v2) con fallback a DirectionsService
+// Motor unificado (Routes v2) con fallback a DirectionsService + caché en memoria
 async function computeRouteUnified({origin,destination,waypoints=[], optimize=true}){
-  const body={
-    origin:{ location:{ latLng:{ latitude: origin.lat, longitude: origin.lng } } },
-    destination:{ location:{ latLng:{ latitude: destination.lat, longitude: destination.lng } } },
-    intermediates:(waypoints||[]).map(w=>({ location:{ latLng:{ latitude:w.lat, longitude:w.lng } } })),
-    travelMode:"DRIVE", routingPreference:"TRAFFIC_AWARE", optimizeWaypointOrder: !!optimize,
-    polylineQuality:"HIGH_QUALITY", polylineEncoding:"ENCODED_POLYLINE",
-    departureTime:{ seconds: Math.floor(Date.now()/1000) + 30 }, computeAlternativeRoutes: true
-  };
-  const fields=[
-    "routes.distanceMeters","routes.duration","routes.optimizedIntermediateWaypointIndex",
-    "routes.polyline.encodedPolyline",
-    "routes.legs.distanceMeters","routes.legs.duration","routes.legs.polyline.encodedPolyline",
-    "routes.legs.steps.distanceMeters","routes.legs.steps.staticDuration",
-    "routes.legs.steps.polyline.encodedPolyline","routes.legs.steps.navigationInstruction",
-    "routes.travelAdvisory.speedReadingIntervals"
-  ].join(",");
-  try{
-    const r = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json", "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY, "X-Goog-FieldMask": fields },
-      body: JSON.stringify(body)
-    });
-    if(!r.ok) throw new Error(`Routes API ${r.status}`);
-    const json=await r.json();
-    json.routes.sort((a,b)=>secondsFromDuration(a.duration)-secondsFromDuration(b.duration));
-    return json.routes[0];
-  }catch(e){
-    // Fallback a api directions 
-    return await new Promise((resolve, reject)=>{
-      const svc = new google.maps.DirectionsService();
-      const req = {
-        origin: new google.maps.LatLng(origin.lat,origin.lng),
-        destination: new google.maps.LatLng(destination.lat,destination.lng),
-        waypoints: (waypoints||[]).map(w=>({location:new google.maps.LatLng(w.lat,w.lng), stopover:true})),
-        optimizeWaypoints: !!optimize, travelMode: google.maps.TravelMode.DRIVING
-      };
-      svc.route(req,(res,st)=>{
-        if(st!==google.maps.DirectionsStatus.OK) return reject(new Error('Directions fallback '+st));
-        const legs = res.routes[0].legs.map(l=>({
-          distanceMeters:l.distance.value, duration: l.duration.value+'s',
-          steps: l.steps.map(s=>({
-            distanceMeters:s.distance.value, staticDuration:s.duration.value+'s',
-            navigationInstruction:{ instructions: s.instructions.replace(/<[^>]+>/g,'') },
-            polyline:{ encodedPolyline: google.maps.geometry.encoding.encodePath(s.path) }
-          })),
-          polyline:{ encodedPolyline: google.maps.geometry.encoding.encodePath(res.routes[0].overview_path) }
-        }));
-        resolve({
-          distanceMeters: res.routes[0].legs.reduce((a,l)=>a+l.distance.value,0),
-          duration:       res.routes[0].legs.reduce((a,l)=>a+l.duration.value,0)+'s',
-          polyline:{ encodedPolyline: google.maps.geometry.encoding.encodePath(res.routes[0].overview_path) },
-          travelAdvisory:{},
-          legs
+  const key=routeCacheKey({origin,destination,waypoints,optimize});
+  const now=Date.now();
+  const cached=routeCache.get(key);
+  if(cached && cached.expires>now) return cached.value;
+
+  const computePromise = (async()=>{
+    const body={
+      origin:{ location:{ latLng:{ latitude: origin.lat, longitude: origin.lng } } },
+      destination:{ location:{ latLng:{ latitude: destination.lat, longitude: destination.lng } } },
+      intermediates:(waypoints||[]).map(w=>({ location:{ latLng:{ latitude:w.lat, longitude:w.lng } } })),
+      travelMode:"DRIVE", routingPreference:"TRAFFIC_AWARE", optimizeWaypointOrder: !!optimize,
+      polylineQuality:"HIGH_QUALITY", polylineEncoding:"ENCODED_POLYLINE",
+      departureTime:{ seconds: Math.floor(Date.now()/1000) + 30 }, computeAlternativeRoutes: true
+    };
+    const fields=[
+      "routes.distanceMeters","routes.duration","routes.optimizedIntermediateWaypointIndex",
+      "routes.polyline.encodedPolyline",
+      "routes.legs.distanceMeters","routes.legs.duration","routes.legs.polyline.encodedPolyline",
+      "routes.legs.steps.distanceMeters","routes.legs.steps.staticDuration",
+      "routes.legs.steps.polyline.encodedPolyline","routes.legs.steps.navigationInstruction",
+      "routes.travelAdvisory.speedReadingIntervals"
+    ].join(",");
+    try{
+      const r = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes",{
+        method:"POST",
+        headers:{ "Content-Type":"application/json", "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY, "X-Goog-FieldMask": fields },
+        body: JSON.stringify(body)
+      });
+      if(!r.ok) throw new Error(`Routes API ${r.status}`);
+      const json=await r.json();
+      json.routes.sort((a,b)=>secondsFromDuration(a.duration)-secondsFromDuration(b.duration));
+      return json.routes[0];
+    }catch(e){
+      // Fallback a api directions
+      return await new Promise((resolve, reject)=>{
+        const svc = new google.maps.DirectionsService();
+        const req = {
+          origin: new google.maps.LatLng(origin.lat,origin.lng),
+          destination: new google.maps.LatLng(destination.lat,destination.lng),
+          waypoints: (waypoints||[]).map(w=>({location:new google.maps.LatLng(w.lat,w.lng), stopover:true})),
+          optimizeWaypoints: !!optimize, travelMode: google.maps.TravelMode.DRIVING
+        };
+        svc.route(req,(res,st)=>{
+          if(st!==google.maps.DirectionsStatus.OK) return reject(new Error('Directions fallback '+st));
+          const legs = res.routes[0].legs.map(l=>({
+            distanceMeters:l.distance.value, duration: l.duration.value+'s',
+            steps: l.steps.map(s=>({
+              distanceMeters:s.distance.value, staticDuration:s.duration.value+'s',
+              navigationInstruction:{ instructions: s.instructions.replace(/<[^>]+>/g,'') },
+              polyline:{ encodedPolyline: google.maps.geometry.encoding.encodePath(s.path) }
+            })),
+            polyline:{ encodedPolyline: google.maps.geometry.encoding.encodePath(res.routes[0].overview_path) }
+          }));
+          resolve({
+            distanceMeters: res.routes[0].legs.reduce((a,l)=>a+l.distance.value,0),
+            duration:       res.routes[0].legs.reduce((a,l)=>a+l.duration.value,0)+'s',
+            polyline:{ encodedPolyline: google.maps.geometry.encoding.encodePath(res.routes[0].overview_path) },
+            travelAdvisory:{},
+            legs
+          });
         });
       });
-    });
+    }
+  })();
+
+  routeCache.set(key,{expires: now + ROUTE_CACHE_TTL_MS, value: computePromise});
+  try{
+    const res=await computePromise;
+    routeCache.set(key,{expires: Date.now() + ROUTE_CACHE_TTL_MS, value: Promise.resolve(res)});
+    return res;
+  }catch(err){
+    routeCache.delete(key);
+    throw err;
   }
 }
 
@@ -1741,13 +1767,34 @@ window.initMap=function(){
   }
   function speedToZoom(kmh){ if (kmh<=20) return 18; if (kmh<=60) return 17; return 16; }
   const seconds=(d)=> (typeof d==='string' && d.endsWith('s')) ? Math.round(parseFloat(d)) : 0;
+  const TIMEZONE_CACHE_TTL_MS=10*60*1000;
+  const timezoneCache=new Map();
+  const tzKey=(lat,lng,epochSecs)=>{
+    const ts=Math.round(epochSecs/60); // redondeo a minutos
+    return `${lat.toFixed(4)},${lng.toFixed(4)}|${ts}`;
+  };
   async function getArrivalLocalTime(lat,lng, epochSecs){
-    try{
+    const key=tzKey(lat,lng,epochSecs);
+    const now=Date.now();
+    const cached=timezoneCache.get(key);
+    if(cached && cached.expires>now) return cached.value;
+
+    const fetchPromise=(async()=>{
       const url=`https://maps.googleapis.com/maps/api/timezone/json?location=${lat},${lng}&timestamp=${epochSecs}&key=${GOOGLE_MAPS_API_KEY}`;
       const r=await fetch(url); const j=await r.json();
       const offset=(j.rawOffset||0)+(j.dstOffset||0); const d=new Date((epochSecs+offset)*1000);
       return d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
-    }catch(_){ return new Date(epochSecs*1000).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'}); }
+    })();
+
+    timezoneCache.set(key,{expires: now + TIMEZONE_CACHE_TTL_MS, value: fetchPromise});
+    try{
+      const res=await fetchPromise;
+      timezoneCache.set(key,{expires: Date.now() + TIMEZONE_CACHE_TTL_MS, value: Promise.resolve(res)});
+      return res;
+    }catch(_){
+      timezoneCache.delete(key);
+      return new Date(epochSecs*1000).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+    }
   }
   function stepsFromRoute(route){
     const steps=[]; (route.legs||[]).forEach(leg=>{
