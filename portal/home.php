@@ -706,9 +706,9 @@ if ($division_id > 0) {
 <script>
 (function () {
   // Límite duro (no se permite pasar)
-  const MAX_DAYS = 2000;       // ~3 meses
+  const MAX_DAYS = 90;       // ~3 meses
   // Umbral de advertencia (solo aviso, sí se permite)
-  const SOFT_WARN_DAYS = 2000; // ~1 mes
+  const SOFT_WARN_DAYS = 31; // ~1 mes
 
   const $fi = document.getElementById('fecha_inicio_ipt');
   const $ff = document.getElementById('fecha_fin_ipt');

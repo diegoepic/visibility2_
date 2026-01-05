@@ -13,7 +13,7 @@ function csrf_input(): void {
     echo "<input type=\"hidden\" name=\"csrf_token\" value=\"{$t}\">";
 }
 
-/** Lanza excepci®Æn si el token POST no coincide con el de sesi®Æn */
+/** Lanza excepci√≥n si el token POST no coincide con el de sesi√≥n */
 function csrf_validate(): void {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (
@@ -21,7 +21,7 @@ function csrf_validate(): void {
             || empty($_SESSION['csrf_token'])
             || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])
         ) {
-            throw new RuntimeException('CSRF token inv®¢lido.');
+            throw new RuntimeException('CSRF token inv√°lido.');
         }
     }
 }

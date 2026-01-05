@@ -1,0 +1,32 @@
+{
+    "exported_at": "2025-12-31T04:27:52.622Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36 Edg/143.0.0.0",
+    "sw_version": "v3.1.7",
+    "stats": {
+        "today": {
+            "ymd": "2025-12-31",
+            "pending": 4,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 4
+        },
+        "overall": {
+            "pending": 4,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 4
+        }
+    },
+    "queue": {
+        "total_records": 4,
+        "last_created_at": 1767155232554,
+        "last_updated_at": 1767155232554
+    },
+    "recent_events": [],
+    "csrf_token": "60667173112c2ef1063b352f18776dc87cad9598c5b4343656538177b502728d"
+}

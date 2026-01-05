@@ -16,9 +16,8 @@ if ($script !== '') {
         .'|login_pruebas\.php'
         .'|procesar_login_pruebas\.php'
         .'|logout\.php'
-        .'|logout\.php'
-        .'|ping\.php'              // 72 debe poder devolver 401 JSON
-        .'|csrf_refresh\.php'      // 72 idem
+        .'|ping\.php'              // 72 debe poder devolver JSON 401
+        .'|csrf_refresh\.php'      // 72 idempotencia
         .')$#i',
         $script
     );
@@ -27,7 +26,7 @@ if (getenv('V2_TEST_MODE') === '1' && preg_match('#/visibility2/app/api/test_ses
 
 if ($isPublic) { return; }
 
-// Sesin segura
+// Sesi¨®n segura
 if (session_status() !== PHP_SESSION_ACTIVE) {
   $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
   session_set_cookie_params([
@@ -41,7 +40,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
   session_start();
 }
 
-// Conexin
+// ConexiÃ³n
 if (!isset($conn) || !($conn instanceof mysqli)) {
   require_once __DIR__ . '/con_.php';
   if (!isset($conn) || !($conn instanceof mysqli)) {
@@ -131,7 +130,7 @@ if (!function_exists('assert_session_is_valid')) {
     $uid = (int)$_SESSION['usuario_id'];
     $fpr = session_fingerprint();
 
-    // 07revocada?
+    // revocada?
     $sql = "SELECT revoked_at
               FROM user_sessions
              WHERE user_id = ? AND session_fpr = ?
@@ -139,7 +138,7 @@ if (!function_exists('assert_session_is_valid')) {
              LIMIT 1";
     $st = $conn->prepare($sql);
     if ($st) {
-      // Ojo: $fpr es binario, "s" funciona; si prefieres, podras usar "b" + send_long_data.
+      //  $fpr es binario, "s" funciona; , podria en un futuro utlilizar  send_long_data.
       $st->bind_param("is", $uid, $fpr);
 
       if ($st->execute()) {
@@ -157,7 +156,7 @@ if (!function_exists('assert_session_is_valid')) {
           if ($offlineQueue) {
             return;
           }
-          // Cerrar sesin y volver a login con aviso
+          // Cerrar sesi¨®n y volver a login con aviso
           session_unset();
           session_destroy();
           if ($wantsJson) {
@@ -183,7 +182,7 @@ if (!function_exists('assert_session_is_valid')) {
       return;
     }
 
-    // Heartbeat (no crtico)
+    // Heartbeat (no cr¨ªtico)
     $hb = $conn->prepare("UPDATE user_sessions SET last_seen_at = NOW() WHERE user_id = ? AND session_fpr = ?");
     if ($hb) {
       $hb->bind_param("is", $uid, $fpr);
@@ -192,6 +191,4 @@ if (!function_exists('assert_session_is_valid')) {
     }
   }
 }
-
-// Ejecutar guard
 assert_session_is_valid($conn);
