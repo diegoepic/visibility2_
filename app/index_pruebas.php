@@ -334,6 +334,7 @@ foreach ($locales_reag as $local) {
     <link rel="stylesheet" href="assets/css/main.css">
     <link rel="stylesheet" href="assets/css/main-responsive.css">
     <link rel="stylesheet" href="assets/css/offline.css">
+    <link rel="stylesheet" href="assets/css/nav_ar.css">
      <link rel="stylesheet" href="assets/css/journal.css">
     <style>
     @media (max-width: 480px) {
@@ -1078,6 +1079,9 @@ if (isset($_SESSION['success'])) {
                 <button id="btnStartNav" class="btn btn-success btn-sm" title="Modo navegación 3D">
                   <i class="fa fa-location-arrow"></i> Iniciar navegación
                 </button>
+                <button id="btnLiveView" class="btn btn-warning btn-sm" title="Live View (beta)">
+                  <i class="fa fa-street-view"></i> Live View (Beta)
+                </button>
               </div>
               <span class="label label-default" style="margin-left:8px;">Distancia: <span id="distanciaTotal">0 km</span></span>
               <span class="label label-default" style="margin-left:6px;">Duración: <span id="duracionEstimada">0 min</span></span>
@@ -1383,6 +1387,9 @@ foreach ($locales_reag as $row) {
 <script>
   window.__GOOGLE_MAPS_API_KEY = "<?php echo htmlspecialchars($googleMapsApiKey, ENT_QUOTES, 'UTF-8'); ?>";
 </script>
+<script src="assets/js/route_engine.js"></script>
+<script src="assets/js/nav_engine.js"></script>
+<script src="assets/js/ar_view_lite.js"></script>
 
 <script>
 // ============ Preferencias/estado ============
@@ -1412,9 +1419,7 @@ const MAPS_LIBRARIES = 'geometry';
 const IS_TEST_MODE = <?php echo $TEST_MODE ? 'true' : 'false'; ?>;
 let mapsScriptPromise = null;
 let mapsRetryTimer = null;
-let lastRouteApiCall = 0; // "Route throttle"
-const MIN_ROUTE_RECALC_MS = 30000;
-const apiCounters = { routes_calls: 0, directions_fallback_calls: 0, timezone_calls: 0 };
+const apiCounters = { timezone_calls: 0 };
 let isMapVisible = false; // "Maps visibility guard"
 window.startGeoWatch=window.startGeoWatch||function(){};
 window.stopGeoWatch=window.stopGeoWatch||function(){};
@@ -1422,9 +1427,17 @@ window.stopGeoWatch=window.stopGeoWatch||function(){};
 function updateApiCounters(){
   const el=document.getElementById('apiCounters');
   if(!el) return;
-  el.textContent=`API: Routes ${apiCounters.routes_calls} | Fallback ${apiCounters.directions_fallback_calls}`;
+  const stats = window.RouteEngine ? window.RouteEngine.getStats() : {};
+  const routes = stats.routes_api_requests || 0;
+  const fallback = stats.directions_fallback_requests || 0;
+  const mem = stats.cache_hits_memory || 0;
+  const idb = stats.cache_hits_idb || 0;
+  const total = stats.route_requests_total || 0;
+  const reroutes = stats.reroutes_triggered || 0;
+  el.textContent=`API: Routes ${routes} | Fallback ${fallback} | Cache M ${mem} | Cache DB ${idb} | Total ${total} | Reroutes ${reroutes}`;
 }
 updateApiCounters();
+window.addEventListener('route-engine-stats', updateApiCounters);
 
 function scheduleMapsRetry(){
   if (mapsRetryTimer) return;
@@ -1491,42 +1504,18 @@ function secondsFromDuration(d){ if (typeof d==='string' && d.endsWith('s')) ret
 function decode(encoded){ return google.maps.geometry.encoding.decodePath(encoded).map(ll=>({lat:ll.lat(), lng:ll.lng()})); }
 function fmtKm(m){ return (m>=1000) ? (m/1000).toFixed(1)+' km' : Math.round(m)+' m'; }
 
-// Cache sencillo para rutas (clave: origen|destino|paradas|optimizar)
-const ROUTE_CACHE_TTL_MS = 5*60*1000;
-const routeCache = new Map();
-function routeCacheKey({origin,destination,waypoints,optimize}){
-  const fmtOrigin = (p)=>`${p.lat.toFixed(4)},${p.lng.toFixed(4)}`; // "Route cache quantization"
-  const fmtStop   = (p)=>`${p.lat.toFixed(5)},${p.lng.toFixed(5)}`;
-  const ways = (waypoints||[]).map(fmtStop).join(';');
-  return `${fmtOrigin(origin)}|${fmtStop(destination)}|${ways}|${optimize?'1':'0'}`;
-}
-
 // Pinta polilíneas por tráfico (Routes v2)
 function buildTrafficPolylines(map, route){
-  (map.__trafficSegs||[]).forEach(s=>s.setMap(null));
-  map.__trafficSegs=[];
-  const pts = decode(route.polyline.encodedPolyline);
-  const intervals = (route.travelAdvisory && route.travelAdvisory.speedReadingIntervals) || [];
-  if(!intervals.length){
-    const poly=new google.maps.Polyline({ path: pts, map, strokeOpacity:.95, strokeWeight:6, strokeColor:'#4c8fbd' });
-    map.__trafficSegs.push(poly);
-    const b=new google.maps.LatLngBounds(); pts.forEach(p=>b.extend(p)); if(!b.isEmpty()) map.fitBounds(b); return;
-  }
-  intervals.forEach(int=>{
-    const start=int.startPolylinePointIndex||0;
-    const end  =int.endPolylinePointIndex||Math.max(1, pts.length-1);
-    const path = pts.slice(start, end+1);
-    const col  =(int.speed==='SLOW') ? '#ffa722' : (int.speed==='TRAFFIC_JAM' ? '#d74d3a' : '#4c8fbd');
-    const w=(int.speed==='NORMAL')?6:7;
-    const poly=new google.maps.Polyline({ path, map, strokeOpacity:.95, strokeWeight:w, strokeColor:col });
-    map.__trafficSegs.push(poly);
-  });
-  const b=new google.maps.LatLngBounds(); pts.forEach(p=>b.extend(p)); if(!b.isEmpty()) map.fitBounds(b);
+  return window.RouteEngine.buildTrafficPolylines(map, route);
 }
 
 // Drawer de pasos
 function renderIndicacionesFromRoute(route){
   const $ol=$('#listaIndicaciones'); $ol.empty();
+  if(!route || !(route.legs||[]).length){
+    $ol.append('<li>Instrucciones detalladas disponibles en modo navegación.</li>');
+    return;
+  }
   (route.legs||[]).forEach(leg=>{
     (leg.steps||[]).forEach(st=>{
       const ins=(st.navigationInstruction && st.navigationInstruction.instructions) || '';
@@ -1539,85 +1528,9 @@ function renderIndicacionesFromRoute(route){
 }
 
 // Motor unificado (Routes v2) con fallback a DirectionsService + caché en memoria
-async function computeRouteUnified({origin,destination,waypoints=[], optimize=true}){
-  const key=routeCacheKey({origin,destination,waypoints,optimize});
-  const now=Date.now();
-  const cached=routeCache.get(key);
-  if(cached && cached.expires>now) return cached.value;
-
-  const computePromise = (async()=>{
-    const body={
-      origin:{ location:{ latLng:{ latitude: origin.lat, longitude: origin.lng } } },
-      destination:{ location:{ latLng:{ latitude: destination.lat, longitude: destination.lng } } },
-      intermediates:(waypoints||[]).map(w=>({ location:{ latLng:{ latitude:w.lat, longitude:w.lng } } })),
-      travelMode:"DRIVE", routingPreference:"TRAFFIC_AWARE", optimizeWaypointOrder: !!optimize,
-      polylineQuality:"HIGH_QUALITY", polylineEncoding:"ENCODED_POLYLINE",
-      departureTime:{ seconds: Math.floor(Date.now()/1000) + 30 }, computeAlternativeRoutes: false
-    };
-    const fields=[
-      "routes.distanceMeters","routes.duration","routes.optimizedIntermediateWaypointIndex",
-      "routes.polyline.encodedPolyline",
-      "routes.legs.distanceMeters","routes.legs.duration","routes.legs.polyline.encodedPolyline",
-      "routes.legs.steps.distanceMeters","routes.legs.steps.staticDuration",
-      "routes.legs.steps.polyline.encodedPolyline","routes.legs.steps.navigationInstruction",
-      "routes.travelAdvisory.speedReadingIntervals"
-    ].join(",");
-    try{
-      const r = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes",{
-        method:"POST",
-        headers:{ "Content-Type":"application/json", "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY, "X-Goog-FieldMask": fields },
-        body: JSON.stringify(body)
-      });
-      if(!r.ok) throw new Error(`Routes API ${r.status}`);
-      const json=await r.json();
-      json.routes.sort((a,b)=>secondsFromDuration(a.duration)-secondsFromDuration(b.duration));
-      apiCounters.routes_calls++; lastRouteApiCall=Date.now(); updateApiCounters();
-      return json.routes[0];
-    }catch(e){
-      // Fallback a api directions
-      return await new Promise((resolve, reject)=>{
-        const svc = new google.maps.DirectionsService();
-        const req = {
-          origin: new google.maps.LatLng(origin.lat,origin.lng),
-          destination: new google.maps.LatLng(destination.lat,destination.lng),
-          waypoints: (waypoints||[]).map(w=>({location:new google.maps.LatLng(w.lat,w.lng), stopover:true})),
-          optimizeWaypoints: !!optimize, travelMode: google.maps.TravelMode.DRIVING
-        };
-        svc.route(req,(res,st)=>{
-          if(st!==google.maps.DirectionsStatus.OK) return reject(new Error('Directions fallback '+st));
-          apiCounters.directions_fallback_calls++; lastRouteApiCall=Date.now(); updateApiCounters();
-          const legs = res.routes[0].legs.map(l=>({
-            distanceMeters:l.distance.value, duration: l.duration.value+'s',
-            steps: l.steps.map(s=>({
-              distanceMeters:s.distance.value, staticDuration:s.duration.value+'s',
-              navigationInstruction:{ instructions: s.instructions.replace(/<[^>]+>/g,'') },
-              polyline:{ encodedPolyline: google.maps.geometry.encoding.encodePath(s.path) }
-            })),
-            polyline:{ encodedPolyline: google.maps.geometry.encoding.encodePath(res.routes[0].overview_path) }
-          }));
-          resolve({
-            distanceMeters: res.routes[0].legs.reduce((a,l)=>a+l.distance.value,0),
-            duration:       res.routes[0].legs.reduce((a,l)=>a+l.duration.value,0)+'s',
-            polyline:{ encodedPolyline: google.maps.geometry.encoding.encodePath(res.routes[0].overview_path) },
-            travelAdvisory:{},
-            legs
-          });
-        });
-      });
-    }
-  })();
-
-  routeCache.set(key,{expires: now + ROUTE_CACHE_TTL_MS, value: computePromise});
-  try{
-    const res=await computePromise;
-    if(apiCounters.directions_fallback_calls<0) apiCounters.directions_fallback_calls=0; // lint guard
-    if(apiCounters.routes_calls<0) apiCounters.routes_calls=0;
-    routeCache.set(key,{expires: Date.now() + ROUTE_CACHE_TTL_MS, value: Promise.resolve(res)});
-    return res;
-  }catch(err){
-    routeCache.delete(key);
-    throw err;
-  }
+async function computeRouteUnified({origin,destination,waypoints=[], optimize=true, mode}){
+  const chosenMode = mode || (window.trafficEnabled ? 'traffic' : 'preview');
+  return window.RouteEngine.computeRouteUnified({ origin, destination, waypoints, optimize, mode: chosenMode });
 }
 
 // Toma puntos desde la tabla activa/visible
@@ -1669,27 +1582,9 @@ window.planRouteFromSelection = async function (origen, opts={}){
   }
   const destination = puntos[puntos.length - 1];
   const waypoints   = puntos.slice(0, -1);
-  const key = routeCacheKey({origin:origen, destination, waypoints, optimize:window.optimizeOrder});
-  const now=Date.now();
-  const cached=routeCache.get(key);
-  if(cached && cached.expires>now){
-    const route = await cached.value;
-    window.plannedRoute = route;
-    buildTrafficPolylines(window.mapa, route);
-    const km  = ((route.distanceMeters||0)/1000).toFixed(2);
-    const min = Math.round(secondsFromDuration(route.duration)/60);
-    $('#distanciaTotal').text(`${km} km`);
-    $('#duracionEstimada').text(`${min} min`);
-    renderIndicacionesFromRoute(route);
-    logRouteEvent({trigger, cacheHit:true, key});
-    return;
-  }
-  if(!force && (now - lastRouteApiCall) < MIN_ROUTE_RECALC_MS){
-    logRouteEvent({trigger, skipped:'throttle', sinceLast: now-lastRouteApiCall});
-    return;
-  }
+  const mode = window.trafficEnabled ? 'traffic' : 'preview';
   try{
-    const route = await computeRouteUnified({origin:origen, destination, waypoints, optimize:window.optimizeOrder});
+    const route = await computeRouteUnified({origin:origen, destination, waypoints, optimize:window.optimizeOrder, mode});
     window.plannedRoute = route;
     buildTrafficPolylines(window.mapa, route);
     const km  = ((route.distanceMeters||0)/1000).toFixed(2);
@@ -1697,7 +1592,7 @@ window.planRouteFromSelection = async function (origen, opts={}){
     $('#distanciaTotal').text(`${km} km`);
     $('#duracionEstimada').text(`${min} min`);
     renderIndicacionesFromRoute(route);
-    logRouteEvent({trigger, cacheHit:false, key});
+    logRouteEvent({trigger, cacheHit:false});
     speak(`Ruta actualizada. ${km} kilómetros, ${min} minutos.`);
   }catch(err){ logRouteEvent({trigger, error:String(err)}); }
 };
@@ -1939,112 +1834,51 @@ window.initMap=function(){
     const d=new Date(epochSecs*1000);
     return d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
   }
-  function stepsFromRoute(route){
-    const steps=[]; (route.legs||[]).forEach(leg=>{
-      (leg.steps||[]).forEach(s=>{
-        const instr=(s.navigationInstruction && s.navigationInstruction.instructions)||"";
-        const end  = google.maps.geometry.encoding.decodePath(s.polyline.encodedPolyline).slice(-1)[0];
-        const endC = { lat: end.lat(), lng: end.lng() };
-        steps.push({ text: instr, end: endC, poly: google.maps.geometry.encoding.decodePath(s.polyline.encodedPolyline).map(ll=>({lat:ll.lat(), lng:ll.lng()})) });
-      });
-    }); return steps;
-  }
-  function iconForText(t){
-    const s=t||''; if(/derecha/i.test(s)) return 'fa-arrow-right';
-    if(/izquierda/i.test(s)) return 'fa-arrow-left';
-    if(/u\-?turn|retorno/i.test(s)) return 'fa-undo';
-    if(/rotonda|glorieta/i.test(s)) return 'fa-circle-o';
-    if(/incorp|salga|salida/i.test(s)) return 'fa-sign-out';
-    if(/continúe|recto|siga/i.test(s)) return 'fa-long-arrow-up';
-    return 'fa-location-arrow';
-  }
-  class Navigator {
-    constructor(map){ this.map=map; this.active=false; this.stepIdx=0; this.steps=[]; this.route=null; this.geoWatch=null;
-      this.track=true; this.lastPos=null; this.lastHeading=0; this.offRouteSince=null; this.lastRerouteAt=0; this.minRerouteGap=30000; // "Nav reroute hardening"
-      map.addListener('dragstart', ()=>{ if(!this.active) return; this.track=false; $('#btnRecenter').addClass('show'); });
+    function iconForText(t){
+      const s=t||''; if(/derecha/i.test(s)) return 'fa-arrow-right';
+      if(/izquierda/i.test(s)) return 'fa-arrow-left';
+      if(/u\-?turn|retorno/i.test(s)) return 'fa-undo';
+      if(/rotonda|glorieta/i.test(s)) return 'fa-circle-o';
+      if(/incorp|salga|salida/i.test(s)) return 'fa-sign-out';
+      if(/continúe|recto|siga/i.test(s)) return 'fa-long-arrow-up';
+      return 'fa-location-arrow';
     }
-    async startFromSelection(){
-      const pts = collectCurrentPoints(); const pos = window.ejecutorMarker?.getPosition();
+    let navigator3D=null; let navTrack=true; let navSteps=[];
+    function ensureNav(){
+      if(!navigator3D){
+        navigator3D = new NavEngine.Navigator3D(window.mapa, {
+          onRoute:(route, steps, isReroute)=>{
+            window.plannedRoute = route; navSteps = steps||[];
+            buildTrafficPolylines(window.mapa, route);
+            renderIndicacionesFromRoute(route);
+            if(isReroute) speak('Ruta recalculada');
+          },
+          onPosition:(cur)=>{ if(window.ARViewLite) ARViewLite.updatePosition(cur); },
+          onStep:(idx, step)=>{ if(step && window.voiceEnabled){ window.speechSynthesis.cancel(); speak(step.text||''); } },
+          onStop:()=>{ navTrack=true; $('#btnRecenter').removeClass('show'); if(window.ARViewLite) ARViewLite.stop(); },
+          onCamera:(cur, speed)=>{
+            if(!navTrack || !window.mapa) return;
+            const zoom = speed>45 ? 16 : 17;
+            window.mapa.moveCamera({ center: cur, zoom, tilt:55 });
+          }
+        });
+        if(window.mapa){ window.mapa.addListener('dragstart', ()=>{ navTrack=false; $('#btnRecenter').addClass('show'); }); }
+      }
+      return navigator3D;
+    }
+    $('#btnStartNav').on('click', async ()=>{
+      if(!window.mapa){ alert('Mapa no listo.'); return; }
+      const nav=ensureNav();
+      const pts=collectCurrentPoints(); const pos=window.ejecutorMarker?.getPosition();
       if(!pos || !pts.length){ alert('Necesitas al menos 1 parada y la ubicación actual.'); return; }
-      const origin = pos.toJSON(); const destination = pts[pts.length-1]; const waypoints=pts.slice(0,-1);
-      await this.start({origin,destination,waypoints});
-    }
-    async start({origin,destination,waypoints}){
-      try{
-        $('#navHud').show(); this.active=true; this.track=true; this.stepIdx=0; this.offRouteSince=null; $('#btnRecenter').removeClass('show');
-        const route = await computeRouteUnified({origin,destination,waypoints, optimize:window.optimizeOrder});
-        this.route=route; this.steps=stepsFromRoute(route); this.updateHudOverview(); buildTrafficPolylines(this.map, route);
-        this.moveCamera(origin, this.lastHeading||0, 17, 55, true); this.watchGps(); this.listenDeviceOrientation();
-      }catch(e){ alert('No se pudo iniciar navegación.'); $('#navHud').hide(); this.active=false; }
-    }
-    stop(){ this.active=false; this.unwatchGps(); $('#navHud').hide(); (this.map.__trafficSegs||[]).forEach(p=>p.setMap(null)); this.route=null; this.steps=[]; this.stepIdx=0; this.track=true; $('#btnRecenter').removeClass('show'); }
-    updateHudOverview(){
-      const r=this.route; if(!r) return; const etaMin=Math.max(1, Math.round(seconds(r.duration)/60)); const distM=r.distanceMeters||0;
-      $('#hudEta').text(`${etaMin} min`); $('#hudRemain').text(fmtKm(distM));
-      const arrEpoch=Math.floor(Date.now()/1000)+seconds(r.duration);
-      const lastLegEnd=google.maps.geometry.encoding.decodePath((r.legs||[]).slice(-1)[0].polyline.encodedPolyline).slice(-1)[0];
-      getArrivalLocalTime(lastLegEnd.lat(), lastLegEnd.lng(), arrEpoch).then(t=>$('#hudArrival').text(t));
-      this.renderStepBanner();
-    }
-    renderStepBanner(){
-      const s=this.steps[this.stepIdx]; if(!s){ $('#navPrimary').text('Navegación'); $('#navSecondary').text('—'); $('#navNextNext').hide(); return; }
-      $('#navPrimary').text(s.text || 'Sigue la vía'); $('#navSecondary').text('Próximo giro'); $('#navIcon').html(`<i class="fa ${iconForText(s.text)}"></i>`);
-      const n2=this.steps[this.stepIdx+1]; if(n2){ $('#navNextNext').text('Luego: '+(n2.text||'—')).show(); } else { $('#navNextNext').hide(); }
-    }
-    watchGps(){
-      this.unwatchGps();
-      this.geoWatch=navigator.geolocation.watchPosition(p=>{
-        const cur={lat:p.coords.latitude, lng:p.coords.longitude}; const now=Date.now();
-        const spd=(this.lastPos? (dist(this.lastPos,cur)/((now-(this._lastTime||now))/1000))*3.6 : 0); this._lastTime=now;
-        this.lastPos=cur; if(this.track) this.moveCamera(cur, this.lastHeading, speedToZoom(spd), 55, false);
-        this.advanceStepIfNeeded(cur);
-        if(!this.isOnRoute(cur, 80)){ // tolerancia ampliada
-          if(!this.offRouteSince) this.offRouteSince=now;
-          if(spd < 3) return; // evita jitter en detención
-          if(now-this.offRouteSince>15000) this.tryReroute(cur);
-        }
-        else this.offRouteSince=null;
-      }, ()=>{}, { enableHighAccuracy:true, maximumAge:1000, timeout:10000 });
-    }
-    unwatchGps(){ if(this.geoWatch!=null){ navigator.geolocation.clearWatch(this.geoWatch); this.geoWatch=null; } }
-    moveCamera(center, heading, zoom, tilt, instant){ if(instant){ this.map.moveCamera({center, heading, tilt, zoom}); return; }
-      const curH=this.map.getHeading()||0; const delta=((heading - curH + 540)%360)-180; const frames=12; let i=0;
-      const tick=()=>{ if(i>=frames) return; const t=(i+1)/frames; this.map.moveCamera({center, heading: curH + delta*t, tilt, zoom}); i++; requestAnimationFrame(tick); }; tick();
-    }
-    listenDeviceOrientation(){
-      const on=(e)=>{ let hdg=e.alpha; if(hdg==null) return; const cur=this.lastHeading||hdg; const d=((hdg - cur + 540)%360)-180; this.lastHeading=(cur + d*0.2 + 360)%360; };
-      try{
-        if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
-          DeviceOrientationEvent.requestPermission().then(state=>{ if(state==='granted') window.addEventListener('deviceorientation', on, true); }).catch(()=>{});
-        } else { window.addEventListener('deviceorientationabsolute', on, true); window.addEventListener('deviceorientation', on, true); }
-      }catch(_){}
-    }
-    isOnRoute(point, tolMeters){
-      if(!this.route) return true; const path=google.maps.geometry.decodePath(this.route.polyline.encodedPolyline);
-      const poly=new google.maps.Polyline({ path }); const tol=(tolMeters||80)/6378137; const gll=new google.maps.LatLng(point.lat, point.lng);
-      return google.maps.geometry.poly.isLocationOnEdge(gll, poly, tol);
-    }
-    advanceStepIfNeeded(cur){
-      const s=this.steps[this.stepIdx]; if(!s) return; const d=dist(cur, s.end);
-      if(d<12){ this.stepIdx++; this.renderStepBanner(); try{ navigator.vibrate && navigator.vibrate(120);}catch(_){}
-        const nx=this.steps[this.stepIdx]; if(nx && window.voiceEnabled){ window.speechSynthesis.cancel(); speak(nx.text); } }
-    }
-    async tryReroute(cur){
-      const now=Date.now(); if(now - this.lastRerouteAt < this.minRerouteGap) return; this.lastRerouteAt=now;
-      const remain=this.steps.slice(this.stepIdx).map(s=>s.end); const destination=remain.length?remain.slice(-1)[0]:cur; const waypoints=remain.slice(0,-1);
-      try{
-        const newRoute=await computeRouteUnified({origin:cur, destination, waypoints, optimize:window.optimizeOrder});
-        this.route=newRoute; this.steps=stepsFromRoute(newRoute); this.stepIdx=0;
-        buildTrafficPolylines(this.map, newRoute); this.updateHudOverview(); speak('Ruta recalculada');
-      }catch(_){ /* silencioso */ }
-    }
-  }
-  window.navigator3D=null;
-  function ensureNav(){ if(!window.navigator3D) window.navigator3D=new Navigator(window.mapa); return window.navigator3D; }
-  $('#btnStartNav').on('click', async ()=>{ if(!window.mapa){ alert('Mapa no listo.'); return; } const nav=ensureNav(); await nav.startFromSelection(); $('#btnRecenter').removeClass('show'); });
-  $('#btnExitNav').on('click', ()=>{ if(window.navigator3D) window.navigator3D.stop(); });
-  $('#btnRecenter').on('click', ()=>{ if(!window.navigator3D) return; window.navigator3D.track=true; $('#btnRecenter').removeClass('show'); });
-})();
+      const origin=pos.toJSON(); const destination=pts[pts.length-1]; const waypoints=pts.slice(0,-1);
+      try{ await nav.startFromSelection({ origin, destination, waypoints, optimize:window.optimizeOrder }); navTrack=true; $('#btnRecenter').removeClass('show'); }
+      catch(_){ alert('No se pudo iniciar navegación.'); }
+    });
+    $('#btnExitNav').on('click', ()=>{ const nav=ensureNav(); nav.stop(); });
+    $('#btnRecenter').on('click', ()=>{ navTrack=true; $('#btnRecenter').removeClass('show'); });
+    $('#btnLiveView').on('click', ()=>{ if(window.plannedRoute && navSteps.length){ ARViewLite.start(window.plannedRoute, navSteps); } });
+  })();
 
 
 // ======= Wire-up básico =======
