@@ -114,6 +114,7 @@ $sql_ipt = "
     SELECT
         f.id AS id_campana,
         f.nombre AS nombre_campana,
+        f.modalidad AS modalidad,
         f.reference_image    AS reference_image,
         DATE(f.fechaInicio) AS fechaInicio,
         DATE(f.fechaTermino) AS fechaTermino,
@@ -521,10 +522,11 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                          aria-valuemin="0" aria-valuemax="100">0%
                     </div>
                   </div>
-                      <input type="checkbox" 
-                             id="chk-prog<?php echo $rowP['id_campana']; ?>" 
+                      <input type="checkbox"
+                             id="chk-prog<?php echo $rowP['id_campana']; ?>"
                              class="mr-2" style="position: absolute;margin-top: -4%;margin-left: -48%;"
-                             value="<?php echo $rowP['id_campana']; ?>">                  
+                             value="<?php echo $rowP['id_campana']; ?>"
+                             data-modalidad="<?php echo htmlspecialchars($rowP['modalidad'], ENT_QUOTES, 'UTF-8'); ?>">
                     <div class="d-flex align-items-center">
                       <h3 class="widget-user-username text-truncate campaign-name mb-0">
                         <?php echo $campana_upper; ?>
@@ -711,7 +713,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                       href="#"
                       class="position-absolute download-link download-excel-trigger"
                       data-id="<?php echo $rowIpt['id_campana']; ?>"
-                      data-modalidad=""
+                      data-modalidad="<?php echo htmlspecialchars($rowIpt['modalidad'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                       title="Descargar Excel"
                       style="top:10px; right:10px;"
                     >
@@ -725,10 +727,11 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                          aria-valuemin="0" aria-valuemax="100">0%
                     </div>
                   </div>
-                      <input type="checkbox" 
-                             id="chk-ipt<?php echo $rowIpt['id_campana']; ?>" 
+                      <input type="checkbox"
+                             id="chk-ipt<?php echo $rowIpt['id_campana']; ?>"
                              class="mr-2" style="position: absolute;margin-top: -4%;margin-left: -48%;"
-                             value="<?php echo $rowIpt['id_campana']; ?>">                    
+                             value="<?php echo $rowIpt['id_campana']; ?>"
+                             data-modalidad="<?php echo htmlspecialchars($rowIpt['modalidad'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                   <h3 class="widget-user-username campaign-name-ipt">
                     <?php echo htmlspecialchars(mb_strtoupper($rowIpt['nombre_campana'
 ],'UTF-8')); ?>
@@ -1146,12 +1149,17 @@ $('#formChangeRef').submit(function(e){
 </div>
 
 <script>
-// Modal para descargar Excel con opciones de fotos
+// Modal para descargar Excel con opciones de fotos (individual y masivo)
 let campanaDescargaExcel = null;
 let campanaModalidadExcel = '';
+let modoDescargaExcel = 'single';
+let campanasSeleccionadasExcel = [];
 
-const actualizarModalDescargaExcel = (modalidad) => {
-  const modo = (modalidad || '').toLowerCase();
+const normalizarModalidad = (modalidad = '') => (modalidad || '').toLowerCase();
+
+const actualizarModalDescargaExcel = (modalidades) => {
+  const modosEntrada = Array.isArray(modalidades) ? modalidades : [modalidades];
+  const modos = modosEntrada.map(normalizarModalidad).filter(Boolean);
 
   const $grupoImpl = $('#excelFotosImplementacionGroup');
   const $grupoEncuesta = $('#excelFotosEncuestaGroup');
@@ -1169,29 +1177,15 @@ const actualizarModalDescargaExcel = (modalidad) => {
     $('#excelFotosEncuestaLabelSin').text('Sin fotos de encuesta');
   };
 
-  // Estado inicial
-  $grupoImpl.hide();
-  $grupoEncuesta.hide();
-  setTextosImpl('fotos de implementación');
-  setTextosEncuesta();
+  const hasImpl = modos.length === 0 || modos.some(m => ['solo_implementacion', 'implementacion_auditoria', 'retiro'].includes(m));
+  const hasEncuesta = modos.some(m => ['solo_auditoria', 'implementacion_auditoria'].includes(m));
+  const soloRetiro = modos.length > 0 && modos.every(m => m === 'retiro');
 
-  switch (modo) {
-    case 'solo_auditoria':
-      $grupoEncuesta.show();
-      break;
-    case 'retiro':
-      setTextosImpl('fotos de retiro');
-      $grupoImpl.show();
-      break;
-    case 'implementacion_auditoria':
-      $grupoImpl.show();
-      $grupoEncuesta.show();
-      break;
-    case 'solo_implementacion':
-    default:
-      $grupoImpl.show();
-      break;
-  }
+  $grupoImpl.toggle(hasImpl);
+  $grupoEncuesta.toggle(hasEncuesta);
+
+  setTextosImpl(soloRetiro ? 'fotos de retiro' : 'fotos de implementación');
+  setTextosEncuesta();
 
   $('#excelPhotosMaterialCon').prop('checked', true);
   $('#excelPhotosEncuestaCon').prop('checked', true);
@@ -1201,28 +1195,58 @@ $(document).on('click', '.download-excel-trigger', function (e) {
   e.preventDefault();
   campanaDescargaExcel = $(this).data('id') || null;
   campanaModalidadExcel = $(this).data('modalidad') || '';
+  modoDescargaExcel = 'single';
+  campanasSeleccionadasExcel = campanaDescargaExcel ? [campanaDescargaExcel] : [];
 
-  actualizarModalDescargaExcel(campanaModalidadExcel);
+  actualizarModalDescargaExcel([campanaModalidadExcel]);
   $('#modalDescargaExcel').modal('show');
 });
 
-$('#btnDescargarExcelConfirm').on('click', function () {
-  if (!campanaDescargaExcel) return;
+const prepararDescargaMasiva = (checkboxSelector) => {
+  const seleccionados = Array.from(document.querySelectorAll(checkboxSelector));
+  if (seleccionados.length === 0) {
+    alert('Por favor, selecciona al menos una campaña.');
+    return;
+  }
 
+  campanaDescargaExcel = null;
+  campanaModalidadExcel = '';
+  modoDescargaExcel = 'bulk';
+  campanasSeleccionadasExcel = seleccionados.map(cb => cb.value);
+  const modalidades = seleccionados.map(cb => cb.dataset.modalidad || '');
+
+  actualizarModalDescargaExcel(modalidades);
+  $('#modalDescargaExcel').modal('show');
+};
+
+$('#btnDescargarExcelConfirm').on('click', function () {
   const params = new URLSearchParams();
-  params.set('id', campanaDescargaExcel);
+
+  if (modoDescargaExcel === 'bulk') {
+    if (campanasSeleccionadasExcel.length === 0) return;
+    params.set('ids', campanasSeleccionadasExcel.join(','));
+  } else {
+    if (!campanaDescargaExcel) return;
+    params.set('id', campanaDescargaExcel);
+  }
 
   if ($('#excelFotosImplementacionGroup').is(':visible')) {
     const fotosMaterial = $("input[name='excelPhotosMaterialOption']:checked").val() || '1';
     params.set('fotos', fotosMaterial);
+  } else if (modoDescargaExcel === 'bulk') {
+    params.set('fotos', '0');
   }
 
   if ($('#excelFotosEncuestaGroup').is(':visible')) {
     const fotosEncuesta = $("input[name='excelPhotosEncuestaOption']:checked").val() || '1';
     params.set('fotos_encuesta', fotosEncuesta);
+  } else if (modoDescargaExcel === 'bulk') {
+    params.set('fotos_encuesta', '0');
   }
 
-  const url = `/visibility2/portal/informes/descargar_excel.php?${params.toString()}`;
+  const url = (modoDescargaExcel === 'bulk')
+    ? `informes/descarga_excel_masivo.php?${params.toString()}`
+    : `/visibility2/portal/informes/descargar_excel.php?${params.toString()}`;
 
   $('#modalDescargaExcel').modal('hide');
   window.open(url, '_blank');
@@ -1230,43 +1254,20 @@ $('#btnDescargarExcelConfirm').on('click', function () {
 </script>
 
 <script>
-  document.getElementById('bulkDownloadBtn').addEventListener('click', function() {
-    // 1) Recojo todos los checkboxes marcados de ambos grupos
-    const ids = Array.from(document.querySelectorAll("input[id^='chk-prog']:checked"))
-                     .map(cb => cb.value);
+  const btnMasivo = document.getElementById('bulkDownloadBtn');
+  if (btnMasivo) {
+    btnMasivo.addEventListener('click', function() {
+      prepararDescargaMasiva("input[id^='chk-prog']:checked");
+    });
+  }
 
-    if (ids.length === 0) {
-      alert('Por favor, selecciona al menos una campaña.');
-      return;
-    }
+  const btnMasivoIPT = document.getElementById('bulkDownloadBtnIPT');
+  if (btnMasivoIPT) {
+    btnMasivoIPT.addEventListener('click', function() {
+      prepararDescargaMasiva("input[id^='chk-ipt']:checked");
+    });
+  }
 
-    // 2) Construyo la URL con la lista de IDs separados por comas
-    const params = encodeURIComponent(ids.join(','));
-    const url = `informes/descarga_excel_masivo.php?ids=${params}`;
-
-    // 3) Lanzo la descarga en una nueva pestaña
-    window.open(url, '_blank');
-  });
-  
-  
-    document.getElementById('bulkDownloadBtnIPT').addEventListener('click', function() {
-    // 1) Recojo todos los checkboxes marcados de ambos grupos
-    const ids = Array.from(document.querySelectorAll("input[id^='chk-ipt']:checked"))
-                     .map(cb => cb.value);
-
-    if (ids.length === 0) {
-      alert('Por favor, selecciona al menos una campaña.');
-      return;
-    }
-
-    // 2) Construyo la URL con la lista de IDs separados por comas
-    const params = encodeURIComponent(ids.join(','));
-    const url = `informes/descarga_excel_masivo.php?ids=${params}`;
-
-    // 3) Lanzo la descarga en una nueva pestaña
-    window.open(url, '_blank');
-  });
-  
 </script>
 
 <script>
