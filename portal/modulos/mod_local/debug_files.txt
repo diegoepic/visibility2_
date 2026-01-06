@@ -2,19 +2,19 @@ Array
 (
     [csvFile] => Array
         (
-            [name] => CARGA DE LOCALES.csv
-            [full_path] => CARGA DE LOCALES.csv
+            [name] => formato_creacion_locales.csv
+            [full_path] => formato_creacion_locales.csv
             [type] => text/csv
-            [tmp_name] => /tmp/phpNxq3Ex
+            [tmp_name] => /tmp/phplPl05O
             [error] => 0
-            [size] => 489
+            [size] => 37753
         )
 
 )
 
 Array
 (
-    [csrf_token] => e2b1bdf0e865daa38747ac98d9a8fe884842887c0a51e0163ed3260cdf7dd921
+    [csrf_token] => 88e7734658b0e6c7c1dcfaec2a20b0e02cc8b80ef33d8ca96f5f244a32b1ad00
     [empresa_id] => 103
-    [division_id] => 13
+    [division_id] => 14
 )

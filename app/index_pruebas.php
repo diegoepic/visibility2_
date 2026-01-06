@@ -753,7 +753,7 @@ if (isset($_SESSION['success'])) {
                                                             </a>
                                                             <ul role="menu" class="dropdown-menu pull-right">
                                                                 <li role="presentation">
-                                                                    <a role="menuitem" tabindex="-1" href="#responsive<?php echo $idLocal; ?>" data-toggle="modal">
+                                                            <a role="menuitem" tabindex="-1" href="#responsiveProg<?php echo $idLocal; ?>" data-toggle="modal">
                                                                         <i class="fa fa-edit"></i> Campañas
                                                                     </a>
                                                                 </li>
@@ -870,7 +870,7 @@ if (isset($_SESSION['success'])) {
                                                             </a>
                                                             <ul role="menu" class="dropdown-menu pull-right">
                                                                 <li role="presentation">
-                                                                    <a role="menuitem" tabindex="-1" href="#responsive<?php echo $idLocal; ?>" data-toggle="modal">
+                                                            <a role="menuitem" tabindex="-1" href="#responsiveReag<?php echo $idLocal; ?>" data-toggle="modal">
                                                                         <i class="fa fa-edit"></i> Campañas
                                                                     </a>
                                                                 </li>
@@ -1081,6 +1081,7 @@ if (isset($_SESSION['success'])) {
               </div>
               <span class="label label-default" style="margin-left:8px;">Distancia: <span id="distanciaTotal">0 km</span></span>
               <span class="label label-default" style="margin-left:6px;">Duración: <span id="duracionEstimada">0 min</span></span>
+              <div style="margin-top:4px; font-size:11px; color:#555;">"Instrumentation" <span id="apiCounters">API: Routes 0 | Fallback 0</span></div>
             </div>
 
             <!-- HUD de Navegación 
@@ -1131,37 +1132,38 @@ if (isset($_SESSION['success'])) {
 </div>
 
 <?php
-// Modales de gestión por local (programados + reagendados)
-$localesTotales    = array_merge($locales, $locales_reag);
-$idsGenerados      = [];
+// Modales de gestión diferenciados para programados y reagendados
 $precacheTargets   = [];
 $precacheTargetsId = [];
-foreach ($localesTotales as $row) {
-    if (in_array($row['idLocal'], $idsGenerados)) continue;
-    $idsGenerados[] = $row['idLocal'];
-    $idLocal        = (int)$row['idLocal'];
+
+// Modales para locales programados (pendientes: countVisita = 0)
+$idsGeneradosProg = [];
+foreach ($locales as $row) {
+    $idLocal = (int)$row['idLocal'];
+    if (in_array($idLocal, $idsGeneradosProg)) continue;
+    $idsGeneradosProg[] = $idLocal;
     $codigoLocal    = $row['codigoLocal'];
     $nombreLocal    = $row['nombreLocal'];
     $direccionLocal = $row['direccionLocal'];
     $vendedor       = $row['vendedor'];
 
-$sql_campanas = "
-  SELECT DISTINCT
-      f.id AS idCampana,
-      f.nombre AS nombreCampana,
-      f.fechaInicio,
-      f.fechaTermino,
-      f.estado
-  FROM formularioQuestion fq
-  INNER JOIN formulario AS f ON f.id = fq.id_formulario
-  WHERE fq.id_usuario  = ?
-    AND fq.id_local = ?
-    AND f.id_empresa = ?
-    AND f.tipo IN (3,1)
-    AND f.estado = 1
-    AND ( fq.countVisita = 0 OR fq.pregunta = 'en proceso' )
-  ORDER BY f.fechaInicio DESC
-";
+    $sql_campanas = "
+      SELECT DISTINCT
+          f.id AS idCampana,
+          f.nombre AS nombreCampana,
+          f.fechaInicio,
+          f.fechaTermino,
+          f.estado
+      FROM formularioQuestion fq
+      INNER JOIN formulario AS f ON f.id = fq.id_formulario
+      WHERE fq.id_usuario  = ?
+        AND fq.id_local    = ?
+        AND f.id_empresa   = ?
+        AND f.tipo        IN (3,1)
+        AND f.estado       = 1
+        AND fq.countVisita = 0
+      ORDER BY f.fechaInicio DESC
+    ";
 
     $stmt_campanas = $conn->prepare($sql_campanas);
     $stmt_campanas->bind_param('iii', $usuario_id, $idLocal, $empresa_id);
@@ -1169,12 +1171,12 @@ $sql_campanas = "
     $result_campanas = $stmt_campanas->get_result();
 
     echo "
-    <div id='responsive{$idLocal}' class='modal fade' tabindex='-1' role='dialog' aria-labelledby='myModalLabel{$idLocal}' aria-hidden='true'>
+    <div id='responsiveProg{$idLocal}' class='modal fade' tabindex='-1' role='dialog' aria-labelledby='myModalLabelProg{$idLocal}' aria-hidden='true'>
       <div class='modal-dialog'>
         <div class='modal-content'>
           <div class='modal-header'>
             <button type='button' class='close' data-dismiss='modal' aria-hidden='true'>&times;</button>
-            <h4 class='modal-title' id='myModalLabel{$idLocal}'>
+            <h4 class='modal-title' id='myModalLabelProg{$idLocal}'>
               Local: {$codigoLocal} - {$nombreLocal}<br>
               Dirección: {$direccionLocal}<br>
               Vendedor: {$vendedor}
@@ -1191,21 +1193,136 @@ $sql_campanas = "
                 <tbody>
     ";
 
-        if ($result_campanas->num_rows > 0) {
-            while ($campana = $result_campanas->fetch_assoc()) {
-                $idCampana     = (int)$campana['idCampana'];
-                $nombreCampana = htmlspecialchars($campana['nombreCampana'], ENT_QUOTES, 'UTF-8');
-                $gestionarUrl  = $appScope . '/gestionarPruebas.php'
-                    . '?idCampana=' . urlencode($idCampana)
-                    . '&nombreCampana=' . urlencode($nombreCampana)
-                    . '&idLocal=' . urlencode($idLocal)
-                    . '&idUsuario=' . urlencode($usuario_id);
-                $gestionarUrlAttr = htmlspecialchars($gestionarUrl, ENT_QUOTES, 'UTF-8');
+    if ($result_campanas->num_rows > 0) {
+        while ($campana = $result_campanas->fetch_assoc()) {
+            $idCampana     = (int)$campana['idCampana'];
+            $nombreCampana = htmlspecialchars($campana['nombreCampana'], ENT_QUOTES, 'UTF-8');
+            $gestionarUrl  = $appScope . '/gestionarPruebas.php'
+                . '?idCampana=' . urlencode($idCampana)
+                . '&nombreCampana=' . urlencode($nombreCampana)
+                . '&idLocal=' . urlencode($idLocal)
+                . '&idUsuario=' . urlencode($usuario_id);
+            $gestionarUrlAttr = htmlspecialchars($gestionarUrl, ENT_QUOTES, 'UTF-8');
 
-                $precacheKey = $idLocal . '|' . $idCampana;
-                if (!isset($precacheTargetsId[$precacheKey])) {
-                    $precacheTargetsId[$precacheKey] = true;
-                    $precacheTargets[] = [
+            $precacheKey = $idLocal . '|' . $idCampana;
+            if (!isset($precacheTargetsId[$precacheKey])) {
+                $precacheTargetsId[$precacheKey] = true;
+                $precacheTargets[] = [
+                    'idLocal'        => $idLocal,
+                    'nombreLocal'    => $nombreLocal,
+                    'direccionLocal' => $direccionLocal,
+                    'idUsuario'      => $usuario_id,
+                    'idCampana'      => $idCampana,
+                    'nombreCampana'  => $nombreCampana
+                ];
+            }
+            echo "
+                <tr data-idcampana='{$idCampana}'>
+                    <td>{$nombreCampana}</td>
+                    <td class='center'>
+                      <div class='btn-group btn-group-sm'>
+                        <a href='{$gestionarUrlAttr}' class='btn btn-info'>
+                          <i class='fa fa-pencil'></i> Gestionar
+                        </a>
+                      </div>
+                    </td>
+                </tr>
+            ";
+        }
+    } else {
+        echo "
+            <tr>
+                <td colspan='2' class='center'>No hay campañas asociadas a este local.</td>
+            </tr>
+        ";
+    }
+
+    echo "
+                </tbody>
+            </table>
+          </div>
+          <div class='modal-footer'>
+            <button type='button' class='btn btn-default' data-dismiss='modal'>Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    ";
+    $stmt_campanas->close();
+}
+
+// Modales para locales reagendados (pendientes: pregunta = 'en proceso')
+$idsGeneradosReag = [];
+foreach ($locales_reag as $row) {
+    $idLocal = (int)$row['idLocal'];
+    if (in_array($idLocal, $idsGeneradosReag)) continue;
+    $idsGeneradosReag[] = $idLocal;
+    $codigoLocal    = $row['codigoLocal'];
+    $nombreLocal    = $row['nombreLocal'];
+    $direccionLocal = $row['direccionLocal'];
+    $vendedor       = $row['vendedor'];
+
+    $sql_campanas = "
+      SELECT DISTINCT
+          f.id AS idCampana,
+          f.nombre AS nombreCampana,
+          f.fechaInicio,
+          f.fechaTermino,
+          f.estado
+      FROM formularioQuestion fq
+      INNER JOIN formulario AS f ON f.id = fq.id_formulario
+      WHERE fq.id_usuario = ?
+        AND fq.id_local   = ?
+        AND f.id_empresa  = ?
+        AND f.tipo       IN (3,1)
+        AND f.estado      = 1
+        AND fq.pregunta   = 'en proceso'
+      ORDER BY f.fechaInicio DESC
+    ";
+
+    $stmt_campanas = $conn->prepare($sql_campanas);
+    $stmt_campanas->bind_param('iii', $usuario_id, $idLocal, $empresa_id);
+    $stmt_campanas->execute();
+    $result_campanas = $stmt_campanas->get_result();
+
+    echo "
+    <div id='responsiveReag{$idLocal}' class='modal fade' tabindex='-1' role='dialog' aria-labelledby='myModalLabelReag{$idLocal}' aria-hidden='true'>
+      <div class='modal-dialog'>
+        <div class='modal-content'>
+          <div class='modal-header'>
+            <button type='button' class='close' data-dismiss='modal' aria-hidden='true'>&times;</button>
+            <h4 class='modal-title' id='myModalLabelReag{$idLocal}'>
+              Local: {$codigoLocal} - {$nombreLocal}<br>
+              Dirección: {$direccionLocal}<br>
+              Vendedor: {$vendedor}
+            </h4>
+          </div>
+          <div class='modal-body'>
+            <table class='table table-bordered'>
+                <thead>
+                    <tr>
+                        <th>Nombre de la Campaña</th>
+                        <th>Gestionar</th>
+                    </tr>
+                </thead>
+                <tbody>
+    ";
+
+    if ($result_campanas->num_rows > 0) {
+        while ($campana = $result_campanas->fetch_assoc()) {
+            $idCampana     = (int)$campana['idCampana'];
+            $nombreCampana = htmlspecialchars($campana['nombreCampana'], ENT_QUOTES, 'UTF-8');
+            $gestionarUrl  = $appScope . '/gestionarPruebas.php'
+                . '?idCampana=' . urlencode($idCampana)
+                . '&nombreCampana=' . urlencode($nombreCampana)
+                . '&idLocal=' . urlencode($idLocal)
+                . '&idUsuario=' . urlencode($usuario_id);
+            $gestionarUrlAttr = htmlspecialchars($gestionarUrl, ENT_QUOTES, 'UTF-8');
+
+            $precacheKey = $idLocal . '|' . $idCampana;
+            if (!isset($precacheTargetsId[$precacheKey])) {
+                $precacheTargetsId[$precacheKey] = true;
+                $precacheTargets[] = [
                     'idLocal'        => $idLocal,
                     'nombreLocal'    => $nombreLocal,
                     'direccionLocal' => $direccionLocal,
@@ -1290,11 +1407,24 @@ loadExcluded();
 
 // ============ Utilidades de ruta ============
 const GOOGLE_MAPS_API_KEY = window.__GOOGLE_MAPS_API_KEY || '';
-const MAP_ID = "YOUR_VECTOR_MAP_ID"; 
+const MAP_ID = "YOUR_VECTOR_MAP_ID";
 const MAPS_LIBRARIES = 'geometry';
 const IS_TEST_MODE = <?php echo $TEST_MODE ? 'true' : 'false'; ?>;
 let mapsScriptPromise = null;
 let mapsRetryTimer = null;
+let lastRouteApiCall = 0; // "Route throttle"
+const MIN_ROUTE_RECALC_MS = 30000;
+const apiCounters = { routes_calls: 0, directions_fallback_calls: 0, timezone_calls: 0 };
+let isMapVisible = false; // "Maps visibility guard"
+window.startGeoWatch=window.startGeoWatch||function(){};
+window.stopGeoWatch=window.stopGeoWatch||function(){};
+
+function updateApiCounters(){
+  const el=document.getElementById('apiCounters');
+  if(!el) return;
+  el.textContent=`API: Routes ${apiCounters.routes_calls} | Fallback ${apiCounters.directions_fallback_calls}`;
+}
+updateApiCounters();
 
 function scheduleMapsRetry(){
   if (mapsRetryTimer) return;
@@ -1365,9 +1495,10 @@ function fmtKm(m){ return (m>=1000) ? (m/1000).toFixed(1)+' km' : Math.round(m)+
 const ROUTE_CACHE_TTL_MS = 5*60*1000;
 const routeCache = new Map();
 function routeCacheKey({origin,destination,waypoints,optimize}){
-  const fmt = (p)=>`${p.lat.toFixed(6)},${p.lng.toFixed(6)}`;
-  const ways = (waypoints||[]).map(fmt).join(';');
-  return `${fmt(origin)}|${fmt(destination)}|${ways}|${optimize?'1':'0'}`;
+  const fmtOrigin = (p)=>`${p.lat.toFixed(4)},${p.lng.toFixed(4)}`; // "Route cache quantization"
+  const fmtStop   = (p)=>`${p.lat.toFixed(5)},${p.lng.toFixed(5)}`;
+  const ways = (waypoints||[]).map(fmtStop).join(';');
+  return `${fmtOrigin(origin)}|${fmtStop(destination)}|${ways}|${optimize?'1':'0'}`;
 }
 
 // Pinta polilíneas por tráfico (Routes v2)
@@ -1421,7 +1552,7 @@ async function computeRouteUnified({origin,destination,waypoints=[], optimize=tr
       intermediates:(waypoints||[]).map(w=>({ location:{ latLng:{ latitude:w.lat, longitude:w.lng } } })),
       travelMode:"DRIVE", routingPreference:"TRAFFIC_AWARE", optimizeWaypointOrder: !!optimize,
       polylineQuality:"HIGH_QUALITY", polylineEncoding:"ENCODED_POLYLINE",
-      departureTime:{ seconds: Math.floor(Date.now()/1000) + 30 }, computeAlternativeRoutes: true
+      departureTime:{ seconds: Math.floor(Date.now()/1000) + 30 }, computeAlternativeRoutes: false
     };
     const fields=[
       "routes.distanceMeters","routes.duration","routes.optimizedIntermediateWaypointIndex",
@@ -1440,6 +1571,7 @@ async function computeRouteUnified({origin,destination,waypoints=[], optimize=tr
       if(!r.ok) throw new Error(`Routes API ${r.status}`);
       const json=await r.json();
       json.routes.sort((a,b)=>secondsFromDuration(a.duration)-secondsFromDuration(b.duration));
+      apiCounters.routes_calls++; lastRouteApiCall=Date.now(); updateApiCounters();
       return json.routes[0];
     }catch(e){
       // Fallback a api directions
@@ -1453,6 +1585,7 @@ async function computeRouteUnified({origin,destination,waypoints=[], optimize=tr
         };
         svc.route(req,(res,st)=>{
           if(st!==google.maps.DirectionsStatus.OK) return reject(new Error('Directions fallback '+st));
+          apiCounters.directions_fallback_calls++; lastRouteApiCall=Date.now(); updateApiCounters();
           const legs = res.routes[0].legs.map(l=>({
             distanceMeters:l.distance.value, duration: l.duration.value+'s',
             steps: l.steps.map(s=>({
@@ -1477,6 +1610,8 @@ async function computeRouteUnified({origin,destination,waypoints=[], optimize=tr
   routeCache.set(key,{expires: now + ROUTE_CACHE_TTL_MS, value: computePromise});
   try{
     const res=await computePromise;
+    if(apiCounters.directions_fallback_calls<0) apiCounters.directions_fallback_calls=0; // lint guard
+    if(apiCounters.routes_calls<0) apiCounters.routes_calls=0;
     routeCache.set(key,{expires: Date.now() + ROUTE_CACHE_TTL_MS, value: Promise.resolve(res)});
     return res;
   }catch(err){
@@ -1519,8 +1654,14 @@ function speak(text){
   }catch(_){}
 }
 
-// Planifica/actualiza la ruta en el mapa (polilíneas + drawer + HUD stats)
-window.planRouteFromSelection = async function (origen){
+// Planifica/actualiza la ruta en el mapa (polilíneas + drawer + HUD stats) + "Route throttle" + instrumentation
+function logRouteEvent(payload){
+  const now=new Date();
+  console.debug('[route]', { ts: now.toISOString(), ...payload });
+}
+window.planRouteFromSelection = async function (origen, opts={}){
+  const { force=false, trigger='unknown' } = opts;
+  if(!isMapVisible || !window.mapa) { logRouteEvent({trigger, skipped:'map_hidden'}); return; }
   const puntos = collectCurrentPoints();
   if (!puntos.length) {
     (window.mapa.__trafficSegs||[]).forEach(s=>s.setMap(null)); window.mapa.__trafficSegs=[];
@@ -1528,6 +1669,25 @@ window.planRouteFromSelection = async function (origen){
   }
   const destination = puntos[puntos.length - 1];
   const waypoints   = puntos.slice(0, -1);
+  const key = routeCacheKey({origin:origen, destination, waypoints, optimize:window.optimizeOrder});
+  const now=Date.now();
+  const cached=routeCache.get(key);
+  if(cached && cached.expires>now){
+    const route = await cached.value;
+    window.plannedRoute = route;
+    buildTrafficPolylines(window.mapa, route);
+    const km  = ((route.distanceMeters||0)/1000).toFixed(2);
+    const min = Math.round(secondsFromDuration(route.duration)/60);
+    $('#distanciaTotal').text(`${km} km`);
+    $('#duracionEstimada').text(`${min} min`);
+    renderIndicacionesFromRoute(route);
+    logRouteEvent({trigger, cacheHit:true, key});
+    return;
+  }
+  if(!force && (now - lastRouteApiCall) < MIN_ROUTE_RECALC_MS){
+    logRouteEvent({trigger, skipped:'throttle', sinceLast: now-lastRouteApiCall});
+    return;
+  }
   try{
     const route = await computeRouteUnified({origin:origen, destination, waypoints, optimize:window.optimizeOrder});
     window.plannedRoute = route;
@@ -1537,10 +1697,11 @@ window.planRouteFromSelection = async function (origen){
     $('#distanciaTotal').text(`${km} km`);
     $('#duracionEstimada').text(`${min} min`);
     renderIndicacionesFromRoute(route);
+    logRouteEvent({trigger, cacheHit:false, key});
     speak(`Ruta actualizada. ${km} kilómetros, ${min} minutos.`);
-  }catch(err){  }
+  }catch(err){ logRouteEvent({trigger, error:String(err)}); }
 };
-window.debouncedPlanRoute = debounce(window.planRouteFromSelection, 1000);
+window.debouncedPlanRoute = debounce((pos)=>window.planRouteFromSelection(pos,{trigger:'gps_move'}), 1000);
 
 // Estado marcadores y contadores
 window.markersProg={}; window.markersReag={}; window.plannedRoute=null;
@@ -1561,7 +1722,7 @@ function setMode(mode){
   hideAllMarkers(window.markersProg); hideAllMarkers(window.markersReag);
   ensureDateSelectedFor(finalMode); applyFilters();
   const pos = window.ejecutorMarker?.getPosition();
-  if (pos && !(window.navigator3D && window.navigator3D.active)) { window.debouncedPlanRoute(pos.toJSON()); }
+  if (isMapVisible && pos && !(window.navigator3D && window.navigator3D.active)) { window.debouncedPlanRoute(pos.toJSON()); }
 }
 function updateCounts(){
   const mode   = window.modoLocal || 'prog';
@@ -1626,12 +1787,12 @@ window.applyFilters = function(){
     m.marker.setMap( (sameDate && visibleRow) ? window.mapa : null );
   });
   const visibles = Object.values(markers).filter(m=>m.marker.getMap()!==null);
-  if (visibles.length){
+  if (visibles.length && window.google && window.google.maps){
     const b = new google.maps.LatLngBounds(); visibles.forEach(m=>b.extend(m.marker.getPosition())); window.mapa.fitBounds(b);
   }
   updateCounts();
   const pos = window.ejecutorMarker?.getPosition();
-  if (pos && !(window.navigator3D && window.navigator3D.active)) window.debouncedPlanRoute(pos.toJSON());
+  if (isMapVisible && pos && !(window.navigator3D && window.navigator3D.active)) window.debouncedPlanRoute(pos.toJSON());
 };
 
 // ====== INIT MAP ======
@@ -1657,7 +1818,7 @@ window.initMap=function(){
     });
     const iw=new google.maps.InfoWindow({content:
       `<div style="min-width:180px;"><strong>${local.nombre_local}</strong><br><br>
-       <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#responsive${local.idLocal}">
+       <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#responsiveProg${local.idLocal}">
        <i class="fa fa-cog"></i> Gestionar Local</button></div>`});
     marker.addListener('click',()=>iw.open(window.mapa,marker));
     window.markersProg[local.idLocal]={ marker, fechaPropuesta: local.fechaPropuesta };
@@ -1672,7 +1833,7 @@ window.initMap=function(){
     });
     const iw=new google.maps.InfoWindow({content:
       `<div style="min-width:180px;"><strong>${local.nombre_local}</strong><br><br>
-       <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#responsive${local.idLocal}">
+       <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#responsiveReag${local.idLocal}">
        <i class="fa fa-cog"></i> Gestionar Local</button></div>`});
     marker.addListener('click',()=>iw.open(window.mapa,marker));
     window.markersReag[local.idLocal]={ marker, fechaPropuesta: local.fechaPropuesta };
@@ -1685,29 +1846,34 @@ window.initMap=function(){
   });
   window.trafficLayer = new google.maps.TrafficLayer();
 
-  // Geo + recálculo con umbral
-  const MIN_MOVE_METERS=60; let lastPos=null;
-  if(navigator.geolocation){
-    navigator.geolocation.watchPosition(pos=>{
+  // Geo + recálculo con umbral (solo cuando el modal está visible)
+  const MIN_MOVE_METERS=60; let lastPos=null; let geoWatchId=null;
+  function stopGeoWatch(){ if(geoWatchId!=null){ navigator.geolocation.clearWatch(geoWatchId); geoWatchId=null; } }
+  function startGeoWatch(){
+    if(geoWatchId!=null || !navigator.geolocation) return;
+    geoWatchId = navigator.geolocation.watchPosition(pos=>{
       const cur=new google.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
       window.ejecutorMarker.setPosition(cur);
-      // if(!(window.navigator3D && window.navigator3D.active)){ window.mapa.panTo(cur); }
-      if(!lastPos ||
-         google.maps.geometry.spherical.computeDistanceBetween(lastPos, cur) > MIN_MOVE_METERS){
+      if(!lastPos || google.maps.geometry.spherical.computeDistanceBetween(lastPos, cur) > MIN_MOVE_METERS){
         lastPos=cur; const json=cur.toJSON();
         if (window.navigator3D && window.navigator3D.active) return;
-        if (window.autoRecalc) window.debouncedPlanRoute(json);
+        if (window.autoRecalc && isMapVisible) window.debouncedPlanRoute(json);
       }
-    },err=>{ console.error(err); alert('No se pudo obtener tu ubicación.'); },
+    },err=>{ console.error(err); if(isMapVisible) alert('No se pudo obtener tu ubicación.'); },
     { enableHighAccuracy:true, maximumAge:2000, timeout:10000 });
-  } else { alert('Tu navegador no soporta geolocalización.'); }
+  }
+  window.startGeoWatch=startGeoWatch; window.stopGeoWatch=stopGeoWatch;
 
   // Modal show
   $('#modalMapa').on('shown.bs.modal', function(){
+    isMapVisible=true; startGeoWatch();
     google.maps.event.trigger(window.mapa, 'resize');
     ensureDateSelectedFor(window.modoLocal||'prog'); applyFilters();
     const pos=window.ejecutorMarker?.getPosition();
-    if(pos && !(window.navigator3D && window.navigator3D.active)) window.planRouteFromSelection(pos.toJSON());
+    if(pos && !(window.navigator3D && window.navigator3D.active)) window.planRouteFromSelection(pos.toJSON(),{force:true, trigger:'modal_open'});
+  });
+  $('#modalMapa').on('hidden.bs.modal', function(){
+    isMapVisible=false; stopGeoWatch();
   });
 
   // Botones
@@ -1718,18 +1884,18 @@ window.initMap=function(){
     navigator.geolocation.getCurrentPosition(p=>{
       const cur=new google.maps.LatLng(p.coords.latitude, p.coords.longitude);
       window.ejecutorMarker.setPosition(cur); window.mapa.setCenter(cur); window.mapa.setZoom(15);
-      if(!(window.navigator3D && window.navigator3D.active)) window.debouncedPlanRoute(cur.toJSON());
+      if(isMapVisible && !(window.navigator3D && window.navigator3D.active)) window.debouncedPlanRoute(cur.toJSON());
       $('#loadingIndicator').hide();
     }, ()=>{ $('#loadingIndicator').hide(); alert('No se pudo centrar.'); }, { enableHighAccuracy:true, maximumAge:0, timeout:10000 });
   });
   $('#btnRecalcular').on('click', ()=>{
     const pos=window.ejecutorMarker?.getPosition();
-    if(pos && !(window.navigator3D && window.navigator3D.active)) window.planRouteFromSelection(pos.toJSON());
+    if(pos && !(window.navigator3D && window.navigator3D.active)) window.planRouteFromSelection(pos.toJSON(),{force:true, trigger:'manual_recalc'});
   });
   $('#btnIndicaciones').on('click', ()=> $('#drawerIndicaciones').toggleClass('open'));
   $('#btnCloseDrawer').on('click', ()=> $('#drawerIndicaciones').removeClass('open'));
   $('#btnTraffic').on('click', function(){ const isOn=!!window.trafficLayer.getMap(); window.trafficLayer.setMap(isOn?null:window.mapa); });
-  $('#optimizeOrder').on('change', function(){ window.optimizeOrder=$(this).is(':checked'); const pos=window.ejecutorMarker?.getPosition(); if (pos && !(window.navigator3D && window.navigator3D.active)) window.planRouteFromSelection(pos.toJSON()); });
+  $('#optimizeOrder').on('change', function(){ window.optimizeOrder=$(this).is(':checked'); const pos=window.ejecutorMarker?.getPosition(); if (isMapVisible && pos && !(window.navigator3D && window.navigator3D.active)) window.planRouteFromSelection(pos.toJSON(),{trigger:'optimize_toggle'}); });
   $('#autoRecalc').on('change', function(){ window.autoRecalc=$(this).is(':checked'); });
   $('#btnVoz').on('click', function(){ window.voiceEnabled=!window.voiceEnabled; $(this).toggleClass('btn-info', window.voiceEnabled); if (window.voiceEnabled) speak('Voz activada.'); else { try{ speechSynthesis.cancel(); }catch(_){}} });
   $('#btnExportar').on('click', function(){
@@ -1747,7 +1913,7 @@ window.initMap=function(){
     const $tr=$(this).closest('tr'); const id=parseInt($tr.data('idlocal'),10); const modo=window.modoLocal;
     const fecha=(modo==='prog')?$('#filtroFechaProg').val():$('#filtroFechaReag').val(); const key=`${modo}|${fecha}|${id}`;
     if ($(this).is(':checked')) window.excluded.delete(key); else window.excluded.add(key); saveExcluded(); updateCounts();
-    const pos = window.ejecutorMarker?.getPosition(); if (pos && !(window.navigator3D && window.navigator3D.active)) window.debouncedPlanRoute(pos.toJSON());
+    const pos = window.ejecutorMarker?.getPosition(); if (isMapVisible && pos && !(window.navigator3D && window.navigator3D.active)) window.debouncedPlanRoute(pos.toJSON()); logRouteEvent({trigger:'checkbox'});
   });
 
  setMode(window.modoLocal || loadMode() || 'prog'); // arranca con modo recordado
@@ -1767,34 +1933,11 @@ window.initMap=function(){
   }
   function speedToZoom(kmh){ if (kmh<=20) return 18; if (kmh<=60) return 17; return 16; }
   const seconds=(d)=> (typeof d==='string' && d.endsWith('s')) ? Math.round(parseFloat(d)) : 0;
-  const TIMEZONE_CACHE_TTL_MS=10*60*1000;
-  const timezoneCache=new Map();
-  const tzKey=(lat,lng,epochSecs)=>{
-    const ts=Math.round(epochSecs/60); // redondeo a minutos
-    return `${lat.toFixed(4)},${lng.toFixed(4)}|${ts}`;
-  };
-  async function getArrivalLocalTime(lat,lng, epochSecs){
-    const key=tzKey(lat,lng,epochSecs);
-    const now=Date.now();
-    const cached=timezoneCache.get(key);
-    if(cached && cached.expires>now) return cached.value;
-
-    const fetchPromise=(async()=>{
-      const url=`https://maps.googleapis.com/maps/api/timezone/json?location=${lat},${lng}&timestamp=${epochSecs}&key=${GOOGLE_MAPS_API_KEY}`;
-      const r=await fetch(url); const j=await r.json();
-      const offset=(j.rawOffset||0)+(j.dstOffset||0); const d=new Date((epochSecs+offset)*1000);
-      return d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
-    })();
-
-    timezoneCache.set(key,{expires: now + TIMEZONE_CACHE_TTL_MS, value: fetchPromise});
-    try{
-      const res=await fetchPromise;
-      timezoneCache.set(key,{expires: Date.now() + TIMEZONE_CACHE_TTL_MS, value: Promise.resolve(res)});
-      return res;
-    }catch(_){
-      timezoneCache.delete(key);
-      return new Date(epochSecs*1000).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
-    }
+  async function getArrivalLocalTime(_lat,_lng, epochSecs){
+    // "Timezone removal/minimization": usamos hora local del dispositivo (Chile) sin API externa
+    apiCounters.timezone_calls = apiCounters.timezone_calls || 0;
+    const d=new Date(epochSecs*1000);
+    return d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
   }
   function stepsFromRoute(route){
     const steps=[]; (route.legs||[]).forEach(leg=>{
@@ -1817,7 +1960,7 @@ window.initMap=function(){
   }
   class Navigator {
     constructor(map){ this.map=map; this.active=false; this.stepIdx=0; this.steps=[]; this.route=null; this.geoWatch=null;
-      this.track=true; this.lastPos=null; this.lastHeading=0; this.offRouteSince=null; this.lastRerouteAt=0; this.minRerouteGap=2000;
+      this.track=true; this.lastPos=null; this.lastHeading=0; this.offRouteSince=null; this.lastRerouteAt=0; this.minRerouteGap=30000; // "Nav reroute hardening"
       map.addListener('dragstart', ()=>{ if(!this.active) return; this.track=false; $('#btnRecenter').addClass('show'); });
     }
     async startFromSelection(){
@@ -1855,7 +1998,11 @@ window.initMap=function(){
         const spd=(this.lastPos? (dist(this.lastPos,cur)/((now-(this._lastTime||now))/1000))*3.6 : 0); this._lastTime=now;
         this.lastPos=cur; if(this.track) this.moveCamera(cur, this.lastHeading, speedToZoom(spd), 55, false);
         this.advanceStepIfNeeded(cur);
-        if(!this.isOnRoute(cur, 40)){ if(!this.offRouteSince) this.offRouteSince=now; if(now-this.offRouteSince>3000) this.tryReroute(cur); }
+        if(!this.isOnRoute(cur, 80)){ // tolerancia ampliada
+          if(!this.offRouteSince) this.offRouteSince=now;
+          if(spd < 3) return; // evita jitter en detención
+          if(now-this.offRouteSince>15000) this.tryReroute(cur);
+        }
         else this.offRouteSince=null;
       }, ()=>{}, { enableHighAccuracy:true, maximumAge:1000, timeout:10000 });
     }
@@ -1874,7 +2021,7 @@ window.initMap=function(){
     }
     isOnRoute(point, tolMeters){
       if(!this.route) return true; const path=google.maps.geometry.decodePath(this.route.polyline.encodedPolyline);
-      const poly=new google.maps.Polyline({ path }); const tol=(tolMeters||40)/6378137; const gll=new google.maps.LatLng(point.lat, point.lng);
+      const poly=new google.maps.Polyline({ path }); const tol=(tolMeters||80)/6378137; const gll=new google.maps.LatLng(point.lat, point.lng);
       return google.maps.geometry.poly.isLocationOnEdge(gll, poly, tol);
     }
     advanceStepIfNeeded(cur){

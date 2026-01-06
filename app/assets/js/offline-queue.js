@@ -10,7 +10,7 @@
   // tab o el proceso del navegador se interrumpe inesperadamente.
   const STALE_RUNNING_MS = 2 * 60 * 1000;
   const HEARTBEAT_INTERVAL_MS = 60 * 1000;
-  const AUTH_RECOVERY_INTERVAL_MS = 30 * 1000;
+  const AUTH_RECOVERY_INTERVAL_MS = 10 * 1000;
   const MAX_RESPONSE_SNIPPET = 500;
 
   // --------------------------------------------------------------------------------
@@ -534,6 +534,7 @@
     QueueEvents.emit('queue:blocked', { reason, detail });
     if (reason === 'auth') {
       stopAuthRecovery();
+      attemptAuthRecovery().catch(()=>{});
       queueState.authRecoveryTimer = setInterval(() => {
         try { attemptAuthRecovery(); } catch(_){}
       }, AUTH_RECOVERY_INTERVAL_MS);
@@ -550,6 +551,7 @@
     if (reason === 'auth' || reason === 'csrf') {
       requeueBlocked(reason).catch(()=>{});
     }
+    setTimeout(() => { try { drain(); } catch(_){} }, 200);
   }
 
   async function attemptAuthRecovery(){
@@ -573,6 +575,28 @@
     const base = Math.min(5 * 60 * 1000, 2000 * Math.pow(2, attempts));
     const jitter = Math.floor(Math.random() * 750);
     return base + jitter;
+  }
+
+  async function resetQueuedBackoff(reason){
+    if (!window.AppDB || typeof AppDB.listByStatus !== 'function') return 0;
+    try {
+      const queued = await AppDB.listByStatus('queued');
+      const now = Date.now();
+      let touched = 0;
+      await Promise.all(queued.map(async (job) => {
+        const next = job.nextTryAt || job.nextTry || 0;
+        if (next && next > now) {
+          touched++;
+          await AppDB.update(job.id, { nextTryAt: now, updatedAt: now });
+        }
+      }));
+      if (touched) {
+        QueueEvents.emit('queue:retry:reset', { reason: reason || 'reconnect', updated: touched });
+      }
+      return touched;
+    } catch (_) {
+      return 0;
+    }
   }
 
   async function drain(){
@@ -937,6 +961,7 @@
 
   async function resumeFromBackground(){
     if (!navigator.onLine) return;
+    await resetQueuedBackoff('resume');
     const hb = await heartbeat();
     if (!hb.ok) {
       if (hb.blocked === 'auth') blockQueue('auth', hb.data || null);
@@ -974,7 +999,12 @@
     }, HEARTBEAT_INTERVAL_MS);
   }
 
-  window.addEventListener('online', () => setTimeout(drain, 250));
+  window.addEventListener('online', () => {
+    resetQueuedBackoff('online').finally(() => {
+      if (queueState.blocked === 'auth') attemptAuthRecovery();
+      else drain();
+    });
+  });
   window.addEventListener('focus', () => { resumeFromBackground(); });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') resumeFromBackground();
