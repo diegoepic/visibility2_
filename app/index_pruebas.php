@@ -753,7 +753,7 @@ if (isset($_SESSION['success'])) {
                                                             </a>
                                                             <ul role="menu" class="dropdown-menu pull-right">
                                                                 <li role="presentation">
-                                                                    <a role="menuitem" tabindex="-1" href="#responsive<?php echo $idLocal; ?>" data-toggle="modal">
+                                                            <a role="menuitem" tabindex="-1" href="#responsiveProg<?php echo $idLocal; ?>" data-toggle="modal">
                                                                         <i class="fa fa-edit"></i> Campañas
                                                                     </a>
                                                                 </li>
@@ -870,7 +870,7 @@ if (isset($_SESSION['success'])) {
                                                             </a>
                                                             <ul role="menu" class="dropdown-menu pull-right">
                                                                 <li role="presentation">
-                                                                    <a role="menuitem" tabindex="-1" href="#responsive<?php echo $idLocal; ?>" data-toggle="modal">
+                                                            <a role="menuitem" tabindex="-1" href="#responsiveReag<?php echo $idLocal; ?>" data-toggle="modal">
                                                                         <i class="fa fa-edit"></i> Campañas
                                                                     </a>
                                                                 </li>
@@ -1132,37 +1132,38 @@ if (isset($_SESSION['success'])) {
 </div>
 
 <?php
-// Modales de gestión por local (programados + reagendados)
-$localesTotales    = array_merge($locales, $locales_reag);
-$idsGenerados      = [];
+// Modales de gestión diferenciados para programados y reagendados
 $precacheTargets   = [];
 $precacheTargetsId = [];
-foreach ($localesTotales as $row) {
-    if (in_array($row['idLocal'], $idsGenerados)) continue;
-    $idsGenerados[] = $row['idLocal'];
-    $idLocal        = (int)$row['idLocal'];
+
+// Modales para locales programados (pendientes: countVisita = 0)
+$idsGeneradosProg = [];
+foreach ($locales as $row) {
+    $idLocal = (int)$row['idLocal'];
+    if (in_array($idLocal, $idsGeneradosProg)) continue;
+    $idsGeneradosProg[] = $idLocal;
     $codigoLocal    = $row['codigoLocal'];
     $nombreLocal    = $row['nombreLocal'];
     $direccionLocal = $row['direccionLocal'];
     $vendedor       = $row['vendedor'];
 
-$sql_campanas = "
-  SELECT DISTINCT
-      f.id AS idCampana,
-      f.nombre AS nombreCampana,
-      f.fechaInicio,
-      f.fechaTermino,
-      f.estado
-  FROM formularioQuestion fq
-  INNER JOIN formulario AS f ON f.id = fq.id_formulario
-  WHERE fq.id_usuario  = ?
-    AND fq.id_local = ?
-    AND f.id_empresa = ?
-    AND f.tipo IN (3,1)
-    AND f.estado = 1
-    AND ( fq.countVisita = 0 OR fq.pregunta = 'en proceso' )
-  ORDER BY f.fechaInicio DESC
-";
+    $sql_campanas = "
+      SELECT DISTINCT
+          f.id AS idCampana,
+          f.nombre AS nombreCampana,
+          f.fechaInicio,
+          f.fechaTermino,
+          f.estado
+      FROM formularioQuestion fq
+      INNER JOIN formulario AS f ON f.id = fq.id_formulario
+      WHERE fq.id_usuario  = ?
+        AND fq.id_local    = ?
+        AND f.id_empresa   = ?
+        AND f.tipo        IN (3,1)
+        AND f.estado       = 1
+        AND fq.countVisita = 0
+      ORDER BY f.fechaInicio DESC
+    ";
 
     $stmt_campanas = $conn->prepare($sql_campanas);
     $stmt_campanas->bind_param('iii', $usuario_id, $idLocal, $empresa_id);
@@ -1170,12 +1171,12 @@ $sql_campanas = "
     $result_campanas = $stmt_campanas->get_result();
 
     echo "
-    <div id='responsive{$idLocal}' class='modal fade' tabindex='-1' role='dialog' aria-labelledby='myModalLabel{$idLocal}' aria-hidden='true'>
+    <div id='responsiveProg{$idLocal}' class='modal fade' tabindex='-1' role='dialog' aria-labelledby='myModalLabelProg{$idLocal}' aria-hidden='true'>
       <div class='modal-dialog'>
         <div class='modal-content'>
           <div class='modal-header'>
             <button type='button' class='close' data-dismiss='modal' aria-hidden='true'>&times;</button>
-            <h4 class='modal-title' id='myModalLabel{$idLocal}'>
+            <h4 class='modal-title' id='myModalLabelProg{$idLocal}'>
               Local: {$codigoLocal} - {$nombreLocal}<br>
               Dirección: {$direccionLocal}<br>
               Vendedor: {$vendedor}
@@ -1192,21 +1193,136 @@ $sql_campanas = "
                 <tbody>
     ";
 
-        if ($result_campanas->num_rows > 0) {
-            while ($campana = $result_campanas->fetch_assoc()) {
-                $idCampana     = (int)$campana['idCampana'];
-                $nombreCampana = htmlspecialchars($campana['nombreCampana'], ENT_QUOTES, 'UTF-8');
-                $gestionarUrl  = $appScope . '/gestionarPruebas.php'
-                    . '?idCampana=' . urlencode($idCampana)
-                    . '&nombreCampana=' . urlencode($nombreCampana)
-                    . '&idLocal=' . urlencode($idLocal)
-                    . '&idUsuario=' . urlencode($usuario_id);
-                $gestionarUrlAttr = htmlspecialchars($gestionarUrl, ENT_QUOTES, 'UTF-8');
+    if ($result_campanas->num_rows > 0) {
+        while ($campana = $result_campanas->fetch_assoc()) {
+            $idCampana     = (int)$campana['idCampana'];
+            $nombreCampana = htmlspecialchars($campana['nombreCampana'], ENT_QUOTES, 'UTF-8');
+            $gestionarUrl  = $appScope . '/gestionarPruebas.php'
+                . '?idCampana=' . urlencode($idCampana)
+                . '&nombreCampana=' . urlencode($nombreCampana)
+                . '&idLocal=' . urlencode($idLocal)
+                . '&idUsuario=' . urlencode($usuario_id);
+            $gestionarUrlAttr = htmlspecialchars($gestionarUrl, ENT_QUOTES, 'UTF-8');
 
-                $precacheKey = $idLocal . '|' . $idCampana;
-                if (!isset($precacheTargetsId[$precacheKey])) {
-                    $precacheTargetsId[$precacheKey] = true;
-                    $precacheTargets[] = [
+            $precacheKey = $idLocal . '|' . $idCampana;
+            if (!isset($precacheTargetsId[$precacheKey])) {
+                $precacheTargetsId[$precacheKey] = true;
+                $precacheTargets[] = [
+                    'idLocal'        => $idLocal,
+                    'nombreLocal'    => $nombreLocal,
+                    'direccionLocal' => $direccionLocal,
+                    'idUsuario'      => $usuario_id,
+                    'idCampana'      => $idCampana,
+                    'nombreCampana'  => $nombreCampana
+                ];
+            }
+            echo "
+                <tr data-idcampana='{$idCampana}'>
+                    <td>{$nombreCampana}</td>
+                    <td class='center'>
+                      <div class='btn-group btn-group-sm'>
+                        <a href='{$gestionarUrlAttr}' class='btn btn-info'>
+                          <i class='fa fa-pencil'></i> Gestionar
+                        </a>
+                      </div>
+                    </td>
+                </tr>
+            ";
+        }
+    } else {
+        echo "
+            <tr>
+                <td colspan='2' class='center'>No hay campañas asociadas a este local.</td>
+            </tr>
+        ";
+    }
+
+    echo "
+                </tbody>
+            </table>
+          </div>
+          <div class='modal-footer'>
+            <button type='button' class='btn btn-default' data-dismiss='modal'>Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    ";
+    $stmt_campanas->close();
+}
+
+// Modales para locales reagendados (pendientes: pregunta = 'en proceso')
+$idsGeneradosReag = [];
+foreach ($locales_reag as $row) {
+    $idLocal = (int)$row['idLocal'];
+    if (in_array($idLocal, $idsGeneradosReag)) continue;
+    $idsGeneradosReag[] = $idLocal;
+    $codigoLocal    = $row['codigoLocal'];
+    $nombreLocal    = $row['nombreLocal'];
+    $direccionLocal = $row['direccionLocal'];
+    $vendedor       = $row['vendedor'];
+
+    $sql_campanas = "
+      SELECT DISTINCT
+          f.id AS idCampana,
+          f.nombre AS nombreCampana,
+          f.fechaInicio,
+          f.fechaTermino,
+          f.estado
+      FROM formularioQuestion fq
+      INNER JOIN formulario AS f ON f.id = fq.id_formulario
+      WHERE fq.id_usuario = ?
+        AND fq.id_local   = ?
+        AND f.id_empresa  = ?
+        AND f.tipo       IN (3,1)
+        AND f.estado      = 1
+        AND fq.pregunta   = 'en proceso'
+      ORDER BY f.fechaInicio DESC
+    ";
+
+    $stmt_campanas = $conn->prepare($sql_campanas);
+    $stmt_campanas->bind_param('iii', $usuario_id, $idLocal, $empresa_id);
+    $stmt_campanas->execute();
+    $result_campanas = $stmt_campanas->get_result();
+
+    echo "
+    <div id='responsiveReag{$idLocal}' class='modal fade' tabindex='-1' role='dialog' aria-labelledby='myModalLabelReag{$idLocal}' aria-hidden='true'>
+      <div class='modal-dialog'>
+        <div class='modal-content'>
+          <div class='modal-header'>
+            <button type='button' class='close' data-dismiss='modal' aria-hidden='true'>&times;</button>
+            <h4 class='modal-title' id='myModalLabelReag{$idLocal}'>
+              Local: {$codigoLocal} - {$nombreLocal}<br>
+              Dirección: {$direccionLocal}<br>
+              Vendedor: {$vendedor}
+            </h4>
+          </div>
+          <div class='modal-body'>
+            <table class='table table-bordered'>
+                <thead>
+                    <tr>
+                        <th>Nombre de la Campaña</th>
+                        <th>Gestionar</th>
+                    </tr>
+                </thead>
+                <tbody>
+    ";
+
+    if ($result_campanas->num_rows > 0) {
+        while ($campana = $result_campanas->fetch_assoc()) {
+            $idCampana     = (int)$campana['idCampana'];
+            $nombreCampana = htmlspecialchars($campana['nombreCampana'], ENT_QUOTES, 'UTF-8');
+            $gestionarUrl  = $appScope . '/gestionarPruebas.php'
+                . '?idCampana=' . urlencode($idCampana)
+                . '&nombreCampana=' . urlencode($nombreCampana)
+                . '&idLocal=' . urlencode($idLocal)
+                . '&idUsuario=' . urlencode($usuario_id);
+            $gestionarUrlAttr = htmlspecialchars($gestionarUrl, ENT_QUOTES, 'UTF-8');
+
+            $precacheKey = $idLocal . '|' . $idCampana;
+            if (!isset($precacheTargetsId[$precacheKey])) {
+                $precacheTargetsId[$precacheKey] = true;
+                $precacheTargets[] = [
                     'idLocal'        => $idLocal,
                     'nombreLocal'    => $nombreLocal,
                     'direccionLocal' => $direccionLocal,
@@ -1702,7 +1818,7 @@ window.initMap=function(){
     });
     const iw=new google.maps.InfoWindow({content:
       `<div style="min-width:180px;"><strong>${local.nombre_local}</strong><br><br>
-       <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#responsive${local.idLocal}">
+       <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#responsiveProg${local.idLocal}">
        <i class="fa fa-cog"></i> Gestionar Local</button></div>`});
     marker.addListener('click',()=>iw.open(window.mapa,marker));
     window.markersProg[local.idLocal]={ marker, fechaPropuesta: local.fechaPropuesta };
@@ -1717,7 +1833,7 @@ window.initMap=function(){
     });
     const iw=new google.maps.InfoWindow({content:
       `<div style="min-width:180px;"><strong>${local.nombre_local}</strong><br><br>
-       <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#responsive${local.idLocal}">
+       <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#responsiveReag${local.idLocal}">
        <i class="fa fa-cog"></i> Gestionar Local</button></div>`});
     marker.addListener('click',()=>iw.open(window.mapa,marker));
     window.markersReag[local.idLocal]={ marker, fechaPropuesta: local.fechaPropuesta };
