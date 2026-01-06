@@ -278,7 +278,10 @@ function getFotosImplementaciones($idForm, array $fqIds): array {
         ORDER BY id ASC
     ";
 
-    $stmt       = $conn->prepare($sql);
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        die("Error preparando getFotosImplementaciones: " . $conn->error);
+    }
     $params     = array_merge([$types], [$idForm], $fqIds);
     $bindParams = [];
     foreach ($params as $k => $v) {
@@ -578,17 +581,22 @@ function renderSeccionTablas($locales, $encuesta, $inline, $fotosLocales, $maxFo
     }
 
     $html .= "<b>Encuesta</b><table border='1' style='border-collapse:collapse; table-layout:auto; font-size:9pt;'><tr>";
-    if (!empty($encuesta)) {
-        $keys = array_keys($encuesta[0]);
-        foreach ($keys as $k) {
-            $html .= '<th>' . e($k) . '</th>';
+    $keys = [];
+    foreach ($encuesta as $row) {
+        foreach (array_keys($row) as $k) {
+            if (!in_array($k, $keys, true)) {
+                $keys[] = $k;
+            }
         }
+    }
+    foreach ($keys as $k) {
+        $html .= '<th>' . e($k) . '</th>';
     }
     $html .= '</tr>';
     foreach ($encuesta as $row) {
         $html .= '<tr>';
-        foreach ($row as $v) {
-            $vs    = (string)($v ?? '');
+        foreach ($keys as $k) {
+            $vs    = (string)($row[$k] ?? '');
             $html .= '<td>' . renderValorConImagen($vs, $inline) . '</td>';
         }
         $html .= '</tr>';
@@ -671,8 +679,26 @@ if (empty($reportes)) {
 }
 
 // -----------------------------------------------------------------------------
-// Render final (un solo HTML con todas las campañas)
+// Render final (un solo HTML con todas las campañas en una sola tabla)
 // -----------------------------------------------------------------------------
+$localesGlobal        = [];
+$encuestaGlobal       = [];
+$fotosLocalesGlobal   = [];
+$maxFotosLocalesGlobal = 0;
+
+foreach ($reportes as $rep) {
+    foreach ($rep['locales'] as $l) {
+        $localesGlobal[] = $l;
+    }
+    foreach ($rep['encuesta'] as $e) {
+        $encuestaGlobal[] = $e;
+    }
+    foreach ($rep['fotosLocales'] as $fqId => $urls) {
+        $fotosLocalesGlobal[$fqId] = $urls;
+        $maxFotosLocalesGlobal     = max($maxFotosLocalesGlobal, count($urls));
+    }
+}
+
 $html = <<<HTML
 <html>
   <head>
@@ -697,21 +723,13 @@ $html = <<<HTML
   <body>
 HTML;
 
-foreach ($reportes as $idx => $rep) {
-    $html .= '<h3>Campaña: ' . e($rep['nombre']) . '</h3>';
-    $html .= '<p>Modalidad: ' . e($rep['modalidad']) . '</p>';
-    $html .= renderSeccionTablas(
-        $rep['locales'],
-        $rep['encuesta'],
-        $inline,
-        $rep['fotosLocales'],
-        $rep['maxFotosLocales']
-    );
-
-    if ($idx < count($reportes) - 1) {
-        $html .= '<hr style="page-break-after:always;">';
-    }
-}
+$html .= renderSeccionTablas(
+    $localesGlobal,
+    $encuestaGlobal,
+    $inline,
+    $fotosLocalesGlobal,
+    $maxFotosLocalesGlobal
+);
 
 if ($inline) {
     $html .= <<<HTML
