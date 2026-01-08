@@ -189,8 +189,69 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
         $stmt->close();
 
         if ($hasParent) {
-          // Queremos que la nueva pregunta quede inmediatamente debajo del padre
-          $newSort = (int)$parentSort + 1;
+          // Queremos que la nueva pregunta quede al final del bloque condicional del padre
+          $questions = [];
+          $stmt = $conn->prepare("
+            SELECT id, sort_order, id_dependency_option
+            FROM question_set_questions
+            WHERE id_question_set = ?
+          ");
+          $stmt->bind_param("i", $idSet);
+          $stmt->execute();
+          $res = $stmt->get_result();
+          while ($row = $res->fetch_assoc()) {
+            $qid = (int)$row['id'];
+            $questions[$qid] = [
+              'sort_order' => (int)$row['sort_order'],
+              'dep_option' => isset($row['id_dependency_option']) ? (int)$row['id_dependency_option'] : null,
+            ];
+          }
+          $stmt->close();
+
+          $optionParents = [];
+          $stmt = $conn->prepare("
+            SELECT o.id, o.id_question_set_question
+            FROM question_set_options o
+            JOIN question_set_questions q ON q.id = o.id_question_set_question
+            WHERE q.id_question_set = ?
+          ");
+          $stmt->bind_param("i", $idSet);
+          $stmt->execute();
+          $res = $stmt->get_result();
+          while ($row = $res->fetch_assoc()) {
+            $optionParents[(int)$row['id']] = (int)$row['id_question_set_question'];
+          }
+          $stmt->close();
+
+          $childrenByQuestion = [];
+          foreach ($questions as $qid => $qdata) {
+            $depOption = $qdata['dep_option'];
+            if ($depOption && isset($optionParents[$depOption])) {
+              $parentQ = $optionParents[$depOption];
+              $childrenByQuestion[$parentQ][] = $qid;
+            }
+          }
+
+          $maxSort = $parentSort;
+          $stack = [$parentId];
+          $visited = [];
+          while (!empty($stack)) {
+            $current = array_pop($stack);
+            if (isset($visited[$current])) {
+              continue;
+            }
+            $visited[$current] = true;
+            if (isset($questions[$current])) {
+              $maxSort = max($maxSort, $questions[$current]['sort_order']);
+            }
+            if (isset($childrenByQuestion[$current])) {
+              foreach ($childrenByQuestion[$current] as $childId) {
+                $stack[] = $childId;
+              }
+            }
+          }
+
+          $newSort = (int)$maxSort + 1;
 
           // Desplazar hacia abajo todas las preguntas desde ahí
           $stmt = $conn->prepare("
