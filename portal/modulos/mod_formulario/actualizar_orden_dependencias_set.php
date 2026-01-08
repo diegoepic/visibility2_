@@ -84,11 +84,10 @@ function has_cycle_full(array $parentOf): bool {
 
 // -------- Validaciones de entrada --------
 
-// a) IDs de preguntas en payload (y detectar duplicados)
+// a) IDs de preguntas en payload (deduplicar)
 $qIds = array_map(static fn($r)=> (int)($r['id'] ?? 0), $rows);
 if (in_array(0, $qIds, true)){ http_response_code(400); echo "Fila sin 'id' de pregunta válido."; exit(); }
-$dups = array_diff_key($qIds, array_unique($qIds));
-if (!empty($dups)){ http_response_code(400); echo "El payload contiene IDs de pregunta duplicados."; exit(); }
+$qIds = array_values(array_unique($qIds));
 
 // b) Verificar pertenencia de TODAS las preguntas del payload al set
 $in    = implode(',', array_fill(0, count($qIds), '?'));
