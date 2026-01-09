@@ -713,6 +713,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
       $editar_url = ($row['tipo'] === '2')
         ? "mod_formulario/editar_formularioIW.php?id=" . urlencode($row['id'])
         : "mod_formulario/editar_formulario.php?id="   . urlencode($row['id']);
+      $visitas_url = $editar_url . "&active_tab=agregar-entradas";
     ?>
     <tr>
       <td><?= htmlspecialchars($row['id'], ENT_QUOTES, 'UTF-8') ?></td>
@@ -727,6 +728,9 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
         <!-- Editar -->
         <a href="<?= $editar_url ?>" class="btn btn-sm btn-warning mr-1" title="Editar">
           <i class="fas fa-edit"></i>
+        </a>
+        <a href="<?= $visitas_url ?>" class="btn btn-sm btn-secondary mr-1" title="Historial de visitas">
+          <i class="fas fa-clipboard-list"></i>
         </a>
         <br>
         <!-- Mapa -->

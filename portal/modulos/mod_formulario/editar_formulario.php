@@ -13,6 +13,7 @@ include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 
 // Incluir los datos de la sesión
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/session_data.php';
+require_once __DIR__ . '/visitas_helpers.php';
 
 // Verificar si el usuario ha iniciado sesión
 if (!isset($_SESSION['usuario_id'])) {
@@ -280,7 +281,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 }
 
                 $conn->commit();
-                $success = "Set de preguntas importado y sincronizado correctamente.";
+                $success = "Set de preguntas cargado y sincronizado correctamente. Puedes revisarlo en la gestión de preguntas.";
                 header("Location: editar_formulario.php?id=$formulario_id&active_tab=import-set");
                 exit();
 
@@ -535,11 +536,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $val_prop        = trim($data[$idx_valor_propuesto]);
     $fechaPropuesta  = trim($data[$idx_fechaPropuesta]);
     
-$dateObj = DateTime::createFromFormat('y/m/d', $fechaPropuesta);
+$dateObj = DateTime::createFromFormat('Y-m-d', $fechaPropuesta)
+    ?: DateTime::createFromFormat('d/m/Y', $fechaPropuesta)
+    ?: DateTime::createFromFormat('y/m/d', $fechaPropuesta);
 if ($dateObj) {
     $fechaPropuesta = $dateObj->format('Y-m-d') . ' 00:00:00';
 } else {
-    // Manejar error en conversión si el formato es incorrecto
+    $errores_csv[] = "Fila $fila: fechaPropuesta tiene un formato inválido.";
+    continue;
 }
     // Validar que ninguno de los campos requeridos esté vacío
     if ($cod_local == '' || $usr_name == '' || $material == '' || $val_prop == '' || $fechaPropuesta == '') {
@@ -551,7 +555,7 @@ if ($dateObj) {
         continue;
     }
     
-    // Convertir la fecha propuesta al formato MySQL (ajusta según el formato de entrada)
+    // Convertir la fecha propuesta al formato MySQL
     $fechaPropuesta = date("Y-m-d H:i:s", strtotime($fechaPropuesta));
     
     // Búsqueda del local y usuario (código existente)
@@ -608,6 +612,7 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_PO
     $codigo_local    = htmlspecialchars($_POST['codigo_local'], ENT_QUOTES, 'UTF-8');
     $material_ids    = $_POST['material_id'];
     $valores_propuestos = $_POST['valor_propuesto'];
+    $fecha_propuesta_input = isset($_POST['fechaPropuesta']) ? trim($_POST['fechaPropuesta']) : '';
     
     $empresa_form = intval($formulario['id_empresa']);
     $stmt_local = $conn->prepare("SELECT id FROM local WHERE codigo = ? AND id_empresa = ?");
@@ -623,6 +628,20 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_PO
     if (!$found || !$id_local) {
         $error = "No se encontró el local con código '{$codigo_local}' en esta empresa.";
     } elseif ($id_usuario > 0 && !empty($material_ids) && is_array($material_ids)) {
+        if ($fecha_propuesta_input === '') {
+            $error = "Selecciona una fecha propuesta para programar el local.";
+        } else {
+            $fecha_ts = strtotime($fecha_propuesta_input);
+            if ($fecha_ts === false) {
+                $error = "La fecha propuesta es inválida.";
+            } else {
+                $fecha_propuesta = date('Y-m-d H:i:s', $fecha_ts);
+            }
+        }
+
+        if (isset($error)) {
+            // fall through para mostrar el error
+        } else {
 
         foreach ($material_ids as $index => $material_id) {
             $material_id     = intval($material_id);
@@ -644,14 +663,14 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_PO
             // ← FIX: ahora insertamos el ID numérico del local ($id_local), no el código
             $stmt_insert_fq = $conn->prepare("
                 INSERT INTO formularioQuestion
-                    (id_formulario, id_usuario, id_local, material, valor_propuesto, estado)
-                VALUES (?, ?, ?, ?, ?, 0)
+                    (id_formulario, id_usuario, id_local, material, valor_propuesto, fechaPropuesta, estado)
+                VALUES (?, ?, ?, ?, ?, ?, 0)
             ");
             if ($stmt_insert_fq === false) {
                 $error = "Error en la preparación de la consulta: " . htmlspecialchars($conn->error);
                 break;
             }
-            $stmt_insert_fq->bind_param("iiiss", $formulario_id, $id_usuario, $id_local, $material, $valor_propuesto);
+            $stmt_insert_fq->bind_param("iiisss", $formulario_id, $id_usuario, $id_local, $material, $valor_propuesto, $fecha_propuesta);
 
             if (!$stmt_insert_fq->execute()) {
                 $error = "Error al agregar la entrada: " . htmlspecialchars($stmt_insert_fq->error);
@@ -665,6 +684,7 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_PO
             $success = "Entradas agregadas correctamente.";
             header("Location: editar_formulario.php?id=$formulario_id&active_tab=agregar-entradas");
             exit();
+        }
         }
     } else {
         $error = "Por favor, complete todos los campos obligatorios para agregar nuevas entradas.";
@@ -732,261 +752,32 @@ if (isset($_POST['update_fq'])) {
 }
 
 // ------------------------------
-// NUEVO: Agrupar y mostrar las gestiones existentes por LOCAL
-// Se unen las implementaciones (formularioQuestion) y las respuestas de encuesta (form_question_responses unidas con form_questions)
-// Se agrega el campo `pregunta` de formularioQuestion como estado de gestión.
-// Además se implementan filtros y paginación para este apartado.
+// NUEVO: listado de visitas desde visita + gestion_visita
 // ------------------------------
 
-// Leer filtros para la agrupación (ahora con selects)
-$filter_codigo  = isset($_GET['filter_codigo']) ? trim($_GET['filter_codigo']) : '';
-$filter_usuario = isset($_GET['filter_usuario']) ? trim($_GET['filter_usuario']) : '';
-$filter_estado  = isset($_GET['filter_estado']) ? trim($_GET['filter_estado']) : '';
+$visita_usuario = isset($_GET['visita_usuario']) ? intval($_GET['visita_usuario']) : 0;
+$visita_desde_input = isset($_GET['visita_desde']) ? trim($_GET['visita_desde']) : '';
+$visita_hasta_input = isset($_GET['visita_hasta']) ? trim($_GET['visita_hasta']) : '';
+$visita_page = isset($_GET['visita_page']) ? intval($_GET['visita_page']) : 1;
+$visita_per_page = isset($_GET['visita_per_page']) ? intval($_GET['visita_per_page']) : 25;
+if ($visita_page < 1) { $visita_page = 1; }
+if ($visita_per_page < 1) { $visita_per_page = 25; }
 
-// Parámetros para paginación en la agrupación
-$limitGroup = isset($_GET['limit_group']) ? intval($_GET['limit_group']) : 10000;
-if ($limitGroup <= 0) { $limitGroup = 10000; }
-$pageGroup = isset($_GET['page_group']) ? intval($_GET['page_group']) : 1;
-if ($pageGroup < 1) { $pageGroup = 1; }
-$offsetGroup = ($pageGroup - 1) * $limitGroup;
+$visita_filters = [
+    'formulario_id' => $formulario_id,
+    'usuario_id' => $visita_usuario,
+    'fecha_desde' => $visita_desde_input ? $visita_desde_input . ' 00:00:00' : '',
+    'fecha_hasta' => $visita_hasta_input ? $visita_hasta_input . ' 23:59:59' : '',
+    'page' => $visita_page,
+    'per_page' => $visita_per_page,
+];
 
-// Obtener valores únicos para los filtros (Código, Usuario y Estado Gestión)
-$distinct_codigo = [];
-$query_codigo = "
-   SELECT codigo FROM (
-     SELECT l.codigo as codigo
-     FROM formularioQuestion fq
-     LEFT JOIN local l ON l.id = fq.id_local
-     WHERE fq.id_formulario = ?
-     UNION
-     SELECT l.codigo as codigo
-     FROM form_question_responses fqr
-     INNER JOIN form_questions fq2 ON fq2.id = fqr.id_form_question
-     LEFT JOIN local l ON l.id = fqr.id_local
-     WHERE fq2.id_formulario = ?
-   ) as t
-   ORDER BY codigo ASC
-";
-$stmt_codigo = $conn->prepare($query_codigo);
-$stmt_codigo->bind_param("ii", $formulario_id, $formulario_id);
-$stmt_codigo->execute();
-$result_codigo = $stmt_codigo->get_result();
-while($row = $result_codigo->fetch_assoc()){
-   $distinct_codigo[] = $row['codigo'];
-}
-$stmt_codigo->close();
-
-$distinct_usuario = [];
-$query_usuario = "
-   SELECT usuario FROM (
-     SELECT u.usuario as usuario
-     FROM formularioQuestion fq
-     LEFT JOIN usuario u ON u.id = fq.id_usuario
-     WHERE fq.id_formulario = ?
-     UNION
-     SELECT u.usuario as usuario
-     FROM form_question_responses fqr
-     INNER JOIN form_questions fq2 ON fq2.id = fqr.id_form_question
-     LEFT JOIN usuario u ON u.id = fqr.id_usuario
-     WHERE fq2.id_formulario = ?
-   ) as t
-   ORDER BY usuario ASC
-";
-$stmt_usuario = $conn->prepare($query_usuario);
-$stmt_usuario->bind_param("ii", $formulario_id, $formulario_id);
-$stmt_usuario->execute();
-$result_usuario = $stmt_usuario->get_result();
-while($row = $result_usuario->fetch_assoc()){
-   $distinct_usuario[] = $row['usuario'];
-}
-$stmt_usuario->close();
-
-$distinct_estado = [];
-$query_estado = "
-   SELECT DISTINCT 
-      CASE 
-        WHEN TRIM(pregunta) = '' THEN 'No gestionado'
-        ELSE pregunta
-      END as estado
-   FROM formularioQuestion
-   WHERE id_formulario = ?
-   ORDER BY estado ASC
-";
-$stmt_estado = $conn->prepare($query_estado);
-$stmt_estado->bind_param("i", $formulario_id);
-$stmt_estado->execute();
-$result_estado = $stmt_estado->get_result();
-while($row = $result_estado->fetch_assoc()){
-   $distinct_estado[] = $row['estado'];
-}
-$stmt_estado->close();
-
-// Construir la cláusula HAVING en base a los filtros
-$having = array();
-if (!empty($filter_codigo)) {
-    $filter_codigo_esc = $conn->real_escape_string($filter_codigo);
-    $having[] = "codigo = '$filter_codigo_esc'";
-}
-if (!empty($filter_usuario)) {
-    $filter_usuario_esc = $conn->real_escape_string($filter_usuario);
-    // Usamos FIND_IN_SET para buscar en la lista de usuarios concatenados
-    $having[] = "FIND_IN_SET('$filter_usuario_esc', usuarios) > 0";
-}
-if (!empty($filter_estado)) {
-    if (strtolower($filter_estado) === 'no gestionado') {
-        $having[] = "(estado_gestion = '' OR estado_gestion IS NULL)";
-    } else {
-        $filter_estado_esc = $conn->real_escape_string($filter_estado);
-        $having[] = "estado_gestion = '$filter_estado_esc'";
-    }
-}
-
-// Armar la query de agrupación SIN LIMIT/OFFSET para el conteo total
-$sql_group_without_limit = "
-    SELECT 
-        id_local, 
-        codigo, 
-        nombre_local, 
-        direccion_local,
-        SUM(total_entries) AS total_entries,
-        GROUP_CONCAT(DISTINCT usuarios SEPARATOR ', ') AS usuarios,
-        MAX(estado_gestion) AS estado_gestion
-    FROM (
-        SELECT 
-           fq.id_local,
-           l.codigo,
-           l.nombre AS nombre_local,
-           l.direccion AS direccion_local,
-           COUNT(*) AS total_entries,
-           SUM(CASE WHEN fq.estado = 1 THEN 1 ELSE 0 END) AS completadas,
-           SUM(CASE WHEN fq.estado = 0 THEN 1 ELSE 0 END) AS en_proceso,
-           SUM(CASE WHEN fq.estado = 2 THEN 1 ELSE 0 END) AS canceladas,
-           GROUP_CONCAT(DISTINCT u.usuario SEPARATOR ', ') AS usuarios,
-           MIN(fq.pregunta) AS estado_gestion
-        FROM formularioQuestion fq
-        LEFT JOIN local l ON l.id = fq.id_local
-        LEFT JOIN usuario u ON u.id = fq.id_usuario
-        WHERE fq.id_formulario = ?
-        GROUP BY fq.id_local, l.codigo, l.nombre, l.direccion
-
-        UNION ALL
-
-        SELECT 
-           fqr.id_local,
-           l.codigo,
-           l.nombre AS nombre_local,
-           l.direccion AS direccion_local,
-           COUNT(*) AS total_entries,
-           0 AS completadas,
-           0 AS en_proceso,
-           0 AS canceladas,
-           GROUP_CONCAT(DISTINCT u.usuario SEPARATOR ', ') AS usuarios,
-           '' AS estado_gestion
-        FROM form_question_responses fqr
-        INNER JOIN form_questions fq2 ON fq2.id = fqr.id_form_question
-        LEFT JOIN local l ON l.id = fqr.id_local
-        LEFT JOIN usuario u ON u.id = fqr.id_usuario
-        WHERE fq2.id_formulario = ?
-        GROUP BY fqr.id_local, l.codigo, l.nombre, l.direccion
-    ) AS union_table
-    GROUP BY id_local, codigo, nombre_local, direccion_local
-";
-if (!empty($having)) {
-    $sql_group_without_limit .= " HAVING " . implode(" AND ", $having);
-}
-
-// Obtener el total de registros agrupados para la paginación
-$stmt_count = $conn->prepare("SELECT COUNT(*) as total FROM ($sql_group_without_limit) as t");
-if (!$stmt_count) {
-    die("Error en la preparación de la consulta de conteo: " . htmlspecialchars($conn->error));
-}
-$stmt_count->bind_param("ii", $formulario_id, $formulario_id);
-$stmt_count->execute();
-$result_count = $stmt_count->get_result();
-$row_count = $result_count->fetch_assoc();
-$totalRows = intval($row_count['total']);
-$stmt_count->close();
-$totalPages = ceil($totalRows / $limitGroup);
-
-// Armar la query de agrupación CON LIMIT y OFFSET
-// Reemplaza tu SQL actual (con UNION ALL) por algo así:
-
-$sql_group = "
-SELECT
-    l.id                      AS id_local,
-    l.codigo,
-    l.nombre                  AS nombre_local,
-    l.direccion               AS direccion_local,
-    COALESCE(q1.total_fq, 0)  AS entradas_fq,
-    COALESCE(q1.completadas, 0) AS completadas,
-    COALESCE(q1.en_proceso, 0)  AS en_proceso,
-    COALESCE(q1.canceladas, 0)  AS canceladas,
-    COALESCE(q2.total_resps, 0) AS respuestas_encuesta,
-    CONCAT_WS(', ',
-        COALESCE(q1.usuarios, ''), 
-        COALESCE(q2.usuarios, '')
-    ) AS usuarios,
-    COALESCE(q1.estado_gestion, '') AS estado_gestion
-FROM (
-    -- 1) obtenemos los locales únicos que aparecen en implementaciones o encuestas
-    SELECT id_local FROM formularioQuestion WHERE id_formulario = ?
-    UNION
-    SELECT id_local
-    FROM form_question_responses fqr
-    INNER JOIN form_questions fq2 ON fq2.id = fqr.id_form_question
-    WHERE fq2.id_formulario = ?
-) AS all_locals
-
-JOIN local l ON l.id = all_locals.id_local
-
--- 2) agregación de datos de implementaciones (formularioQuestion) por local
-LEFT JOIN (
-    SELECT
-      fq.id_local,
-      COUNT(*) AS total_fq,
-      SUM(fq.estado = 1) AS completadas,
-      SUM(fq.estado = 0) AS en_proceso,
-      SUM(fq.estado = 2) AS canceladas,
-      GROUP_CONCAT(DISTINCT u.usuario SEPARATOR ', ') AS usuarios,
-      MIN(fq.pregunta) AS estado_gestion
-    FROM formularioQuestion fq
-    LEFT JOIN usuario u ON u.id = fq.id_usuario
-    WHERE fq.id_formulario = ?
-    GROUP BY fq.id_local
-) AS q1 ON q1.id_local = all_locals.id_local
-
--- 3) agregación de datos de encuesta (form_question_responses) por local
-LEFT JOIN (
-    SELECT
-      fqr.id_local,
-      COUNT(*) AS total_resps,
-      GROUP_CONCAT(DISTINCT u.usuario SEPARATOR ', ') AS usuarios
-    FROM form_question_responses fqr
-    INNER JOIN form_questions fq2 ON fq2.id = fqr.id_form_question
-    LEFT JOIN usuario u ON u.id = fqr.id_usuario
-    WHERE fq2.id_formulario = ?
-    GROUP BY fqr.id_local
-) AS q2 ON q2.id_local = all_locals.id_local
-
--- 4) Paginación (limit / offset)
-LIMIT ? OFFSET ?
-";
-
-$stmt_group = $conn->prepare($sql_group);
-$stmt_group->bind_param(
-  "iiiiii", 
-   $formulario_id,  // for UNION-part 1
-   $formulario_id,  // for UNION-part 2
-   $formulario_id,  // for q1
-   $formulario_id,  // for q2
-   $limitGroup,
-   $offsetGroup
-);
-$stmt_group->execute();
-$result_group = $stmt_group->get_result();
-
-$gestiones_por_local = $result_group->fetch_all(MYSQLI_ASSOC);
-$stmt_group->close();
+$visitas_result = obtenerListadoVisitas($conn, $visita_filters);
+$visitas = $visitas_result['rows'];
+$visitas_total = $visitas_result['total'];
+$visitas_total_pages = $visitas_result['total_pages'];
+$usuarios_visitas = obtenerUsuariosVisitas($conn, $formulario_id);
+$locales_programados = obtenerLocalesProgramados($conn, $formulario_id);
 
 // ---------------------------------------------------------------
 // OBTENER Listado de Sets de Preguntas disponibles
@@ -999,8 +790,6 @@ $sets = getQuestionSets();
     <meta charset="UTF-8">
     <title>Editar Formulario</title>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.12/css/dataTables.bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/1.2.2/css/buttons.bootstrap.min.css">    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"> 
     <style>
         .material-row { margin-bottom: 10px; }
@@ -1023,13 +812,6 @@ $sets = getQuestionSets();
         border-color: #ccc;
     }
     
-    .dt-buttons { 
-      float: left; 
-      margin-right: 10px; 
-    }
-    .dataTables_filter { 
-      float: right; 
-    }
     .btn-default{
     background-color: #f8f9fa;
     border-color: #ddd;
@@ -1239,6 +1021,10 @@ $sets = getQuestionSets();
                     <label for="codigo_local">Código Local:</label>
                     <input type="text" id="codigo_local" name="codigo_local" class="form-control" required>
                 </div>
+                <div class="form-group">
+                    <label for="fechaPropuesta">Fecha propuesta:</label>
+                    <input type="datetime-local" id="fechaPropuesta" name="fechaPropuesta" class="form-control" required>
+                </div>
                 <!-- Contenedor para materiales y valores propuestos -->
                 <div id="materiales-container">
                     <div class="material-row">
@@ -1327,79 +1113,137 @@ $sets = getQuestionSets();
             </div>
             
             
-            <!-- NUEVO: Listado de Gestiones Existentes AGRUPADAS por Local -->
-            <h3 class="mt-5">Gestiones Agrupadas por Local</h3>
-            
-<table id="example" class="table table-striped table-bordered" cellspacing="0" width="100%">
-	<thead>
-		<tr>
-                  <th>Código Local</th>
-                  <th>Local</th>
-                  <th>Dirección</th>
-                  <th>Usuarios</th>
-                  <th>Estado Gestión</th>
-                  <th>Acción</th>
-		</tr>
-	</thead>
-	<tbody>
-                  <?php if (!empty($gestiones_por_local)): ?>
-                    <?php foreach ($gestiones_por_local as $g): ?>
-                      <tr>
-                        <td><?= htmlspecialchars((string)($g['codigo']          ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                        <td><?= htmlspecialchars((string)($g['nombre_local']    ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                        <td><?= htmlspecialchars((string)($g['direccion_local'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                        <td><?= htmlspecialchars((string)($g['usuarios']         ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                        <td>
-                          <?= empty($g['estado_gestion'])
-                             ? 'No gestionado'
-                             : htmlspecialchars((string)$g['estado_gestion'], ENT_QUOTES, 'UTF-8')
-                          ?>
-                        </td>
-                        <td>
-                          <button
-                            class="btn btn-sm btn-info ver-gestiones"
-                            data-local-id="<?= htmlspecialchars((string)($g['id_local'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                          >Ver Detalles</button>
-                            <button
-                            class="btn btn-sm btn-primary ver-visitas"
-                            data-formulario-id="<?= $formulario_id ?>"
-                            data-local-id="<?= htmlspecialchars($g['id_local'], ENT_QUOTES, 'UTF-8') ?>"
-                          >Ver Visitas</button>
-                          
-                          <button
-                            class="btn btn-sm btn-warning editar-gestion"
-                            data-local-id="<?= htmlspecialchars((string)($g['id_local'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                          >Editar Gestión</button>
-                        </td>
-                      </tr>
-                    <?php endforeach; ?>
-                  <?php else: ?>
-                    <tr>
-                      <td colspan="8" class="text-center">No hay gestiones registradas.</td>
-                    </tr>
-                  <?php endif; ?>            
-	</tbody>
-  <tfoot>
-    <tr>
-      <th>Código Local</th>
-      <th>Local</th>
-      <th>Dirección</th>
-      <th>Usuarios</th>
-      <th>Estado Gestión</th>
-      <th>Acción</th>
-    </tr>
-  </tfoot>
-</table>
+            <!-- NUEVO: Listado de visitas -->
+            <h3 class="mt-5">Historial de visitas</h3>
+            <p class="text-muted">
+                Locales programados en ruta: <strong><?= count($locales_programados) ?></strong>.
+                Visitas registradas: <strong><?= (int)$visitas_total ?></strong>.
+            </p>
 
-        </div>
-        
-        <!-- Modal para ver gestiones agrupadas por local -->
-        <div class="modal fade" id="gestionesModal" tabindex="-1" role="dialog" aria-labelledby="gestionesModalLabel" aria-hidden="true">
-          <div class="modal-dialog modal-lg" role="document">
-            <div class="modal-content" id="gestionesModalContent">
-              <!-- Detalle de gestiones cargado vía AJAX -->
+            <form method="get" class="form-row align-items-end mb-3">
+                <input type="hidden" name="id" value="<?= (int)$formulario_id ?>">
+                <input type="hidden" name="active_tab" value="agregar-entradas">
+                <div class="form-group col-md-3">
+                    <label for="visita_desde">Desde</label>
+                    <input type="date" id="visita_desde" name="visita_desde" class="form-control" value="<?= htmlspecialchars($visita_desde_input, ENT_QUOTES, 'UTF-8') ?>">
+                </div>
+                <div class="form-group col-md-3">
+                    <label for="visita_hasta">Hasta</label>
+                    <input type="date" id="visita_hasta" name="visita_hasta" class="form-control" value="<?= htmlspecialchars($visita_hasta_input, ENT_QUOTES, 'UTF-8') ?>">
+                </div>
+                <div class="form-group col-md-3">
+                    <label for="visita_usuario">Usuario</label>
+                    <select id="visita_usuario" name="visita_usuario" class="form-control">
+                        <option value="">Todos</option>
+                        <?php foreach ($usuarios_visitas as $u): ?>
+                            <option value="<?= (int)$u['id'] ?>" <?php if ($visita_usuario === (int)$u['id']) echo 'selected'; ?>>
+                                <?= htmlspecialchars($u['usuario'], ENT_QUOTES, 'UTF-8') ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group col-md-2">
+                    <label for="visita_per_page">Por página</label>
+                    <select id="visita_per_page" name="visita_per_page" class="form-control">
+                        <?php foreach ([10, 25, 50, 100] as $opt): ?>
+                            <option value="<?= $opt ?>" <?php if ($visita_per_page === $opt) echo 'selected'; ?>><?= $opt ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group col-md-1">
+                    <button type="submit" class="btn btn-primary w-100">Filtrar</button>
+                </div>
+            </form>
+
+            <?php
+                $export_params = [
+                    'formulario_id' => $formulario_id,
+                    'visita_usuario' => $visita_usuario,
+                    'visita_desde' => $visita_desde_input,
+                    'visita_hasta' => $visita_hasta_input,
+                ];
+                $export_url = 'exportar_visitas_csv.php?' . http_build_query($export_params);
+            ?>
+            <a href="<?= htmlspecialchars($export_url, ENT_QUOTES, 'UTF-8') ?>" class="btn btn-outline-secondary mb-3">
+                <i class="fas fa-file-csv"></i> Exportar CSV
+            </a>
+
+            <div class="table-responsive">
+                <table class="table table-striped table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Fecha/Hora</th>
+                            <th>Código Local</th>
+                            <th>Cadena</th>
+                            <th>Local</th>
+                            <th>Dirección</th>
+                            <th>Usuario</th>
+                            <th>Estado</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (!empty($visitas)): ?>
+                            <?php foreach ($visitas as $v): ?>
+                                <tr>
+                                    <td><?= $v['fecha_inicio'] ? date('d/m/Y H:i', strtotime($v['fecha_inicio'])) : '—' ?></td>
+                                    <td><?= htmlspecialchars((string)($v['codigo'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars((string)($v['cadena'] ?? 'Sin cadena'), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars((string)($v['local_nombre'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars((string)($v['direccion'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars((string)($v['usuario'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars((string)($v['estado_visita'] ?? $v['estado'] ?? 'Sin estado'), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td>
+                                        <button class="btn btn-sm btn-info ver-detalle-visita" data-visita-id="<?= (int)$v['id'] ?>">
+                                            Ver detalles
+                                        </button>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <tr>
+                                <td colspan="8" class="text-center">No hay visitas registradas con los filtros actuales.</td>
+                            </tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
             </div>
-          </div>
+
+            <?php if ($visitas_total_pages > 1): ?>
+                <nav aria-label="Paginación de visitas">
+                    <ul class="pagination">
+                        <?php
+                            $base_params = $_GET;
+                            $base_params['id'] = $formulario_id;
+                            $base_params['active_tab'] = 'agregar-entradas';
+                        ?>
+                        <li class="page-item <?= $visita_page <= 1 ? 'disabled' : '' ?>">
+                            <?php
+                                $base_params['visita_page'] = max(1, $visita_page - 1);
+                                $prev_url = 'editar_formulario.php?' . http_build_query($base_params);
+                            ?>
+                            <a class="page-link" href="<?= htmlspecialchars($prev_url, ENT_QUOTES, 'UTF-8') ?>">Anterior</a>
+                        </li>
+                        <?php for ($p = 1; $p <= $visitas_total_pages; $p++): ?>
+                            <?php
+                                $base_params['visita_page'] = $p;
+                                $page_url = 'editar_formulario.php?' . http_build_query($base_params);
+                            ?>
+                            <li class="page-item <?= $p === $visita_page ? 'active' : '' ?>">
+                                <a class="page-link" href="<?= htmlspecialchars($page_url, ENT_QUOTES, 'UTF-8') ?>"><?= $p ?></a>
+                            </li>
+                        <?php endfor; ?>
+                        <li class="page-item <?= $visita_page >= $visitas_total_pages ? 'disabled' : '' ?>">
+                            <?php
+                                $base_params['visita_page'] = min($visitas_total_pages, $visita_page + 1);
+                                $next_url = 'editar_formulario.php?' . http_build_query($base_params);
+                            ?>
+                            <a class="page-link" href="<?= htmlspecialchars($next_url, ENT_QUOTES, 'UTF-8') ?>">Siguiente</a>
+                        </li>
+                    </ul>
+                </nav>
+            <?php endif; ?>
+
         </div>
 
         <!-- Tab: Agregar Pregunta -->
@@ -1504,202 +1348,25 @@ $sets = getQuestionSets();
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
 
-<script src="/visibility2/portal/dist/js/jquery.dataTables.min.js"></script>
-<script src='https://cdn.datatables.net/buttons/1.2.2/js/dataTables.buttons.min.js'></script>
-<script src='https://cdn.datatables.net/buttons/1.2.2/js/buttons.colVis.min.js'></script>
-<script src='https://cdn.datatables.net/buttons/1.2.2/js/buttons.html5.min.js'></script>
-<script src='https://cdn.datatables.net/buttons/1.2.2/js/buttons.print.min.js'></script>
-<script src='https://cdn.datatables.net/1.10.12/js/dataTables.bootstrap.min.js'></script>
-<script src='https://cdn.datatables.net/buttons/1.2.2/js/buttons.bootstrap.min.js'></script>
-<script src='https://cdnjs.cloudflare.com/ajax/libs/jszip/2.5.0/jszip.min.js'></script>
-<script src='https://cdn.rawgit.com/bpampuch/pdfmake/0.1.18/build/vfs_fonts.js'></script>
-<script src='https://cdn.rawgit.com/bpampuch/pdfmake/0.1.18/build/pdfmake.min.js'></script>
-
-<script>
-    $(document).ready(function () {
-	//Only needed for the filename of export files.
-	//Normally set in the title tag of your page.
-	document.title = "Simple DataTable";
-	// Create search inputs in footer
-	$("#example tfoot th").each(function () {
-		var title = $(this).text();
-		$(this).html('<input type="text" placeholder="Buscar ' + title + '" />');
-	});
-	// DataTable initialisation
-	var table = $("#example").DataTable({
-		dom: '<"dt-buttons"Bf><"clear">lirtp',
-		paging: true,
-		autoWidth: true,
-		buttons: [
-			"colvis",
-			"copyHtml5",
-			"csvHtml5",
-			"excelHtml5",
-			"pdfHtml5",
-			"print"
-		],
-		initComplete: function (settings, json) {
-			var footer = $("#example tfoot tr");
-			$("#example thead").append(footer);
-		}
-	});
-
-	// Apply the search
-	$("#example thead").on("keyup", "input", function () {
-		table.column($(this).parent().index())
-		.search(this.value)
-		.draw();
-	});
-});
-</script>
+ 
 
 <script>
 $(document).ready(function(){
-  // Cargar modal de edición de entrada
-  $('.btn-editar').on('click', function(){
-    var fqId = $(this).data('fq-id');
-    $.ajax({
-      url: 'ajax_editar_fq.php',
-      method: 'GET',
-      data: { id: fqId, formulario_id: <?php echo $formulario_id; ?> },
-      success: function(data) {
-        $('#editarFQModalContent').html(data);
-        $('#editarFQModal').modal('show');
-      },
-      error: function() {
-        alert('Error al cargar el formulario de edición.');
-      }
-    });
-  });
-
-
-
-$(function(){
-  const params = new URLSearchParams(window.location.search);
-
-  if (params.get('open_modal') === 'gestiones' && params.get('local_id')) {
-    const localId   = params.get('local_id');
-    const userId    = params.get('user_id') || '';
-    const tab       = params.get('tab') || 'impl';
-    const pageImpl  = parseInt(params.get('page_impl')||'1',10);
-    const pageResp  = parseInt(params.get('page_resp')||'1',10);
-
-    // abrir el modal nuevamente
-    $.get('ajax_ver_gestiones.php', {
+  $(document).on('click', '.ver-detalle-visita', function() {
+    const visitaId = $(this).data('visita-id');
+    $.get('ajax_detalle_visita.php', {
       formulario_id: <?= json_encode($formulario_id) ?>,
-      local_id:      localId,
-      user_id:       userId,
-      page_impl:     pageImpl,
-      page_resp:     pageResp,
-      tab:           tab
+      visita_id: visitaId
     })
     .done(html => {
-      $('#gestionesModalContent').html(html);
-      $('#gestionesModal').modal('show');
-    });
-
-    // limpiar parámetros para no reabrir en futuros reloads manuales
-    params.delete('open_modal');
-    params.delete('local_id');
-    params.delete('user_id');
-    params.delete('tab');
-    params.delete('page_impl');
-    params.delete('page_resp');
-    history.replaceState({}, '', location.pathname + '?' + params.toString());
-  }
-});
-
-const formularioId = <?= json_encode($formulario_id) ?>;
-
-$(document).on('click', '.ver-gestiones', function() {
-  const localId = $(this).data('local-id');
-  $.get('ajax_ver_gestiones.php', { formulario_id: formularioId, local_id: localId })
-    .done(html => {
-      $('#gestionesModalContent').html(html);
-      $('#gestionesModal').modal('show');
-    })
-    .fail((xhr, status, err) => {
-      console.error('AJAX Error:', status, err);
-      alert('Error al cargar las gestiones.');
-    });
-});
-
-$(document).on('click', '.editar-gestion', function() {
-  const localId = $(this).data('local-id');
-  $.get('ajax_editar_gestion.php', { formulario_id: formularioId, local_id: localId })
-    .done(html => {
-      $('#editarGestionModalContent').html(html);
-      $('#editarGestionModal').modal('show');
+      $('#visitaDetalleModalContent').html(html);
+      $('#visitaDetalleModal').modal('show');
     })
     .fail(() => {
-      alert('Error al cargar el formulario de edición de gestión.');
+      alert('Error al cargar el detalle de la visita.');
     });
-});
-  
-  // Interceptar el submit del formulario de edición de gestión para enviarlo por AJAX
-$(document).on('submit', '#editarGestionForm', function(e) {
-  e.preventDefault();
-  const $form = $(this);
-  const url = 'ajax_editar_gestion.php'
-            + '?formulario_id=' + encodeURIComponent($form.find('input[name="formulario_id"]').val())
-            + '&local_id='      + encodeURIComponent($form.find('input[name="local_id"]').val());
-
-  $.post(url, $form.serialize(), function(response) {
-    const $resp  = $('<div>').html(response);
-    const $alert = $resp.find('.alert').first();
-
-    if ($alert.length) {
-      const $modalBody = $('#editarGestionModal .modal-body');
-      $modalBody.find('.alert').remove();
-      $modalBody.prepend($alert.hide().fadeIn(150));
-
-      // : si fue éxito, recarga la página quedando en la pestaña "agregar-entradas"
-      if ($resp.find('.alert-success').length) {
-        setTimeout(() => {
-          const url = new URL(window.location.href);
-          url.searchParams.set('active_tab', 'agregar-entradas');
-          window.location.href = url.toString();
-        }, 600);
-      }
-    }
-
-    const $newTable = $resp.find('table');
-    if ($newTable.length) {
-      $('#editarGestionModal .modal-body table').replaceWith($newTable);
-    }
-  })
-  .fail(function() {
-    alert('Error al guardar la actualización de gestión.');
   });
 });
-  // Interceptar el submit del formulario de reasignación de local para enviarlo por AJAX
-$(document).on('submit', '#reasignarLocalForm', function(e) {
-  e.preventDefault();
-  var $form = $(this);
-  var url = 'ajax_editar_gestion.php?formulario_id=<?php echo $formulario_id; ?>&local_id=' + $('input[name="local_id"]').val();
-
-  $.ajax({
-    url: url,
-    method: 'POST',
-    data: $form.serialize(),
-    success: function(response) {
-      $('#editarGestionModalContent').html(response);
-
-      // si hay éxito, recarga manteniendo la pestaña
-      if (response.indexOf('alert-success') !== -1) {
-        setTimeout(() => {
-          const url = new URL(window.location.href);
-          url.searchParams.set('active_tab', 'agregar-entradas');
-          window.location.href = url.toString();
-        }, 600);
-      }
-    },
-    error: function() {
-      alert('Error al reasignar el local.');
-    }
-  });
-});
-})
 
 
 
@@ -1813,58 +1480,12 @@ function removeMaterialRow(button) {
 }
 
 
-const formularioId = <?= json_encode($formulario_id) ?>;
-
-$(document).on('click', '.ver-visitas', function() {
-  const localId = $(this).data('local-id');
-  // Llamamos a un nuevo endpoint que devolverá el HTML del histórico de visitas
-  $.get('ajax_ver_visitas.php', {
-    formulario_id: formularioId,
-    local_id:      localId
-  })
-  .done(html => {
-    $('#visitasModalContent').html(html);
-    $('#visitasModal').modal('show');
-  })
-  .fail((xhr, status, err) => {
-    console.error('AJAX Error:', status, err);
-    alert('Error al cargar el histórico de visitas.');
-  });
-});
-
 </script>
 
-<!-- Modal único para edición de entrada -->
-<div class="modal fade" id="editarFQModal" tabindex="-1" role="dialog" aria-labelledby="editarFQModalLabel" aria-hidden="true">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content" id="editarFQModalContent">
-      <!-- Contenido cargado vía AJAX -->
-    </div>
-  </div>
-</div>
-
-<!-- Modal para ver gestiones agrupadas por local -->
-<div class="modal fade" id="gestionesModal" tabindex="-1" role="dialog" aria-labelledby="gestionesModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg" role="document">
-    <div class="modal-content" id="gestionesModalContent">
-      <!-- Detalle de gestiones cargado vía AJAX -->
-      
-    </div>
-  </div>
-</div>
-
-<div class="modal fade" id="editarGestionModal" tabindex="-1" role="dialog" aria-labelledby="editarGestionModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg" role="document">  <!-- Aquí puedes usar modal-lg o modal-xl -->
-    <div class="modal-content" id="editarGestionModalContent">
-      <!-- Contenido cargado vía AJAX -->
-    </div>
-  </div>
-</div>
-
-<div class="modal fade" id="visitasModal" tabindex="-1" role="dialog" aria-labelledby="visitasModalLabel" aria-hidden="true">
+<div class="modal fade" id="visitaDetalleModal" tabindex="-1" role="dialog" aria-labelledby="visitaDetalleModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-xl" role="document">
-    <div class="modal-content" id="visitasModalContent">
-      <!-- Aquí cargaremos vía AJAX el listado completo de visitas -->
+    <div class="modal-content" id="visitaDetalleModalContent">
+      <!-- Aquí cargaremos vía AJAX el detalle de la visita -->
     </div>
   </div>
 </div>
