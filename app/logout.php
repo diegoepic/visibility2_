@@ -17,6 +17,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';
+require_once __DIR__ . '/lib/remember.php';
 
 function ip_addr(): string {
   return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
@@ -58,6 +59,15 @@ if (!empty($_SESSION['usuario_id']) && isset($conn) && $conn instanceof mysqli) 
     $st->close();
   }
 }
+
+// Revocar remember token actual
+if (isset($conn) && $conn instanceof mysqli) {
+  $cookie = parse_remember_cookie();
+  if ($cookie) {
+    remember_revoke_token($conn, $cookie['selector']);
+  }
+}
+clear_remember_cookie();
 
 // ----- Limpiar sesión y cookie -----
 $_SESSION = [];

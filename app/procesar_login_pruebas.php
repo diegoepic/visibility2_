@@ -16,6 +16,7 @@ ini_set('display_errors', 0);
 session_start();
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';
+require_once __DIR__ . '/lib/remember.php';
 
 /* ===== Helpers para sesión única (mismos que en portal) ===== */
 function ip_addr(): string { return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0'; }
@@ -46,6 +47,9 @@ function revoke_other_sessions(mysqli $conn, int $userId, string $currentFpr): v
     $st->bind_param("is", $userId, $currentFpr);
     $st->execute(); $st->close();
   }
+}
+function remember_days(): int {
+  return (int)(getenv('V2_REMEMBER_DAYS') ?: 30);
 }
 
 function fail_and_back(): never {
@@ -161,6 +165,12 @@ $_SESSION['division_id']        = isset($u['id_division']) ? (int)$u['id_divisio
 $fpr = session_fingerprint();
 revoke_other_sessions($conn, (int)$u['id'], $fpr);
 upsert_session($conn, (int)$u['id'], $fpr);
+
+// Remember-me persistente (rehidrata sesión al reiniciar navegador)
+$pair = generate_remember_pair();
+remember_store_token($conn, (int)$u['id'], $pair['selector'], $pair['hash'], ip_addr(), user_agent());
+remember_revoke_other_tokens($conn, (int)$u['id'], $pair['selector']);
+set_remember_cookie($pair['selector'], $pair['token'], remember_days());
 
 // Métricas de login
 if ($update_stmt = $conn->prepare("UPDATE usuario SET login_count = login_count + 1, last_login = NOW() WHERE id = ?")) {
