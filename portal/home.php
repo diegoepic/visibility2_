@@ -996,6 +996,21 @@ if ($division_id > 0) {
                       <p>Ruta Planificada</p>
                   </a>
               </li>
+          <?php if (strtoupper(trim($division_nombre)) == 'SAVORY' or 'MC'): ?>              
+              <li class="nav-item">
+                  <a href="https://visibility.cl/visibility2/portal/repositorio/SAVORY/SAVORY_TEMPORADA_2024-2025.xlsx" class="nav-link">
+                      <i class="far fa-circle nav-icon"></i>
+                      <p>Temporada 2024-2025</p>
+                  </a>
+              </li>
+              <li class="nav-item">
+                  <a href="https://visibility.cl/visibility2/portal/repositorio/SAVORY/SAVORY_TEMPORADA_2023-2024.xlsx" class="nav-link">
+                      <i class="far fa-circle nav-icon"></i>
+                      <p>Temporada 2023-2024</p>
+                  </a>
+              </li>              
+          <?php else: ?>  
+          <?php endif; ?>                
             </ul>
           </li>
           <li class="nav-item">

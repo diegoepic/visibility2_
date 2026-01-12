@@ -1,8 +1,4 @@
 <?php
-// mod_formulario.php
-
-session_start();
-
 // Desactivar la visualización de errores en producción (habilítala solo para depuración)
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);

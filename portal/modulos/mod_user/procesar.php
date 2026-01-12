@@ -1,13 +1,16 @@
 <?php
-// Activar la visualización de errores para depuración (desactivar en producción)
+// Activar el reporte de errores para depuración (sin enviar salida al cliente)
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 
 // Incluir el archivo de base de datos y funciones
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 
 // Iniciar la sesión para manejar mensajes de éxito y error
-session_start();
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+
 
 
 

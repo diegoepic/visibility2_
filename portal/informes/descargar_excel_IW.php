@@ -218,18 +218,44 @@ if ($iw_requiere_local && !empty($localIdsToFetch)) {
     // preparar placeholders dinámicos
     $place = implode(',', array_fill(0, count($ids), '?'));
     $types = str_repeat('i', count($ids));
-    $sqlL  = "SELECT id, codigo, nombre, direccion FROM local WHERE id IN ($place)";
+       $sqlL = "
+        SELECT 
+            l.id, 
+            l.codigo, 
+            l.nombre,
+            l.direccion,
+            cu.nombre   AS cuenta,
+            ca.nombre   AS cadena,
+            co.comuna   AS comuna,
+            re.region   AS region,
+            jv.nombre   AS jefeVenta
+        FROM local l
+        JOIN cuenta cu  ON cu.id = l.id_cuenta
+        JOIN cadena ca  ON ca.id = l.id_cadena
+        JOIN comuna co  ON co.id = l.id_comuna
+        JOIN region re  ON re.id = co.id_region
+        LEFT JOIN jefe_venta jv ON jv.id = l.id_jefe_venta
+        WHERE l.id IN ($place)
+    ";
+    
     $stmtL = $conn->prepare($sqlL);
     $stmtL->bind_param($types, ...$ids);
     $stmtL->execute();
     $resL = $stmtL->get_result();
+    
     while ($lr = $resL->fetch_assoc()) {
         $localInfo[(int)$lr['id']] = [
             'codigo'    => (string)($lr['codigo'] ?? ''),
             'nombre'    => (string)($lr['nombre'] ?? ''),
-            'direccion' => (string)($lr['direccion'] ?? '')
+            'direccion' => (string)($lr['direccion'] ?? ''),
+            'cuenta'    => (string)($lr['cuenta'] ?? ''),
+            'cadena'    => (string)($lr['cadena'] ?? ''),
+            'comuna'    => (string)($lr['comuna'] ?? ''),
+            'region'    => (string)($lr['region'] ?? ''),
+            'jefeVenta' => (string)($lr['jefeVenta'] ?? '')            
         ];
     }
+    
     $stmtL->close();
 }
 
@@ -248,26 +274,48 @@ $isCsvOutput = !$inline;
 
 foreach ($grouped as $g) {
     $row = [
-        'ID Campaña'      => $formulario_id,
-        'Nombre Campaña'  => $camp_name,
+        //'ID Campana'      => $formulario_id,
+        'ID Campana'      => $g['local_id'],
+        'Nombre Campana'  => $camp_name,
         'ID Usuario'      => $g['ID Usuario'],
         'Nombre Usuario'  => $g['Nombre Usuario'],
         'Fecha Respuesta' => $g['Fecha Respuesta'],
     ];
 
-    // Columnas de Local sólo si la campaña requiere local
-    if ($iw_requiere_local) {
-        $lid = (int)$g['local_id'];
-        if ($lid > 0 && isset($localInfo[$lid])) {
-            $row['Dirección Local'] = $localInfo[$lid]['direccion'] !== '' ? $localInfo[$lid]['direccion'] : 'N/A';
-            $row['Nombre Local']    = $localInfo[$lid]['nombre']    !== '' ? $localInfo[$lid]['nombre']    : 'N/A';
-            $row['Código Local']    = iw_format_codigo_csv($localInfo[$lid]['codigo'], $isCsvOutput);
-        } else {
-            $row['Dirección Local'] = 'N/A';
-            $row['Nombre Local']    = 'N/A';
-            $row['Código Local']    = 'N/A';
-        }
+// Columnas de Local sólo si la campaña requiere local
+if ($iw_requiere_local) {
+    $lid = (int)$g['local_id'];
+
+    if ($lid > 0 && isset($localInfo[$lid])) {
+        $codigoLocal = iw_format_codigo_csv($localInfo[$lid]['codigo'], $isCsvOutput);
+
+        $row['Direccion Local'] = $localInfo[$lid]['direccion'] !== '' ? $localInfo[$lid]['direccion'] : 'N/A';
+        $row['Nombre Local']    = $localInfo[$lid]['nombre']    !== '' ? $localInfo[$lid]['nombre']    : 'N/A';
+        $row['Codigo Local']    = $codigoLocal;
+        $row['N Local']         = $codigoLocal; // homologación
+
+        // 👇 NUEVOS CAMPOS
+        $row['Cuenta'] = $localInfo[$lid]['cuenta'] !== '' ? $localInfo[$lid]['cuenta'] : 'N/A';
+        $row['Cadena'] = $localInfo[$lid]['cadena'] !== '' ? $localInfo[$lid]['cadena'] : 'N/A';
+        $row['Comuna'] = $localInfo[$lid]['comuna'] !== '' ? $localInfo[$lid]['comuna'] : 'N/A';
+        $row['Region'] = $localInfo[$lid]['region'] !== '' ? $localInfo[$lid]['region'] : 'N/A';
+        $row['JefeVenta'] = $localInfo[$lid]['jefeVenta'] !== '' ? $localInfo[$lid]['jefeVenta'] : 'N/A';        
+
+    } else {
+        $row['Direccion Local'] = 'N/A';
+        $row['Nombre Local']    = 'N/A';
+        $row['Codigo Local']    = 'N/A';
+        $row['N Local']         = 'N/A';
+
+        // 👇 NUEVOS CAMPOS (fallback)
+        $row['Cuenta'] = 'N/A';
+        $row['Cadena'] = 'N/A';
+        $row['Comuna'] = 'N/A';
+        $row['Region'] = 'N/A';
+        $row['JefeVenta'] = 'N/A';        
     }
+}
+
 
     // Pivot de preguntas: respuesta y (valor) cuando aplique
     foreach ($questions as $qText) {
@@ -310,14 +358,32 @@ if (!empty($data)) {
     unset($r);
 }
 
-// ------------------------------------------------------------------------------------
-// 11) Encabezados en orden (fijos + dinámicos)
-//     Nota: si iw_requiere_local=1 se insertan las 3 columnas de local como fijas.
-// ------------------------------------------------------------------------------------
-$fixedHeaders = ['ID Campaña','Nombre Campaña','ID Usuario','Nombre Usuario','Fecha Respuesta'];
+
 if ($iw_requiere_local) {
-    // Orden solicitado por el usuario: Dirección, Nombre, Código
-    array_splice($fixedHeaders, count($fixedHeaders), 0, ['Dirección Local','Nombre Local','Código Local']);
+    $fixedHeaders = [
+        'ID Campana',
+        'Codigo Local',
+        'N Local',
+        'Nombre Campana',
+        'Cuenta',
+        'Cadena',
+        'Nombre Local',
+        'Direccion Local',
+        'Comuna',
+        'Region',
+        'JefeVenta',        
+        'Nombre Usuario',
+        'Fecha Respuesta'
+    ];
+} else {
+    // fallback histórico (por seguridad)
+    $fixedHeaders = [
+        'ID Campana',
+        'Nombre Campana',
+        'ID Usuario',
+        'Nombre Usuario',
+        'Fecha Respuesta'
+    ];
 }
 
 $dynamic = [];

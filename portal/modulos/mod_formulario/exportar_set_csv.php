@@ -70,7 +70,7 @@ fputcsv($out, [
   'set_id','set_nombre',
   'question_id','question_sort_order','question_text','question_type','is_required','is_valued',
   'dependency_option_id','dependency_parent_question_id','dependency_parent_question_text','dependency_option_text',
-  'option_id','option_sort_order','option_text','option_reference_image'
+  'options_count','options_detalle'
 ], $sep);
 
 $byQ=[]; foreach($qs as $q){ $byQ[(int)$q['id']]=$q; }
@@ -83,23 +83,22 @@ foreach($qs as $q){
     $depOptTxt=$optTextById[$depId] ?? '';
   }
 
-  if($ops){
+  $optionsDetail = '';
+  if ($ops){
+    $parts = [];
     foreach($ops as $op){
-      fputcsv($out, [
-        $idSet,$set['nombre_set'],
-        $qid,$q['sort_order'],$q['question_text'],tipoTexto($q['id_question_type']),(int)$q['is_required'],(int)$q['is_valued'],
-        $depId?:'',$depParentId?:'',$depParentTxt,$depOptTxt,
-        (int)$op['id'],(int)$op['sort_order'],$op['option_text'],$op['reference_image']
-      ], $sep);
+      $img = $op['reference_image'] ? " (img: {$op['reference_image']})" : '';
+      $parts[] = (int)$op['sort_order'] . ". [" . (int)$op['id'] . "] " . $op['option_text'] . $img;
     }
-  } else {
-    fputcsv($out, [
-      $idSet,$set['nombre_set'],
-      $qid,$q['sort_order'],$q['question_text'],tipoTexto($q['id_question_type']),(int)$q['is_required'],(int)$q['is_valued'],
-      $depId?:'',$depParentId?:'',$depParentTxt,$depOptTxt,
-      '','','',''
-    ], $sep);
+    $optionsDetail = implode(' | ', $parts);
   }
+
+  fputcsv($out, [
+    $idSet,$set['nombre_set'],
+    $qid,$q['sort_order'],$q['question_text'],tipoTexto($q['id_question_type']),(int)$q['is_required'],(int)$q['is_valued'],
+    $depId?:'',$depParentId?:'',$depParentTxt,$depOptTxt,
+    count($ops),$optionsDetail
+  ], $sep);
 }
 fclose($out);
 exit;
