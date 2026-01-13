@@ -62,4 +62,57 @@ class GestionVisitaModel
 
         return $gestiones;
     }
+
+    public function getGestionesMapaComplementaria(int $empresaId, int $campanaId, int $localId, int $visitaId, bool $requiereLocal): array
+    {
+        $sql = "
+          SELECT
+            v.id AS visitaId,
+            v.id_local AS localId,
+            DATE_FORMAT(v.fecha_inicio, '%d/%m/%Y %H:%i') AS fechaVisita,
+            v.latitud AS lat,
+            v.longitud AS lng,
+            u.usuario AS usuario
+          FROM visita v
+          JOIN formulario f ON f.id = v.id_formulario AND f.id_empresa = ?
+          LEFT JOIN usuario u ON u.id = v.id_usuario
+          WHERE v.id_formulario = ?
+        ";
+        $params = [$empresaId, $campanaId];
+        $types = 'ii';
+
+        if ($requiereLocal) {
+            $sql .= " AND v.id_local = ? ";
+            $params[] = $localId;
+            $types .= 'i';
+        } else {
+            $sql .= " AND v.id = ? ";
+            $params[] = $visitaId;
+            $types .= 'i';
+        }
+
+        $sql .= " AND v.latitud IS NOT NULL AND v.longitud IS NOT NULL ORDER BY v.fecha_inicio ASC, v.id ASC";
+
+        $stmt = $this->conn->prepare($sql);
+        $stmt->bind_param($types, ...$params);
+        $stmt->execute();
+        $res = $stmt->get_result();
+
+        $gestiones = [];
+        while ($r = $res->fetch_assoc()) {
+            $gestiones[] = [
+                'id' => (int)$r['visitaId'],
+                'idFQ' => (int)$r['visitaId'],
+                'visitaId' => (int)$r['visitaId'],
+                'localId' => (int)$r['localId'],
+                'fechaVisita' => $r['fechaVisita'],
+                'lat' => $r['lat'] !== null ? (float)$r['lat'] : null,
+                'lng' => $r['lng'] !== null ? (float)$r['lng'] : null,
+                'usuario' => $r['usuario'],
+            ];
+        }
+        $stmt->close();
+
+        return $gestiones;
+    }
 }

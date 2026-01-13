@@ -6,6 +6,9 @@
 
   window.initMap = function initMap(){
     const locales = window.MAPA_DATA || [];
+    const isComplementaria = !!(window.MAPA_CONFIG && window.MAPA_CONFIG.isComplementaria);
+    const iwRequiereLocal = !!(window.MAPA_CONFIG && window.MAPA_CONFIG.iwRequiereLocal);
+    const iwNoLocal = isComplementaria && !iwRequiereLocal;
     const chileBounds = new google.maps.LatLngBounds({lat:-56,lng:-76},{lat:-17.5,lng:-66});
 
     const mapLocales = new google.maps.Map(document.getElementById('map'), {
@@ -22,24 +25,42 @@
     if (window.GestionesMap) window.GestionesMap.setMap(mapGestiones);
 
     locales.forEach(loc => {
-      if (loc.lat == null || loc.lng == null) return;
-      const pos = {lat:+loc.lat, lng:+loc.lng};
+      const markerLat = (loc.markerLat != null) ? loc.markerLat : loc.lat;
+      const markerLng = (loc.markerLng != null) ? loc.markerLng : loc.lng;
+      if (markerLat == null || markerLng == null) return;
+      const pos = {lat:+markerLat, lng:+markerLng};
       const icon=`/visibility2/portal/assets/images/marker_${loc.is_priority?'blue':'red'}1.png`;
       const marker = new google.maps.Marker({ position: pos, map: mapLocales, icon:{url:icon, scaledSize:new google.maps.Size(30,30)} });
 
-      const last = (loc.lastLat!=null && loc.lastLng!=null) ? {lat:+loc.lastLat,lng:+loc.lastLng} : null;
+      const last = (loc.lastLat!=null && loc.lastLng!=null && loc.lat!=null && loc.lng!=null)
+        ? {lat:+loc.lastLat,lng:+loc.lastLng}
+        : null;
       const dist = last ? haversineMeters({lat:+loc.lat,lng:+loc.lng}, last) : null;
-      const pill = dist==null ? '' : `<span class="badge badge-${dist<=150?'success':'danger'} ml-1">${dist} m</span>`;
+      const pill = dist==null || iwNoLocal ? '' : `<span class="badge badge-${dist<=150?'success':'danger'} ml-1">${dist} m</span>`;
+
+      const infoTitle = iwNoLocal
+        ? `<strong>Visita #${esc(loc.visitaId ?? loc.idLocal ?? '')}</strong>`
+        : `<strong>${esc(loc.nombreLocal)}</strong>`;
+      const infoSecondary = iwNoLocal ? '' : `<small>${esc(loc.direccionLocal)}</small><br>`;
+      const infoEstado = isComplementaria
+        ? `<small><strong>Visitas:</strong> ${+loc.visitasCount || 0} · <strong>Respuestas:</strong> ${+loc.gestionesCount || 0}</small><br>`
+        : `<small><strong>Estado:</strong> ${esc(loc.estadoLabel ?? loc.estadoGestion ?? '—')} ${pill}</small><br>`;
+      const infoFooter = iwNoLocal
+        ? `<small><strong>Fecha:</strong> ${esc(loc.fechaVisita ?? '—')} · ${esc(loc.usuarioGestion ?? '—')}</small><br>`
+        : `<small><strong>Última:</strong> ${esc(loc.fechaVisita ?? '—')} · ${esc(loc.usuarioGestion ?? '—')}</small><br>`;
+      const detailButton = iwNoLocal
+        ? `<div class="mt-2 d-flex"><button class="btn btn-sm btn-info" onclick="DetalleLocalModal.open(${MAPA_CONFIG.campanaId},0,${+loc.visitaId || +loc.idLocal})">Detalle</button></div>`
+        : `<div class="mt-2 d-flex"><button class="btn btn-sm btn-info" onclick="DetalleLocalModal.open(${MAPA_CONFIG.campanaId},${+loc.idLocal})">Detalle</button></div>`;
 
       const iw=new google.maps.InfoWindow({content:`
         <div style="max-width:240px">
-          <strong>${esc(loc.nombreLocal)}</strong><br>
-          <small>${esc(loc.direccionLocal)}</small><br>
+          ${infoTitle}<br>
+          ${infoSecondary}
           <img src="${esc(loc.fotoRef)}" loading="lazy" decoding="async" style="width:100%;border-radius:4px;margin:8px 0;"><br>
-          <small><strong>Estado:</strong> ${esc(loc.estadoLabel ?? loc.estadoGestion ?? '—')} ${pill}</small><br>
-          <small><strong>Última:</strong> ${esc(loc.fechaVisita ?? '—')} · ${esc(loc.usuarioGestion ?? '—')}</small><br>
-          <small><strong>V/G:</strong> ${+loc.visitasCount || 0} / ${+loc.gestionesCount || 0}</small><br>
-          <div class="mt-2 d-flex"><button class="btn btn-sm btn-info" onclick="DetalleLocalModal.open(${MAPA_CONFIG.campanaId},${+loc.idLocal})">Detalle</button></div>
+          ${infoEstado}
+          ${infoFooter}
+          ${!isComplementaria ? `<small><strong>V/G:</strong> ${+loc.visitasCount || 0} / ${+loc.gestionesCount || 0}</small><br>` : ''}
+          ${detailButton}
         </div>`});
       marker.addListener('click',()=>{ iw.open(mapLocales,marker); highlightRow(+loc.idLocal); });
       markersLocales[+loc.idLocal]=marker;

@@ -13,6 +13,7 @@
     implementado_auditado: { label: 'Implementado y auditado', class: 'success', icon: 'check-double' },
     solo_implementado: { label: 'Solo implementado', class: 'warning', icon: 'check' },
     solo_auditoria: { label: 'Solo auditoría', class: 'info', icon: 'search' },
+    complementaria: { label: 'Complementaria', class: 'primary', icon: 'clipboard-list' },
     sin_datos: { label: 'Sin gestiones', class: 'secondary', icon: 'minus' },
   };
 
@@ -85,14 +86,15 @@
     return `<span class="badge badge-${cfg.class} align-middle" aria-label="Modo: ${esc(cfg.label)}"><i class="fas fa-${cfg.icon} mr-1"></i>${cfg.label}</span>`;
   }
 
-  function buildSummary(resumen, loc, modo){
+  function buildSummary(resumen, loc, modo, opts = {}){
+    const { iwRequiresLocal = true } = opts;
     return `
       <div class="bg-light border-bottom p-4">
         <div class="d-flex flex-wrap justify-content-between align-items-start">
           <div>
-            <p class="text-muted mb-1">${esc(loc.codigo || '')}</p>
-            <h5 class="mb-1 d-flex align-items-center">${esc(loc.nombre || '')} <span class="ml-2">${badgeForModo(modo)}</span></h5>
-            <p class="mb-1"><i class="fas fa-map-marker-alt text-primary mr-1"></i> ${esc(loc.direccion || '')}</p>
+            ${iwRequiresLocal ? `<p class="text-muted mb-1">${esc(loc.codigo || '')}</p>` : '<p class="text-muted mb-1">Gestión complementaria</p>'}
+            <h5 class="mb-1 d-flex align-items-center">${esc(iwRequiresLocal ? (loc.nombre || '') : 'Visita') } <span class="ml-2">${badgeForModo(modo)}</span></h5>
+            ${iwRequiresLocal ? `<p class="mb-1"><i class="fas fa-map-marker-alt text-primary mr-1"></i> ${esc(loc.direccion || '')}</p>` : ''}
             <p class="mb-0 small text-muted"><i class="fas fa-user-clock mr-1"></i> Última visita: ${esc(resumen.ultima_fecha || '—')} · ${esc(resumen.ultima_usuario || '—')}</p>
           </div>
           <div class="text-right">
@@ -117,7 +119,7 @@
           </div>
         </div>
         <div class="row mt-3">
-          ${['Local','Dirección','Modo','Última visita','Distancia'].map((label, idx) => {
+          ${['Local','Dirección','Modo','Última visita','Distancia'].filter((_, idx) => (iwRequiresLocal || idx >= 2)).map((label, idx) => {
             const values = [loc.nombre || '—', loc.direccion || '—', (estadoConfig[modo]?.label)||modo, resumen.ultima_fecha || '—', formatDistance(resumen.distancia_metros)];
             const icons = ['store','map-signs','layer-group','calendar-day','ruler-combined'];
             const colors = ['primary','secondary','info','success','warning'];
@@ -467,9 +469,12 @@
 
     const soloImplementacion = flags.has_impl_any && !flags.has_audit;
     const soloAuditoria = flags.has_audit && !flags.has_impl_any;
+    const isComplementaria = Number(flags.is_complementaria) === 1;
+    const iwRequiresLocal = Number(flags.iw_requires_local) === 1;
 
     const mostrarImplementacion = !soloAuditoria;
     const mostrarEncuesta = !soloImplementacion;
+    const visitaLabel = (!iwRequiresLocal && visitas.length) ? `Visita #${visitas[0].id}` : (loc.codigo || '');
 
     injectStyles();
 
@@ -497,7 +502,19 @@
 
     let contenido;
 
-    if (soloImplementacion) {
+    if (isComplementaria) {
+      contenido = `
+        <div class="row">
+          <div class="col-lg-8">
+            <h5 class="mt-4 mb-3"><i class="fas fa-walking text-primary mr-2"></i>Visitas</h5>
+            ${buildVisitas(visitas)}
+            ${buildEncuesta(visitas)}
+          </div>
+          <div class="col-lg-4">
+            ${buildMiniMapCard(resumen)}
+          </div>
+        </div>`;
+    } else if (soloImplementacion) {
       contenido = `
         <div class="row">
           <div class="col-12">
@@ -530,11 +547,11 @@
 
     return `
       <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title">${esc(data.campanaNombre || '')} · ${esc(loc.codigo || '')}</h5>
+        <h5 class="modal-title">${esc(data.campanaNombre || '')} · ${esc(visitaLabel)}</h5>
         <button class="close text-white" data-dismiss="modal" aria-label="Cerrar">&times;</button>
       </div>
       <div class="modal-body p-0">
-        ${buildSummary(resumen, loc, d.modo || 'sin_datos')}
+        ${buildSummary(resumen, loc, d.modo || 'sin_datos', { iwRequiresLocal })}
         <div class="p-3">
           ${contenido}
         </div>
@@ -556,29 +573,34 @@
     const lastLat = parseFloat(detalle?.resumen?.ultima_lat);
     const lastLng = parseFloat(detalle?.resumen?.ultima_lng);
 
-    if (Number.isNaN(locLat) || Number.isNaN(locLng) || typeof google === 'undefined' || !google.maps) {
+    const hasLocalCoords = !Number.isNaN(locLat) && !Number.isNaN(locLng);
+    const hasLastCoords = !Number.isNaN(lastLat) && !Number.isNaN(lastLng);
+    if ((!hasLocalCoords && !hasLastCoords) || typeof google === 'undefined' || !google.maps) {
       mapEl.innerHTML = '<div class="p-3 text-center text-muted">No hay coordenadas o el mapa no está disponible.</div>';
       return;
     }
 
     const bounds = new google.maps.LatLngBounds();
     const map = new google.maps.Map(mapEl, {
-      center: { lat: locLat, lng: locLng },
+      center: hasLocalCoords ? { lat: locLat, lng: locLng } : { lat: lastLat, lng: lastLng },
       zoom: 14,
       gestureHandling: 'greedy',
       streetViewControl: false,
       mapTypeControl: false,
     });
 
-    const localMarker = new google.maps.Marker({
-      position: { lat: locLat, lng: locLng },
-      map,
-      label: 'L',
-      title: 'Local',
-    });
-    bounds.extend(localMarker.getPosition());
+    let localMarker = null;
+    if (hasLocalCoords) {
+      localMarker = new google.maps.Marker({
+        position: { lat: locLat, lng: locLng },
+        map,
+        label: 'L',
+        title: 'Local',
+      });
+      bounds.extend(localMarker.getPosition());
+    }
 
-    if (!Number.isNaN(lastLat) && !Number.isNaN(lastLng)) {
+    if (hasLastCoords) {
       const lastMarker = new google.maps.Marker({
         position: { lat: lastLat, lng: lastLng },
         map,
@@ -588,13 +610,15 @@
       });
       bounds.extend(lastMarker.getPosition());
 
-      new google.maps.Polyline({
-        path: [localMarker.getPosition(), lastMarker.getPosition()],
-        map,
-        strokeColor: '#0d6efd',
-        strokeOpacity: 0.7,
-        strokeWeight: 3,
-      });
+      if (localMarker) {
+        new google.maps.Polyline({
+          path: [localMarker.getPosition(), lastMarker.getPosition()],
+          map,
+          strokeColor: '#0d6efd',
+          strokeOpacity: 0.7,
+          strokeWeight: 3,
+        });
+      }
     }
 
     map.fitBounds(bounds);
@@ -606,11 +630,17 @@
   }
 
   window.DetalleLocalModal = {
-    open(campanaId, localId){
+    open(campanaId, localId, visitaId){
       injectStyles();
       $('#detalleLocalContent').html(placeholder);
       $('#detalleLocalModal').modal('show');
-      const params = new URLSearchParams({ idCampana: campanaId, idLocal: localId, format:'json' });
+      const params = new URLSearchParams({ idCampana: campanaId, format:'json' });
+      if (localId) {
+        params.set('idLocal', localId);
+      }
+      if (visitaId) {
+        params.set('idVisita', visitaId);
+      }
       fetch('detalle_local.php?'+params.toString(), { headers: { 'X-CSRF-TOKEN': MAPA_CONFIG.csrf }})
         .then(r=>r.json())
         .then(data=> {

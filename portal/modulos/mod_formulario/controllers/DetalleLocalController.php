@@ -27,8 +27,9 @@ class DetalleLocalController
         }
         $campanaId = intval($_GET['idCampana'] ?? ($_GET['campana'] ?? 0));
         $localId   = intval($_GET['idLocal'] ?? ($_GET['local'] ?? 0));
+        $visitaId  = intval($_GET['idVisita'] ?? ($_GET['visita'] ?? 0));
         $empresaId = intval($_SESSION['empresa_id'] ?? 0);
-        if ($campanaId <= 0 || $localId <= 0 || $empresaId <= 0) {
+        if ($campanaId <= 0 || $empresaId <= 0) {
             http_response_code(400);
             echo json_encode(['error' => 'Parámetros inválidos']);
             exit();
@@ -39,18 +40,42 @@ class DetalleLocalController
             echo json_encode(['error' => 'Token CSRF inválido']);
             exit();
         }
-        return [$empresaId, $campanaId, $localId];
+        return [$empresaId, $campanaId, $localId, $visitaId];
     }
 
     public function apiDetalle(): void
     {
         header('Content-Type: application/json; charset=UTF-8');
-        [$empresaId, $campanaId, $localId] = $this->validate();
+        [$empresaId, $campanaId, $localId, $visitaId] = $this->validate();
+        $campanaInfo = $this->localModel->getCampanaInfo($campanaId, $empresaId);
+        $isComplementaria = ($campanaInfo['modalidad'] ?? '') === 'complementaria';
+        $iwRequiereLocal = (int)($campanaInfo['iw_requiere_local'] ?? 0) === 1;
         $campanaNombre = $this->localModel->getCampanaNombre($campanaId, $empresaId);
-        $detalle = $this->detalleModel->getDetalle($empresaId, $campanaId, $localId);
+
+        if ($isComplementaria) {
+            if ($iwRequiereLocal && $localId <= 0) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Parámetros inválidos']);
+                return;
+            }
+            if (!$iwRequiereLocal && $visitaId <= 0) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Parámetros inválidos']);
+                return;
+            }
+            $detalle = $this->detalleModel->getDetalleComplementaria($empresaId, $campanaId, $localId, $visitaId, $iwRequiereLocal);
+        } else {
+            if ($localId <= 0) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Parámetros inválidos']);
+                return;
+            }
+            $detalle = $this->detalleModel->getDetalle($empresaId, $campanaId, $localId);
+        }
         echo json_encode([
             'campanaNombre' => $campanaNombre,
             'detalle' => $detalle,
+            'campanaInfo' => $campanaInfo,
         ], JSON_UNESCAPED_UNICODE);
     }
 }

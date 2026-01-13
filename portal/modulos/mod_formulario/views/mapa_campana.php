@@ -1,6 +1,9 @@
 <?php
 /** @var array $viewData */
 $campanaNombre = $viewData['campanaNombre'];
+$campanaInfo = $viewData['campanaInfo'] ?? [];
+$isComplementaria = (bool)($viewData['isComplementaria'] ?? false);
+$iwRequiereLocal = (bool)($viewData['iwRequiereLocal'] ?? false);
 $usuarios = $viewData['usuarios'];
 $estadosDisponibles = $viewData['estadosDisponibles'];
 $locales = $viewData['locales'];
@@ -49,9 +52,11 @@ $mapKey = $viewData['mapKey'];
       <form method="get" class="mb-2">
         <input type="hidden" name="id" value="<?= (int)$filters['idCampana'] ?>">
         <div class="form-row align-items-center mb-2">
-          <div class="form-group mb-1">
-            <input type="text" name="filter_codigo" class="form-control form-control-sm" placeholder="Código" value="<?= htmlspecialchars($filters['filterCodigo'], ENT_QUOTES) ?>">
-          </div>
+          <?php if (!$isComplementaria || $iwRequiereLocal): ?>
+            <div class="form-group mb-1">
+              <input type="text" name="filter_codigo" class="form-control form-control-sm" placeholder="Código" value="<?= htmlspecialchars($filters['filterCodigo'], ENT_QUOTES) ?>">
+            </div>
+          <?php endif; ?>
           <div class="form-group mb-1">
             <select name="filter_usuario_id" class="form-control form-control-sm">
               <option value="">Todos los usuarios</option>
@@ -63,16 +68,18 @@ $mapKey = $viewData['mapKey'];
               <?php endforeach; ?>
             </select>
           </div>
-          <div class="form-group mb-1">
-            <select name="filter_estado" class="form-control form-control-sm">
-              <option value="">Todos los estados</option>
-              <?php foreach ($estadosDisponibles as $est): $sel = ($filters['filterEstado'] === $est) ? 'selected' : ''; ?>
-                <option value="<?= htmlspecialchars($est,ENT_QUOTES) ?>" <?= $sel ?>><?= htmlspecialchars($est,ENT_QUOTES) ?></option>
-              <?php endforeach; ?>
-              <?php $selSD = ($filters['filterEstado'] === 'sin_datos') ? 'selected' : ''; ?>
-              <option value="sin_datos" <?= $selSD ?>>Sin gestiones</option>
-            </select>
-          </div>
+          <?php if (!$isComplementaria): ?>
+            <div class="form-group mb-1">
+              <select name="filter_estado" class="form-control form-control-sm">
+                <option value="">Todos los estados</option>
+                <?php foreach ($estadosDisponibles as $est): $sel = ($filters['filterEstado'] === $est) ? 'selected' : ''; ?>
+                  <option value="<?= htmlspecialchars($est,ENT_QUOTES) ?>" <?= $sel ?>><?= htmlspecialchars($est,ENT_QUOTES) ?></option>
+                <?php endforeach; ?>
+                <?php $selSD = ($filters['filterEstado'] === 'sin_datos') ? 'selected' : ''; ?>
+                <option value="sin_datos" <?= $selSD ?>>Sin gestiones</option>
+              </select>
+            </div>
+          <?php endif; ?>
         </div>
         <div class="form-row align-items-center">
           <div class="form-group mb-1">
@@ -100,15 +107,32 @@ $mapKey = $viewData['mapKey'];
     <div class="p-2">
       <table class="table table-sm table-hover" id="tblLocales">
         <thead>
-          <tr><th>Cod.</th><th>Nombre</th><th>Estado</th><th>Última</th></tr>
+          <?php if ($isComplementaria && !$iwRequiereLocal): ?>
+            <tr><th>Visita</th><th>Usuario</th><th>Fecha</th></tr>
+          <?php elseif ($isComplementaria && $iwRequiereLocal): ?>
+            <tr><th>Cod.</th><th>Nombre</th><th>Usuario</th><th>Última</th></tr>
+          <?php else: ?>
+            <tr><th>Cod.</th><th>Nombre</th><th>Estado</th><th>Última</th></tr>
+          <?php endif; ?>
         </thead>
         <tbody>
         <?php foreach ($locales as $loc): ?>
           <tr data-id="<?= (int)$loc['idLocal'] ?>">
-            <td><?= htmlspecialchars($loc['codigoLocal'] ?? '', ENT_QUOTES) ?></td>
-            <td><?= htmlspecialchars($loc['nombreLocal'] ?? '', ENT_QUOTES) ?></td>
-            <td><?= htmlspecialchars($loc['estadoLabel'] ?? '', ENT_QUOTES) ?></td>
-            <td><?= htmlspecialchars($loc['fechaVisita'] ?? '—', ENT_QUOTES) ?></td>
+            <?php if ($isComplementaria && !$iwRequiereLocal): ?>
+              <td><?= htmlspecialchars('Visita #'.(int)($loc['visitaId'] ?? $loc['idLocal']), ENT_QUOTES) ?></td>
+              <td><?= htmlspecialchars($loc['usuarioGestion'] ?? '—', ENT_QUOTES) ?></td>
+              <td><?= htmlspecialchars($loc['fechaVisita'] ?? '—', ENT_QUOTES) ?></td>
+            <?php elseif ($isComplementaria && $iwRequiereLocal): ?>
+              <td><?= htmlspecialchars($loc['codigoLocal'] ?? '', ENT_QUOTES) ?></td>
+              <td><?= htmlspecialchars($loc['nombreLocal'] ?? '', ENT_QUOTES) ?></td>
+              <td><?= htmlspecialchars($loc['usuarioGestion'] ?? '—', ENT_QUOTES) ?></td>
+              <td><?= htmlspecialchars($loc['fechaVisita'] ?? '—', ENT_QUOTES) ?></td>
+            <?php else: ?>
+              <td><?= htmlspecialchars($loc['codigoLocal'] ?? '', ENT_QUOTES) ?></td>
+              <td><?= htmlspecialchars($loc['nombreLocal'] ?? '', ENT_QUOTES) ?></td>
+              <td><?= htmlspecialchars($loc['estadoLabel'] ?? '', ENT_QUOTES) ?></td>
+              <td><?= htmlspecialchars($loc['fechaVisita'] ?? '—', ENT_QUOTES) ?></td>
+            <?php endif; ?>
           </tr>
         <?php endforeach; ?>
         </tbody>
@@ -147,7 +171,9 @@ $mapKey = $viewData['mapKey'];
     window.MAPA_DATA = <?= json_encode($locales, JSON_UNESCAPED_UNICODE) ?>;
     window.MAPA_CONFIG = {
       campanaId: <?= (int)$filters['idCampana'] ?>,
-      csrf: '<?= htmlspecialchars($csrf, ENT_QUOTES) ?>'
+      csrf: '<?= htmlspecialchars($csrf, ENT_QUOTES) ?>',
+      isComplementaria: <?= $isComplementaria ? 'true' : 'false' ?>,
+      iwRequiereLocal: <?= $iwRequiereLocal ? 'true' : 'false' ?>
     };
     window.MAP_KEY = '<?= htmlspecialchars($mapKey, ENT_QUOTES) ?>';
   </script>

@@ -75,23 +75,44 @@ class MapaCampanaController
         }
 
         $campanaNombre = $this->localModel->getCampanaNombre($filters['idCampana'], $filters['empresa_id']);
-        $usuarios = $this->localModel->getUsuariosByCampana($filters['idCampana'], $filters['empresa_id']);
-        $estadosDisponibles = $this->localModel->getEstadosByCampana($filters['idCampana'], $filters['empresa_id']);
-        $pageData = $this->localModel->getLocalesPage($filters);
+        $campanaInfo = $this->localModel->getCampanaInfo($filters['idCampana'], $filters['empresa_id']);
+        $isComplementaria = ($campanaInfo['modalidad'] ?? '') === 'complementaria';
+        $iwRequiereLocal = (int)($campanaInfo['iw_requiere_local'] ?? 0) === 1;
+
+        if ($isComplementaria) {
+            $usuarios = $this->localModel->getUsuariosByCampanaComplementaria($filters['idCampana'], $filters['empresa_id']);
+            $estadosDisponibles = [];
+            if ($iwRequiereLocal) {
+                $pageData = $this->localModel->getComplementariaLocalesPage($filters);
+            } else {
+                $pageData = $this->localModel->getComplementariaVisitasPage($filters);
+            }
+        } else {
+            $usuarios = $this->localModel->getUsuariosByCampana($filters['idCampana'], $filters['empresa_id']);
+            $estadosDisponibles = $this->localModel->getEstadosByCampana($filters['idCampana'], $filters['empresa_id']);
+            $pageData = $this->localModel->getLocalesPage($filters);
+        }
 
         foreach ($pageData['locales'] as &$loc) {
             $loc['estadoLabel'] = $this->estadoLabel($loc['estadoGestion'] ?? '');
         }
         unset($loc);
 
-        $allowedEstados = array_values(array_unique($estadosDisponibles));
-        $allowedEstados[] = 'sin_datos';
-        if ($filters['filterEstado'] !== '' && !in_array($filters['filterEstado'], $allowedEstados, true)) {
+        if (!$isComplementaria) {
+            $allowedEstados = array_values(array_unique($estadosDisponibles));
+            $allowedEstados[] = 'sin_datos';
+            if ($filters['filterEstado'] !== '' && !in_array($filters['filterEstado'], $allowedEstados, true)) {
+                $filters['filterEstado'] = '';
+            }
+        } else {
             $filters['filterEstado'] = '';
         }
 
         $viewData = [
             'campanaNombre' => $campanaNombre,
+            'campanaInfo' => $campanaInfo,
+            'isComplementaria' => $isComplementaria,
+            'iwRequiereLocal' => $iwRequiereLocal,
             'usuarios' => $usuarios,
             'estadosDisponibles' => $estadosDisponibles,
             'locales' => $pageData['locales'],
@@ -125,7 +146,19 @@ class MapaCampanaController
             return;
         }
 
-        $pageData = $this->localModel->getLocalesPage($filters);
+        $campanaInfo = $this->localModel->getCampanaInfo($filters['idCampana'], $filters['empresa_id']);
+        $isComplementaria = ($campanaInfo['modalidad'] ?? '') === 'complementaria';
+        $iwRequiereLocal = (int)($campanaInfo['iw_requiere_local'] ?? 0) === 1;
+
+        if ($isComplementaria) {
+            if ($iwRequiereLocal) {
+                $pageData = $this->localModel->getComplementariaLocalesPage($filters);
+            } else {
+                $pageData = $this->localModel->getComplementariaVisitasPage($filters);
+            }
+        } else {
+            $pageData = $this->localModel->getLocalesPage($filters);
+        }
         foreach ($pageData['locales'] as &$loc) {
             $loc['estadoLabel'] = $this->estadoLabel($loc['estadoGestion'] ?? '');
         }
@@ -133,6 +166,7 @@ class MapaCampanaController
 
         header('Content-Type: application/json; charset=UTF-8');
         echo json_encode([
+            'campanaInfo' => $campanaInfo,
             'locales' => $pageData['locales'],
             'pagination' => [
                 'totalPages' => $pageData['totalPages'],
