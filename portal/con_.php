@@ -4,7 +4,23 @@ declare(strict_types=1);
 if (!isset($conn) || !($conn instanceof mysqli)) {
     mysqli_report(MYSQLI_REPORT_OFF);
 
-    $conn = @mysqli_connect("localhost", "visibility", "xyPz8e/rgaC2", "visibility_visibility2");
+    $rootDir = dirname(__DIR__);
+    $config = [];
+    $localConfig = $rootDir . '/config/local.php';
+    if (is_file($localConfig)) {
+        $loaded = require $localConfig;
+        if (is_array($loaded)) {
+            $config = $loaded;
+        }
+    }
+    $db = $config['db'] ?? [];
+
+    $dbHost = $db['host'] ?? (getenv('VISIBILITY_DB_HOST') ?: 'localhost');
+    $dbUser = $db['user'] ?? (getenv('VISIBILITY_DB_USER') ?: 'visibility');
+    $dbPass = $db['pass'] ?? (getenv('VISIBILITY_DB_PASS') ?: 'xyPz8e/rgaC2');
+    $dbName = $db['name'] ?? (getenv('VISIBILITY_DB_NAME') ?: 'visibility_visibility2');
+
+    $conn = @mysqli_connect($dbHost, $dbUser, $dbPass, $dbName);
     if (!$conn) {
         die("Error de conexión: " . mysqli_connect_error());
     }
