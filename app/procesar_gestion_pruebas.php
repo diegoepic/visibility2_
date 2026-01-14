@@ -1,7 +1,15 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+// Solo mostrar errores en desarrollo, nunca en producción
+if (getenv('APP_ENV') !== 'production') {
+    ini_set('display_errors', 1);
+    ini_set('display_startup_errors', 1);
+    error_reporting(E_ALL);
+} else {
+    ini_set('display_errors', 0);
+    ini_set('display_startup_errors', 0);
+    error_reporting(E_ALL);
+    ini_set('log_errors', 1);
+}
 
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 
@@ -73,6 +81,11 @@ if (function_exists('idempo_claim_or_fail')) { idempo_claim_or_fail($conn, 'proc
 /* ---------------- Utilidades columnas opcionales ---------------- */
 function table_has_col(mysqli $c, string $table, string $col): bool {
   try {
+    // Validar que table y col sean nombres alfanuméricos válidos (prevenir SQL injection)
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $table) ||
+        !preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $col)) {
+      return false;
+    }
     $res = $c->query("SHOW COLUMNS FROM `$table` LIKE '".$c->real_escape_string($col)."'");
     if ($res) { $ok = $res->num_rows > 0; $res->close(); return $ok; }
   } catch (Throwable $e) {}
@@ -220,6 +233,28 @@ function foto_already_linked(mysqli $conn, int $visita_id, int $idFQ, string $ur
 
 /* ---------------- Utilidades de imagen ---------------- */
 function convertirAWebP($sourcePath, $destPath, $quality = 80) {
+  // VALIDACIÓN: Tamaño máximo del archivo (25MB para soportar fotos de alta resolución)
+  $maxFileSize = 50 * 1024 * 1024; // 25MB
+  $fileSize = @filesize($sourcePath);
+  if ($fileSize === false || $fileSize > $maxFileSize) {
+    throw new Exception('Imagen muy grande (máx 25MB). Intente con una foto de menor resolución.');
+  }
+
+  // VALIDACIÓN: Obtener dimensiones y MIME type
+  $info = @getimagesize($sourcePath);
+  if (!$info) {
+    throw new Exception('Archivo no es una imagen válida');
+  }
+
+  // VALIDACIÓN: Dimensiones máximas (4000x4000)
+  $maxWidth = 4000;
+  $maxHeight = 4000;
+  if ($info[0] > $maxWidth || $info[1] > $maxHeight) {
+    throw new Exception('Dimensiones muy grandes (máx 4000x4000)');
+  }
+
+  $mime = $info['mime'] ?? '';
+
   if (class_exists('Imagick')) {
     try {
       $img = new Imagick($sourcePath);
@@ -231,8 +266,6 @@ function convertirAWebP($sourcePath, $destPath, $quality = 80) {
       if ($ok) return true;
     } catch (Throwable $e) {}
   }
-  $info = @getimagesize($sourcePath); if (!$info) return false;
-  $mime = $info['mime'] ?? '';
   switch ($mime) {
     case 'image/jpeg': $image=@imagecreatefromjpeg($sourcePath); break;
     case 'image/png':  $image=@imagecreatefrompng($sourcePath); if ($image){@imagepalettetotruecolor($image);@imagealphablending($image,true);@imagesavealpha($image,true);} break;

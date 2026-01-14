@@ -62,6 +62,7 @@ $iw_requiere_local = (int)$iw_requiere_local === 1;
 // ------------------------------------------------------------------------------------
 $pregs     = [];   // id_question => question_text
 $isValued  = [];   // id_question => bool
+$isValuedByText = []; // question_text => bool   ✅ NUEVO
 $questions = [];   // en orden
 
 $stmt = $conn->prepare("
@@ -77,8 +78,10 @@ $rs = $stmt->get_result();
 while ($r = $rs->fetch_assoc()) {
     $qid = (int)$r['id'];
     $txt = (string)$r['question_text'];
+
     $pregs[$qid]    = $txt;
     $isValued[$qid] = (bool)$r['is_valued'];
+    $isValuedByText[$txt] = (bool)$r['is_valued']; // ✅ NUEVO
     $questions[]    = $txt;
 }
 $stmt->close();
@@ -136,78 +139,56 @@ $rs = $stmt->get_result();
 //    - Fallback puntual a "usuario|minuto" sólo si no hay visita (histórico raro)
 //    - Para iw_requiere_local=1 se añadirá Dirección/Nombre/Código Local
 // ------------------------------------------------------------------------------------
-$grouped = [];           // key => grupo
-$localIdsToFetch = [];   // set de id_local para lookup posterior
+$data = [];               // eventos (alineables)
+$localIdsToFetch = [];    // set de id_local para lookup posterior
 
 while ($row = $rs->fetch_assoc()) {
-    $qid  = (int)$row['id_form_question'];
-    if (!isset($pregs[$qid])) continue; // seguridad
 
-    $uid  = (int)$row['id_usuario'];
-    $ans  = (string)$row['answer_text'];
-    $val  = $row['valor'];
-    $cat  = (string)$row['created_at'];
-    $vid  = (int)$row['visita_id'];
-    $lid  = (int)$row['local_id_effective'];
+    $qid = (int)$row['id_form_question'];
+    if (!isset($pregs[$qid])) continue;
 
-    // ts_min para fallback (usuario+minuto)
-    $ts_min = '';
-    if ($cat !== '') {
-        $t = strtotime($cat);
-        $ts_min = $t ? date('Y-m-d H:i', $t) : '';
-    }
+    $uid = (int)$row['id_usuario'];
+    $lid = (int)$row['local_id_effective'];
+    $visitaId = (int)($row['visita_id'] ?? 0);
 
-    // clave de agrupación
-    $groupKey = ($vid > 0) ? ('v'.$vid) : ($uid . '|' . $ts_min);
+    $cat = (string)$row['created_at'];
+    $ts  = strtotime($cat);
 
-    // Inicializar grupo
-    if (!isset($grouped[$groupKey])) {
-        $grouped[$groupKey] = [
-            'ID Usuario'      => $uid,
-            'Nombre Usuario'  => isset($usernames[$uid]) ? $usernames[$uid] : $uid,
-            'Fecha Respuesta' => ($ts_min ?: ($cat ? date('Y-m-d H:i', strtotime($cat)) : '')),
-            'visita_id'       => $vid,
-            'local_id'        => $lid,  // puede ser 0 (histórico sin local)
-            'min_ts_unix'     => ($cat ? strtotime($cat) : PHP_INT_MAX),
-            'answers'         => []     // question_text => ['answer'=>..., 'valor'=>...]
+    $fecha = $ts ? date('Y-m-d', $ts) : '';
+    $hora  = $ts ? date('H:i:s', $ts) : '';
+
+    // Clave del evento (1 visita / local / fecha / hora)
+    $eventKey = $lid . '|' . $visitaId . '|' . $fecha . '|' . $hora;
+
+    // Inicializar evento
+    if (!isset($data[$eventKey])) {
+        $data[$eventKey] = [
+            'meta' => [
+                'local_id'          => $lid,
+                'Nombre Usuario'    => $usernames[$uid] ?? $uid,
+                'Fecha Respuesta'   => $fecha,
+                'Hora Respuesta'    => $hora,
+                'Fecha Planificada' => $fecha
+            ],
+            'answers' => []
         ];
-        if ($iw_requiere_local && $lid > 0) {
-            $localIdsToFetch[$lid] = true;
-        }
-    } else {
-        // mantener la fecha mínima del grupo
-        $u = ($cat ? strtotime($cat) : PHP_INT_MAX);
-        if ($u < $grouped[$groupKey]['min_ts_unix']) {
-            $grouped[$groupKey]['min_ts_unix'] = $u;
-            $grouped[$groupKey]['Fecha Respuesta'] = date('Y-m-d H:i', $u);
-        }
-        // si no tenía local y aparece uno > 0, úsalo
-        if ($iw_requiere_local && (int)$grouped[$groupKey]['local_id'] === 0 && $lid > 0) {
-            $grouped[$groupKey]['local_id'] = $lid;
-            $localIdsToFetch[$lid] = true;
-        }
     }
 
-    // Pivot de preguntas
-    $qText = $pregs[$qid];
-    if (!isset($grouped[$groupKey]['answers'][$qText])) {
-        $grouped[$groupKey]['answers'][$qText] = ['answer' => '', 'valor' => ''];
-    }
-    // concatenar múltiple opción en mismo grupo
-    if ($ans !== '') {
-        $grouped[$groupKey]['answers'][$qText]['answer'] =
-            ($grouped[$groupKey]['answers'][$qText]['answer'] === '')
-            ? $ans
-            : ($grouped[$groupKey]['answers'][$qText]['answer'] . "; " . $ans);
-    }
-    if ($isValued[$qid] && $val !== null && $val !== '') {
-        $grouped[$groupKey]['answers'][$qText]['valor'] =
-            ($grouped[$groupKey]['answers'][$qText]['valor'] === '')
-            ? $val
-            : ($grouped[$groupKey]['answers'][$qText]['valor'] . "; " . $val);
+    // Guardar respuesta (1 pregunta puede tener N respuestas)
+    $data[$eventKey]['answers'][$pregs[$qid]][] = [
+        'answer' => (string)$row['answer_text'],
+        'valor'  => ($isValued[$qid] ? $row['valor'] : '')
+    ];
+
+    // Guardar local para lookup posterior
+    if ($iw_requiere_local && $lid > 0) {
+        $localIdsToFetch[$lid] = true;
     }
 }
+
 $stmt->close();
+
+
 
 // ------------------------------------------------------------------------------------
 // 8) Lookup masivo de locales (sólo si iw_requiere_local = 1)
@@ -269,68 +250,94 @@ function iw_format_codigo_csv($codigo, $isCsv) {
 // ------------------------------------------------------------------------------------
 // 9) Construir filas finales
 // ------------------------------------------------------------------------------------
-$data = [];
+
+// ------------------------------------------------------------------------------------
+// 9) Construir filas finales ALINEADAS (sin duplicar valores)
+// ------------------------------------------------------------------------------------
+$finalData = [];
 $isCsvOutput = !$inline;
 
-foreach ($grouped as $g) {
-    $row = [
-        //'ID Campana'      => $formulario_id,
-        'ID Campana'      => $g['local_id'],
-        'Nombre Campana'  => $camp_name,
-        'ID Usuario'      => $g['ID Usuario'],
-        'Nombre Usuario'  => $g['Nombre Usuario'],
-        'Fecha Respuesta' => $g['Fecha Respuesta'],
-    ];
+foreach ($data as $event) {
 
-// Columnas de Local sólo si la campaña requiere local
-if ($iw_requiere_local) {
-    $lid = (int)$g['local_id'];
+    $meta    = $event['meta'];
+    $answers = $event['answers'];
 
-    if ($lid > 0 && isset($localInfo[$lid])) {
-        $codigoLocal = iw_format_codigo_csv($localInfo[$lid]['codigo'], $isCsvOutput);
-
-        $row['Direccion Local'] = $localInfo[$lid]['direccion'] !== '' ? $localInfo[$lid]['direccion'] : 'N/A';
-        $row['Nombre Local']    = $localInfo[$lid]['nombre']    !== '' ? $localInfo[$lid]['nombre']    : 'N/A';
-        $row['Codigo Local']    = $codigoLocal;
-        $row['N Local']         = $codigoLocal; // homologación
-
-        // 👇 NUEVOS CAMPOS
-        $row['Cuenta'] = $localInfo[$lid]['cuenta'] !== '' ? $localInfo[$lid]['cuenta'] : 'N/A';
-        $row['Cadena'] = $localInfo[$lid]['cadena'] !== '' ? $localInfo[$lid]['cadena'] : 'N/A';
-        $row['Comuna'] = $localInfo[$lid]['comuna'] !== '' ? $localInfo[$lid]['comuna'] : 'N/A';
-        $row['Region'] = $localInfo[$lid]['region'] !== '' ? $localInfo[$lid]['region'] : 'N/A';
-        $row['JefeVenta'] = $localInfo[$lid]['jefeVenta'] !== '' ? $localInfo[$lid]['jefeVenta'] : 'N/A';        
-
-    } else {
-        $row['Direccion Local'] = 'N/A';
-        $row['Nombre Local']    = 'N/A';
-        $row['Codigo Local']    = 'N/A';
-        $row['N Local']         = 'N/A';
-
-        // 👇 NUEVOS CAMPOS (fallback)
-        $row['Cuenta'] = 'N/A';
-        $row['Cadena'] = 'N/A';
-        $row['Comuna'] = 'N/A';
-        $row['Region'] = 'N/A';
-        $row['JefeVenta'] = 'N/A';        
+    // 1) calcular cuántas filas necesita este evento
+    $maxRows = 1;
+    foreach ($answers as $respList) {
+        $maxRows = max($maxRows, count($respList));
     }
-}
 
+    // 2) construir filas alineadas
+    for ($i = 0; $i < $maxRows; $i++) {
 
-    // Pivot de preguntas: respuesta y (valor) cuando aplique
-    foreach ($questions as $qText) {
-        $colAns   = $qText;
-        $colValor = $qText . ' (Valor)';
-        if (isset($g['answers'][$qText])) {
-            $row[$colAns]   = $g['answers'][$qText]['answer'];
-            $row[$colValor] = $g['answers'][$qText]['valor'];
-        } else {
-            $row[$colAns]   = '';
-            $row[$colValor] = '';
+        $row = [
+            'ID Campana'        => $meta['local_id'],
+            'Nombre Campana'    => $camp_name,
+            'Nombre Usuario'    => $meta['Nombre Usuario'],
+            'Fecha Planificada' => $meta['Fecha Planificada'],
+            'Fecha Respuesta'   => $meta['Fecha Respuesta'],
+            'Hora Respuesta'    => $meta['Hora Respuesta']
+        ];
+
+        // 3) info del local
+        if ($iw_requiere_local) {
+            $lid = (int)$meta['local_id'];
+
+            if ($lid > 0 && isset($localInfo[$lid])) {
+                $codigoLocal = iw_format_codigo_csv($localInfo[$lid]['codigo'], $isCsvOutput);
+
+                $row['Codigo Local']    = $codigoLocal;
+                $row['N Local']         = $codigoLocal;
+                $row['Nombre Local']    = $localInfo[$lid]['nombre'];
+                $row['Direccion Local'] = $localInfo[$lid]['direccion'];
+                $row['Cuenta']          = $localInfo[$lid]['cuenta'];
+                $row['Cadena']          = $localInfo[$lid]['cadena'];
+                $row['Comuna']          = $localInfo[$lid]['comuna'];
+                $row['Region']          = $localInfo[$lid]['region'];
+                $row['JefeVenta']       = $localInfo[$lid]['jefeVenta'];
+            } else {
+                $row['Codigo Local']    = 'N/A';
+                $row['N Local']         = 'N/A';
+                $row['Nombre Local']    = 'N/A';
+                $row['Direccion Local'] = 'N/A';
+                $row['Cuenta']          = 'N/A';
+                $row['Cadena']          = 'N/A';
+                $row['Comuna']          = 'N/A';
+                $row['Region']          = 'N/A';
+                $row['JefeVenta']       = 'N/A';
+            }
         }
+
+        // 4) columnas dinámicas (preguntas)
+        foreach ($questions as $qText) {
+
+            // valor por defecto
+            $row[$qText] = '';
+
+            if (!empty($isValuedByText[$qText])) {
+                $row[$qText . ' (Valor)'] = '';
+            }
+
+            // si existe respuesta para esta pregunta e índice
+            if (isset($answers[$qText][$i])) {
+                $row[$qText] = $answers[$qText][$i]['answer'] ?? '';
+
+                if (!empty($isValuedByText[$qText])) {
+                    $row[$qText . ' (Valor)'] = $answers[$qText][$i]['valor'] ?? '';
+                }
+            }
+        }
+
+        $finalData[] = $row;
     }
-    $data[] = $row;
 }
+
+// reemplazar data original
+$data = $finalData;
+unset($finalData);
+
+
 
 // ------------------------------------------------------------------------------------
 // 10) Eliminar columnas "(Valor)" que queden completamente vacías
@@ -373,28 +380,29 @@ if ($iw_requiere_local) {
         'Region',
         'JefeVenta',        
         'Nombre Usuario',
-        'Fecha Respuesta'
+        'Fecha Planificada',         
+        'Fecha Respuesta',
+        'Hora Respuesta'
     ];
 } else {
     // fallback histórico (por seguridad)
     $fixedHeaders = [
         'ID Campana',
         'Nombre Campana',
-        'ID Usuario',
         'Nombre Usuario',
         'Fecha Respuesta'
     ];
 }
 
 $dynamic = [];
-if (!empty($data)) {
-    $firstRow = $data[0];
-    foreach ($firstRow as $col => $_) {
-        if (!in_array($col, $fixedHeaders, true)) {
-            $dynamic[] = $col;
-        }
+
+foreach ($questions as $qText) {
+    $dynamic[] = $qText;
+    if (!empty($isValuedByText[$qText])) {
+        $dynamic[] = $qText . ' (Valor)';
     }
 }
+
 $headers = array_merge($fixedHeaders, $dynamic);
 
 // ------------------------------------------------------------------------------------

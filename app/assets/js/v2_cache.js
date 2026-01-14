@@ -1,9 +1,9 @@
 (function(){
   'use strict';
-  window.SW_VERSION = window.SW_VERSION || 'v3.1.7';
+  window.SW_VERSION = window.SW_VERSION || 'v3.1.8';
 
   const DB_NAME    = 'visibility2-v2';
-  const DB_VERSION = 7;
+  const DB_VERSION = 9;
   
   let _db = null;
   let _useLS = false;

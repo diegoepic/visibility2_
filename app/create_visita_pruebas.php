@@ -124,6 +124,17 @@ if (empty($csrf) || empty($csrf_session) || !hash_equals($csrf_session, $csrf)) 
 }
 
 if (getenv('V2_TEST_MODE') === '1') {
+  // SEGURIDAD: Solo permitir TEST_MODE en entornos de desarrollo/staging
+  $allowedHosts = ['localhost', '127.0.0.1', 'dev.visibility.cl', 'staging.visibility.cl'];
+  $currentHost = $_SERVER['HTTP_HOST'] ?? '';
+
+  if (!in_array($currentHost, $allowedHosts, true)) {
+    json_fail(403, 'TEST_MODE está deshabilitado en producción.', [
+      'error_code' => 'TEST_MODE_FORBIDDEN',
+      'retryable' => false
+    ]);
+  }
+
   sanitize_idempotency_key();
   $key = $_SERVER['HTTP_X_IDEMPOTENCY_KEY'] ?? ($_POST['X_Idempotency_Key'] ?? 'test_key');
   if (!isset($_SESSION['test_idempo'])) $_SESSION['test_idempo'] = [];

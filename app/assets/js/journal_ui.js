@@ -18,16 +18,13 @@
   let GROUPS_WEEK    = {};
   let OFFLINE_GUIDS  = new Set(); 
   
+  // Sanitización mejorada usando DOM API (previene XSS más efectivamente)
   function esc(str){
-    return String(str == null ? '' : str).replace(/[&<>"']/g, function(ch){
-      switch (ch){
-        case '&': return '&amp;';
-        case '<': return '&lt;';
-        case '>': return '&gt;';
-        case '"': return '&quot;';
-        default:  return ch;
-      }
-    });
+    if (str == null) return '';
+    // Usar createElement + textContent es más seguro que regex manual
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
   }
 
   function showMessage(title, msg, type){

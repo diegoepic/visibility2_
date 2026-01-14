@@ -2,7 +2,7 @@
 // Wrapper IndexedDB para cola offline (estado robusto)
 (function(){
   const DB_NAME = 'v2_offline';
-  const DB_VER  = 8;
+  const DB_VER  = 9;
   const STORE   = 'queue';
 
   const STATUS_ALIASES = {
@@ -169,7 +169,8 @@
         if (!current) {
           done = true;
           try { tx.abort(); } catch (_) {}
-          return resolve(null);
+          // CORREGIDO: Rechazar con error en lugar de resolver null silenciosamente
+          return reject(new Error('Job not found for update: ' + id));
         }
         result = { ...current, ...patch, updatedAt: Date.now() };
         if (patch && patch.status) result.status = normalizeStatus(patch.status);

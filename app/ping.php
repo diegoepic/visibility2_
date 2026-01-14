@@ -54,7 +54,6 @@ try {
         'empresa_id'  => $empresaId,
         'app_version' => getenv('APP_VERSION') ?: 'v2',
         'db_ok'       => $db_ok,
-        'csrf_token'  => $_SESSION['csrf_token'],
         'session_valid' => true,
         'user_session_state' => 'active'
     ];

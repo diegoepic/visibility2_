@@ -13,6 +13,7 @@
     implementado_auditado: { label: 'Implementado y auditado', class: 'success', icon: 'check-double' },
     solo_implementado: { label: 'Solo implementado', class: 'warning', icon: 'check' },
     solo_auditoria: { label: 'Solo auditoría', class: 'info', icon: 'search' },
+    complementaria: { label: 'Complementaria', class: 'primary', icon: 'clipboard-list' },
     sin_datos: { label: 'Sin gestiones', class: 'secondary', icon: 'minus' },
   };
 
@@ -85,14 +86,15 @@
     return `<span class="badge badge-${cfg.class} align-middle" aria-label="Modo: ${esc(cfg.label)}"><i class="fas fa-${cfg.icon} mr-1"></i>${cfg.label}</span>`;
   }
 
-  function buildSummary(resumen, loc, modo){
+  function buildSummary(resumen, loc, modo, opts = {}){
+    const { iwRequiresLocal = true } = opts;
     return `
       <div class="bg-light border-bottom p-4">
         <div class="d-flex flex-wrap justify-content-between align-items-start">
           <div>
-            <p class="text-muted mb-1">${esc(loc.codigo || '')}</p>
-            <h5 class="mb-1 d-flex align-items-center">${esc(loc.nombre || '')} <span class="ml-2">${badgeForModo(modo)}</span></h5>
-            <p class="mb-1"><i class="fas fa-map-marker-alt text-primary mr-1"></i> ${esc(loc.direccion || '')}</p>
+            ${iwRequiresLocal ? `<p class="text-muted mb-1">${esc(loc.codigo || '')}</p>` : '<p class="text-muted mb-1">Gestión complementaria</p>'}
+            <h5 class="mb-1 d-flex align-items-center">${esc(iwRequiresLocal ? (loc.nombre || '') : 'Visita') } <span class="ml-2">${badgeForModo(modo)}</span></h5>
+            ${iwRequiresLocal ? `<p class="mb-1"><i class="fas fa-map-marker-alt text-primary mr-1"></i> ${esc(loc.direccion || '')}</p>` : ''}
             <p class="mb-0 small text-muted"><i class="fas fa-user-clock mr-1"></i> Última visita: ${esc(resumen.ultima_fecha || '—')} · ${esc(resumen.ultima_usuario || '—')}</p>
           </div>
           <div class="text-right">
@@ -117,7 +119,7 @@
           </div>
         </div>
         <div class="row mt-3">
-          ${['Local','Dirección','Modo','Última visita','Distancia'].map((label, idx) => {
+          ${['Local','Dirección','Modo','Última visita','Distancia'].filter((_, idx) => (iwRequiresLocal || idx >= 2)).map((label, idx) => {
             const values = [loc.nombre || '—', loc.direccion || '—', (estadoConfig[modo]?.label)||modo, resumen.ultima_fecha || '—', formatDistance(resumen.distancia_metros)];
             const icons = ['store','map-signs','layer-group','calendar-day','ruler-combined'];
             const colors = ['primary','secondary','info','success','warning'];
@@ -138,23 +140,32 @@
   }
 
   function buildTables(implementaciones, historial){
-    const implRows = implementaciones.map(i=>`
-      <tr>
+    const filteredUserId = (window.MAPA_CONFIG && window.MAPA_CONFIG.filteredUserId) || 0;
+    const highlightClass = 'table-warning';
+
+    const implRows = implementaciones.map(i=>{
+      const isFilteredUser = filteredUserId > 0 && Number(i.usuarioId) === filteredUserId;
+      return `
+      <tr${isFilteredUser ? ` class="${highlightClass}"` : ''}>
         <td>${formatDate(i.fechaVisita)}</td>
-        <td>${esc(i.usuario || '')}</td>
+        <td>${esc(i.usuario || '')}${isFilteredUser ? ' <span class="badge badge-warning badge-pill" title="Usuario filtrado"><i class="fas fa-filter"></i></span>' : ''}</td>
         <td>${esc(i.material || '')}</td>
         <td><span class="badge badge-light">${esc(i.estado_gestion || '')}</span></td>
         <td>${esc(i.valor_propuesto ?? '')}</td>
         <td>${esc(i.valor_real ?? '')}</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
 
-    const histRows = historial.map(i=>`
-      <tr>
+    const histRows = historial.map(i=>{
+      const isFilteredUser = filteredUserId > 0 && Number(i.usuarioId) === filteredUserId;
+      return `
+      <tr${isFilteredUser ? ` class="${highlightClass}"` : ''}>
         <td>${formatDate(i.fechaVisita)}</td>
-        <td>${esc(i.usuario || '')}</td>
+        <td>${esc(i.usuario || '')}${isFilteredUser ? ' <span class="badge badge-warning badge-pill" title="Usuario filtrado"><i class="fas fa-filter"></i></span>' : ''}</td>
         <td><span class="badge badge-info">${esc(i.estado_gestion || '')}</span></td>
         <td>${esc(i.material || '')}</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
 
     const accordionId = 'implAccordion';
 
@@ -291,6 +302,42 @@
       </div>`;
   }
 
+  // Construye la encuesta de UNA SOLA visita (para IW con local)
+  function buildEncuestaVisita(visita){
+    const respuestas = visita.respuestas || [];
+    if (respuestas.length === 0) {
+      return '<p class="text-muted small">Sin respuestas de encuesta.</p>';
+    }
+
+    const rows = respuestas.map(r => {
+      const ans = r.answer_text || '';
+      const isYesNo = ['SI','NO','Si','No','sí','no'].includes(ans);
+      const badge = isYesNo ? `<span class="badge badge-${ans.toLowerCase().startsWith('s') ? 'success' : 'danger'}">${esc(ans)}</span>` : '';
+      const ansHtml = isImage(ans) ? formatImg(ans.startsWith('/') ? ans : ans) : (badge || esc(ans).replace(/\n/g,'<br>'));
+      const isValued = Number(r.is_valued) === 1 || r.is_valued === true;
+      const valor = isValued ? formatValor(r.valor) : { html: '', hasValor: false };
+
+      return `<tr>
+        <td>${esc(r.question_text || '')}</td>
+        <td>
+          <div class="d-flex flex-column flex-sm-row flex-wrap">
+            <div class="mr-sm-2 mb-1 mb-sm-0">${ansHtml || '<span class="text-muted">—</span>'}</div>
+            ${valor.hasValor ? `<div class="d-inline-flex align-items-center">${valor.html}</div>` : ''}
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div class="table-responsive" style="max-height:300px;overflow:auto;">
+        <table class="table table-sm table-bordered mb-0">
+          <thead class="thead-light"><tr><th>Pregunta</th><th>Respuesta</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  // Construye la encuesta mezclando TODAS las visitas (para campañas programadas)
   function buildEncuesta(visitas){
     const rows = [];
     visitas.forEach(v => {
@@ -376,10 +423,14 @@
       </div>`;
   }
 
+  // Construye visitas para campañas programadas (con materiales)
   function buildVisitas(visitas){
     if (!visitas.length) return '<p class="text-muted">Sin visitas registradas.</p>';
 
+    const filteredUserId = (window.MAPA_CONFIG && window.MAPA_CONFIG.filteredUserId) || 0;
+
     return visitas.map((v, idx)=>{
+      const isFilteredUser = filteredUserId > 0 && Number(v.usuarioId) === filteredUserId;
       const estadoLocal = (v.estado_local||[]).map(c=>`
         <div class="mb-2">
           <strong>${esc(c.estado_gestion || '')}</strong><br>
@@ -409,10 +460,10 @@
       const fmt = d => d ? d.toLocaleString('es-CL') : '—';
       const collapseId = `visitDetails-${idx}`;
 
-      return `<div class="card mb-3">
-        <div class="card-header d-flex justify-content-between align-items-center">
+      return `<div class="card mb-3${isFilteredUser ? ' border-warning' : ''}">
+        <div class="card-header${isFilteredUser ? ' bg-warning text-dark' : ''} d-flex justify-content-between align-items-center">
           <div>
-            <strong>Visita #${v.secuencia || ''}</strong> · ${fmt(fechaInicio)} — ${v.fecha_fin ? fmt(fechaFin) : 'Sin fecha de término'}<br>
+            <strong>Visita #${v.secuencia || ''}</strong> · ${fmt(fechaInicio)} — ${v.fecha_fin ? fmt(fechaFin) : 'Sin fecha de término'}${isFilteredUser ? ' <span class="badge badge-dark badge-pill ml-1" title="Usuario filtrado"><i class="fas fa-filter"></i> Usuario filtrado</span>' : ''}<br>
             <small>Usuario: ${esc(v.usuario || '')}</small> · <small>Coordenadas: ${esc(v.latitud ?? '—')}, ${esc(v.longitud ?? '—')}</small>
           </div>
           <button class="btn btn-outline-primary btn-sm" data-toggle="collapse" data-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">Ver más</button>
@@ -441,16 +492,94 @@
     }).join('');
   }
 
-  function buildMiniMapCard(resumen){
+  // Construye visitas para IW con local (sin materiales, con encuesta segmentada por visita)
+  function buildVisitasIWConLocal(visitas){
+    if (!visitas.length) return '<p class="text-muted">Sin visitas registradas.</p>';
+
+    const filteredUserId = (window.MAPA_CONFIG && window.MAPA_CONFIG.filteredUserId) || 0;
+
+    return visitas.map((v, idx)=>{
+      const isFilteredUser = filteredUserId > 0 && Number(v.usuarioId) === filteredUserId;
+      const estadoLocal = (v.estado_local||[]).map(c=>`
+        <div class="mb-2">
+          <strong>${esc(c.estado_gestion || '')}</strong><br>
+          ${esc(c.observacion || '')}<br>
+          ${c.foto_url ? formatImg(c.foto_url) : ''}
+        </div>`).join('') || '<p class="text-muted small">Sin cambios de estado.</p>';
+
+      const fechaInicio = v.fecha_inicio ? new Date(v.fecha_inicio.replace(' ', 'T')) : null;
+      const fechaFin = v.fecha_fin ? new Date(v.fecha_fin.replace(' ', 'T')) : null;
+      const fmt = d => d ? d.toLocaleString('es-CL') : '—';
+      const collapseId = `visitDetails-${idx}`;
+
+      return `<div class="card mb-3${isFilteredUser ? ' border-warning' : ''}">
+        <div class="card-header${isFilteredUser ? ' bg-warning text-dark' : ''} d-flex justify-content-between align-items-center">
+          <div>
+            <strong>Visita #${v.secuencia || v.id || ''}</strong> · ${fmt(fechaInicio)} — ${v.fecha_fin ? fmt(fechaFin) : 'Sin fecha de término'}${isFilteredUser ? ' <span class="badge badge-dark badge-pill ml-1" title="Usuario filtrado"><i class="fas fa-filter"></i> Usuario filtrado</span>' : ''}<br>
+            <small><i class="fas fa-user mr-1"></i>${esc(v.usuario || '')}</small> · <small><i class="fas fa-map-marker-alt mr-1"></i>${esc(v.latitud ?? '—')}, ${esc(v.longitud ?? '—')}</small>
+          </div>
+          <button class="btn btn-outline-primary btn-sm" data-toggle="collapse" data-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
+            <i class="fas fa-chevron-down"></i>
+          </button>
+        </div>
+        <div id="${collapseId}" class="collapse ${idx === 0 ? 'show' : ''}">
+          <div class="card-body">
+            <h6><i class="fas fa-info-circle text-primary mr-1"></i>Estado del local</h6>
+            ${estadoLocal}
+            <hr>
+            <h6><i class="fas fa-clipboard-check text-primary mr-1"></i>Encuesta de esta visita</h6>
+            ${buildEncuestaVisita(v)}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function buildMiniMapCard(resumen, opts = {}){
+    const { iwRequiresLocal = true } = opts;
+    const markerCount = iwRequiresLocal ? 2 : 1;
+    const markerLabel = iwRequiresLocal ? 'Se muestran el local y la última gestión' : 'Se muestra la ubicación de la visita';
+
+    // Simbología de marcadores - simular el aspecto de los marcadores de Google Maps
+    const legendItems = iwRequiresLocal
+      ? `
+        <div class="d-flex align-items-center mr-3">
+          <div class="d-inline-flex align-items-center justify-content-center mr-1"
+               style="width:20px;height:20px;background:#EA4335;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 1px 3px rgba(0,0,0,0.3);">
+            <span style="color:white;font-weight:bold;font-size:10px;transform:rotate(45deg);">L</span>
+          </div>
+          <small class="text-muted">Local</small>
+        </div>
+        <div class="d-flex align-items-center">
+          <div class="d-inline-flex align-items-center justify-content-center mr-1"
+               style="width:20px;height:20px;background:#34A853;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 1px 3px rgba(0,0,0,0.3);">
+            <span style="color:white;font-weight:bold;font-size:10px;transform:rotate(45deg);">G</span>
+          </div>
+          <small class="text-muted">Gestión</small>
+        </div>
+      `
+      : `
+        <div class="d-flex align-items-center">
+          <div class="d-inline-flex align-items-center justify-content-center mr-1"
+               style="width:20px;height:20px;background:#34A853;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 1px 3px rgba(0,0,0,0.3);">
+            <span style="color:white;font-weight:bold;font-size:10px;transform:rotate(45deg);">V</span>
+          </div>
+          <small class="text-muted">Visita</small>
+        </div>
+      `;
+
     return `
-      <div class="card mb-3" aria-label="Mapa de local y última gestión">
+      <div class="card mb-3" aria-label="Mapa de ${iwRequiresLocal ? 'local y última gestión' : 'ubicación de visita'}">
         <div class="card-header bg-white d-flex justify-content-between align-items-center">
           <div><i class="fas fa-map-marked-alt text-primary mr-2"></i>Mapa</div>
-          <span class="badge badge-light" data-toggle="tooltip" title="Se muestran el local y la última gestión">2 marcadores</span>
+          <span class="badge badge-light" data-toggle="tooltip" title="${markerLabel}">${markerCount} marcador${markerCount > 1 ? 'es' : ''}</span>
         </div>
         <div class="map-shell" id="detalleLocalMap"></div>
-        <div class="card-body py-2">
-          <small class="text-muted">Arrastra para mover el mapa, usa scroll para zoom.</small>
+        <div class="card-body py-2 d-flex justify-content-between align-items-center flex-wrap">
+          <small class="text-muted mb-1">Arrastra para mover el mapa, usa scroll para zoom.</small>
+          <div class="d-flex align-items-center mb-1">
+            ${legendItems}
+          </div>
         </div>
       </div>`;
   }
@@ -467,14 +596,17 @@
 
     const soloImplementacion = flags.has_impl_any && !flags.has_audit;
     const soloAuditoria = flags.has_audit && !flags.has_impl_any;
+    const isComplementaria = Number(flags.is_complementaria) === 1;
+    const iwRequiresLocal = Number(flags.iw_requires_local) === 1;
 
     const mostrarImplementacion = !soloAuditoria;
     const mostrarEncuesta = !soloImplementacion;
+    const visitaLabel = (!iwRequiresLocal && visitas.length) ? `Visita #${visitas[0].id}` : (loc.codigo || '');
 
     injectStyles();
 
     const columnaMapa = `
-      ${buildMiniMapCard(resumen)}
+      ${buildMiniMapCard(resumen, { iwRequiresLocal })}
       <div class="card mb-3">
         <div class="card-header bg-white"><i class="fas fa-stream text-primary mr-2"></i>Estado del local</div>
         <div class="card-body">
@@ -497,7 +629,34 @@
 
     let contenido;
 
-    if (soloImplementacion) {
+    if (isComplementaria) {
+      // IW con local: Mostrar visitas con encuesta segmentada, sin encuesta global
+      if (iwRequiresLocal) {
+        contenido = `
+          <div class="row">
+            <div class="col-lg-8">
+              <h5 class="mt-4 mb-3"><i class="fas fa-walking text-primary mr-2"></i>Visitas al local</h5>
+              ${buildVisitasIWConLocal(visitas)}
+            </div>
+            <div class="col-lg-4">
+              ${buildMiniMapCard(resumen, { iwRequiresLocal })}
+            </div>
+          </div>`;
+      } else {
+        // IW sin local: Mantener formato original
+        contenido = `
+          <div class="row">
+            <div class="col-lg-8">
+              <h5 class="mt-4 mb-3"><i class="fas fa-walking text-primary mr-2"></i>Visitas</h5>
+              ${buildVisitas(visitas)}
+              ${buildEncuesta(visitas)}
+            </div>
+            <div class="col-lg-4">
+              ${buildMiniMapCard(resumen, { iwRequiresLocal })}
+            </div>
+          </div>`;
+      }
+    } else if (soloImplementacion) {
       contenido = `
         <div class="row">
           <div class="col-12">
@@ -530,11 +689,11 @@
 
     return `
       <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title">${esc(data.campanaNombre || '')} · ${esc(loc.codigo || '')}</h5>
+        <h5 class="modal-title">${esc(data.campanaNombre || '')} · ${esc(visitaLabel)}</h5>
         <button class="close text-white" data-dismiss="modal" aria-label="Cerrar">&times;</button>
       </div>
       <div class="modal-body p-0">
-        ${buildSummary(resumen, loc, d.modo || 'sin_datos')}
+        ${buildSummary(resumen, loc, d.modo || 'sin_datos', { iwRequiresLocal })}
         <div class="p-3">
           ${contenido}
         </div>
@@ -556,48 +715,65 @@
     const lastLat = parseFloat(detalle?.resumen?.ultima_lat);
     const lastLng = parseFloat(detalle?.resumen?.ultima_lng);
 
-    if (Number.isNaN(locLat) || Number.isNaN(locLng) || typeof google === 'undefined' || !google.maps) {
+    const hasLocalCoords = !Number.isNaN(locLat) && !Number.isNaN(locLng);
+    const hasLastCoords = !Number.isNaN(lastLat) && !Number.isNaN(lastLng);
+
+    // FIX: Para IW sin local, solo mostrar coordenadas de la gestión
+    if ((!hasLocalCoords && !hasLastCoords) || typeof google === 'undefined' || !google.maps) {
       mapEl.innerHTML = '<div class="p-3 text-center text-muted">No hay coordenadas o el mapa no está disponible.</div>';
       return;
     }
 
     const bounds = new google.maps.LatLngBounds();
     const map = new google.maps.Map(mapEl, {
-      center: { lat: locLat, lng: locLng },
-      zoom: 14,
+      center: hasLocalCoords ? { lat: locLat, lng: locLng } : { lat: lastLat, lng: lastLng },
+      zoom: hasLocalCoords ? 14 : 16, // Más zoom si solo hay gestión
       gestureHandling: 'greedy',
       streetViewControl: false,
       mapTypeControl: false,
     });
 
-    const localMarker = new google.maps.Marker({
-      position: { lat: locLat, lng: locLng },
-      map,
-      label: 'L',
-      title: 'Local',
-    });
-    bounds.extend(localMarker.getPosition());
+    let localMarker = null;
+    if (hasLocalCoords) {
+      localMarker = new google.maps.Marker({
+        position: { lat: locLat, lng: locLng },
+        map,
+        label: 'L',
+        title: 'Local',
+      });
+      bounds.extend(localMarker.getPosition());
+    }
 
-    if (!Number.isNaN(lastLat) && !Number.isNaN(lastLng)) {
+    if (hasLastCoords) {
       const lastMarker = new google.maps.Marker({
         position: { lat: lastLat, lng: lastLng },
         map,
-        label: 'G',
-        title: 'Última gestión',
+        label: hasLocalCoords ? 'G' : 'V', // 'V' para Visita si no hay local
+        title: hasLocalCoords ? 'Última gestión' : 'Ubicación de visita',
         icon: { url: 'https://maps.gstatic.com/mapfiles/ms2/micons/green-dot.png' }
       });
       bounds.extend(lastMarker.getPosition());
 
-      new google.maps.Polyline({
-        path: [localMarker.getPosition(), lastMarker.getPosition()],
-        map,
-        strokeColor: '#0d6efd',
-        strokeOpacity: 0.7,
-        strokeWeight: 3,
-      });
+      // Solo dibujar línea si hay ambos puntos
+      if (localMarker) {
+        new google.maps.Polyline({
+          path: [localMarker.getPosition(), lastMarker.getPosition()],
+          map,
+          strokeColor: '#0d6efd',
+          strokeOpacity: 0.7,
+          strokeWeight: 3,
+        });
+      }
     }
 
-    map.fitBounds(bounds);
+    // FIX: Si solo hay un punto, centrar en él; si hay dos, ajustar bounds
+    if (hasLocalCoords && hasLastCoords) {
+      map.fitBounds(bounds);
+    } else {
+      // Un solo punto, centrar
+      const center = hasLocalCoords ? { lat: locLat, lng: locLng } : { lat: lastLat, lng: lastLng };
+      map.setCenter(center);
+    }
   }
 
   function activateInteractions(data){
@@ -606,18 +782,45 @@
   }
 
   window.DetalleLocalModal = {
-    open(campanaId, localId){
+    open(campanaId, localId, visitaId){
+      console.log('[DetalleLocalModal] Opening with params:', { campanaId, localId, visitaId });
       injectStyles();
       $('#detalleLocalContent').html(placeholder);
       $('#detalleLocalModal').modal('show');
-      const params = new URLSearchParams({ idCampana: campanaId, idLocal: localId, format:'json' });
-      fetch('detalle_local.php?'+params.toString(), { headers: { 'X-CSRF-TOKEN': MAPA_CONFIG.csrf }})
-        .then(r=>r.json())
+      const params = new URLSearchParams({ idCampana: campanaId, format:'json' });
+
+      // FIX: Permitir localId=0 para IW sin local, solo validar que esté definido
+      if (localId !== undefined && localId !== null) {
+        params.set('idLocal', localId);
+        console.log('[DetalleLocalModal] Added idLocal:', localId);
+      }
+
+      // FIX: Permitir visitaId=0, solo validar que esté definido
+      if (visitaId !== undefined && visitaId !== null) {
+        params.set('idVisita', visitaId);
+        console.log('[DetalleLocalModal] Added idVisita:', visitaId);
+      }
+
+      const url = 'detalle_local.php?'+params.toString();
+      console.log('[DetalleLocalModal] Fetching:', url);
+
+      fetch(url, { headers: { 'X-CSRF-TOKEN': MAPA_CONFIG.csrf }})
+        .then(r=>{
+          console.log('[DetalleLocalModal] Response status:', r.status);
+          if (!r.ok) {
+            throw new Error(`HTTP ${r.status}`);
+          }
+          return r.json();
+        })
         .then(data=> {
+          console.log('[DetalleLocalModal] Received data:', data);
           $('#detalleLocalContent').html(buildLayout(data));
           activateInteractions(data);
         })
-        .catch(()=> $('#detalleLocalContent').html('<div class="alert alert-danger m-3">Error cargando detalle.</div>'));
+        .catch(err=> {
+          console.error('[DetalleLocalModal] Error:', err);
+          $('#detalleLocalContent').html('<div class="alert alert-danger m-3">Error cargando detalle: ' + err.message + '</div>');
+        });
     }
   };
 })();

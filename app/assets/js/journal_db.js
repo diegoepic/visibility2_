@@ -3,7 +3,7 @@
   'use strict';
 
   const DB_NAME = 'v2_journal';
-  const DB_VER  = 8;
+  const DB_VER  = 9;
   const STORE   = 'journal';
   const STORE_EVENTS = 'events';
 

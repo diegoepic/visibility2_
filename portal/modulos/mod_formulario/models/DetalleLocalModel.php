@@ -122,6 +122,7 @@ class DetalleLocalModel
             gv.valor_real            AS valor_real,
             COALESCE(gv.latitud, gv.lat_foto)  AS latitud,
             COALESCE(gv.longitud, gv.lng_foto) AS longitud,
+            gv.id_usuario            AS usuarioId,
             COALESCE(u.usuario,'—')  AS usuario,
             'GV'                     AS source
           FROM gestion_visita gv
@@ -147,6 +148,7 @@ class DetalleLocalModel
             fq.valor                 AS valor_real,
             fq.latGestion            AS latitud,
             fq.lngGestion            AS longitud,
+            fq.id_usuario            AS usuarioId,
             COALESCE(u.usuario,'—')  AS usuario,
             'FQ'                     AS source
           FROM formularioQuestion fq
@@ -173,6 +175,7 @@ class DetalleLocalModel
         $stH=$this->conn->prepare(
             "SELECT gv.id, gv.visita_id, gv.estado_gestion,
                     DATE_FORMAT(gv.fecha_visita,'%d/%m/%Y %H:%i') AS fechaVisita,
+                    gv.id_usuario AS usuarioId,
                     COALESCE(u.usuario,'—') AS usuario,
                     COALESCE(m.nombre, fq.material) AS material,
                     fq.valor_propuesto, gv.valor_real,
@@ -226,7 +229,7 @@ class DetalleLocalModel
 
         // Visitas registradas
         $stmtV = $this->conn->prepare(
-            "SELECT v.id, v.fecha_inicio, v.fecha_fin, v.latitud, v.longitud, COALESCE(u.usuario,'—') AS usuario
+            "SELECT v.id, v.fecha_inicio, v.fecha_fin, v.latitud, v.longitud, v.id_usuario AS usuarioId, COALESCE(u.usuario,'—') AS usuario
              FROM visita v
              LEFT JOIN usuario u ON u.id = v.id_usuario
              JOIN formulario f ON f.id = v.id_formulario AND f.id_empresa = ?
@@ -346,5 +349,129 @@ class DetalleLocalModel
         unset($v);
 
         return $visitas;
+    }
+
+    public function getDetalleComplementaria(int $empresaId, int $campanaId, int $localId, int $visitaId, bool $requiereLocal): array
+    {
+        $localCodigo = $localNombre = $localDireccion = null;
+        $latLocal = $lngLocal = null;
+
+        if ($requiereLocal) {
+            $stL = $this->conn->prepare(
+                "SELECT l.codigo,l.nombre,l.direccion,l.lat,l.lng
+                 FROM local l
+                 JOIN visita v ON v.id_local = l.id AND v.id_formulario = ?
+                 JOIN formulario f ON f.id = v.id_formulario AND f.id_empresa = ?
+                 WHERE l.id = ? LIMIT 1"
+            );
+            $stL->bind_param('iii', $campanaId, $empresaId, $localId);
+            $stL->execute();
+            $stL->bind_result($localCodigo, $localNombre, $localDireccion, $latLocal, $lngLocal);
+            $stL->fetch();
+            $stL->close();
+        }
+
+        $localCodigo    = $localCodigo    ?: ($requiereLocal ? '#'.$localId : '');
+        $localNombre    = $localNombre    ?: '';
+        $localDireccion = $localDireccion ?: '—';
+
+        $visitas = [];
+        if ($requiereLocal) {
+            $stmtV = $this->conn->prepare(
+                "SELECT v.id, v.fecha_inicio, v.fecha_fin, v.latitud, v.longitud, v.id_usuario AS usuarioId, COALESCE(u.usuario,'—') AS usuario
+                 FROM visita v
+                 LEFT JOIN usuario u ON u.id = v.id_usuario
+                 JOIN formulario f ON f.id = v.id_formulario AND f.id_empresa = ?
+                 WHERE v.id_formulario = ? AND v.id_local = ?
+                 ORDER BY v.fecha_inicio DESC"
+            );
+            $stmtV->bind_param('iii', $empresaId, $campanaId, $localId);
+        } else {
+            $stmtV = $this->conn->prepare(
+                "SELECT v.id, v.fecha_inicio, v.fecha_fin, v.latitud, v.longitud, v.id_usuario AS usuarioId, COALESCE(u.usuario,'—') AS usuario
+                 FROM visita v
+                 LEFT JOIN usuario u ON u.id = v.id_usuario
+                 JOIN formulario f ON f.id = v.id_formulario AND f.id_empresa = ?
+                 WHERE v.id_formulario = ? AND v.id = ?
+                 ORDER BY v.fecha_inicio DESC"
+            );
+            $stmtV->bind_param('iii', $empresaId, $campanaId, $visitaId);
+        }
+        $stmtV->execute();
+        $resV = $stmtV->get_result();
+        while ($row = $resV->fetch_assoc()) {
+            $visitas[] = $row;
+        }
+        $stmtV->close();
+
+        $totalVisitas = count($visitas);
+        foreach ($visitas as $idx => &$v) {
+            $vid = (int)$v['id'];
+            $stmtR = $this->conn->prepare(
+                "SELECT fqr.id, fq.question_text, fqr.answer_text, fqr.valor, fq.is_valued, fqr.created_at
+                 FROM form_question_responses fqr
+                 JOIN form_questions fq ON fq.id = fqr.id_form_question
+                 JOIN formulario f ON f.id = fq.id_formulario AND f.id_empresa = ?
+                 WHERE fqr.visita_id = ? AND fq.id_formulario = ?
+                 ORDER BY fqr.created_at ASC"
+            );
+            $stmtR->bind_param('iii', $empresaId, $vid, $campanaId);
+            $stmtR->execute();
+            $v['respuestas'] = $stmtR->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmtR->close();
+
+            $v['secuencia'] = $totalVisitas - $idx;
+            $v['estado_local'] = [];
+            $v['implementaciones_ok'] = [];
+            $v['implementaciones_no'] = [];
+        }
+        unset($v);
+
+        $visitasTot = $totalVisitas;
+        $lastUsuario = '—';
+        $lastFecha = '—';
+        $lastLat = null;
+        $lastLng = null;
+        if (!empty($visitas)) {
+            $last = $visitas[0];
+            $lastUsuario = $last['usuario'] ?? '—';
+            $lastFecha = $last['fecha_inicio'] ? date('d/m/Y H:i', strtotime($last['fecha_inicio'])) : '—';
+            $lastLat = $last['latitud'] ?? null;
+            $lastLng = $last['longitud'] ?? null;
+        }
+
+        $distUltima = ($latLocal !== null && $lastLat !== null)
+            ? $this->haversine((float)$latLocal, (float)$lngLocal, (float)$lastLat, (float)$lastLng)
+            : null;
+
+        return [
+            'local' => [
+                'id' => $requiereLocal ? $localId : 0,
+                'codigo' => $localCodigo,
+                'nombre' => $localNombre,
+                'direccion' => $localDireccion,
+                'lat' => $latLocal,
+                'lng' => $lngLocal,
+            ],
+            'modo' => 'complementaria',
+            'flags' => [
+                'has_impl_aud' => 0,
+                'has_impl_any' => 0,
+                'has_audit' => 1,
+                'is_complementaria' => 1,
+                'iw_requires_local' => $requiereLocal ? 1 : 0,
+            ],
+            'resumen' => [
+                'visitas_totales' => (int)$visitasTot,
+                'ultima_usuario' => $lastUsuario,
+                'ultima_fecha' => $lastFecha,
+                'ultima_lat' => $lastLat,
+                'ultima_lng' => $lastLng,
+                'distancia_metros' => $distUltima,
+            ],
+            'implementaciones' => [],
+            'historial' => [],
+            'visitas' => $visitas,
+        ];
     }
 }

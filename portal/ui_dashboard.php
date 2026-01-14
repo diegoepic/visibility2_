@@ -889,11 +889,11 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                   </div>
                   <!-- Botones acción -->
                   <div class="row mt-2 text-center">
-                    <div class="col-sm-6">
-                      <a href="#"
-                         class="btn btn-app inline-link"
-                         data-tipo="complementaria"
-                         data-id="<?php echo $cc['id_campana']; ?>">
+                                      <div class="col-sm-6">
+                      <a href="/visibility2/portal/modulos/mod_formulario/mapa_campana.php?id=<?php echo $cc['id_campana']; ?>"
+                         class="btn btn-app"
+                         target="_blank"
+                         title="Ver mapa en línea">
                         <i class="fa fa-play"></i> En línea
                       </a>
                     </div>

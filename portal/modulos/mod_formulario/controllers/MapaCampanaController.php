@@ -41,13 +41,61 @@ class MapaCampanaController
         $filterDesdeRaw = trim($_GET['fdesde'] ?? '');
         $filterHastaRaw = trim($_GET['fhasta'] ?? '');
 
-        $filterDesde = preg_match('/^\d{4}-\d{2}-\d{2}$/', $filterDesdeRaw) ? $filterDesdeRaw . ' 00:00:00' : null;
-        $filterHasta = preg_match('/^\d{4}-\d{2}-\d{2}$/', $filterHastaRaw) ? $filterHastaRaw . ' 23:59:59' : null;
+        // OPTIMIZACIÓN: Si no se especifica rango, usar últimos 30 días por defecto
+        // Esto evita cargar miles de registros históricos
+        // FIX: Diferenciar entre "no pasado" (primera carga) vs "pasado vacío" (ver todos)
+        $fechasExplicitamentePasadas = isset($_GET['fdesde']) || isset($_GET['fhasta']);
+        $useDefaultRange = !$fechasExplicitamentePasadas && empty($filterDesdeRaw) && empty($filterHastaRaw);
+
+        if ($useDefaultRange) {
+            // Por defecto: últimos 30 días (solo si NO se pasaron parámetros explícitos)
+            $filterDesde = date('Y-m-d', strtotime('-30 days')) . ' 00:00:00';
+            $filterHasta = date('Y-m-d') . ' 23:59:59';
+        } else {
+            // Usuario pasó fechas explícitamente (vacías o con valor)
+            $filterDesde = preg_match('/^\d{4}-\d{2}-\d{2}$/', $filterDesdeRaw) ? $filterDesdeRaw . ' 00:00:00' : null;
+            $filterHasta = preg_match('/^\d{4}-\d{2}-\d{2}$/', $filterHastaRaw) ? $filterHastaRaw . ' 23:59:59' : null;
+        }
 
         $perPage = isset($_GET['per_page']) && ctype_digit((string)$_GET['per_page']) ? (int)$_GET['per_page'] : 50;
         $page    = max(1, intval($_GET['page'] ?? 1));
 
-        return compact('idCampana','empresa_id','filterCodigo','filterEstado','filterUserId','filterDesde','filterHasta','perPage','page');
+        // SEGURIDAD: Validar que el usuario filtrado pertenece a la misma empresa (si se especifica)
+        if ($filterUserId > 0) {
+            $stmt = $this->conn->prepare("SELECT id FROM usuario WHERE id = ? AND id_empresa = ? LIMIT 1");
+            $stmt->bind_param('ii', $filterUserId, $empresa_id);
+            $stmt->execute();
+            $stmt->store_result();
+            if ($stmt->num_rows === 0) {
+                $filterUserId = 0; // Usuario no válido o de otra empresa
+            }
+            $stmt->close();
+        }
+
+        return compact('idCampana','empresa_id','filterCodigo','filterEstado','filterUserId','filterDesde','filterHasta','perPage','page','useDefaultRange');
+    }
+
+    private function getMapKey(): string
+    {
+        // SEGURIDAD: Leer API key desde configuración o variable de entorno
+        // Primero intenta leer de variable de entorno
+        $key = getenv('GOOGLE_MAPS_API_KEY');
+
+        // Si no existe, intenta leer del archivo de configuración
+        if (!$key) {
+            $configFile = $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/config/maps_config.php';
+            if (file_exists($configFile)) {
+                $config = include $configFile;
+                $key = $config['google_maps_api_key'] ?? '';
+            }
+        }
+
+        // Fallback a la key hardcodeada (temporal, debe ser removida)
+        if (!$key) {
+            $key = 'AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw';
+        }
+
+        return $key;
     }
 
     private function estadoLabel(string $estado): string
@@ -75,23 +123,57 @@ class MapaCampanaController
         }
 
         $campanaNombre = $this->localModel->getCampanaNombre($filters['idCampana'], $filters['empresa_id']);
-        $usuarios = $this->localModel->getUsuariosByCampana($filters['idCampana'], $filters['empresa_id']);
-        $estadosDisponibles = $this->localModel->getEstadosByCampana($filters['idCampana'], $filters['empresa_id']);
-        $pageData = $this->localModel->getLocalesPage($filters);
+        $campanaInfo = $this->localModel->getCampanaInfo($filters['idCampana'], $filters['empresa_id']);
+        $isComplementaria = ($campanaInfo['modalidad'] ?? '') === 'complementaria';
+        $iwRequiereLocal = (int)($campanaInfo['iw_requiere_local'] ?? 0) === 1;
 
-        foreach ($pageData['locales'] as &$loc) {
-            $loc['estadoLabel'] = $this->estadoLabel($loc['estadoGestion'] ?? '');
+        if ($isComplementaria) {
+            $usuarios = $this->localModel->getUsuariosByCampanaComplementaria($filters['idCampana'], $filters['empresa_id']);
+            $estadosDisponibles = [];
+            if ($iwRequiereLocal) {
+                $pageData = $this->localModel->getComplementariaLocalesPage($filters);
+            } else {
+                $pageData = $this->localModel->getComplementariaVisitasPage($filters);
+            }
+        } else {
+            $usuarios = $this->localModel->getUsuariosByCampana($filters['idCampana'], $filters['empresa_id']);
+            $estadosDisponibles = $this->localModel->getEstadosByCampana($filters['idCampana'], $filters['empresa_id']);
+            $pageData = $this->localModel->getLocalesPage($filters);
         }
-        unset($loc);
 
-        $allowedEstados = array_values(array_unique($estadosDisponibles));
-        $allowedEstados[] = 'sin_datos';
-        if ($filters['filterEstado'] !== '' && !in_array($filters['filterEstado'], $allowedEstados, true)) {
+        // Obtener nombre del usuario filtrado para mostrar en alertas
+        $filteredUserName = null;
+        if ($filters['filterUserId'] > 0) {
+            foreach ($usuarios as $u) {
+                if ((int)$u['id'] === $filters['filterUserId']) {
+                    $filteredUserName = $u['usuario'] . ($u['nombre'] ? ' — ' . $u['nombre'] : '');
+                    break;
+                }
+            }
+        }
+
+        // FIX: Solo procesar estadoLabel para campañas programadas (no IW)
+        if (!$isComplementaria) {
+            foreach ($pageData['locales'] as &$loc) {
+                $loc['estadoLabel'] = $this->estadoLabel($loc['estadoGestion'] ?? '');
+            }
+            unset($loc);
+
+            $allowedEstados = array_values(array_unique($estadosDisponibles));
+            $allowedEstados[] = 'sin_datos';
+            if ($filters['filterEstado'] !== '' && !in_array($filters['filterEstado'], $allowedEstados, true)) {
+                $filters['filterEstado'] = '';
+            }
+        } else {
+            // Campañas complementarias no tienen estados
             $filters['filterEstado'] = '';
         }
 
         $viewData = [
             'campanaNombre' => $campanaNombre,
+            'campanaInfo' => $campanaInfo,
+            'isComplementaria' => $isComplementaria,
+            'iwRequiereLocal' => $iwRequiereLocal,
             'usuarios' => $usuarios,
             'estadosDisponibles' => $estadosDisponibles,
             'locales' => $pageData['locales'],
@@ -102,8 +184,9 @@ class MapaCampanaController
                 'totalRows' => $pageData['totalRows'],
             ],
             'filters' => $filters,
+            'filteredUserName' => $filteredUserName,
             'csrf' => $csrf,
-            'mapKey' => 'AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw' ?: '',
+            'mapKey' => $this->getMapKey(),
         ];
 
         require __DIR__ . '/../views/mapa_campana.php';
@@ -125,14 +208,31 @@ class MapaCampanaController
             return;
         }
 
-        $pageData = $this->localModel->getLocalesPage($filters);
-        foreach ($pageData['locales'] as &$loc) {
-            $loc['estadoLabel'] = $this->estadoLabel($loc['estadoGestion'] ?? '');
+        $campanaInfo = $this->localModel->getCampanaInfo($filters['idCampana'], $filters['empresa_id']);
+        $isComplementaria = ($campanaInfo['modalidad'] ?? '') === 'complementaria';
+        $iwRequiereLocal = (int)($campanaInfo['iw_requiere_local'] ?? 0) === 1;
+
+        if ($isComplementaria) {
+            if ($iwRequiereLocal) {
+                $pageData = $this->localModel->getComplementariaLocalesPage($filters);
+            } else {
+                $pageData = $this->localModel->getComplementariaVisitasPage($filters);
+            }
+        } else {
+            $pageData = $this->localModel->getLocalesPage($filters);
         }
-        unset($loc);
+
+        // FIX: Solo procesar estadoLabel para campañas programadas (no IW)
+        if (!$isComplementaria) {
+            foreach ($pageData['locales'] as &$loc) {
+                $loc['estadoLabel'] = $this->estadoLabel($loc['estadoGestion'] ?? '');
+            }
+            unset($loc);
+        }
 
         header('Content-Type: application/json; charset=UTF-8');
         echo json_encode([
+            'campanaInfo' => $campanaInfo,
             'locales' => $pageData['locales'],
             'pagination' => [
                 'totalPages' => $pageData['totalPages'],

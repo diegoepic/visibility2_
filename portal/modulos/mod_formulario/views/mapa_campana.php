@@ -1,6 +1,9 @@
 <?php
 /** @var array $viewData */
 $campanaNombre = $viewData['campanaNombre'];
+$campanaInfo = $viewData['campanaInfo'] ?? [];
+$isComplementaria = (bool)($viewData['isComplementaria'] ?? false);
+$iwRequiereLocal = (bool)($viewData['iwRequiereLocal'] ?? false);
 $usuarios = $viewData['usuarios'];
 $estadosDisponibles = $viewData['estadosDisponibles'];
 $locales = $viewData['locales'];
@@ -49,9 +52,11 @@ $mapKey = $viewData['mapKey'];
       <form method="get" class="mb-2">
         <input type="hidden" name="id" value="<?= (int)$filters['idCampana'] ?>">
         <div class="form-row align-items-center mb-2">
-          <div class="form-group mb-1">
-            <input type="text" name="filter_codigo" class="form-control form-control-sm" placeholder="Código" value="<?= htmlspecialchars($filters['filterCodigo'], ENT_QUOTES) ?>">
-          </div>
+          <?php if (!$isComplementaria || $iwRequiereLocal): ?>
+            <div class="form-group mb-1">
+              <input type="text" name="filter_codigo" class="form-control form-control-sm" placeholder="Código local" value="<?= htmlspecialchars($filters['filterCodigo'], ENT_QUOTES) ?>">
+            </div>
+          <?php endif; ?>
           <div class="form-group mb-1">
             <select name="filter_usuario_id" class="form-control form-control-sm">
               <option value="">Todos los usuarios</option>
@@ -63,16 +68,18 @@ $mapKey = $viewData['mapKey'];
               <?php endforeach; ?>
             </select>
           </div>
-          <div class="form-group mb-1">
-            <select name="filter_estado" class="form-control form-control-sm">
-              <option value="">Todos los estados</option>
-              <?php foreach ($estadosDisponibles as $est): $sel = ($filters['filterEstado'] === $est) ? 'selected' : ''; ?>
-                <option value="<?= htmlspecialchars($est,ENT_QUOTES) ?>" <?= $sel ?>><?= htmlspecialchars($est,ENT_QUOTES) ?></option>
-              <?php endforeach; ?>
-              <?php $selSD = ($filters['filterEstado'] === 'sin_datos') ? 'selected' : ''; ?>
-              <option value="sin_datos" <?= $selSD ?>>Sin gestiones</option>
-            </select>
-          </div>
+          <?php if (!$isComplementaria): ?>
+            <div class="form-group mb-1">
+              <select name="filter_estado" class="form-control form-control-sm">
+                <option value="">Todos los estados</option>
+                <?php foreach ($estadosDisponibles as $est): $sel = ($filters['filterEstado'] === $est) ? 'selected' : ''; ?>
+                  <option value="<?= htmlspecialchars($est,ENT_QUOTES) ?>" <?= $sel ?>><?= htmlspecialchars($est,ENT_QUOTES) ?></option>
+                <?php endforeach; ?>
+                <?php $selSD = ($filters['filterEstado'] === 'sin_datos') ? 'selected' : ''; ?>
+                <option value="sin_datos" <?= $selSD ?>>Sin gestiones</option>
+              </select>
+            </div>
+          <?php endif; ?>
         </div>
         <div class="form-row align-items-center">
           <div class="form-group mb-1">
@@ -96,31 +103,71 @@ $mapKey = $viewData['mapKey'];
           </div>
         </div>
       </form>
+      <?php if ($filters['useDefaultRange'] ?? false): ?>
+        <div class="alert alert-info alert-sm py-2 px-2 mx-2 mb-2 d-flex justify-content-between align-items-center" style="font-size:0.85rem;">
+          <span><i class="fas fa-info-circle mr-1"></i> Mostrando últimos 30 días</span>
+          <a href="?id=<?= (int)$filters['idCampana'] ?>&fdesde=&fhasta=&page=1" class="btn btn-sm btn-outline-primary" style="font-size:0.75rem;padding:2px 8px;">Ver todos</a>
+        </div>
+      <?php endif; ?>
+      <?php if ($isComplementaria && $iwRequiereLocal && $filters['filterUserId'] > 0 && !empty($viewData['filteredUserName'])): ?>
+        <div class="alert alert-warning alert-sm py-2 px-2 mx-2 mb-2" style="font-size:0.85rem;">
+          <i class="fas fa-filter mr-1"></i> <strong>Filtrando por <?= htmlspecialchars($viewData['filteredUserName'], ENT_QUOTES) ?>:</strong><br>
+          <small>Mostrando locales con al menos una visita de este usuario. En el detalle verás todas las visitas para contexto completo.</small>
+        </div>
+      <?php endif; ?>
     </div>
     <div class="p-2">
       <table class="table table-sm table-hover" id="tblLocales">
         <thead>
-          <tr><th>Cod.</th><th>Nombre</th><th>Estado</th><th>Última</th></tr>
+          <?php if ($isComplementaria && !$iwRequiereLocal): ?>
+            <tr><th>Visita</th><th>Usuario</th><th>Fecha</th></tr>
+          <?php elseif ($isComplementaria && $iwRequiereLocal): ?>
+            <tr><th>Cod.</th><th>Nombre</th><th>Usuario</th><th>Última visita</th></tr>
+          <?php else: ?>
+            <tr><th>Cod.</th><th>Nombre</th><th>Estado</th><th>Última visita</th></tr>
+          <?php endif; ?>
         </thead>
         <tbody>
         <?php foreach ($locales as $loc): ?>
           <tr data-id="<?= (int)$loc['idLocal'] ?>">
-            <td><?= htmlspecialchars($loc['codigoLocal'] ?? '', ENT_QUOTES) ?></td>
-            <td><?= htmlspecialchars($loc['nombreLocal'] ?? '', ENT_QUOTES) ?></td>
-            <td><?= htmlspecialchars($loc['estadoLabel'] ?? '', ENT_QUOTES) ?></td>
-            <td><?= htmlspecialchars($loc['fechaVisita'] ?? '—', ENT_QUOTES) ?></td>
+            <?php if ($isComplementaria && !$iwRequiereLocal): ?>
+              <td><?= htmlspecialchars('Visita #'.(int)($loc['visitaId'] ?? $loc['idLocal']), ENT_QUOTES) ?></td>
+              <td><?= htmlspecialchars($loc['usuarioGestion'] ?? '—', ENT_QUOTES) ?></td>
+              <td><?= htmlspecialchars($loc['fechaVisita'] ?? '—', ENT_QUOTES) ?></td>
+            <?php elseif ($isComplementaria && $iwRequiereLocal): ?>
+              <td><?= htmlspecialchars($loc['codigoLocal'] ?? '', ENT_QUOTES) ?></td>
+              <td><?= htmlspecialchars($loc['nombreLocal'] ?? '', ENT_QUOTES) ?></td>
+              <td>
+                <?= htmlspecialchars($loc['usuarioGestion'] ?? '—', ENT_QUOTES) ?>
+                <?php if ($filters['filterUserId'] > 0 && isset($loc['visitasUsuarioFiltrado']) && isset($loc['visitasCount']) && $loc['visitasCount'] > 0): ?>
+                  <span class="badge badge-primary ml-1" style="font-size:0.7rem;" title="<?= (int)$loc['visitasUsuarioFiltrado'] ?> de <?= (int)$loc['visitasCount'] ?> visitas son de este usuario">
+                    <?= (int)$loc['visitasUsuarioFiltrado'] ?>/<?= (int)$loc['visitasCount'] ?>
+                  </span>
+                <?php endif; ?>
+              </td>
+              <td><?= htmlspecialchars($loc['fechaVisita'] ?? '—', ENT_QUOTES) ?></td>
+            <?php else: ?>
+              <td><?= htmlspecialchars($loc['codigoLocal'] ?? '', ENT_QUOTES) ?></td>
+              <td><?= htmlspecialchars($loc['nombreLocal'] ?? '', ENT_QUOTES) ?></td>
+              <td><?= htmlspecialchars($loc['estadoLabel'] ?? '', ENT_QUOTES) ?></td>
+              <td><?= htmlspecialchars($loc['fechaVisita'] ?? '—', ENT_QUOTES) ?></td>
+            <?php endif; ?>
           </tr>
         <?php endforeach; ?>
         </tbody>
       </table>
       <div class="d-flex justify-content-between align-items-center mb-3">
-        <div class="small">Página <?= (int)$pagination['currentPage'] ?> / <?= (int)$pagination['totalPages'] ?> (<?= (int)$pagination['totalRows'] ?> locales)</div>
+        <?php
+          // FIX: Texto dinámico según tipo de campaña
+          $itemLabel = ($isComplementaria && !$iwRequiereLocal) ? 'visitas' : 'locales';
+        ?>
+        <div class="small">Página <?= (int)$pagination['currentPage'] ?> / <?= (int)$pagination['totalPages'] ?> (<?= (int)$pagination['totalRows'] ?> <?= $itemLabel ?>)</div>
         <div>
           <?php if ($pagination['currentPage'] > 1): ?>
-            <a class="btn btn-outline-secondary btn-sm" href="?<?= http_build_query(array_merge($_GET,['page'=>$pagination['currentPage']-1])) ?>">&laquo;</a>
+            <a class="btn btn-outline-secondary btn-sm" href="?<?= http_build_query([...$_GET, 'page' => $pagination['currentPage']-1]) ?>" title="Página anterior">&laquo;</a>
           <?php endif; ?>
           <?php if ($pagination['currentPage'] < $pagination['totalPages']): ?>
-            <a class="btn btn-outline-secondary btn-sm" href="?<?= http_build_query(array_merge($_GET,['page'=>$pagination['currentPage']+1])) ?>">&raquo;</a>
+            <a class="btn btn-outline-secondary btn-sm" href="?<?= http_build_query([...$_GET, 'page' => $pagination['currentPage']+1]) ?>" title="Página siguiente">&raquo;</a>
           <?php endif; ?>
         </div>
       </div>
@@ -147,7 +194,10 @@ $mapKey = $viewData['mapKey'];
     window.MAPA_DATA = <?= json_encode($locales, JSON_UNESCAPED_UNICODE) ?>;
     window.MAPA_CONFIG = {
       campanaId: <?= (int)$filters['idCampana'] ?>,
-      csrf: '<?= htmlspecialchars($csrf, ENT_QUOTES) ?>'
+      csrf: '<?= htmlspecialchars($csrf, ENT_QUOTES) ?>',
+      isComplementaria: <?= $isComplementaria ? 'true' : 'false' ?>,
+      iwRequiereLocal: <?= $iwRequiereLocal ? 'true' : 'false' ?>,
+      filteredUserId: <?= (int)($filters['filterUserId'] ?? 0) ?>
     };
     window.MAP_KEY = '<?= htmlspecialchars($mapKey, ENT_QUOTES) ?>';
   </script>
