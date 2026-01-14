@@ -247,10 +247,10 @@ function convertirAWebP($sourcePath, $destPath, $quality = 80) {
   }
 
   // VALIDACIÓN: Dimensiones máximas (4000x4000)
-  $maxWidth = 4000;
-  $maxHeight = 4000;
+  $maxWidth = 8000;
+  $maxHeight = 8000;
   if ($info[0] > $maxWidth || $info[1] > $maxHeight) {
-    throw new Exception('Dimensiones muy grandes (máx 4000x4000)');
+    throw new Exception('Dimensiones muy grandes (máx 8000x8000)');
   }
 
   $mime = $info['mime'] ?? '';
