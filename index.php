@@ -1,5 +1,5 @@
 <?php
-// ------- Endurecer cookies de sesi¨®n ANTES de session_start -------
+// ------- Endurecer cookies de sesiÂ¨Â®n ANTES de session_start -------
 $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
 session_set_cookie_params([
     'lifetime' => 0,
@@ -12,7 +12,7 @@ session_set_cookie_params([
 
 session_start();
 
-// ------- Encabezados de seguridad y no-cache en p¨¢gina de login -------
+// ------- Encabezados de seguridad y no-cache en pÂ¨Â¢gina de login -------
 header('X-Frame-Options: DENY');
 header("Content-Security-Policy: frame-ancestors 'none'");
 header('Referrer-Policy: no-referrer');
@@ -38,7 +38,7 @@ $notice_login   = $_SESSION['notice_login']   ?? ''; // opcional
 
 unset($_SESSION['error_login'], $_SESSION['error_forgot'], $_SESSION['success_forgot'], $_SESSION['notice_login']);
 
-// (Opcional) Si ya hay sesi¨®n v¨¢lida, podr¨ªas redirigir al home del portal:
+// (Opcional) Si ya hay sesiÂ¨Â®n vÂ¨Â¢lida, podrÂ¨Âªas redirigir al home del portal:
 // if (!empty($_SESSION['usuario_id'])) {
 //     header('Location: visibility2/portal/home.php');
 //     exit;
@@ -112,28 +112,28 @@ unset($_SESSION['error_login'], $_SESSION['error_forgot'], $_SESSION['success_fo
           </div>
         <?php endif; ?>
 
-        <!-- Mensaje de Error de Inicio de Sesi¨®n -->
+        <!-- Mensaje de Error de Inicio de SesiÂ¨Â®n -->
         <?php if ($error_login !== ""): ?>
           <div class="errorHandler alert alert-danger">
             <i class="fa fa-remove-sign"></i> <?php echo e($error_login); ?>
           </div>
         <?php endif; ?>
 
-        <!-- Mensaje de Error de Restablecimiento de Contrase0Š9a -->
+        <!-- Mensaje de Error de Restablecimiento de ContraseÂ0Å 9a -->
         <?php if ($error_forgot !== ""): ?>
           <div class="errorHandler alert alert-danger">
             <i class="fa fa-remove-sign"></i> <?php echo e($error_forgot); ?>
           </div>
         <?php endif; ?>
 
-        <!-- Mensaje de 0‡7xito de Restablecimiento de Contrase0Š9a -->
+        <!-- Mensaje de Â0â€¡7xito de Restablecimiento de ContraseÂ0Å 9a -->
         <?php if ($success_forgot !== ""): ?>
           <div class="errorHandler alert alert-success">
             <i class="fa fa-check-sign"></i> <?php echo e($success_forgot); ?>
           </div>
         <?php endif; ?>
 
-        <!-- Mensajes de Error o 0‡7xito de otras acciones -->
+        <!-- Mensajes de Error o Â0â€¡7xito de otras acciones -->
         <?php
         if (isset($_SESSION['error_solicitud'])) {
             echo '<div class="errorHandler alert alert-danger">' . e($_SESSION['error_solicitud']) . '</div>';
@@ -192,21 +192,21 @@ unset($_SESSION['error_login'], $_SESSION['error_forgot'], $_SESSION['success_fo
       </form>
     </div>
 
-    <!-- Formulario de Restablecimiento de Contrase0Š9a -->
+    <!-- Formulario de Restablecimiento de ContraseÂ0Å 9a -->
     <div class="box-forgot">
       <h3>Olvidaste tu contrase&ntilde;a?</h3>
       <p>Ingrese su direcci&oacute;n de correo electr&oacute;nico a continuaci&oacute;n para restablecer su contrase&ntilde;a.</p>
       <form class="form-forgot" action="visibility2/portal/modulos/restablecer_contrasena.php" method="POST" novalidate>
         <input type="hidden" name="csrf_token" value="<?php echo e($CSRF); ?>">
 
-        <!-- Mensaje de Error de Restablecimiento de Contrase0Š9a -->
+        <!-- Mensaje de Error de Restablecimiento de ContraseÂ0Å 9a -->
         <?php if ($error_forgot !== ""): ?>
           <div class="errorHandler alert alert-danger">
             <i class="fa fa-remove-sign"></i> <?php echo e($error_forgot); ?>
           </div>
         <?php endif; ?>
 
-        <!-- Mensaje de 0‡7xito de Restablecimiento de Contrase0Š9a -->
+        <!-- Mensaje de Â0â€¡7xito de Restablecimiento de ContraseÂ0Å 9a -->
         <?php if ($success_forgot !== ""): ?>
           <div class="errorHandler alert alert-success">
             <i class="fa fa-check-sign"></i> <?php echo e($success_forgot); ?>
@@ -238,7 +238,7 @@ unset($_SESSION['error_login'], $_SESSION['error_forgot'], $_SESSION['success_fo
       </form>	
     </div>
 
-    <!-- Formulario de Solicitud de Creaci¨®n de Cuenta -->
+    <!-- Formulario de Solicitud de CreaciÂ¨Â®n de Cuenta -->
     <div class="box-register">
       <h3>Solicitud de Creaci&oacute;n de Cuenta</h3>
       <p>Ingrese sus datos para solicitar la creaci&oacute;n de su cuenta:</p>
