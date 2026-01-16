@@ -1026,6 +1026,7 @@ function buildMoveTargets(){
   sel.append('<option value="root">Raíz del set</option>');
   $('.rail').each(function(){
     var parent=$(this).data('parent-id'), dep=$(this).data('dep');
+    if (movingLI && parseInt(parent,10) === parseInt(movingLI.data('id'),10)) return;
     var parentTitle=$('.q-item[data-id="'+parent+'"]').find('> .q-card .q-title').first().text().trim();
     var optText=$(this).find('.opt-chip').first().text().trim();
     sel.append('<option value="'+parent+':'+dep+'">'+escapeHtml(parentTitle)+' → opción: '+escapeHtml(optText)+'</option>');
@@ -1056,7 +1057,17 @@ function activateDnD(){
     placeholder:'sortable-placeholder',
     forcePlaceholderSize:true,
     tolerance:'pointer',
-    cancel:'a,button,.btn,input,[contenteditable]'
+    cancel:'a,button,.btn,input,[contenteditable]',
+    receive:function(e, ui){
+      var parentId = $(this).data('parent-id');
+      var movedId = ui.item.data('id');
+      if (parentId && parseInt(parentId,10) === parseInt(movedId,10)) {
+        if (ui.sender && ui.sender.sortable) ui.sender.sortable('cancel');
+        notify('error','No puedes mover una pregunta a una opción de sí misma.');
+        return;
+      }
+      markDirty();
+    }
   }).on('sortupdate', markDirty).disableSelection();
   dndActive=true;
 }
