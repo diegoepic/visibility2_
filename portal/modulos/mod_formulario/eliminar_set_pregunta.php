@@ -14,8 +14,14 @@ include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/session_da
 
 $idQ   = isset($_GET['id'])    ? (int)$_GET['id']    : 0;
 $idSet = isset($_GET['idSet']) ? (int)$_GET['idSet'] : 0;
+$csrf = $_GET['csrf_token'] ?? '';
 
 if ($idQ<=0 || $idSet<=0){ die("Parámetros inválidos."); }
+if (!hash_equals($_SESSION['csrf_token'] ?? '', $csrf)) {
+  $_SESSION['error_sets'] = "Token CSRF inválido.";
+  header("Location: gestionar_sets.php?idSet=".$idSet);
+  exit();
+}
 
 /* ------------------------- Helpers ------------------------- */
 
@@ -153,10 +159,10 @@ if ($confirm !== '1'){
         <hr>
         <div class="mb-2">¿Qué deseas hacer?</div>
         <div class="d-flex flex-wrap">
-          <a class="btn btn-danger mr-2 mb-2" href="eliminar_set_pregunta.php?id=<?= $idQ ?>&idSet=<?= $idSet ?>&confirm=1&delete=all">
+          <a class="btn btn-danger mr-2 mb-2" href="eliminar_set_pregunta.php?id=<?= $idQ ?>&idSet=<?= $idSet ?>&confirm=1&delete=all&csrf_token=<?= htmlspecialchars($csrf, ENT_QUOTES) ?>">
             Eliminar subárbol completo
           </a>
-          <a class="btn btn-outline-danger mr-2 mb-2" href="eliminar_set_pregunta.php?id=<?= $idQ ?>&idSet=<?= $idSet ?>&confirm=1&delete=only">
+          <a class="btn btn-outline-danger mr-2 mb-2" href="eliminar_set_pregunta.php?id=<?= $idQ ?>&idSet=<?= $idSet ?>&confirm=1&delete=only&csrf_token=<?= htmlspecialchars($csrf, ENT_QUOTES) ?>">
             Eliminar solo esta (reubicar hijos a raíz)
           </a>
           <a class="btn btn-secondary mb-2" href="gestionar_sets.php?idSet=<?= $idSet ?>">Cancelar</a>

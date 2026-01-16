@@ -2,6 +2,10 @@
 session_start();
 if (!isset($_SESSION['usuario_id'])) { echo "No autorizado."; exit(); }
 
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 // DEBUG (apaga en prod)
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -231,6 +235,10 @@ function saveOptimizedImage(string $tmpPath, string $destDirFs, string $destDirW
    ============================================================ */
 
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '')==='edit_question_set'){
+  if (!hash_equals($_SESSION['csrf_token'] ?? '', $_POST['csrf_token'] ?? '')) {
+    echo "Token CSRF inválido.";
+    exit();
+  }
   $idSet        = (int)($_POST['id_set'] ?? 0);
   $idSetQuestion= (int)($_POST['idSetQuestion'] ?? 0);
   $question_text= trim($_POST['question_text'] ?? '');
@@ -358,6 +366,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '')==='edit_ques
       }
       $toDel = array_diff($curIds, $submitted);
       if (!empty($toDel)){
+        $depsToDel = dependentsByOption($conn, $idSet, $toDel);
+        if (!empty($depsToDel)){
+          $list = [];
+          foreach ($depsToDel as $optId => $texts){
+            foreach ($texts as $t){ $list[] = $t; }
+          }
+          $preview = implode(', ', array_slice($list, 0, 5));
+          $more = count($list) > 5 ? '…' : '';
+          throw new Exception("No puedes eliminar opciones con dependientes. Reasigna o elimina sus preguntas primero. Ejemplos: ".$preview.$more);
+        }
         $in=implode(',', array_map('intval', $toDel));
         $conn->query("DELETE FROM question_set_options WHERE id_question_set_question={$idSetQuestion} AND id IN ($in)");
       }
@@ -497,6 +515,7 @@ function isOptionTypeInt($t){ return in_array((int)$t, [1,2,3], true); }
   <input type="hidden" name="action" value="edit_question_set">
   <input type="hidden" name="id_set" value="<?= $idSet ?>">
   <input type="hidden" name="idSetQuestion" value="<?= (int)$q['id'] ?>">
+  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES) ?>">
 
   <div class="modal-header py-2">
     <h5 class="modal-title">Editar pregunta</h5>

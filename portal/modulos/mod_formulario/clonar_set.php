@@ -12,7 +12,13 @@ include_once $_SERVER['DOCUMENT_ROOT'].'/visibility2/portal/modulos/db.php';
 include_once $_SERVER['DOCUMENT_ROOT'].'/visibility2/portal/modulos/session_data.php';
 
 $idSet = isset($_GET['idSet']) ? (int)$_GET['idSet'] : 0;
+$csrf = $_GET['csrf_token'] ?? '';
 if ($idSet<=0){ $_SESSION['error_sets']="Parámetros inválidos."; header("Location: gestionar_sets.php"); exit(); }
+if (!hash_equals($_SESSION['csrf_token'] ?? '', $csrf)) {
+  $_SESSION['error_sets']="Token CSRF inválido.";
+  header("Location: gestionar_sets.php");
+  exit();
+}
 
 // Cargar set
 $st=$conn->prepare("SELECT * FROM question_set WHERE id=?");
@@ -65,19 +71,21 @@ try{
 
     // Remapear dependencias
     $stUp=$conn->prepare("UPDATE question_set_questions SET id_dependency_option=? WHERE id=? AND id_question_set=?");
+    $stUpNull=$conn->prepare("UPDATE question_set_questions SET id_dependency_option=NULL WHERE id=? AND id_question_set=?");
     foreach($qs as $q){
       $oldDep = $q['id_dependency_option'];
       $newQ   = $newQByOld[(int)$q['id']];
       if (is_null($oldDep)){
-        $dep = NULL;
-        $stUp->bind_param("iii",$dep,$newQ,$newSetId); // pass null safely
+        $stUpNull->bind_param("ii",$newQ,$newSetId);
+        $stUpNull->execute();
       } else {
         $newDep = $newOptByOld[(int)$oldDep] ?? NULL;
         $stUp->bind_param("iii",$newDep,$newQ,$newSetId);
+        $stUp->execute();
       }
-      $stUp->execute();
     }
     $stUp->close();
+    $stUpNull->close();
   }
 
   $conn->commit();
