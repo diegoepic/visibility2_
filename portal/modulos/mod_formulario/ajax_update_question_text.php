@@ -4,6 +4,12 @@
 session_start();
 if (!isset($_SESSION['usuario_id'])) { http_response_code(403); echo "No autorizado."; exit(); }
 
+if (!hash_equals($_SESSION['csrf_token'] ?? '', $_POST['csrf_token'] ?? '')) {
+  http_response_code(403);
+  echo "Token CSRF inválido.";
+  exit();
+}
+
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
