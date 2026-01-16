@@ -114,13 +114,20 @@ $validOpt = fetchValidOptions($conn, $idSet);
 // d) Construir parentOf global del set con datos actuales
 $currentDepOptByQ = fetchSetDeps($conn, $idSet); // childQ => optionId|null
 $parentOf = []; // childQ => parentQ|null (actual)
+$selfDepQuestions = []; // childQ => true
 foreach ($currentDepOptByQ as $childQ => $optId) {
   if ($optId !== null){
     if (!isset($validOpt[$optId])) {
       // datos "sucios": opción no existe/ya no pertenece; trátalo como NULL para no romper validación
       $parentOf[$childQ] = null;
     } else {
-      $parentOf[$childQ] = (int)$validOpt[$optId];
+      $parentQ = (int)$validOpt[$optId];
+      if ($parentQ === (int)$childQ) {
+        $parentOf[$childQ] = null;
+        $selfDepQuestions[$childQ] = true;
+      } else {
+        $parentOf[$childQ] = $parentQ;
+      }
     }
   } else {
     $parentOf[$childQ] = null;
@@ -138,7 +145,13 @@ foreach ($rows as $r){
   } else {
     $dep = (int)$dep;
     if (!isset($validOpt[$dep])){ http_response_code(400); echo "Opción disparadora inválida para una pregunta (id_opción: $dep)."; exit(); }
-    $parentOf[$child] = (int)$validOpt[$dep];
+    $parentQ = (int)$validOpt[$dep];
+    if ($parentQ === $child) {
+      $parentOf[$child] = null;
+      $selfDepQuestions[$child] = true;
+    } else {
+      $parentOf[$child] = $parentQ;
+    }
   }
 }
 
@@ -172,6 +185,10 @@ try{
     $sort = (int)$r['sort_order'];
     $dep  = array_key_exists('dep_option_id', $r) ? $r['dep_option_id'] : null;
 
+    if (!empty($selfDepQuestions[$id])){
+      $dep = null;
+    }
+
     if ($dep === null || $dep === ''){
       // sin dependencia => NULL explícito
       $upNoDep->bind_param("iii", $sort, $id, $idSet);
@@ -189,7 +206,11 @@ try{
   $upNoDep->close();
 
   $conn->commit();
-  echo "Estructura actualizada correctamente.";
+  $msg = "Estructura actualizada correctamente.";
+  if (!empty($selfDepQuestions)) {
+    $msg .= " Se limpiaron " . count($selfDepQuestions) . " dependencias inválidas (auto-dependencia).";
+  }
+  echo $msg;
 } catch(Exception $e){
   $conn->rollback();
   http_response_code(500);
