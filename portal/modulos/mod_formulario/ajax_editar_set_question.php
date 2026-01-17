@@ -13,6 +13,7 @@ error_reporting(E_ALL);
 
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/session_data.php';
+include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/mod_formulario/sort_order_helpers.php';
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 /* ============================================================
@@ -311,50 +312,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '')==='edit_ques
     $st->execute(); 
     $st->close();
 
-    // Reordenar cuando la dependencia cambia y ahora es condicional
-    if ($depChanged && $dependency_option !== null) {
-      $optMap = optionsMapByQuestion($conn, $idSet);
-      if (!isset($optMap[$dependency_option])) {
-        throw new Exception("La opción seleccionada no pertenece a este set.");
-      }
-      $parentQ = (int)$optMap[$dependency_option];
-
-      // sort_order del padre
-      $stP = $conn->prepare("SELECT sort_order FROM question_set_questions WHERE id=? AND id_question_set=?");
-      $stP->bind_param("ii", $parentQ, $idSet);
-      $stP->execute();
-      $stP->bind_result($parentSort);
-      if (!$stP->fetch()) {
-        $stP->close();
-        throw new Exception("No se encontró la pregunta padre al reordenar.");
-      }
-      $stP->close();
-
-      $newSort = (int)$parentSort + 1;
-
-      // Desplazar hacia abajo todas las preguntas con sort_order >= newSort, excepto esta
-      $stShift = $conn->prepare("
-        UPDATE question_set_questions
-           SET sort_order = sort_order + 1
-         WHERE id_question_set = ?
-           AND id <> ?
-           AND sort_order >= ?
-      ");
-      $stShift->bind_param("iii", $idSet, $idSetQuestion, $newSort);
-      $stShift->execute();
-      $stShift->close();
-
-      // Asignar nuevo sort_order a la pregunta actual
-      $stSort = $conn->prepare("
-        UPDATE question_set_questions
-           SET sort_order = ?
-         WHERE id = ? AND id_question_set = ?
-      ");
-      $stSort->bind_param("iii", $newSort, $idSetQuestion, $idSet);
-      $stSort->execute();
-      $stSort->close();
-    }
-
     // Opciones según tipo
     if ($isOptionType($id_type)){
       // Eliminar opciones removidas (comparando ids existentes enviados vs actuales)
@@ -467,6 +424,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '')==='edit_ques
       $conn->query("DELETE FROM question_set_options WHERE id_question_set_question={$idSetQuestion}");
     }
 
+    normalizar_sort_order_set($conn, $idSet);
     $conn->commit();
     echo "OK";
   } catch(Exception $e){

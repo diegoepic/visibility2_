@@ -17,6 +17,7 @@ header('Content-Type: text/plain; charset=utf-8');
 
 include_once $_SERVER['DOCUMENT_ROOT'].'/visibility2/portal/modulos/db.php';
 include_once $_SERVER['DOCUMENT_ROOT'].'/visibility2/portal/modulos/session_data.php';
+include_once $_SERVER['DOCUMENT_ROOT'].'/visibility2/portal/modulos/mod_formulario/sort_order_helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST'){ http_response_code(405); echo "Método inválido."; exit(); }
 
@@ -182,13 +183,16 @@ if (has_cycle_full($parentOf)){
 $conn->begin_transaction();
 try{
   // Statements reusables (con/sin dependencia)
-  $upWithDep = $conn->prepare("UPDATE question_set_questions SET sort_order=?, id_dependency_option=? WHERE id=? AND id_question_set=?");
-  $upNoDep   = $conn->prepare("UPDATE question_set_questions SET sort_order=?, id_dependency_option=NULL WHERE id=? AND id_question_set=?");
+  $upWithDep = $conn->prepare("UPDATE question_set_questions SET id_dependency_option=? WHERE id=? AND id_question_set=?");
+  $upNoDep   = $conn->prepare("UPDATE question_set_questions SET id_dependency_option=NULL WHERE id=? AND id_question_set=?");
+  $preferredOrder = [];
+  $index = 1;
 
   foreach ($rows as $r){
     $id   = (int)$r['id'];
-    if (!isset($r['sort_order'])){ throw new Exception("Fila sin 'sort_order' para pregunta $id."); }
-    $sort = (int)$r['sort_order'];
+    $preferredOrder[$id] = $index;
+    $index++;
+
     $dep  = array_key_exists('dep_option_id', $r) ? $r['dep_option_id'] : null;
 
     if (!empty($selfDepQuestions[$id])){
@@ -197,13 +201,13 @@ try{
 
     if ($dep === null || $dep === ''){
       // sin dependencia => NULL explícito
-      $upNoDep->bind_param("iii", $sort, $id, $idSet);
+      $upNoDep->bind_param("ii", $id, $idSet);
       $upNoDep->execute();
     } else {
       $dep = (int)$dep;
       // seguridad extra: validar opción del mismo set (de nuevo, por si payload mutó entre validación y update)
       if (!isset($validOpt[$dep])){ throw new Exception("Opción disparadora inválida durante actualización (id_opción: $dep)."); }
-      $upWithDep->bind_param("iiii", $sort, $dep, $id, $idSet);
+      $upWithDep->bind_param("iii", $dep, $id, $idSet);
       $upWithDep->execute();
     }
   }
@@ -211,10 +215,15 @@ try{
   $upWithDep->close();
   $upNoDep->close();
 
+  $cleared = normalizar_sort_order_set($conn, $idSet, $preferredOrder);
+
   $conn->commit();
   $msg = "Estructura actualizada correctamente.";
   if (!empty($selfDepQuestions)) {
     $msg .= " Se limpiaron " . count($selfDepQuestions) . " dependencias inválidas (auto-dependencia).";
+  }
+  if (!empty($cleared)) {
+    $msg .= " Se normalizaron " . count($cleared) . " dependencias huérfanas.";
   }
   echo $msg;
 } catch(Exception $e){

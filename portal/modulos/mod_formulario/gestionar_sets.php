@@ -18,6 +18,7 @@ error_reporting(E_ALL);
 
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/session_data.php';
+include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/mod_formulario/sort_order_helpers.php';
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 /* ---------- Helpers de datos ---------- */
@@ -253,6 +254,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
     try {
       // Iniciamos transacción porque vamos a mover sort_order + insertar
       $conn->begin_transaction();
+      normalizar_sort_order_set($conn, $idSet);
 
       // Calcular sort_order según si tiene dependencia o no
       if (is_null($dependency_option)) {
@@ -424,6 +426,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
           }
         }
       }
+
+      normalizar_sort_order_set($conn, $idSet);
 
       // Todo OK
       $conn->commit();
@@ -1103,6 +1107,13 @@ $('#confirmMove').on('click', function(){
   var target=$('#moveTarget').val(), pos=$('#movePosition').val(), sib=$('#moveSibling').val();
   var listEl = (target==='root') ? $('#sortableRoot') : getRailByValue(target);
   if(!listEl || !listEl.length) return;
+  if (movingLI && target !== 'root') {
+    var parentId = target.split(':')[0];
+    if (wouldCreateCycle(movingLI, parentId)) {
+      notify('error','No puedes mover una pregunta a una opción de su descendiente.');
+      return;
+    }
+  }
   if(pos==='start') listEl.prepend(movingLI);
   else if(pos==='end') listEl.append(movingLI);
   else {
@@ -1139,6 +1150,21 @@ function getRailByValue(v){
   var p=v.split(':'); return $('.child-sortable[data-parent-id="'+p[0]+'"][data-dep="'+p[1]+'"]');
 }
 function escapeHtml(s){return (s||'').replace(/[&<>"'`=\/]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;','`':'&#x60;','=':'&#x3D;'}[c]});}
+function getDescendantIds($li){
+  var ids=[];
+  $li.find('.q-item').each(function(){
+    var id=parseInt($(this).data('id'),10);
+    if(!isNaN(id)) ids.push(id);
+  });
+  return ids;
+}
+function wouldCreateCycle($li, parentId){
+  if (!parentId) return false;
+  var pid=parseInt(parentId,10);
+  if (isNaN(pid)) return false;
+  var desc=getDescendantIds($li);
+  return desc.indexOf(pid) !== -1;
+}
 
 /* ====== DnD opcional ====== */
 let dndActive=false;
@@ -1157,6 +1183,11 @@ function activateDnD(){
       if (parentId && parseInt(parentId,10) === parseInt(movedId,10)) {
         if (ui.sender && ui.sender.sortable) ui.sender.sortable('cancel');
         notify('error','No puedes mover una pregunta a una opción de sí misma.');
+        return;
+      }
+      if (parentId && wouldCreateCycle(ui.item, parentId)) {
+        if (ui.sender && ui.sender.sortable) ui.sender.sortable('cancel');
+        notify('error','No puedes mover una pregunta a una opción de su descendiente.');
         return;
       }
       markDirty();
@@ -1190,13 +1221,15 @@ function buildOrderTree($rootUl){
 function collectStructure(){
   var rows=[], order=1;
   function collectFrom($ul){
-    var pid = $ul.data('parent-id') || null;
-    var dep = $ul.data('dep') || null;
+    var pid = $ul.data('parent-id');
+    var dep = $ul.data('dep');
+    var parentId = pid ? parseInt(pid,10) : null;
+    var depId = dep ? parseInt(dep,10) : null;
     $ul.children('.q-item').each(function(){
       rows.push({
-        id: $(this).data('id'),
-        parent_id: pid?parseInt(pid,10):null,
-        dep_option_id: dep?parseInt(dep,10):null,
+        id: parseInt($(this).data('id'),10),
+        parent_id: parentId,
+        dep_option_id: depId,
         sort_order: order++
       });
       $(this).find('> .q-card .rail .child-sortable').each(function(){ collectFrom($(this)); });
