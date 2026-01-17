@@ -11,6 +11,7 @@ error_reporting(E_ALL);
 
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/session_data.php';
+include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/mod_formulario/sort_order_helpers.php';
 
 $idQ   = isset($_GET['id'])    ? (int)$_GET['id']    : 0;
 $idSet = isset($_GET['idSet']) ? (int)$_GET['idSet'] : 0;
@@ -230,6 +231,7 @@ try {
     $stDel->close();
   }
 
+  normalizar_sort_order_set($conn, $idSet);
   $conn->commit();
   $_SESSION['success_sets'] = "Eliminación realizada correctamente.";
 } catch (Exception $e){

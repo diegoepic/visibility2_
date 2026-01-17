@@ -10,6 +10,7 @@ error_reporting(E_ALL);
 
 include_once $_SERVER['DOCUMENT_ROOT'].'/visibility2/portal/modulos/db.php';
 include_once $_SERVER['DOCUMENT_ROOT'].'/visibility2/portal/modulos/session_data.php';
+include_once $_SERVER['DOCUMENT_ROOT'].'/visibility2/portal/modulos/mod_formulario/sort_order_helpers.php';
 
 $idQ   = isset($_GET['id'])    ? (int)$_GET['id']    : 0;
 $idSet = isset($_GET['idSet']) ? (int)$_GET['idSet'] : 0;
@@ -59,11 +60,28 @@ if ($mode === 'solo') {
 
   $conn->begin_transaction();
   try{
+    normalizar_sort_order_set($conn, $idSet);
+    $q = fetchQ($conn, $idQ, $idSet);
+    if (!$q) { throw new Exception("Pregunta no encontrada tras normalizar."); }
+    $desc = subtreeIds($conn, $idSet, $idQ);
+    $subtree = array_merge([$idQ], $desc);
+    $in = implode(',', array_fill(0, count($subtree), '?'));
+    $types = str_repeat('i', count($subtree));
+    $params = array_merge($subtree, [$idSet]);
+    $refs = [];
+    foreach ($params as $k => $v) { $params[$k] = (int)$v; $refs[$k] = &$params[$k]; }
+    $st=$conn->prepare("SELECT COALESCE(MAX(sort_order),0) FROM question_set_questions WHERE id IN ($in) AND id_question_set=?");
+    $st->bind_param($types.'i', ...$refs);
+    $st->execute();
+    $st->bind_result($maxSort);
+    $st->fetch();
+    $st->close();
+
     // Desplazar sort_order siguientes
     $st=$conn->prepare("UPDATE question_set_questions SET sort_order=sort_order+1 WHERE id_question_set=? AND sort_order>?");
-    $st->bind_param("ii",$idSet,$q['sort_order']); $st->execute(); $st->close();
+    $st->bind_param("ii",$idSet,$maxSort); $st->execute(); $st->close();
 
-    $newSort=(int)$q['sort_order']+1;
+    $newSort=(int)$maxSort+1;
     $txt = $q['question_text']." (Copia)";
     $dep = is_null($q['id_dependency_option']) ? NULL : (int)$q['id_dependency_option'];
 
@@ -80,6 +98,7 @@ if ($mode === 'solo') {
       $st->close();
     }
 
+    normalizar_sort_order_set($conn, $idSet);
     $conn->commit();
     $_SESSION['success_sets']="Pregunta duplicada.";
   } catch(Exception $e){
