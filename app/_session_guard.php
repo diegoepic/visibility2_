@@ -18,6 +18,7 @@ if ($script !== '') {
         .'|logout\.php'
         .'|ping\.php'              // 72 debe poder devolver JSON 401
         .'|csrf_refresh\.php'      // 72 idempotencia
+        .'|diagnostics/healthcheck\.php'
         .')$#i',
         $script
     );
@@ -40,7 +41,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
   session_start();
 }
 
-// Conexi¨®n
+// Conexiï¿½ï¿½n
 if (!isset($conn) || !($conn instanceof mysqli)) {
   require_once __DIR__ . '/con_.php';
   if (!isset($conn) || !($conn instanceof mysqli)) {

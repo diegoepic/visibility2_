@@ -3,10 +3,21 @@
     error_reporting(E_ALL & ~E_NOTICE);
 
 
-    $servername = "localhost";
-    $username   = "visibility";
-    $password   = "xyPz8e/rgaC2";
-    $dbname     = "visibility_visibility2";
+    $rootDir = dirname(__DIR__);
+    $config = [];
+    $localConfig = $rootDir . '/config/local.php';
+    if (is_file($localConfig)) {
+        $loaded = require $localConfig;
+        if (is_array($loaded)) {
+            $config = $loaded;
+        }
+    }
+    $db = $config['db'] ?? [];
+
+    $servername = $db['host'] ?? (getenv('VISIBILITY_DB_HOST') ?: 'localhost');
+    $username   = $db['user'] ?? (getenv('VISIBILITY_DB_USER') ?: 'visibility');
+    $password   = $db['pass'] ?? (getenv('VISIBILITY_DB_PASS') ?: 'xyPz8e/rgaC2');
+    $dbname     = $db['name'] ?? (getenv('VISIBILITY_DB_NAME') ?: 'visibility_visibility2');
 
 
     $conn = new mysqli($servername, $username, $password, $dbname);
