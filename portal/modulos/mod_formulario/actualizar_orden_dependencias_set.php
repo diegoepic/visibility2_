@@ -2,6 +2,12 @@
 session_start();
 if (!isset($_SESSION['usuario_id'])) { http_response_code(403); echo "No autorizado."; exit(); }
 
+if (!hash_equals($_SESSION['csrf_token'] ?? '', $_POST['csrf_token'] ?? '')) {
+  http_response_code(403);
+  echo "Token CSRF inválido.";
+  exit();
+}
+
 
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -11,6 +17,7 @@ header('Content-Type: text/plain; charset=utf-8');
 
 include_once $_SERVER['DOCUMENT_ROOT'].'/visibility2/portal/modulos/db.php';
 include_once $_SERVER['DOCUMENT_ROOT'].'/visibility2/portal/modulos/session_data.php';
+include_once $_SERVER['DOCUMENT_ROOT'].'/visibility2/portal/modulos/mod_formulario/sort_order_helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST'){ http_response_code(405); echo "Método inválido."; exit(); }
 
@@ -114,13 +121,20 @@ $validOpt = fetchValidOptions($conn, $idSet);
 // d) Construir parentOf global del set con datos actuales
 $currentDepOptByQ = fetchSetDeps($conn, $idSet); // childQ => optionId|null
 $parentOf = []; // childQ => parentQ|null (actual)
+$selfDepQuestions = []; // childQ => true
 foreach ($currentDepOptByQ as $childQ => $optId) {
   if ($optId !== null){
     if (!isset($validOpt[$optId])) {
       // datos "sucios": opción no existe/ya no pertenece; trátalo como NULL para no romper validación
       $parentOf[$childQ] = null;
     } else {
-      $parentOf[$childQ] = (int)$validOpt[$optId];
+      $parentQ = (int)$validOpt[$optId];
+      if ($parentQ === (int)$childQ) {
+        $parentOf[$childQ] = null;
+        $selfDepQuestions[$childQ] = true;
+      } else {
+        $parentOf[$childQ] = $parentQ;
+      }
     }
   } else {
     $parentOf[$childQ] = null;
@@ -138,7 +152,13 @@ foreach ($rows as $r){
   } else {
     $dep = (int)$dep;
     if (!isset($validOpt[$dep])){ http_response_code(400); echo "Opción disparadora inválida para una pregunta (id_opción: $dep)."; exit(); }
-    $parentOf[$child] = (int)$validOpt[$dep];
+    $parentQ = (int)$validOpt[$dep];
+    if ($parentQ === $child) {
+      $parentOf[$child] = null;
+      $selfDepQuestions[$child] = true;
+    } else {
+      $parentOf[$child] = $parentQ;
+    }
   }
 }
 
@@ -163,24 +183,31 @@ if (has_cycle_full($parentOf)){
 $conn->begin_transaction();
 try{
   // Statements reusables (con/sin dependencia)
-  $upWithDep = $conn->prepare("UPDATE question_set_questions SET sort_order=?, id_dependency_option=? WHERE id=? AND id_question_set=?");
-  $upNoDep   = $conn->prepare("UPDATE question_set_questions SET sort_order=?, id_dependency_option=NULL WHERE id=? AND id_question_set=?");
+  $upWithDep = $conn->prepare("UPDATE question_set_questions SET id_dependency_option=? WHERE id=? AND id_question_set=?");
+  $upNoDep   = $conn->prepare("UPDATE question_set_questions SET id_dependency_option=NULL WHERE id=? AND id_question_set=?");
+  $preferredOrder = [];
+  $index = 1;
 
   foreach ($rows as $r){
     $id   = (int)$r['id'];
-    if (!isset($r['sort_order'])){ throw new Exception("Fila sin 'sort_order' para pregunta $id."); }
-    $sort = (int)$r['sort_order'];
+    $preferredOrder[$id] = $index;
+    $index++;
+
     $dep  = array_key_exists('dep_option_id', $r) ? $r['dep_option_id'] : null;
+
+    if (!empty($selfDepQuestions[$id])){
+      $dep = null;
+    }
 
     if ($dep === null || $dep === ''){
       // sin dependencia => NULL explícito
-      $upNoDep->bind_param("iii", $sort, $id, $idSet);
+      $upNoDep->bind_param("ii", $id, $idSet);
       $upNoDep->execute();
     } else {
       $dep = (int)$dep;
       // seguridad extra: validar opción del mismo set (de nuevo, por si payload mutó entre validación y update)
       if (!isset($validOpt[$dep])){ throw new Exception("Opción disparadora inválida durante actualización (id_opción: $dep)."); }
-      $upWithDep->bind_param("iiii", $sort, $dep, $id, $idSet);
+      $upWithDep->bind_param("iii", $dep, $id, $idSet);
       $upWithDep->execute();
     }
   }
@@ -188,8 +215,17 @@ try{
   $upWithDep->close();
   $upNoDep->close();
 
+  $cleared = normalizar_sort_order_set($conn, $idSet, $preferredOrder);
+
   $conn->commit();
-  echo "Estructura actualizada correctamente.";
+  $msg = "Estructura actualizada correctamente.";
+  if (!empty($selfDepQuestions)) {
+    $msg .= " Se limpiaron " . count($selfDepQuestions) . " dependencias inválidas (auto-dependencia).";
+  }
+  if (!empty($cleared)) {
+    $msg .= " Se normalizaron " . count($cleared) . " dependencias huérfanas.";
+  }
+  echo $msg;
 } catch(Exception $e){
   $conn->rollback();
   http_response_code(500);

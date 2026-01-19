@@ -6,11 +6,12 @@
   const CSRF_ENDPOINT = BASE + '/csrf_refresh.php';
   const PING_ENDPOINT = BASE + '/ping.php';
   // Tiempo máximo permitido para un job en estado "running" antes de re-encolarlo.
-  // Se reduce a 2 minutos para evitar que las tareas se queden colgadas cuando el
-  // tab o el proceso del navegador se interrumpe inesperadamente.
-  const STALE_RUNNING_MS = 2 * 60 * 1000;
+  // Se usa 5 minutos para dar margen suficiente a uploads de fotos grandes en
+  // conexiones lentas, evitando re-encolar prematuramente y crear duplicados.
+  const STALE_RUNNING_MS = 5 * 60 * 1000;
   const HEARTBEAT_INTERVAL_MS = 60 * 1000;
   const AUTH_RECOVERY_INTERVAL_MS = 10 * 1000;
+  const CSRF_REFRESH_INTERVAL_MS = 10 * 60 * 1000; // Refrescar CSRF cada 10 minutos proactivamente
   const MAX_RESPONSE_SNIPPET = 500;
 
   // --------------------------------------------------------------------------------
@@ -236,8 +237,10 @@
 
     const timeoutPromise = new Promise((_, reject) => {
       controller.signal.addEventListener('abort', () => {
-        const err = new DOMException(code || 'timeout', 'AbortError');
-        err.code = code || 'timeout';
+        // Usar Error en vez de DOMException porque DOMException.code es read-only
+        const err = new Error(code || 'timeout');
+        err.name = 'AbortError';
+        err.timeoutCode = code || 'timeout';
         reject(err);
       }, { once:true });
     });
@@ -379,14 +382,23 @@
       return { code: 'NETWORK', retryable: true };
     }
     if (error && error.name === 'AbortError') {
-      return { code: error.code || 'TIMEOUT', retryable: true };
+      return { code: error.timeoutCode || 'TIMEOUT', retryable: true };
     }
     if (response) {
       const status = response.status;
       const isHtml = parsed && parsed.isHtml;
-      if (status === 401 || status === 403 || isHtml) {
+
+      // 401 = sesión expirada, bloquear cola y esperar re-login
+      if (status === 401 || isHtml) {
         return { code: 'AUTH_EXPIRED', retryable: false, blocked: 'auth' };
       }
+
+      // 403 = permiso denegado permanentemente (no tiene acceso a este recurso)
+      // No bloquear la cola, simplemente marcar como error final
+      if (status === 403) {
+        return { code: 'FORBIDDEN', retryable: false };
+      }
+
       if (status === 419) {
         return { code: 'CSRF_INVALID', retryable: false, blocked: 'csrf' };
       }
@@ -407,16 +419,34 @@
   // Ejecución de tareas
   // --------------------------------------------------------------------------------
   async function processTask(task){
-    // Resolver visita local desde GUID si aplica
-    if (task.fields && !task.fields.visita_id && task.fields.client_guid) {
-      const lid = LocalByGuid.get(task.fields.client_guid);
-      if (lid) task.fields.visita_id = lid;
+    // PATCH 2: Resolver visita_id desde múltiples fuentes de forma robusta
+    if (task.fields && !task.fields.visita_id) {
+      // 1. Intentar desde client_guid → visita_id real (mapping actualizado)
+      if (task.fields.client_guid) {
+        const mapped = LocalByGuid.get(task.fields.client_guid);
+        // Solo usar si es numérico (visita_id real, no "local-xxx")
+        if (mapped && !String(mapped).startsWith('local-')) {
+          task.fields.visita_id = mapped;
+        }
+      }
+
+      // 2. Fallback: buscar en Visits map si tenemos visita_local_id
+      if (!task.fields.visita_id && task.fields.visita_local_id) {
+        const real = Visits.get(String(task.fields.visita_local_id));
+        if (real) task.fields.visita_id = real;
+      }
     }
 
-    // Si la tarea hace referencia a una visita "local-*" -> traducir a real si ya existe
+    // Si todavía tenemos un ID local, intentar traducir o limpiar
     if (task.fields && task.fields.visita_id && String(task.fields.visita_id).startsWith('local-')) {
       const real = Visits.get(String(task.fields.visita_id));
-      if (real) task.fields.visita_id = real;
+      if (real) {
+        task.fields.visita_id = real;
+      } else {
+        // PATCH 2: No enviar ID local al servidor - dejar que lo resuelva por client_guid
+        console.warn('[Queue] visita_id local sin mapping real:', task.fields.visita_id, '- se enviará sin visita_id para que servidor lo resuelva');
+        delete task.fields.visita_id;
+      }
     }
 
     const { response: r, parsed } = await httpPost(task);
@@ -432,12 +462,19 @@
     // Si es la creación de visita, persistir mapping y marcar dependencia como resuelta
     if (task.type === 'create_visita' && js && js.visita_id) {
       const localId = task.fields.visita_local_id;
-      if (localId) Visits.set(String(localId), js.visita_id);
+      const realVisitaId = js.visita_id;
 
+      // Mapear local-uuid → visita_id real
+      if (localId) {
+        Visits.set(String(localId), realVisitaId);
+      }
+
+      // PATCH 2: Mapear client_guid → visita_id REAL (no el local)
       if (task.fields.client_guid) {
         const depTag = `create:${task.fields.client_guid}`;
         CompletedDeps.add(depTag);
-        LocalByGuid.set(task.fields.client_guid, js.visita_id);
+        // Guardar el ID REAL, no el local
+        LocalByGuid.set(task.fields.client_guid, realVisitaId);
       }
     }
 
@@ -630,12 +667,21 @@
           t.meta = t.meta || inferMetaFromTask(t);
 
           const attempts = (t.attempts || 0) + 1;
-          await AppDB.update(t.id, {
+
+          // PATCH 1 complemento: Manejar caso de job eliminado en paralelo
+          const updateResult = await AppDB.update(t.id, {
             status: 'running',
             attempts,
             startedAt: now,
             updatedAt: now
           });
+
+          // Si el job ya no existe, continuar con el siguiente
+          if (updateResult && updateResult.__notFound) {
+            console.warn('[Queue] Job desapareció durante drain:', t.id);
+            continue;
+          }
+
           QueueEvents.emit('queue:dispatch:start', { job: t });
           jr('onStart', t);
 
@@ -711,9 +757,30 @@
 
       if (!task.id) task.id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
 
+      // PATCH P1-3: Dedupe semántico automático para gestiones
+      // Evita duplicar tareas idénticas por tipo+campaña+local
+      if (!task.dedupeKey && task.type && task.fields) {
+        const f = task.fields;
+        const formId = f.id_formulario || f.idCampana || f.id_campana || f.campana || '';
+        const localId = f.id_local || f.idLocal || f.local_id || '';
+        const isGestion = ['procesar_gestion', 'procesar_gestion_pruebas', 'upload_material_foto', 'upload_material_foto_pruebas'].includes(task.type) ||
+          (task.url && (task.url.includes('procesar_gestion') || task.url.includes('upload_material_foto')));
+
+        if (isGestion && formId && localId) {
+          task.dedupeKey = `${task.type}:${formId}:${localId}`;
+        }
+      }
+
       // Tareas especiales: create_visita (genera id local y mapea por client_guid)
       if (task.type === 'create_visita') {
         if (!task.fields) task.fields = {};
+
+        // PATCH: Dedupe por client_guid para evitar doble create_visita
+        // Si ya existe una tarea create_visita para este client_guid, no crear otra
+        if (!task.dedupeKey && task.fields.client_guid) {
+          task.dedupeKey = `create_visita:${task.fields.client_guid}`;
+        }
+
         if (!task.fields.visita_local_id) {
           task.fields.visita_local_id = 'local-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now());
         }
@@ -973,6 +1040,22 @@
   }
 
   let _heartbeatTimer = null;
+  let _csrfRefreshTimer = null;
+
+  // PATCH P1-1: Refresco proactivo de CSRF para evitar tokens expirados
+  function ensureCSRFRefresh(){
+    if (_csrfRefreshTimer) return;
+    _csrfRefreshTimer = setInterval(async () => {
+      try {
+        if (!navigator.onLine || queueState.blocked) return;
+        const result = await refreshCSRF();
+        if (result && result.ok) {
+          console.log('[Queue] CSRF refrescado proactivamente');
+        }
+      } catch(_) {}
+    }, CSRF_REFRESH_INTERVAL_MS);
+  }
+
   function ensureHeartbeat(){
     if (_heartbeatTimer) return;
     _heartbeatTimer = setInterval(async () => {
@@ -1011,6 +1094,7 @@
   });
   document.addEventListener('DOMContentLoaded', () => {
     ensureHeartbeat();
+    ensureCSRFRefresh();
     setTimeout(drain, 600);
   });
 

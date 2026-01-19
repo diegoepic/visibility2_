@@ -2,6 +2,10 @@
 session_start();
 if (!isset($_SESSION['usuario_id'])) { echo "No autorizado."; exit(); }
 
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 // DEBUG (apaga en prod)
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -9,6 +13,7 @@ error_reporting(E_ALL);
 
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/session_data.php';
+include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/mod_formulario/sort_order_helpers.php';
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 /* ============================================================
@@ -231,6 +236,10 @@ function saveOptimizedImage(string $tmpPath, string $destDirFs, string $destDirW
    ============================================================ */
 
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '')==='edit_question_set'){
+  if (!hash_equals($_SESSION['csrf_token'] ?? '', $_POST['csrf_token'] ?? '')) {
+    echo "Token CSRF inválido.";
+    exit();
+  }
   $idSet        = (int)($_POST['id_set'] ?? 0);
   $idSetQuestion= (int)($_POST['idSetQuestion'] ?? 0);
   $question_text= trim($_POST['question_text'] ?? '');
@@ -303,50 +312,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '')==='edit_ques
     $st->execute(); 
     $st->close();
 
-    // Reordenar cuando la dependencia cambia y ahora es condicional
-    if ($depChanged && $dependency_option !== null) {
-      $optMap = optionsMapByQuestion($conn, $idSet);
-      if (!isset($optMap[$dependency_option])) {
-        throw new Exception("La opción seleccionada no pertenece a este set.");
-      }
-      $parentQ = (int)$optMap[$dependency_option];
-
-      // sort_order del padre
-      $stP = $conn->prepare("SELECT sort_order FROM question_set_questions WHERE id=? AND id_question_set=?");
-      $stP->bind_param("ii", $parentQ, $idSet);
-      $stP->execute();
-      $stP->bind_result($parentSort);
-      if (!$stP->fetch()) {
-        $stP->close();
-        throw new Exception("No se encontró la pregunta padre al reordenar.");
-      }
-      $stP->close();
-
-      $newSort = (int)$parentSort + 1;
-
-      // Desplazar hacia abajo todas las preguntas con sort_order >= newSort, excepto esta
-      $stShift = $conn->prepare("
-        UPDATE question_set_questions
-           SET sort_order = sort_order + 1
-         WHERE id_question_set = ?
-           AND id <> ?
-           AND sort_order >= ?
-      ");
-      $stShift->bind_param("iii", $idSet, $idSetQuestion, $newSort);
-      $stShift->execute();
-      $stShift->close();
-
-      // Asignar nuevo sort_order a la pregunta actual
-      $stSort = $conn->prepare("
-        UPDATE question_set_questions
-           SET sort_order = ?
-         WHERE id = ? AND id_question_set = ?
-      ");
-      $stSort->bind_param("iii", $newSort, $idSetQuestion, $idSet);
-      $stSort->execute();
-      $stSort->close();
-    }
-
     // Opciones según tipo
     if ($isOptionType($id_type)){
       // Eliminar opciones removidas (comparando ids existentes enviados vs actuales)
@@ -358,6 +323,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '')==='edit_ques
       }
       $toDel = array_diff($curIds, $submitted);
       if (!empty($toDel)){
+        $depsToDel = dependentsByOption($conn, $idSet, $toDel);
+        if (!empty($depsToDel)){
+          $list = [];
+          foreach ($depsToDel as $optId => $texts){
+            foreach ($texts as $t){ $list[] = $t; }
+          }
+          $preview = implode(', ', array_slice($list, 0, 5));
+          $more = count($list) > 5 ? '…' : '';
+          throw new Exception("No puedes eliminar opciones con dependientes. Reasigna o elimina sus preguntas primero. Ejemplos: ".$preview.$more);
+        }
         $in=implode(',', array_map('intval', $toDel));
         $conn->query("DELETE FROM question_set_options WHERE id_question_set_question={$idSetQuestion} AND id IN ($in)");
       }
@@ -449,6 +424,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '')==='edit_ques
       $conn->query("DELETE FROM question_set_options WHERE id_question_set_question={$idSetQuestion}");
     }
 
+    normalizar_sort_order_set($conn, $idSet);
     $conn->commit();
     echo "OK";
   } catch(Exception $e){
@@ -497,6 +473,7 @@ function isOptionTypeInt($t){ return in_array((int)$t, [1,2,3], true); }
   <input type="hidden" name="action" value="edit_question_set">
   <input type="hidden" name="id_set" value="<?= $idSet ?>">
   <input type="hidden" name="idSetQuestion" value="<?= (int)$q['id'] ?>">
+  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES) ?>">
 
   <div class="modal-header py-2">
     <h5 class="modal-title">Editar pregunta</h5>

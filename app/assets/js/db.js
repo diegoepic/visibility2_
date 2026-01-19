@@ -151,7 +151,8 @@
     });
   }
 
-  // Update “estricto”: si no existe → resolve(null), sin lanzar excepción
+  // Update "tolerante": si no existe → resolve con flag __notFound, no lanza excepción
+  // Esto evita que drain() se congele cuando un job desaparece en paralelo
   async function update(id, patch) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -169,8 +170,9 @@
         if (!current) {
           done = true;
           try { tx.abort(); } catch (_) {}
-          // CORREGIDO: Rechazar con error en lugar de resolver null silenciosamente
-          return reject(new Error('Job not found for update: ' + id));
+          // PATCH 1: Resolve con flag en vez de reject para no crashear drain()
+          console.warn('[AppDB] Job no encontrado para update:', id);
+          return resolve({ __notFound: true, id: id });
         }
         result = { ...current, ...patch, updatedAt: Date.now() };
         if (patch && patch.status) result.status = normalizeStatus(patch.status);
@@ -179,7 +181,7 @@
       };
 
       tx.oncomplete = () => { if (!done) { done = true; resolve(result); } };
-      tx.onabort    = () => { if (!done) { done = true; resolve(null); } };
+      tx.onabort    = () => { if (!done) { done = true; resolve({ __notFound: true, id: id }); } };
       tx.onerror    = () => { if (!done) { done = true; reject(tx.error || new Error('tx error')); } };
     });
   }

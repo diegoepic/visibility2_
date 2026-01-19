@@ -6,6 +6,11 @@ if (!isset($_SESSION['usuario_id'])) {
   exit();
 }
 
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf_token'];
+
 // DEBUG (apaga en prod)
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -13,6 +18,7 @@ error_reporting(E_ALL);
 
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/session_data.php';
+include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/mod_formulario/sort_order_helpers.php';
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 /* ---------- Helpers de datos ---------- */
@@ -65,19 +71,90 @@ function getOptionsForQuestions($conn, $questionIds){
   return $map;
 }
 
-/** Devuelve id de pregunta padre dada la opción disparadora */
-function parentQuestionIdByOption($conn, $optId){
-  $stmt = $conn->prepare("SELECT id_question_set_question FROM question_set_options WHERE id = ? LIMIT 1");
-  $stmt->bind_param("i", $optId);
-  $stmt->execute();
-  $stmt->bind_result($pid);
-  $ok = $stmt->fetch();
-  $stmt->close();
-  return $ok ? (int)$pid : null;
+/* ---------- Helpers de imágenes ---------- */
+
+function ensureDir(string $dir){
+  if (!is_dir($dir)) { @mkdir($dir, 0755, true); }
+}
+
+function getImageInfo(string $path){
+  $info = @getimagesize($path);
+  if (!$info) return [null, null, null];
+  return [$info[0], $info[1], $info['mime'] ?? null];
+}
+
+function imageCreateFromPath(string $path, ?string $mime){
+  switch ($mime){
+    case 'image/jpeg':
+    case 'image/jpg': return @imagecreatefromjpeg($path);
+    case 'image/png':
+      $im = @imagecreatefrompng($path);
+      if ($im){ imagepalettetotruecolor($im); imagesavealpha($im, true); }
+      return $im;
+    case 'image/gif':
+      $im = @imagecreatefromgif($path);
+      if ($im){ imagepalettetotruecolor($im); imagesavealpha($im, true); }
+      return $im;
+    case 'image/webp':
+      return function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($path) : null;
+    default: return null;
+  }
+}
+
+function fixOrientationIfNeeded($img, string $path, ?string $mime){
+  if ($mime !== 'image/jpeg' && $mime !== 'image/jpg') return $img;
+  if (!function_exists('exif_read_data')) return $img;
+  $exif = @exif_read_data($path);
+  if (!$exif || empty($exif['Orientation'])) return $img;
+  $ori = (int)$exif['Orientation'];
+  switch ($ori) {
+    case 3: $img = imagerotate($img, 180, 0); break;
+    case 6: $img = imagerotate($img, -90, 0); break;
+    case 8: $img = imagerotate($img, 90, 0); break;
+  }
+  return $img;
+}
+
+function resizeToMax($srcImg, int $w, int $h, int $maxDim=1600){
+  if ($w <= $maxDim && $h <= $maxDim) return $srcImg;
+  $ratio = $w / $h;
+  if ($ratio >= 1){ $newW = $maxDim; $newH = (int)round($maxDim / $ratio); }
+  else { $newH = $maxDim; $newW = (int)round($maxDim * $ratio); }
+  $dst = imagecreatetruecolor($newW, $newH);
+  imagealphablending($dst, false);
+  imagesavealpha($dst, true);
+  imagecopyresampled($dst, $srcImg, 0,0,0,0, $newW, $newH, $w, $h);
+  imagedestroy($srcImg);
+  return $dst;
+}
+
+function saveOptimizedImage(string $tmpPath, string $destDirFs, string $destDirWeb, string $prefix='opt_', int $maxDim=1600, int $quality=80){
+  ensureDir($destDirFs);
+
+  [$w, $h, $mime] = getImageInfo($tmpPath);
+  if (!$mime || !$w || !$h) return '';
+
+  $img = imageCreateFromPath($tmpPath, $mime);
+  if (!$img) return '';
+
+  $img = fixOrientationIfNeeded($img, $tmpPath, $mime);
+  $img = resizeToMax($img, $w, $h, $maxDim);
+
+  $id = uniqid($prefix, true);
+  if (function_exists('imagewebp')){
+    $path = $destDirFs . $id . '.webp';
+    $ok = @imagewebp($img, $path, $quality);
+    imagedestroy($img);
+    if ($ok) return $destDirWeb . $id . '.webp';
+  }
+  $path = $destDirFs . $id . '.jpg';
+  @imagejpeg($img, $path, 82);
+  imagedestroy($img);
+  return $destDirWeb . $id . '.jpg';
 }
 
 /** Construye árbol agrupando por opción disparadora */
-function buildTree($questions, $optionsMap, $conn){
+function buildTree($questions, $optionsMap){
   // índice por id
   $byId = [];
   foreach($questions as $q){
@@ -86,11 +163,18 @@ function buildTree($questions, $optionsMap, $conn){
     $byId[ (int)$q['id'] ] = $q;
   }
 
+  $optionParents = [];
+  foreach ($optionsMap as $qid => $opts){
+    foreach ($opts as $op){
+      $optionParents[(int)$op['id']] = (int)$qid;
+    }
+  }
+
   $roots = [];
   foreach ($byId as $id => &$q){
     $depOpt = (int)$q['id_dependency_option'];
     if ($depOpt){
-      $parentId = parentQuestionIdByOption($conn, $depOpt);
+      $parentId = $optionParents[$depOpt] ?? null;
       if ($parentId && isset($byId[$parentId])){
         $byId[$parentId]['children'][] =& $q;
       } else {
@@ -123,6 +207,13 @@ function tipoTexto($t){
 
 if ($_SERVER['REQUEST_METHOD']==='POST'){
   $action = $_POST['action'] ?? '';
+  if (!hash_equals($_SESSION['csrf_token'] ?? '', $_POST['csrf_token'] ?? '')) {
+    $idSetRedirect = isset($_POST['id_set']) ? (int)$_POST['id_set'] : 0;
+    $_SESSION['error_sets']="Token CSRF inválido.";
+    $redir = $idSetRedirect > 0 ? "gestionar_sets.php?idSet=".$idSetRedirect : "gestionar_sets.php";
+    header("Location: ".$redir);
+    exit();
+  }
 
   if ($action==='create_set'){
     $nombre = trim($_POST['nombre_set'] ?? '');
@@ -163,6 +254,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
     try {
       // Iniciamos transacción porque vamos a mover sort_order + insertar
       $conn->begin_transaction();
+      normalizar_sort_order_set($conn, $idSet);
 
       // Calcular sort_order según si tiene dependencia o no
       if (is_null($dependency_option)) {
@@ -309,13 +401,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
             $txt=trim($txt); if($txt==='') continue;
             $ref='';
             if(isset($_FILES['option_images']['name'][$i]) && $_FILES['option_images']['error'][$i]===UPLOAD_ERR_OK){
+              if ($_FILES['option_images']['size'][$i] > 10*1024*1024) {
+                throw new Exception("Archivo demasiado grande (>10MB).");
+              }
               $tmp  = $_FILES['option_images']['tmp_name'][$i];
-              $name = basename($_FILES['option_images']['name'][$i]);
-              $ext  = strtolower(pathinfo($name,PATHINFO_EXTENSION));
-              $destDir = $_SERVER['DOCUMENT_ROOT'].'/uploads/opciones/';
-              if(!is_dir($destDir)) mkdir($destDir,0755,true);
-              $fname = uniqid('opt_',true).'.'.$ext;
-              if(move_uploaded_file($tmp,$destDir.$fname)) $ref = '/uploads/opciones/'.$fname;
+              $ref = saveOptimizedImage($tmp, $_SERVER['DOCUMENT_ROOT'].'/uploads/opciones/', '/uploads/opciones/', 'opt_', 1600, 80);
             }
             $st=$conn->prepare("INSERT INTO question_set_options (id_question_set_question, option_text, reference_image, sort_order) VALUES (?,?,?,?)");
             $st->bind_param("issi",$newQ,$txt,$ref,$sortOpt); 
@@ -336,6 +426,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
           }
         }
       }
+
+      normalizar_sort_order_set($conn, $idSet);
 
       // Todo OK
       $conn->commit();
@@ -372,7 +464,7 @@ if ($selectedSet){
   $flat = getQuestionsFlat($conn, $idSetSel);
   $ids  = array_map(fn($r)=>(int)$r['id'],$flat);
   $optionsMap = getOptionsForQuestions($conn,$ids);
-  $tree = buildTree($flat, $optionsMap, $conn);
+  $tree = buildTree($flat, $optionsMap);
 }
 
 /* ---------- Mapa de dependencias por opción (para badges + tooltips) ---------- */
@@ -433,6 +525,7 @@ if ($selectedSet){
   .drag-handle{cursor:move; color:#adb5bd; margin-right:.5rem;}
   .q-title{font-weight:600; margin:0;}
   .q-title[contenteditable="true"]{outline: 2px dashed #bcd; border-radius:4px; padding:2px 4px;}
+  .search-match .q-card{border-color:#7aa7ff; box-shadow:0 0 0 2px rgba(122,167,255,.2);}
   .chips .badge{margin-left:.25rem;}
   .q-actions .btn{margin-left:.25rem;}
   .rail{background:#fbfcfe; border:1px dashed #e1e6ef; border-radius:8px; padding:.5rem .75rem; margin-top:.5rem;}
@@ -488,7 +581,7 @@ if ($selectedSet){
           <strong>Sets disponibles</strong>
           <?php if($selectedSet): ?>
           <div class="btn-group btn-group-sm">
-            <a class="btn btn-light" href="clonar_set.php?idSet=<?= $selectedSet['id'] ?>" title="Clonar set"><i class="fa fa-copy"></i></a>
+            <a class="btn btn-light" href="clonar_set.php?idSet=<?= $selectedSet['id'] ?>&csrf_token=<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>" title="Clonar set"><i class="fa fa-copy"></i></a>
             <a class="btn btn-light" href="exportar_set_csv.php?idSet=<?= $selectedSet['id'] ?>" title="Exportar CSV"><i class="fa fa-file-csv"></i></a>
           </div>
           <?php endif; ?>
@@ -519,6 +612,7 @@ if ($selectedSet){
         <div class="card-body">
           <form method="post">
             <input type="hidden" name="action" value="create_set">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>">
             <div class="form-group">
               <label>Nombre</label>
               <input type="text" class="form-control" name="nombre_set" required>
@@ -559,6 +653,7 @@ if ($selectedSet){
           <form method="post" class="mb-3">
             <input type="hidden" name="action" value="update_set">
             <input type="hidden" name="id_set" value="<?= $selectedSet['id'] ?>">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>">
             <div class="form-row">
               <div class="form-group col-md-6">
                 <label>Nombre</label>
@@ -579,6 +674,7 @@ if ($selectedSet){
           <form method="post" enctype="multipart/form-data" class="mb-4 p-3 border rounded bg-white">
             <input type="hidden" name="action" value="add_question">
             <input type="hidden" name="id_set" value="<?= $selectedSet['id'] ?>">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>">
             <div class="form-group">
               <label>Texto de la pregunta</label>
               <input type="text" name="question_text" class="form-control" required>
@@ -655,7 +751,7 @@ if ($selectedSet){
           <ul id="sortableRoot" class="list-unstyled">
             <?php
             // renderer recursivo con badges y previews
-            function renderNode($node, $setId, $depCountsByOption, $depChildrenByOption){
+            function renderNode($node, $setId, $depCountsByOption, $depChildrenByOption, $csrfToken){
               $qid  = (int)$node['id'];
               $tipo = tipoTexto($node['id_question_type']);
               $req  = (int)$node['is_required']===1;
@@ -693,7 +789,7 @@ if ($selectedSet){
               // echo '        <a class="btn btn-sm btn-outline-primary" href="duplicar_pregunta.php?id='.$qid.'&idSet='.$setId.'&mode=solo" title="Duplicar pregunta"><i class="fa fa-copy"></i></a>';
               // echo '        <a class="btn btn-sm btn-outline-primary" href="duplicar_pregunta.php?id='.$qid.'&idSet='.$setId.'&mode=rama" title="Duplicar rama"><i class="fa fa-sitemap"></i></a>';
               echo '        <button class="btn btn-sm btn-info" onclick="editarSetPregunta('.$qid.', '.$setId.')" title="Editar"><i class="fa fa-pen"></i></button>';
-              echo '        <a class="btn btn-sm btn-danger" href="eliminar_set_pregunta.php?id='.$qid.'&idSet='.$setId.'" title="Eliminar"><i class="fa fa-trash"></i></a>';
+              echo '        <a class="btn btn-sm btn-danger" href="eliminar_set_pregunta.php?id='.$qid.'&idSet='.$setId.'&csrf_token='.urlencode($csrfToken).'" title="Eliminar"><i class="fa fa-trash"></i></a>';
               echo '      </div>';
               echo '    </div>';
 
@@ -736,7 +832,7 @@ if ($selectedSet){
                   if (!empty($node['children'])){
                     foreach($node['children'] as $child){
                       if ((int)$child['id_dependency_option'] === $optId){
-                        renderNode($child, $setId, $depCountsByOption, $depChildrenByOption);
+                        renderNode($child, $setId, $depCountsByOption, $depChildrenByOption, $csrfToken);
                       }
                     }
                   }
@@ -750,11 +846,11 @@ if ($selectedSet){
               echo '</li>';
             }
 
-            foreach($tree as $n) renderNode($n, $selectedSet['id'], $depCountsByOption, $depChildrenByOption);
+            foreach($tree as $n) renderNode($n, $selectedSet['id'], $depCountsByOption, $depChildrenByOption, $csrfToken);
             ?>
           </ul>
 
-          <div hidden class="small-help mt-3">
+          <div class="small-help mt-3">
             • Usa <b>↑ / ↓</b> para mover dentro del mismo bloque.  
             • <b>“Cambiar condición / destino”</b> para enviar una pregunta a otro bloque/condición.  
             • Doble click sobre el título para edición rápida.  
@@ -846,6 +942,7 @@ if ($selectedSet){
 
 <script>
   window.SET_MODEL = <?= json_encode(['questions'=>$jsQuestions], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+  window.CSRF_TOKEN = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
 
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
@@ -875,7 +972,7 @@ function markDirty(){
 }
 
 
-const SHOW_UNSAVED_WARNING = false; //dejar en true para mostrar mensajes de confirmacion al editars sets
+const SHOW_UNSAVED_WARNING = true; //dejar en true para mostrar mensajes de confirmacion al editars sets
 window.addEventListener('beforeunload', function(e){
   if (SHOW_UNSAVED_WARNING && dirty){
     e.preventDefault();
@@ -1010,6 +1107,13 @@ $('#confirmMove').on('click', function(){
   var target=$('#moveTarget').val(), pos=$('#movePosition').val(), sib=$('#moveSibling').val();
   var listEl = (target==='root') ? $('#sortableRoot') : getRailByValue(target);
   if(!listEl || !listEl.length) return;
+  if (movingLI && target !== 'root') {
+    var parentId = target.split(':')[0];
+    if (wouldCreateCycle(movingLI, parentId)) {
+      notify('error','No puedes mover una pregunta a una opción de su descendiente.');
+      return;
+    }
+  }
   if(pos==='start') listEl.prepend(movingLI);
   else if(pos==='end') listEl.append(movingLI);
   else {
@@ -1026,6 +1130,7 @@ function buildMoveTargets(){
   sel.append('<option value="root">Raíz del set</option>');
   $('.rail').each(function(){
     var parent=$(this).data('parent-id'), dep=$(this).data('dep');
+    if (movingLI && parseInt(parent,10) === parseInt(movingLI.data('id'),10)) return;
     var parentTitle=$('.q-item[data-id="'+parent+'"]').find('> .q-card .q-title').first().text().trim();
     var optText=$(this).find('.opt-chip').first().text().trim();
     sel.append('<option value="'+parent+':'+dep+'">'+escapeHtml(parentTitle)+' → opción: '+escapeHtml(optText)+'</option>');
@@ -1045,6 +1150,21 @@ function getRailByValue(v){
   var p=v.split(':'); return $('.child-sortable[data-parent-id="'+p[0]+'"][data-dep="'+p[1]+'"]');
 }
 function escapeHtml(s){return (s||'').replace(/[&<>"'`=\/]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;','`':'&#x60;','=':'&#x3D;'}[c]});}
+function getDescendantIds($li){
+  var ids=[];
+  $li.find('.q-item').each(function(){
+    var id=parseInt($(this).data('id'),10);
+    if(!isNaN(id)) ids.push(id);
+  });
+  return ids;
+}
+function wouldCreateCycle($li, parentId){
+  if (!parentId) return false;
+  var pid=parseInt(parentId,10);
+  if (isNaN(pid)) return false;
+  var desc=getDescendantIds($li);
+  return desc.indexOf(pid) !== -1;
+}
 
 /* ====== DnD opcional ====== */
 let dndActive=false;
@@ -1056,7 +1176,22 @@ function activateDnD(){
     placeholder:'sortable-placeholder',
     forcePlaceholderSize:true,
     tolerance:'pointer',
-    cancel:'a,button,.btn,input,[contenteditable]'
+    cancel:'a,button,.btn,input,[contenteditable]',
+    receive:function(e, ui){
+      var parentId = $(this).data('parent-id');
+      var movedId = ui.item.data('id');
+      if (parentId && parseInt(parentId,10) === parseInt(movedId,10)) {
+        if (ui.sender && ui.sender.sortable) ui.sender.sortable('cancel');
+        notify('error','No puedes mover una pregunta a una opción de sí misma.');
+        return;
+      }
+      if (parentId && wouldCreateCycle(ui.item, parentId)) {
+        if (ui.sender && ui.sender.sortable) ui.sender.sortable('cancel');
+        notify('error','No puedes mover una pregunta a una opción de su descendiente.');
+        return;
+      }
+      markDirty();
+    }
   }).on('sortupdate', markDirty).disableSelection();
   dndActive=true;
 }
@@ -1086,13 +1221,15 @@ function buildOrderTree($rootUl){
 function collectStructure(){
   var rows=[], order=1;
   function collectFrom($ul){
-    var pid = $ul.data('parent-id') || null;
-    var dep = $ul.data('dep') || null;
+    var pid = $ul.data('parent-id');
+    var dep = $ul.data('dep');
+    var parentId = pid ? parseInt(pid,10) : null;
+    var depId = dep ? parseInt(dep,10) : null;
     $ul.children('.q-item').each(function(){
       rows.push({
-        id: $(this).data('id'),
-        parent_id: pid?parseInt(pid,10):null,
-        dep_option_id: dep?parseInt(dep,10):null,
+        id: parseInt($(this).data('id'),10),
+        parent_id: parentId,
+        dep_option_id: depId,
         sort_order: order++
       });
       $(this).find('> .q-card .rail .child-sortable').each(function(){ collectFrom($(this)); });
@@ -1107,7 +1244,8 @@ function saveStructure(){
   const payload = collectStructure();
   $.post('actualizar_orden_dependencias_set.php',{
     idSet: <?= $selectedSet? $selectedSet['id'] : 0 ?>,
-    data: JSON.stringify(payload)
+    data: JSON.stringify(payload),
+    csrf_token: window.CSRF_TOKEN
   }).done(msg => { notify('success', msg || 'Estructura guardada.'); dirty=false; $('#btnSaveStructure').prop('disabled', true).html('<i class="fa fa-layer-group"></i> Guardar estructura'); })
     .fail(xhr => { notify('error', xhr.responseText || 'Error al guardar.'); $('#btnSaveStructure').prop('disabled', false).html('<i class="fa fa-layer-group"></i> Guardar estructura'); });
 }
@@ -1145,7 +1283,7 @@ $(document).on('blur keydown','.q-title[contenteditable="true"]', function(e){
   var $el=$(this); $el.removeAttr('contenteditable');
   var text=$el.text().trim(), id=$el.data('id');
   if (text===''){ notify('error','El texto no puede ser vacío.'); return; }
-  $.post('ajax_update_question_text.php', { idSet: <?= (int)$idSetSel ?>, idQuestion:id, text:text })
+  $.post('ajax_update_question_text.php', { idSet: <?= (int)$idSetSel ?>, idQuestion:id, text:text, csrf_token: window.CSRF_TOKEN })
     .done(()=>notify('success','Título actualizado.'))
     .fail(()=>notify('error','No se pudo actualizar.'));
 });
@@ -1154,11 +1292,11 @@ $(document).on('blur keydown','.q-title[contenteditable="true"]', function(e){
 $('#searchInput').on('input', function(){
   const q = (this.value||'').toLowerCase().trim();
   if(!q){
-    $('.q-item').show();
+    $('.q-item').show().removeClass('search-match');
     return;
   }
   // Ocultar todo inicialmente
-  $('.q-item').hide();
+  $('.q-item').hide().removeClass('search-match');
 
   // Filtrar por texto de pregunta u opciones visibles en rail-title
   $('.q-item').each(function(){
@@ -1171,9 +1309,9 @@ $('#searchInput').on('input', function(){
       });
     }
     if(match){
-      $li.show();
+      $li.show().addClass('search-match');
       // mostrar ancestros
-      $li.parents('.q-item').show();
+      $li.parents('.q-item').show().removeClass('collapsed');
     }
   });
 });
