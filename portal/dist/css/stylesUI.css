@@ -1,50 +1,411 @@
-   /* Estilos personalizados para ajustar las tarjetas */
+.card-body .row {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.card-body > .container > .row {
+    align-items: stretch;
+}
+
+.card-body > .container > .row > [class*="col-"] {
+    display: flex;
+    flex-direction: column;
+}
+
+/* ---- COLUMNAS DE CARDS ---- */
+.campaign-item,
+.campaign-item-ipt,
+.col-12.col-sm-6.col-md-4.d-flex.align-items-stretch {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 20px;
+}
+
+/* ============================================
+   CARD PRINCIPAL - CAMPAÑAS PLANIFICADAS E IPT
+   ============================================ */
+
+.card.card-widget.widget-user {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 460px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card.card-widget.widget-user:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+/* ---- HEADER ---- */
+.widget-user .widget-user-header {
+    position: relative;
+    padding: 15px 55px 55px 30px; /* Espacio para checkbox izq y botón der */
+    min-height: 165px;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    overflow: visible;
+}
+
+/* ---- TÍTULO ---- */
+.widget-user .widget-user-username {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding-right: 0;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.35;
+    max-height: 36px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+}
+
+/* ---- ESTADO Y FECHAS ---- */
+.widget-user .widget-user-desc {
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: normal;
+    overflow: visible;
+    color: rgba(255,255,255,0.9);
+}
+
+/* ---- IMAGEN DE REFERENCIA (TODAS LAS CARDS) ---- */
+.widget-user .widget-user-image {
+    position: absolute !important;
+    top: auto !important;
+    bottom: -40px !important;
+    left: 50% !important;
+    transform: translateX(-50%);
+    margin: 0 !important;
+    z-index: 10;
+    width: 90px;
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Imagen dentro del contenedor */
+.widget-user .widget-user-image img {
+    width: 80px !important;
+    height: 80px !important;
+    min-width: 80px !important;
+    min-height: 80px !important;
+    max-width: 80px !important;
+    max-height: 80px !important;
+    object-fit: cover;
+    object-position: center;
+    border-radius: 50%;
+    border: 3px solid #fff;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    background-color: #fff;
+}
+
+/* Quitar estilos inline problemáticos */
+.widget-user .widget-user-image img[style*="height: 79px"] {
+    height: 80px !important;
+}
+
+/* Hover en imagen */
+.widget-user .widget-user-image img.zoom {
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.widget-user .widget-user-image img.zoom:hover {
+    transform: scale(1.1);
+}
+
+/* ---- FOOTER ---- */
+.widget-user .card-footer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding-top: 55px !important;
+    padding-bottom: 15px;
+    background: #fff;
+}
+
+/* ---- INDICADORES ---- */
+.description-block {
+    margin: 5px 0;
+    padding: 5px 0;
+}
+
+.description-header {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0;
+    color: #333;
+}
+
+.description-text {
+    font-size: 10px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    color: #666;
+    text-transform: uppercase;
+}
+
+/* ---- BOTONES ---- */
+.btn-app {
+    margin: 3px auto;
+    min-width: 70px;
+    max-width: 90px;
+    padding: 10px 5px;
+    font-size: 11px;
+}
+
+.btn-app i {
+    font-size: 18px;
+    display: block;
+    margin-bottom: 3px;
+}
+
+/* ---- PORCENTAJES ---- */
+.widget-user .inner {
+    padding: 10px 5px;
+}
+
+.widget-user .inner h3 {
+    margin: 0;
+}
+
+.widget-user .inner p {
+    margin: 5px 0 0 0;
+    font-size: 11px !important;
+    font-weight: bold;
+    line-height: 1.2;
+    color: #555;
+}
+
+/* ---- CONTROLES: CHECKBOX Y DESCARGA ---- */
+.widget-user-header input[type="checkbox"] {
+    position: absolute !important;
+    top: 12px !important;
+    left: 12px !important;
+    margin: 0 !important;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    z-index: 20;
+}
+
+.widget-user-header .dropdown.dl-compact,
+.widget-user-header .download-link,
+.widget-user-header .download-excel-trigger,
+.widget-user-header a.position-absolute.download-link,
+.widget-user-header a.position-absolute.download-link-cc {
+    position: absolute !important;
+    top: 8px !important;
+    right: 10px !important;
+    z-index: 20;
+}
+
+.widget-user-header .download-link img,
+.widget-user-header .download-link-cc img,
+.widget-user-header a.position-absolute img {
+    width: 38px !important;
+    height: auto;
+}
+
+/* Barra de progreso */
+.widget-user-header .progress {
+    position: absolute !important;
+    top: 55px !important;
+    right: 10px !important;
+    width: 110px !important;
+}
+
+/* ============================================
+   ACTIVIDADES COMPLEMENTARIAS (ESPECÍFICO)
+   ============================================ */
+
+/* Selector específico para complementarias */
+.card-widget:not(.campaign-item):not(.campaign-item-ipt) .widget-user-header:not(:has(.widget-user-image)) + .widget-user-image,
+.card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .widget-user-image {
+    position: absolute !important;
+    top: auto !important;
+    bottom: -40px !important;
+    left: 50% !important;
+    transform: translateX(-50%);
+}
+
+/* Cards complementarias más compactas */
+.card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .card.card-widget.widget-user {
+    min-height: 360px;
+}
+
+.card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .widget-user-header {
+    min-height: 110px;
+    padding: 15px 50px 50px 15px;
+}
+
+.card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .widget-user-image {
+    bottom: -35px !important;
+}
+
+.card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .card-footer {
+    padding-top: 50px !important;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+/* Pantallas medianas */
+@media (max-width: 1199.98px) {
     .widget-user .widget-user-header {
-        padding: 20px;
-        height: 170px;
+        min-height: 160px;
+        padding: 12px 50px 55px 28px;
     }
-    .widget-user .widget-user-image {
-        top: 22%;
-    }
+    
     .widget-user .widget-user-username {
-        display: block;
-        width: 95%;
-        margin-top: 0;
-        font-size: 18px;
-        white-space: normal;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        box-sizing: border-box;
+        font-size: 12px;
     }
+}
+
+/* Tablets */
+@media (max-width: 991.98px) {
+    .widget-user .widget-user-header {
+        min-height: 155px;
+        padding: 12px 45px 50px 28px;
+    }
+    
+    .widget-user .widget-user-username {
+        font-size: 12px;
+        max-height: 32px;
+    }
+    
     .widget-user .widget-user-desc {
-        margin-top: 5px;
-        font-size: 14px;
+        font-size: 10px;
     }
-    .description-block {
-        margin: 10px 0;
+    
+    .widget-user .widget-user-image img {
+        width: 70px !important;
+        height: 70px !important;
+        min-width: 70px !important;
+        min-height: 70px !important;
+        max-width: 70px !important;
+        max-height: 70px !important;
     }
-    .description-text {
-        font-size: 0.8rem !important;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+    
+    .widget-user .widget-user-image {
+        bottom: -35px !important;
+        width: 80px;
+        height: 80px;
     }
-    .description-header {
-        font-size: 1.2rem;
-    }
+    
     .widget-user .card-footer {
-        
-        padding-top: 30px;
+        padding-top: 50px !important;
     }
+    
+    .card.card-widget.widget-user {
+        min-height: 430px;
+    }
+    
+    /* Complementarias tablet */
+    .card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .card.card-widget.widget-user {
+        min-height: 340px;
+    }
+}
+
+/* Móviles */
+@media (max-width: 767.98px) {
+    .campaign-item,
+    .campaign-item-ipt,
+    .col-12.col-sm-6.col-md-4.d-flex.align-items-stretch,
+    .card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) {
+        max-width: 100%;
+        flex: 0 0 100%;
+    }
+    
+    .widget-user .widget-user-header {
+        min-height: 145px;
+        padding: 12px 45px 45px 28px;
+    }
+    
+    .widget-user .widget-user-username {
+        font-size: 13px;
+        max-height: 36px;
+    }
+    
+    .widget-user .widget-user-desc {
+        font-size: 11px;
+    }
+    
+    .widget-user .widget-user-image {
+        bottom: -32px !important;
+        width: 74px;
+        height: 74px;
+    }
+    
+    .widget-user .widget-user-image img {
+        width: 68px !important;
+        height: 68px !important;
+        min-width: 68px !important;
+        min-height: 68px !important;
+        max-width: 68px !important;
+        max-height: 68px !important;
+    }
+    
+    .widget-user .card-footer {
+        padding-top: 45px !important;
+    }
+    
     .btn-app {
-        margin: 5px auto;
-        min-width: 80px;
+        min-width: 65px;
+        padding: 8px 5px;
+        font-size: 10px;
     }
-    .widget-user .inner {
-        padding: 10px;
+    
+    .btn-app i {
+        font-size: 16px;
     }
-    @media (max-width: 575.98px) {
-        .widget-user .widget-user-image {
-            top: 45px;
-        }
+    
+    .card.card-widget.widget-user {
+        min-height: 410px;
     }
+    
+    .widget-user-header input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+    }
+    
+    /* Complementarias móvil */
+    .card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .card.card-widget.widget-user {
+        min-height: 330px;
+    }
+}
+
+/* Móviles pequeños */
+@media (max-width: 575.98px) {
+    .widget-user .widget-user-header {
+        min-height: 140px;
+    }
+    
+    .description-header {
+        font-size: 1rem;
+    }
+    
+    .widget-user .inner p {
+        font-size: 10px !important;
+    }
+    
+    .widget-user .inner h3 b {
+        font-size: 16px !important;
+    }
+}

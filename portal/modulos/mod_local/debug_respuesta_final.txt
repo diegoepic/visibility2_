@@ -1,152 +1,76 @@
 {
     "success": true,
-    "inserted": 40,
-    "failed": 17,
-    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1768832189.csv",
+    "inserted": 60,
+    "failed": 1,
+    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1768847067.csv",
     "successes": [
-        "L\u00ednea 2: Local 'ESCOBAR VIDAL ANA MARIA' (c\u00f3digo 17433) insertado.",
-        "L\u00ednea 3: Local 'REGINA SONCCO FLORES' (c\u00f3digo 12116) insertado.",
-        "L\u00ednea 4: Local 'REGINA SONCCO FLORES' (c\u00f3digo 13245) insertado.",
-        "L\u00ednea 9: Local 'INVERSIONES MORENO QUIROGA SPA' (c\u00f3digo 95852) insertado.",
-        "L\u00ednea 10: Local 'RAMIRI TARQUI' (c\u00f3digo 56674) insertado.",
-        "L\u00ednea 12: Local 'JUANA MERCEDES GRADOS GOMEZ' (c\u00f3digo 96616) insertado.",
-        "L\u00ednea 13: Local 'CARNICERIA Y PESCADERIA MR BULL LTDA' (c\u00f3digo 64649) insertado.",
-        "L\u00ednea 14: Local 'HUACACOLQUI ATOCHE VARINIA DEL MILAGROS' (c\u00f3digo 16806) insertado.",
-        "L\u00ednea 15: Local 'PAOLA ANDREA TORO' (c\u00f3digo 73810) insertado.",
-        "L\u00ednea 16: Local 'FELIX GUSTAVO BARRAZA LARRONDO COMERCIALIZADORA DE ALIMENTOS EIRL' (c\u00f3digo 74195) insertado.",
-        "L\u00ednea 17: Local 'ROJAS SOTO PIERO FABIAN' (c\u00f3digo 12063) insertado.",
-        "L\u00ednea 21: Local 'SOCIEDAD COMERCIAL SOLAR SPA' (c\u00f3digo 72713) insertado.",
-        "L\u00ednea 22: Local 'URQUIETA SALINAS JESSICA ROSSANA' (c\u00f3digo 12767) insertado.",
-        "L\u00ednea 26: Local 'CHACON PEREZ ODETT MARIBEL' (c\u00f3digo 22997) insertado.",
-        "L\u00ednea 28: Local 'DIANA ELIZABETH BARDALES FLORES DE RONCAL' (c\u00f3digo 91628) insertado.",
-        "L\u00ednea 29: Local 'NAVARRETE MORALES EDWARD RODRIGO' (c\u00f3digo 23054) insertado.",
-        "L\u00ednea 30: Local 'ROXANA JARA EIRL' (c\u00f3digo 92332) insertado.",
-        "L\u00ednea 31: Local 'ROJAS MOLINA BETTY JESSICA' (c\u00f3digo 18931) insertado.",
-        "L\u00ednea 32: Local 'ARAGON ANCCO LUZ MARINA' (c\u00f3digo 24189) insertado.",
-        "L\u00ednea 33: Local 'HUACA COAQUERA ROSA' (c\u00f3digo 68839) insertado.",
-        "L\u00ednea 35: Local 'INVERSIONES FLYM SPA' (c\u00f3digo 75131) insertado.",
-        "L\u00ednea 36: Local 'PAICHO CHOQUE DARWIN' (c\u00f3digo 87643) insertado.",
-        "L\u00ednea 37: Local 'SOTO CAPURATA HERNAN ADEMAR' (c\u00f3digo 12736) insertado.",
-        "L\u00ednea 38: Local 'COCHA CAZORLA TRIFON' (c\u00f3digo 88273) insertado.",
-        "L\u00ednea 40: Local 'JALDIN CALICHO MIGUEL' (c\u00f3digo 69771) insertado.",
-        "L\u00ednea 43: Local 'CHALLO LLANQUE RUTH RUSSMERY' (c\u00f3digo 70529) insertado.",
-        "L\u00ednea 44: Local 'DEYSI JHOSELIN CHAMBI MAMANI ALMACEN Y AMASANDERIA EIRL' (c\u00f3digo 96309) insertado.",
-        "L\u00ednea 45: Local 'DANIELA GARCIA LAIME' (c\u00f3digo 93165) insertado.",
-        "L\u00ednea 46: Local 'LEYTON AGUILERA ROSA VERONICA' (c\u00f3digo 12978) insertado.",
-        "L\u00ednea 47: Local 'MINIMARKET EZEQUIEL PACO EIRL' (c\u00f3digo 96167) insertado.",
-        "L\u00ednea 49: Local 'SUSANA INES RODRIGUEZ DIAZ' (c\u00f3digo 90351) insertado.",
-        "L\u00ednea 50: Local 'HENRIQUEZ GUZMAN EDITH ROSA' (c\u00f3digo 12087) insertado.",
-        "L\u00ednea 51: Local 'CASTRO MAMANI ANGEL RICARDO' (c\u00f3digo 60751) insertado.",
-        "L\u00ednea 52: Local 'ALBARO MAMANI MAMANI' (c\u00f3digo 11841) insertado.",
-        "L\u00ednea 53: Local 'MAMANI DE MAMANI JOSEFINA' (c\u00f3digo 45261) insertado.",
-        "L\u00ednea 54: Local 'TICONA CHAMBI JOSE' (c\u00f3digo 12737) insertado.",
-        "L\u00ednea 55: Local 'LUNA PINTO JESUS RENE' (c\u00f3digo 16684) insertado.",
-        "L\u00ednea 56: Local 'GUTIERREZ CHOQUE ELIZA' (c\u00f3digo 17755) insertado.",
-        "L\u00ednea 57: Local 'TICONA CHAMBI LISBETH' (c\u00f3digo 97012) insertado.",
-        "L\u00ednea 58: Local 'VEGA CORONADO INES POLONIA' (c\u00f3digo 11812) insertado."
+        "L\u00ednea 2: Local 'SOCIEDAD FULL COMPUTACION LIMITADA' (c\u00f3digo 98458) insertado.",
+        "L\u00ednea 3: Local 'LAFUENTE FRANZ MARCELA ALEJANDRA' (c\u00f3digo 7505) insertado.",
+        "L\u00ednea 4: Local 'SOCIEDAD COMERCIAL YASMAN SPA' (c\u00f3digo 87362) insertado.",
+        "L\u00ednea 5: Local 'AGUILAR AGUILAR GEORGINA DEL CARMEN' (c\u00f3digo 14417) insertado.",
+        "L\u00ednea 6: Local 'GALLARDO RUIZ JENNY DE LOURDES' (c\u00f3digo 22962) insertado.",
+        "L\u00ednea 7: Local 'COMERCIAL JM SPA' (c\u00f3digo 91882) insertado.",
+        "L\u00ednea 8: Local 'TURISMO Y GASTRONOMIA DELICIAS DEL CAMPO SPA' (c\u00f3digo 93359) insertado.",
+        "L\u00ednea 9: Local 'VALENZUELA TOLEDO JOSE SEBASTIAN' (c\u00f3digo 54481) insertado.",
+        "L\u00ednea 10: Local 'SOC. COMERCIAL GALVARINO RIVEROS CARDENAS LTDA' (c\u00f3digo 45727) insertado.",
+        "L\u00ednea 11: Local 'VERA HARO ARACELI SOLANGE' (c\u00f3digo 88368) insertado.",
+        "L\u00ednea 12: Local 'COMERCIALIZADORA ALEJANDRA GOMEZ VARGAS EIRL' (c\u00f3digo 92587) insertado.",
+        "L\u00ednea 13: Local 'TORRES AGUILAR ORITIA' (c\u00f3digo 7660) insertado.",
+        "L\u00ednea 14: Local 'GALLARDO OYARZO ELFRIDA GEORGINA' (c\u00f3digo 7537) insertado.",
+        "L\u00ednea 15: Local 'ANDRADE ANDRADE IVONE ESTELA' (c\u00f3digo 70466) insertado.",
+        "L\u00ednea 16: Local 'MIRANDA OVANDO IRIS NILDA' (c\u00f3digo 7748) insertado.",
+        "L\u00ednea 17: Local 'SANCHEZ BADILLA ELENA EDITH' (c\u00f3digo 7523) insertado.",
+        "L\u00ednea 18: Local 'PE\u00d1A HARO MARIA TRANSITO' (c\u00f3digo 7746) insertado.",
+        "L\u00ednea 19: Local 'VELASQUEZ VELASQUEZ MIGUEL H.' (c\u00f3digo 14423) insertado.",
+        "L\u00ednea 20: Local 'LONCUANTE NANCUL MARIA ESTER' (c\u00f3digo 7633) insertado.",
+        "L\u00ednea 21: Local 'CARRENO PUNOL ANA ERNESTINA' (c\u00f3digo 7525) insertado.",
+        "L\u00ednea 22: Local 'OYARZO GUICHATUREO SONIA VANESSA' (c\u00f3digo 24201) insertado.",
+        "L\u00ednea 23: Local 'LA QUILLOTANA SPA' (c\u00f3digo 22967) insertado.",
+        "L\u00ednea 24: Local 'MILLALDEO ANTI\u00d1ANCO JULIO IGNACIO' (c\u00f3digo 7519) insertado.",
+        "L\u00ednea 25: Local 'CARDENAS SANCHEZ CRISTINA MABEL' (c\u00f3digo 14422) insertado.",
+        "L\u00ednea 26: Local 'ALVAREZ MU\u00d1OZ RICHARD ESTEBAN' (c\u00f3digo 77762) insertado.",
+        "L\u00ednea 27: Local 'CANUMAN BORQUEZ MARIA SONNIA' (c\u00f3digo 10994) insertado.",
+        "L\u00ednea 28: Local 'RUTA 5 SUR' (c\u00f3digo 63520) insertado.",
+        "L\u00ednea 29: Local 'SOCIEDAD COMERCIAL DEJAVU II SPA.' (c\u00f3digo 90117) insertado.",
+        "L\u00ednea 30: Local 'GOMEZ BORQUEZ JOSE' (c\u00f3digo 7511) insertado.",
+        "L\u00ednea 31: Local 'SOCIEDAD COM. MIRAMARK LTDA' (c\u00f3digo 60713) insertado.",
+        "L\u00ednea 32: Local 'ANDRADE OYARZUN OSVALDO JUVENAL' (c\u00f3digo 77116) insertado.",
+        "L\u00ednea 33: Local 'SOCIEDAD COMERCIAL VARGAS HERMANOS LTDA.' (c\u00f3digo 7503) insertado.",
+        "L\u00ednea 34: Local 'SOCIEDAD COMERCIAL VARGAS HERMANOS LTDA.' (c\u00f3digo 7809) insertado.",
+        "L\u00ednea 35: Local 'CARCAMO MAYORGA ANA MARIA' (c\u00f3digo 66493) insertado.",
+        "L\u00ednea 36: Local 'EL GUATON DE LA FRUTA SPA' (c\u00f3digo 95390) insertado.",
+        "L\u00ednea 37: Local 'CAYUN VERA FRANCISCO JAVIER' (c\u00f3digo 95389) insertado.",
+        "L\u00ednea 38: Local 'ANDRADE MARQUEZ LORENA DEL CARMEN' (c\u00f3digo 75813) insertado.",
+        "L\u00ednea 39: Local 'SANTANA ANTIMAN HERMES ORIOL' (c\u00f3digo 88458) insertado.",
+        "L\u00ednea 40: Local 'BAHAMONDE HAASE NURY MARIBEL' (c\u00f3digo 63356) insertado.",
+        "L\u00ednea 41: Local 'GUINEO BARRIA MIRNA CELINDA' (c\u00f3digo 63274) insertado.",
+        "L\u00ednea 42: Local 'SOCIEDAD DE INVERSIONES EL QUILAR LTDA' (c\u00f3digo 60012) insertado.",
+        "L\u00ednea 43: Local 'MANSILLA FUENTES HECTOR DANIEL' (c\u00f3digo 9800) insertado.",
+        "L\u00ednea 44: Local 'G Y P SPA' (c\u00f3digo 89291) insertado.",
+        "L\u00ednea 45: Local 'ROJAS SOTOMAYOR NELLY' (c\u00f3digo 7576) insertado.",
+        "L\u00ednea 46: Local 'PAILLALEVE MANSILLA EMA MIRTA' (c\u00f3digo 22739) insertado.",
+        "L\u00ednea 47: Local 'ORTLOFF DUNCKER NELSON ROLANDO' (c\u00f3digo 22961) insertado.",
+        "L\u00ednea 48: Local 'ULLOA BRULE LUIS' (c\u00f3digo 7614) insertado.",
+        "L\u00ednea 49: Local 'AUDE CONTRERAS MARIA ELISABETH' (c\u00f3digo 8011) insertado.",
+        "L\u00ednea 50: Local 'HERMANOS HENRIQUEZ SPA' (c\u00f3digo 77818) insertado.",
+        "L\u00ednea 52: Local 'MERCADO PARTICULAR SANDRA LETICIA VERGAR' (c\u00f3digo 94755) insertado.",
+        "L\u00ednea 53: Local 'DIAZ DIAZ LIZARDO ANTONIO' (c\u00f3digo 7485) insertado.",
+        "L\u00ednea 54: Local 'JOBIS URIBE ULDA DEL CARMEN' (c\u00f3digo 87163) insertado.",
+        "L\u00ednea 55: Local 'AMPUERO AMPUERO VIVIANA ISABEL' (c\u00f3digo 7702) insertado.",
+        "L\u00ednea 56: Local 'NU\u00d1EZ NECUL MARIELA DEL TRANSITO' (c\u00f3digo 54903) insertado.",
+        "L\u00ednea 57: Local 'SOCIEDAD COMERCIAL DALCA SPA' (c\u00f3digo 56075) insertado.",
+        "L\u00ednea 58: Local 'COMERCIAL DISFRUTA SPA' (c\u00f3digo 64122) insertado.",
+        "L\u00ednea 59: Local 'MONTA\u00d1A BAHAMONDE FILOMENA' (c\u00f3digo 7671) insertado.",
+        "L\u00ednea 60: Local 'PEREZ BARRIENTOS DOLORES DEL CARMEN' (c\u00f3digo 7479) insertado.",
+        "L\u00ednea 61: Local 'SOTOMAYOR BAHAMONDE MANUEL HUMBERTO' (c\u00f3digo 8006) insertado.",
+        "L\u00ednea 62: Local 'VIDAL BARRIENTOS ROBERTO DOMINGO' (c\u00f3digo 7580) insertado."
     ],
     "failures": [
         {
-            "line": 5,
-            "codigo": "65278",
-            "nombre": "CHACON COTRINA LUIS SANTOS",
-            "reason": "El c\u00f3digo de local '65278' ya existe (l\u00ednea 5)."
-        },
-        {
-            "line": 6,
-            "codigo": "60269",
-            "nombre": "HUANCA RAMOS JHENNY DANITZA",
-            "reason": "El c\u00f3digo de local '60269' ya existe (l\u00ednea 6)."
-        },
-        {
-            "line": 7,
-            "codigo": "12062",
-            "nombre": "HUANCA RAMOS JHENNY DANITZA",
-            "reason": "El c\u00f3digo de local '12062' ya existe (l\u00ednea 7)."
-        },
-        {
-            "line": 8,
-            "codigo": "55462",
-            "nombre": "HUANCA RAMOS JHENNY DANITZA",
-            "reason": "El c\u00f3digo de local '55462' ya existe (l\u00ednea 8)."
-        },
-        {
-            "line": 11,
-            "codigo": "97924",
-            "nombre": "COMERCIAL LOS ANGELES SPPA",
-            "reason": "El c\u00f3digo de local '97924' ya existe (l\u00ednea 11)."
-        },
-        {
-            "line": 18,
-            "codigo": "12794",
-            "nombre": "ACHACOLLO LAYME RUBEN",
-            "reason": "El c\u00f3digo de local '12794' ya existe (l\u00ednea 18)."
-        },
-        {
-            "line": 19,
-            "codigo": "91966",
-            "nombre": "ACHACOLLO LAYME RUBEN",
-            "reason": "El c\u00f3digo de local '91966' ya existe (l\u00ednea 19)."
-        },
-        {
-            "line": 20,
-            "codigo": "88833",
-            "nombre": "ALIMENTOS HLH SPA",
-            "reason": "El c\u00f3digo de local '88833' ya existe (l\u00ednea 20)."
-        },
-        {
-            "line": 23,
-            "codigo": "86893",
-            "nombre": "GALLARDO CRUZ ALEJANDRO LUIS",
-            "reason": "El c\u00f3digo de local '86893' ya existe (l\u00ednea 23)."
-        },
-        {
-            "line": 24,
-            "codigo": "88597",
-            "nombre": "ELISEO CONDORI QUI\u00d1ONES",
-            "reason": "El c\u00f3digo de local '88597' ya existe (l\u00ednea 24)."
-        },
-        {
-            "line": 25,
-            "codigo": "19475",
-            "nombre": "PINOTTI LOPEZ ROSA ISELLA",
-            "reason": "El c\u00f3digo de local '19475' ya existe (l\u00ednea 25)."
-        },
-        {
-            "line": 27,
-            "codigo": "91275",
-            "nombre": "MINIMARKET LA RIVE\u00d1A SPA",
-            "reason": "El c\u00f3digo de local '91275' ya existe (l\u00ednea 27)."
-        },
-        {
-            "line": 34,
-            "codigo": "74167",
-            "nombre": "CONDORI COLQUE SANDRA",
-            "reason": "El c\u00f3digo de local '74167' ya existe (l\u00ednea 34)."
-        },
-        {
-            "line": 39,
-            "codigo": "93707",
-            "nombre": "YUFLA AYAVIRE ELIZABETH",
-            "reason": "El c\u00f3digo de local '93707' ya existe (l\u00ednea 39)."
-        },
-        {
-            "line": 41,
-            "codigo": "92227",
-            "nombre": "JALDIN CALICHO MIGUEL",
-            "reason": "El c\u00f3digo de local '92227' ya existe (l\u00ednea 41)."
-        },
-        {
-            "line": 42,
-            "codigo": "96853",
-            "nombre": "CHALLO LLANQUE RUTH RUSSMERY",
-            "reason": "El c\u00f3digo de local '96853' ya existe (l\u00ednea 42)."
-        },
-        {
-            "line": 48,
-            "codigo": "11842",
-            "nombre": "COMERCIAL VERTA MAMANI CACERES E IRL",
-            "reason": "El c\u00f3digo de local '11842' ya existe (l\u00ednea 48)."
+            "line": 51,
+            "codigo": "7486",
+            "nombre": "HARO DIAZ ARISTELA",
+            "reason": "El c\u00f3digo de local '7486' ya existe (l\u00ednea 51)."
         }
     ]
 }

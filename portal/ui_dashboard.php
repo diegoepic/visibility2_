@@ -371,7 +371,369 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
   <link rel="stylesheet" href="plugins/fontawesome-free/css/all.min.css">
   <link rel="stylesheet" href="dist/css/adminlte.min.css">
   <link rel="stylesheet" href="dist/css/stylesUI.css">
-  
+  <style>
+      /* ============================================
+   DASHBOARD CARDS - NORMALIZACIÓN Y RESPONSIVE
+   Soluciona problemas de descuadre en cards
+   ============================================ */
+
+/* ---- CONTENEDOR DE CAMPAÑAS ---- */
+.card-body .row {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+/* ---- COLUMNAS DE CARDS (campaign-item) ---- */
+.campaign-item,
+.campaign-item-ipt,
+.col-12.col-sm-6.col-md-4.d-flex.align-items-stretch {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 20px;
+}
+
+/* ---- CARD PRINCIPAL ---- */
+.card.card-widget.widget-user {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 420px; /* Altura mínima consistente */
+}
+
+/* ---- HEADER DE LA CARD ---- */
+.widget-user .widget-user-header {
+    position: relative;
+    padding: 15px 20px 50px 20px; /* Padding inferior para espacio de imagen */
+    min-height: 140px; /* Altura fija para el header */
+    height: 140px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    overflow: hidden;
+}
+
+/* ---- TÍTULO DE CAMPAÑA (nombre) ---- */
+.widget-user .widget-user-username {
+    display: block;
+    width: calc(100% - 60px); /* Dejar espacio para botón descarga */
+    margin: 0;
+    padding-right: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.3;
+    max-height: 36px; /* Máximo 2 líneas */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+/* ---- DESCRIPCIÓN (estado y fechas) ---- */
+.widget-user .widget-user-desc {
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---- IMAGEN DE REFERENCIA ---- */
+.widget-user .widget-user-image {
+    position: absolute;
+    top: auto !important;
+    bottom: -35px; /* Posición desde abajo del header */
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0;
+    z-index: 10;
+}
+
+.widget-user .widget-user-image img,
+.widget-user .widget-user-image .reference-img {
+    width: 80px !important;
+    height: 80px !important;
+    min-width: 80px;
+    min-height: 80px;
+    max-width: 80px;
+    max-height: 80px;
+    object-fit: cover;
+    object-position: center;
+    border-radius: 50%;
+    border: 3px solid #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    background-color: #f5f5f5;
+}
+
+/* ---- FOOTER DE LA CARD ---- */
+.widget-user .card-footer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding-top: 50px !important; /* Espacio para la imagen que sobresale */
+    padding-bottom: 15px;
+}
+
+/* ---- INDICADORES (Programados/Visitados/Ejecutados) ---- */
+.widget-user .card-footer > .row:first-child {
+    margin-bottom: 10px;
+}
+
+.widget-user .description-block {
+    margin: 5px 0;
+    padding: 5px 0;
+}
+
+.widget-user .description-header {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.widget-user .description-text {
+    font-size: 10px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}
+
+/* ---- BOTONES DE ACCIÓN ---- */
+.widget-user .btn-app {
+    margin: 3px auto;
+    min-width: 70px;
+    max-width: 85px;
+    padding: 8px 5px;
+    font-size: 11px;
+}
+
+.widget-user .btn-app i {
+    font-size: 16px;
+}
+
+/* ---- PORCENTAJES ---- */
+.widget-user .inner {
+    padding: 8px 5px;
+}
+
+.widget-user .inner h3 {
+    margin: 0;
+}
+
+.widget-user .inner p {
+    margin: 5px 0 0 0;
+    font-size: 11px !important;
+    line-height: 1.2;
+}
+
+/* ---- CHECKBOX SELECCIÓN ---- */
+.widget-user-header input[type="checkbox"] {
+    position: absolute !important;
+    top: 10px !important;
+    left: 10px !important;
+    margin: 0 !important;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    z-index: 15;
+}
+
+/* ---- BOTÓN DESCARGA EXCEL ---- */
+.widget-user-header .dropdown.dl-compact,
+.widget-user-header .download-link,
+.widget-user-header .download-excel-trigger {
+    position: absolute !important;
+    top: 8px !important;
+    right: 10px !important;
+    z-index: 15;
+}
+
+.widget-user-header .download-link img {
+    width: 35px !important;
+    height: auto;
+}
+
+/* ---- BARRA DE PROGRESO DESCARGA ---- */
+.widget-user-header .progress {
+    position: absolute !important;
+    top: 50px !important;
+    right: 10px !important;
+    width: 100px !important;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+/* Tablets */
+@media (max-width: 991.98px) {
+    .widget-user .widget-user-header {
+        min-height: 130px;
+        height: 130px;
+    }
+    
+    .widget-user .widget-user-username {
+        font-size: 13px;
+        max-height: 34px;
+    }
+    
+    .widget-user .widget-user-image img,
+    .widget-user .widget-user-image .reference-img {
+        width: 70px !important;
+        height: 70px !important;
+        min-width: 70px;
+        min-height: 70px;
+        max-width: 70px;
+        max-height: 70px;
+    }
+    
+    .widget-user .card-footer {
+        padding-top: 45px !important;
+    }
+    
+    .card.card-widget.widget-user {
+        min-height: 400px;
+    }
+}
+
+/* Móviles */
+@media (max-width: 767.98px) {
+    .campaign-item,
+    .campaign-item-ipt,
+    .col-12.col-sm-6.col-md-4.d-flex.align-items-stretch {
+        max-width: 100%;
+        flex: 0 0 100%;
+    }
+    
+    .widget-user .widget-user-header {
+        min-height: 120px;
+        height: 120px;
+        padding: 12px 15px 45px 15px;
+    }
+    
+    .widget-user .widget-user-username {
+        font-size: 14px;
+        width: calc(100% - 50px);
+        max-height: 40px;
+    }
+    
+    .widget-user .widget-user-desc {
+        font-size: 11px;
+    }
+    
+    .widget-user .widget-user-image {
+        bottom: -30px;
+    }
+    
+    .widget-user .widget-user-image img,
+    .widget-user .widget-user-image .reference-img {
+        width: 65px !important;
+        height: 65px !important;
+        min-width: 65px;
+        min-height: 65px;
+        max-width: 65px;
+        max-height: 65px;
+    }
+    
+    .widget-user .card-footer {
+        padding-top: 40px !important;
+    }
+    
+    .widget-user .btn-app {
+        min-width: 60px;
+        padding: 6px 4px;
+        font-size: 10px;
+    }
+    
+    .widget-user .btn-app i {
+        font-size: 14px;
+    }
+    
+    .card.card-widget.widget-user {
+        min-height: 380px;
+    }
+    
+    .widget-user-header input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+    }
+}
+
+/* Móviles pequeños */
+@media (max-width: 575.98px) {
+    .widget-user .widget-user-header {
+        min-height: 115px;
+        height: auto;
+        min-height: 115px;
+    }
+    
+    .widget-user .description-header {
+        font-size: 1rem;
+    }
+    
+    .widget-user .inner p {
+        font-size: 10px !important;
+    }
+    
+    .widget-user .inner h3 b {
+        font-size: 16px !important;
+    }
+}
+
+/* ============================================
+   ACTIVIDADES COMPLEMENTARIAS
+   (Cards más simples sin porcentajes)
+   ============================================ */
+.card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .widget-user {
+    min-height: 320px;
+}
+
+/* ============================================
+   UTILIDADES ADICIONALES
+   ============================================ */
+
+/* Efecto hover suave */
+.card.card-widget.widget-user {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card.card-widget.widget-user:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+/* Imagen zoom */
+.widget-user-image img.zoom {
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.widget-user-image img.zoom:hover {
+    transform: translateX(-50%) scale(1.1);
+}
+
+/* Fix para d-flex align-items-stretch en Bootstrap */
+.row.d-flex > [class*="col-"] {
+    display: flex;
+}
+
+/* Asegurar que todas las cards en una fila tengan misma altura */
+.card-body > .container > .row {
+    align-items: stretch;
+}
+
+.card-body > .container > .row > [class*="col-"] {
+    display: flex;
+    flex-direction: column;
+}
+
+.card-body > .container > .row > [class*="col-"] > .card {
+    flex: 1;
+}
+  </style>
 </head>
 <body>
 
@@ -542,7 +904,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                   <img 
                     id="refImg-<?php echo $rowP['id_campana']; ?>"
                     class="reference-img elevation-2 zoom"
-                    style="height: 79px;!important" src="<?php echo htmlspecialchars($rowP['reference_image'] ?: 'dist/img/visibility2Logo.png'); ?>"
+                     src="<?php echo htmlspecialchars($rowP['reference_image'] ?: 'dist/img/visibility2Logo.png'); ?>"
                     data-camp="<?php echo $rowP['id_campana'];?>"
                   >
                 </div>
@@ -865,11 +1227,11 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
 ]; ?>
                   </h3>
                   <h5 class="widget-user-desc">Actividad Complementaria</h5>
-                </div>
                 <div class="widget-user-image">
-                  <img class="elevation-2 zoom"
-                       src="dist/img/visibility2Logo.png"
-                       alt="Campaña Complementaria">
+                    <img class="elevation-2 zoom"
+                         src="dist/img/visibility2Logo.png"
+                         alt="Campaña Complementaria">
+                  </div>
                 </div>
                 <div class="card-footer">
                   <!-- Indicadores -->

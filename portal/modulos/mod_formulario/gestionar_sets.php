@@ -972,7 +972,7 @@ function markDirty(){
 }
 
 
-const SHOW_UNSAVED_WARNING = true; //dejar en true para mostrar mensajes de confirmacion al editars sets
+const SHOW_UNSAVED_WARNING = false; //dejar en true para mostrar mensajes de confirmacion al editar sets
 window.addEventListener('beforeunload', function(e){
   if (SHOW_UNSAVED_WARNING && dirty){
     e.preventDefault();
