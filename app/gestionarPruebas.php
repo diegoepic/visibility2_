@@ -26,13 +26,16 @@ $sql_validar = "
         f.nombre AS nombreCampanaDB,
         f.id_division AS idDivision,
         f.modalidad AS modalidadCampana,
+        l.codigo AS codigoLocal,
         l.nombre AS nombreLocal,
         l.direccion AS direccionLocal,
         l.lat AS lat,
-        l.lng AS lng
+        l.lng AS lng,
+        IFNULL(v.nombre_vendedor, '') AS vendedor
     FROM formularioQuestion fq
     INNER JOIN formulario AS f ON f.id = fq.id_formulario
     INNER JOIN local AS l ON l.id = fq.id_local
+    LEFT JOIN vendedor AS v ON v.id = l.id_vendedor
     WHERE fq.id_formulario = ?
       AND fq.id_local = ?
       AND fq.id_usuario = ?
@@ -58,10 +61,14 @@ $actionLabel   = $isRetiro ? 'Retirar'     : 'Implementar';
 $sectionLabel  = $isRetiro ? 'Retiro'      : 'Implementación';
 $nombreCampanaDB = htmlspecialchars($row['nombreCampanaDB'], ENT_QUOTES, 'UTF-8');
 $idDivision    = intval($row['idDivision']);
+$codigoLocal   = htmlspecialchars($row['codigoLocal'] ?? '', ENT_QUOTES, 'UTF-8');
 $nombreLocal   = htmlspecialchars($row['nombreLocal'], ENT_QUOTES, 'UTF-8');
 $direccionLocal= htmlspecialchars($row['direccionLocal'], ENT_QUOTES, 'UTF-8');
+$nombreVendedor = htmlspecialchars($row['vendedor'] ?? '', ENT_QUOTES, 'UTF-8');
 $latitud       = floatval($row['lat']);
 $longitud      = floatval($row['lng']);
+$codigoLocalDisplay = $codigoLocal !== '' ? $codigoLocal : 'No aplica';
+$nombreVendedorDisplay = $nombreVendedor !== '' ? $nombreVendedor : 'No aplica';
 $stmt_validar->close();
 
 // ¿Encuesta pendiente?
@@ -368,11 +375,12 @@ input[type=file][id^="fotoPregunta_"] {
              <div class="row">
                 <div class="col-sm-12">
                    <div class="page-header">
-                      <h2 style="font-size: 1.5rem;">
+                        <h2 style="font-size: 1.5rem;">
                         Gestionar Campaña: <strong><?php echo $nombreCampanaDB; ?></strong><br>
-                        en Local: <strong><?php echo $nombreLocal; ?></strong>
+                        en Local: <strong><?php echo $codigoLocalDisplay; ?> - <?php echo $nombreLocal; ?></strong>
                       </h2>
                       <p>Dirección: <strong><?php echo $direccionLocal; ?></strong></p>
+                      <p>Vendedor: <strong><?php echo $nombreVendedorDisplay; ?></strong></p>
                    </div>
                 </div>
              </div>

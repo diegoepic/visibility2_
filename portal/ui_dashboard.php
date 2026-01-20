@@ -12,10 +12,9 @@ require_once $_SERVER['DOCUMENT_ROOT'
 require_once $_SERVER['DOCUMENT_ROOT'
 ] . '/visibility2/portal/modulos/session_data.php';
 
-// 2) Variables de sesión: empresa, división, perfil
-$empresa_id  = $_SESSION['empresa_id'];
-$division_id = $_SESSION['division_id'];
-$perfilUser  = $_SESSION['perfil_nombre'];
+$empresa_id  = $_SESSION['empresa_id'] ?? null;
+$division_id = $_SESSION['division_id'] ?? null;
+$perfilUser  = $_SESSION['perfil_nombre'] ?? null;
 
 
 
@@ -403,8 +402,8 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
 /* ---- HEADER DE LA CARD ---- */
 .widget-user .widget-user-header {
     position: relative;
-    padding: 15px 20px 50px 20px; /* Padding inferior para espacio de imagen */
-    min-height: 140px; /* Altura fija para el header */
+    padding: 6px 0px 28px 0px; 
+    min-height: 140px; 
     height: 140px;
     display: flex;
     flex-direction: column;
@@ -416,7 +415,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
 .widget-user .widget-user-username {
     display: block;
     width: calc(100% - 60px); /* Dejar espacio para botón descarga */
-    margin: 0;
+    margin: 20px;
     padding-right: 10px;
     font-size: 14px;
     font-weight: 700;
@@ -711,9 +710,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
     transition: transform 0.2s ease;
 }
 
-.widget-user-image img.zoom:hover {
-    transform: translateX(-50%) scale(1.1);
-}
+
 
 /* Fix para d-flex align-items-stretch en Bootstrap */
 .row.d-flex > [class*="col-"] {
@@ -733,6 +730,9 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
 .card-body > .container > .row > [class*="col-"] > .card {
     flex: 1;
 }
+.widget-user .widget-user-image { pointer-events: none; }
+.widget-user .widget-user-image img { pointer-events: auto; }
+
   </style>
 </head>
 <body>
@@ -1069,43 +1069,57 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
             ?>
             <div class="col-12 col-sm-6 col-md-4 align-items-stretch campaign-item-ipt">
               <div class="card card-widget widget-user shadow w-100">
-                <div class="widget-user-header bg-info position-relative">
-                  <!-- Descargar Excel -->
-                     <a
-                      href="#"
-                      class="position-absolute download-link download-excel-trigger"
-                      data-id="<?php echo $rowIpt['id_campana']; ?>"
-                      data-modalidad="<?php echo htmlspecialchars($rowIpt['modalidad'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-                      title="Descargar Excel"
-                      style="top:10px; right:10px;"
-                    >
-                      <img src="images/icon/download_excel.png" alt="Download" style="width:40px; cursor:pointer;">
-                    </a>
-                  <div class="progress"
-                       style="position:absolute; top:60px; right:10px; width:120px; display:none; background:#e9ecef; border-radius:5px;">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated"
-                         role="progressbar"
-                         style="width:0%;"
-                         aria-valuemin="0" aria-valuemax="100">0%
-                    </div>
-                  </div>
-                      <input type="checkbox"
-                             id="chk-ipt<?php echo $rowIpt['id_campana']; ?>"
-                             class="mr-2" style="position: absolute;margin-top: -4%;margin-left: -48%;"
-                             value="<?php echo $rowIpt['id_campana']; ?>"
-                             data-modalidad="<?php echo htmlspecialchars($rowIpt['modalidad'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
-                  <h3 class="widget-user-username campaign-name-ipt">
-                    <?php echo htmlspecialchars(mb_strtoupper($rowIpt['nombre_campana'
-],'UTF-8')); ?>
-                  </h3>
-                  <h5 class="widget-user-desc"><?php echo $ed; ?></h5>
-                  <h5 class="widget-user-desc">
-                    <?php echo htmlspecialchars($rowIpt['fechaInicio'
-]); ?> al
-                    <?php echo htmlspecialchars($rowIpt['fechaTermino'
-]); ?>
-                  </h5>
-                </div>
+               <div class="widget-user-header bg-info position-relative">
+
+  <!-- Dropdown Excel (igual a Programadas) -->
+  <div class="dropdown dl-compact" style="position:absolute; top:10px; right:10px; z-index:5;">
+    <button class="btn btn-sm btn-success dropdown-toggle px-2 py-1"
+            type="button"
+            data-toggle="dropdown"
+            aria-expanded="false"
+            title="Descargar Excel">
+      <i class="fas fa-file-excel"></i>
+    </button>
+    <div class="dropdown-menu dropdown-menu-right">
+      <a class="dropdown-item download-excel-trigger"
+         href="#"
+         data-id="<?= (int)$rowIpt['id_campana']; ?>"
+         data-modalidad="<?= htmlspecialchars($rowIpt['modalidad'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+        DESCARGAR DATA
+      </a>
+    </div>
+  </div>
+
+  <!-- Barra progreso (igual) -->
+  <div class="progress"
+       style="position:absolute; top:60px; right:10px; width:120px; display:none; background:#e9ecef; border-radius:5px;">
+    <div class="progress-bar progress-bar-striped progress-bar-animated"
+         role="progressbar"
+         style="width:0%;"
+         aria-valuemin="0" aria-valuemax="100">0%
+    </div>
+  </div>
+
+  <!-- Checkbox (igual; idealmente sin inline, pero lo dejamos idéntico a tu patrón actual) -->
+  <input type="checkbox"
+         id="chk-ipt<?= (int)$rowIpt['id_campana']; ?>"
+         class="mr-2"
+         style="position: absolute;margin-top: -4%;margin-left: -48%;"
+         value="<?= (int)$rowIpt['id_campana']; ?>"
+         data-modalidad="<?= htmlspecialchars($rowIpt['modalidad'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+
+  <!-- Título (igual a Programadas: wrapper + text-truncate + mb-0) -->
+  <div class="d-flex align-items-center">
+    <h3 class="widget-user-username text-truncate campaign-name-ipt mb-0">
+      <?= htmlspecialchars(mb_strtoupper($rowIpt['nombre_campana'], 'UTF-8')); ?>
+    </h3>
+  </div>
+
+  <h5 class="widget-user-desc"><?= htmlspecialchars($ed); ?></h5>
+  <h5 class="widget-user-desc">
+    <?= htmlspecialchars($rowIpt['fechaInicio']); ?> al <?= htmlspecialchars($rowIpt['fechaTermino']); ?>
+  </h5>
+</div>
                 <div class="widget-user-image" style="top:110px!important;">
                   <img 
                     id="refImg-<?php echo $rowIpt['id_campana']; ?>"
@@ -1209,31 +1223,54 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
       <div class="row">
         <?php if (!empty($compCampanas)): ?>
           <?php foreach ($compCampanas as $cc): ?>
-            <div class="col-12 col-sm-6 col-md-4 d-flex align-items-stretch">
+            <div class="col-12 col-sm-6 col-md-4 align-items-stretch campaign-item">
               <div class="card card-widget widget-user shadow w-100">
-                <div class="widget-user-header bg-info position-relative">
-                  <!-- Descargar Excel -->
-<a
-  href="#"
-  class="position-absolute download-link-cc"
-  data-id="<?php echo $cc['id_campana']; ?>"
-  title="Descargar Excel"
-  style="top:10px; right:10px;"
->
-  <img src="images/icon/download_excel.png" alt="Download" style="width:40px; cursor:pointer;">
-</a>
-                  <h3 class="widget-user-username text-truncate">
-                    <?php echo $cc['nombre_campana'
-]; ?>
-                  </h3>
-                  <h5 class="widget-user-desc">Actividad Complementaria</h5>
-                <div class="widget-user-image">
-                    <img class="elevation-2 zoom"
-                         src="dist/img/visibility2Logo.png"
-                         alt="Campaña Complementaria">
-                  </div>
-                </div>
-                <div class="card-footer">
+
+  <div class="widget-user-header bg-info position-relative">
+
+    <!-- Descarga Excel (misma ubicación) -->
+    <div class="dropdown dl-compact" style="position:absolute; top:10px; right:10px; z-index:5;">
+      <button class="btn btn-sm btn-success dropdown-toggle px-2 py-1"
+              type="button"
+              data-toggle="dropdown"
+              aria-expanded="false"
+              title="Descargar Excel">
+        <i class="fas fa-file-excel"></i>
+      </button>
+      <div class="dropdown-menu dropdown-menu-right">
+        <a class="dropdown-item download-link-cc"
+           href="#"
+           data-id="<?= (int)$cc['id_campana']; ?>">
+          DESCARGAR DATA
+        </a>
+      </div>
+    </div>
+
+    <!-- Checkbox (si quieres igual a las otras; opcional) -->
+    <input type="checkbox"
+           id="chk-cc<?= (int)$cc['id_campana']; ?>"
+           class="mr-2"
+           style="position: absolute;margin-top: -4%;margin-left: -48%;"
+           value="<?= (int)$cc['id_campana']; ?>">
+
+    <div class="d-flex align-items-center">
+      <h3 class="widget-user-username text-truncate mb-0">
+        <?= htmlspecialchars(mb_strtoupper($cc['nombre_campana'], 'UTF-8')); ?>
+      </h3>
+    </div>
+
+    <h5 class="widget-user-desc">ACTIVIDAD COMPLEMENTARIA</h5>
+
+  </div>
+
+  <!-- Imagen flotante IGUAL (OJO: sin style top) -->
+  <div class="widget-user-image" style="top:110px!important;">
+    <img class="reference-img elevation-2 zoom"
+         src="dist/img/visibility2Logo.png"
+         alt="Campaña Complementaria">
+  </div>
+
+  <div class="card-footer">
                   <!-- Indicadores -->
                   <div class="row">
                     <div class="col-sm-6 border-right">
