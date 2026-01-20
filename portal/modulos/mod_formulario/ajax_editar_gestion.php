@@ -72,8 +72,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_gestion') {
     if (isset($_POST['gestion']) && is_array($_POST['gestion'])) {
         $successCount = 0;
-
-$pregunta_val = ($estado === 1 ? 'completado' : ($estado === 2 ? 'cancelado' : 'en proceso'));
         
 $sql_update = "
   UPDATE formularioQuestion
@@ -101,6 +99,19 @@ $sql_update = "
             $fv          = str_replace('T',' ',$data['fechaVisita']);
             $fp          = $data['fechaPropuesta'] ?: null;
             $estado      = intval($data['estado']);
+            if ($estado === 3) {
+                $estado_db = 0;
+                $pregunta_val = '';
+            } elseif ($estado === 1) {
+                $estado_db = 1;
+                $pregunta_val = 'completado';
+            } elseif ($estado === 2) {
+                $estado_db = 2;
+                $pregunta_val = 'cancelado';
+            } else {
+                $estado_db = 0;
+                $pregunta_val = 'en proceso';
+            }
             // motivo llega directamente como '-' si está marcado, o no existe
             $motivo      = isset($data['motivo']) && $data['motivo']==='-' ? '-' : '';
             $is_priority = isset($data['is_priority']) ? 1 : 0;
@@ -114,7 +125,7 @@ $sql_update = "
                   $valor_impl,  
                   $fv,
                   $fp,
-                  $estado,
+                  $estado_db,
                   $pregunta_val, 
                   $motivo,
                   $is_priority,
@@ -256,6 +267,7 @@ $stmt_ejec->close();
                   <option value="0" <?= $g['estado']==0?'selected':'' ?>>En proceso</option>
                   <option value="1" <?= $g['estado']==1?'selected':'' ?>>Completado</option>
                   <option value="2" <?= $g['estado']==2?'selected':'' ?>>Cancelado</option>
+                  <option value="3" <?= $g['estado']==3?'selected':'' ?>>No gestionado</option>
                 </select>
               </td>
               <td class="text-center">
