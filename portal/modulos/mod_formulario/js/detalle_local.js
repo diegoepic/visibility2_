@@ -337,57 +337,57 @@
       </div>`;
   }
 
-  // Construye la encuesta mezclando TODAS las visitas (para campañas programadas)
+  // Construye la encuesta agrupada por visita (para campañas programadas/IPT)
   function buildEncuesta(visitas){
-    const rows = [];
-    visitas.forEach(v => {
-      (v.respuestas || []).forEach(r => {
-        const ans = r.answer_text || '';
-        const isYesNo = ['SI','NO','Si','No','sí','no'].includes(ans);
-        const badge = isYesNo ? `<span class="badge badge-${ans.toLowerCase().startsWith('s') ? 'success' : 'danger'}">${esc(ans)}</span>` : '';
-        const ansHtml = isImage(ans) ? formatImg(ans.startsWith('/') ? ans : ans) : (badge || esc(ans).replace(/\n/g,'<br>'));
-                const isValued = Number(r.is_valued) === 1 || r.is_valued === true;
-        const valor = isValued ? formatValor(r.valor) : { html: '', hasValor: false };
-        rows.push({
-          id: r.id,
-          question: r.question_text,
-          answer: ansHtml || '<span class="text-muted">—</span>',
-          valorHtml: valor.html,
-          hasValor: valor.hasValor,
-          fecha: r.created_at,
-          visita: v.secuencia
-        });
-      });
-    });
-
-    const renderTable = (dataRows, opts = {}) => {
-      const { scrollable = true } = opts;
-      const tableBody = dataRows.map(r=>`<tr>
-        <td>${r.visita}</td>
-        <td>${esc(r.question || '')}</td>
-        <td>
-          <div class="d-flex flex-column flex-sm-row flex-wrap">
-            <div class="mr-sm-2 mb-1 mb-sm-0">${r.answer}</div>
-            ${r.hasValor ? `<div class="d-inline-flex align-items-center">${r.valorHtml}</div>` : ''}
-          </div>
-        </td>
-        <td>${esc(r.fecha || '')}</td>
-      </tr>`).join('');
-
-      const wrapperStyle = scrollable ? 'style="max-height:60vh;overflow:auto;"' : '';
-      return `
-        <div class="table-responsive" ${wrapperStyle}>
-          <table class="table table-sm table-striped mb-0">
-            <thead class="thead-light"><tr><th>Visita</th><th>Pregunta</th><th>Respuesta</th><th>Fecha</th></tr></thead>
-            <tbody>${tableBody || '<tr><td colspan="4" class="text-center text-muted">Sin respuestas.</td></tr>'}</tbody>
-          </table>
-        </div>`;
-    };
-
-    const compactTable = renderTable(rows, { scrollable: true });
-    const fullTable = renderTable(rows, { scrollable: false });
     const collapseId = 'encuestaCollapse';
     const fullModalId = 'encuestaFullModal';
+
+    const renderGrouped = (data, opts = {}) => {
+      const { scrollable = true } = opts;
+      const wrapperStyle = scrollable ? 'style="max-height:60vh;overflow:auto;"' : '';
+      const content = data.map(v => {
+        const respuestas = v.respuestas || [];
+        const rows = respuestas.map(r => {
+          const ans = r.answer_text || '';
+          const isYesNo = ['SI','NO','Si','No','sí','no'].includes(ans);
+          const badge = isYesNo ? `<span class="badge badge-${ans.toLowerCase().startsWith('s') ? 'success' : 'danger'}">${esc(ans)}</span>` : '';
+          const ansHtml = isImage(ans) ? formatImg(ans.startsWith('/') ? ans : ans) : (badge || esc(ans).replace(/\n/g,'<br>'));
+          const isValued = Number(r.is_valued) === 1 || r.is_valued === true;
+          const valor = isValued ? formatValor(r.valor) : { html: '', hasValor: false };
+
+          return `<tr>
+            <td>${esc(r.question_text || '')}</td>
+            <td>
+              <div class="d-flex flex-column flex-sm-row flex-wrap">
+                <div class="mr-sm-2 mb-1 mb-sm-0">${ansHtml || '<span class="text-muted">—</span>'}</div>
+                ${valor.hasValor ? `<div class="d-inline-flex align-items-center">${valor.html}</div>` : ''}
+              </div>
+            </td>
+            <td>${esc(r.created_at || '')}</td>
+          </tr>`;
+        }).join('');
+
+        return `
+          <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <strong>Visita #${esc(v.secuencia || '')}</strong>
+              <small class="text-muted">${formatDate(v.fecha_inicio)}</small>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm table-striped mb-0">
+                <thead class="thead-light"><tr><th>Pregunta</th><th>Respuesta</th><th>Fecha</th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="3" class="text-center text-muted">Sin respuestas.</td></tr>'}</tbody>
+              </table>
+            </div>
+          </div>`;
+      }).join('') || '<p class="text-center text-muted">Sin respuestas.</p>';
+
+      return `<div class="table-responsive" ${wrapperStyle}>${content}</div>`;
+    };
+
+    const compactTable = renderGrouped(visitas, { scrollable: true });
+    const fullTable = renderGrouped(visitas, { scrollable: false });
+    const hasRows = visitas.some(v => (v.respuestas || []).length > 0);
 
     return `
       <div class="card mb-3">
@@ -395,7 +395,7 @@
           <div><i class="fas fa-clipboard-check text-primary mr-2"></i>Encuesta</div>
           <div class="btn-group" role="group" aria-label="Acciones de encuesta">
             <button class="btn btn-outline-secondary btn-sm" data-toggle="collapse" data-target="#${collapseId}" aria-expanded="true" aria-controls="${collapseId}">Mostrar / ocultar</button>
-            <button class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#${fullModalId}" ${rows.length ? '' : 'disabled'}>
+            <button class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#${fullModalId}" ${hasRows ? '' : 'disabled'}>
               Ver en pantalla completa
             </button>
           </div>
@@ -536,12 +536,12 @@
   }
 
   function buildMiniMapCard(resumen, opts = {}){
-    const { iwRequiresLocal = true } = opts;
-    const markerCount = iwRequiresLocal ? 2 : 1;
-    const markerLabel = iwRequiresLocal ? 'Se muestran el local y la última gestión' : 'Se muestra la ubicación de la visita';
+    const { iwRequiresLocal = true, showLocalMarker = true } = opts;
+    const markerCount = showLocalMarker ? 2 : 1;
+    const markerLabel = showLocalMarker ? 'Se muestran el local y la última gestión' : 'Se muestra la ubicación de la visita';
 
     // Simbología de marcadores - simular el aspecto de los marcadores de Google Maps
-    const legendItems = iwRequiresLocal
+    const legendItems = showLocalMarker
       ? `
         <div class="d-flex align-items-center mr-3">
           <div class="d-inline-flex align-items-center justify-content-center mr-1"
@@ -592,12 +592,21 @@
     const hist = d.historial || [];
     const visitas = d.visitas || [];
     const visitasFinalizadas = visitas.filter(v => !!v.fecha_fin);
+    const totalFinalizadas = visitasFinalizadas.length;
+    const visitasFinalizadasNumeradas = visitasFinalizadas.map((v, idx) => ({
+      ...v,
+      secuencia: totalFinalizadas - idx
+    }));
     const flags = d.flags || {};
 
     const soloImplementacion = flags.has_impl_any && !flags.has_audit;
     const soloAuditoria = flags.has_audit && !flags.has_impl_any;
     const isComplementaria = Number(flags.is_complementaria) === 1;
     const iwRequiresLocal = Number(flags.iw_requires_local) === 1;
+    const locLat = parseFloat(loc.lat);
+    const locLng = parseFloat(loc.lng);
+    const hasLocalCoords = !Number.isNaN(locLat) && !Number.isNaN(locLng);
+    const showLocalMarker = (!isComplementaria || iwRequiresLocal) && hasLocalCoords;
 
     const mostrarImplementacion = !soloAuditoria;
     const mostrarEncuesta = !soloImplementacion;
@@ -606,7 +615,7 @@
     injectStyles();
 
     const columnaMapa = `
-      ${buildMiniMapCard(resumen, { iwRequiresLocal })}
+      ${buildMiniMapCard(resumen, { iwRequiresLocal, showLocalMarker })}
       <div class="card mb-3">
         <div class="card-header bg-white"><i class="fas fa-stream text-primary mr-2"></i>Estado del local</div>
         <div class="card-body">
@@ -617,14 +626,14 @@
     const columnaImplementacion = `
       ${buildTables(impls, hist)}
       <h5 class="mt-4 mb-3 text-center"><i class="fas fa-walking text-primary mr-2"></i>Visitas finalizadas</h5>
-      ${buildVisitas(visitasFinalizadas)}
-      ${buildMaterials(visitasFinalizadas)}
+      ${buildVisitas(visitasFinalizadasNumeradas)}
+      ${buildMaterials(visitasFinalizadasNumeradas)}
     `;
 
     const columnaEncuesta = `
       <h5 class="mt-4 mb-3"><i class="fas fa-walking text-primary mr-2"></i>Visitas finalizadas</h5>
-      ${buildVisitas(visitasFinalizadas)}
-      ${buildEncuesta(visitasFinalizadas)}
+      ${buildVisitas(visitasFinalizadasNumeradas)}
+      ${buildEncuesta(visitasFinalizadasNumeradas)}
     `;
 
     let contenido;
@@ -639,7 +648,7 @@
               ${buildVisitasIWConLocal(visitas)}
             </div>
             <div class="col-lg-4">
-              ${buildMiniMapCard(resumen, { iwRequiresLocal })}
+              ${buildMiniMapCard(resumen, { iwRequiresLocal, showLocalMarker })}
             </div>
           </div>`;
       } else {
@@ -652,7 +661,7 @@
               ${buildEncuesta(visitas)}
             </div>
             <div class="col-lg-4">
-              ${buildMiniMapCard(resumen, { iwRequiresLocal })}
+              ${buildMiniMapCard(resumen, { iwRequiresLocal, showLocalMarker })}
             </div>
           </div>`;
       }
@@ -678,11 +687,11 @@
         <div class="row">
           <div class="col-lg-8">
             ${columnaImplementacion}
-            ${mostrarEncuesta ? buildEncuesta(visitasFinalizadas) : ''}
+            ${mostrarEncuesta ? buildEncuesta(visitasFinalizadasNumeradas) : ''}
           </div>
           <div class="col-lg-4">
             ${columnaMapa}
-            ${mostrarImplementacion ? buildMaterials(visitasFinalizadas) : ''}
+            ${mostrarImplementacion ? buildMaterials(visitasFinalizadasNumeradas) : ''}
           </div>
         </div>`;
     }
