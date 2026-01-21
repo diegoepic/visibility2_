@@ -350,7 +350,7 @@ $conn->close();
           </div>
 
           <div class="form-group col-md-2">
-            <label for="estado">Estado</label>
+            <label for="estado">Estado de la campaña</label>
             <select class="form-control" id="estado" name="estado" onchange="this.form.submit();">
               <option value="1" <?= $filter_estado==1?'selected':'' ?>>En curso</option>
               <option value="3" <?= $filter_estado==3?'selected':'' ?>>Finalizadas</option>

@@ -11,6 +11,7 @@
   <link rel="stylesheet" type="text/css" href="../../assets/css/dataTable.css">
   <link rel='stylesheet' href='https://cdn.datatables.net/v/dt/jq-3.3.1/jszip-2.5.0/dt-1.10.20/b-1.6.1/b-colvis-1.6.1/b-html5-1.6.1/r-2.2.3/datatables.min.css'>
 </head>
+
 <body>
 <div class="container card-panel">
   <!-- Filtros -->
@@ -60,16 +61,16 @@
             <?php endif; ?>
 
             <div class="form-group col-md-3">
-              <label for="id_subdivision">SUB DIVISION</label>
+              <label for="id_subdivision">SUB DIVISIÓN</label>
               <select class="form-control" id="id_subdivision" name="id_subdivision" disabled>
                 <option value="0" selected>TODAS</option>
                 <option value="-1">SIN SUB DIVISION</option>
               </select>
-              <small class="help">FILTRA CAMPAÑAS POR SUB DIVISION (SI APLICA).</small>
+              <small class="help">FILTRA CAMPAÑAS POR SUB DIVISIÓN (SI APLICA).</small>
             </div>
 
             <div class="form-group col-md-2">
-              <label for="tipo_gestion">TIPO DE GESTION</label>
+              <label for="tipo_gestion">TIPO DE GESTIÓN</label>
               <select class="form-control" id="tipo_gestion" name="tipo_gestion">
                 <option value="0" <?= ($tipoCampana==0)?'selected':'' ?>>TODAS</option>
                 <option value="1" <?= ($tipoCampana==1)?'selected':'' ?>>CAMPAÑA</option>
@@ -120,7 +121,7 @@
 
           </div>
 
-          <!-- 🔹 Persistencia -->
+          <!--  Persistencia -->
           <input type="hidden" id="val_division" value="<?= (int)$filter_division ?>">
           <input type="hidden" id="val_subdivision" value="<?= (int)$filter_subdivision ?>">
           <input type="hidden" id="val_campana" value="<?= (int)$filter_campana ?>">
@@ -206,7 +207,7 @@
   </div>
 </div>
 
-<!-- 🪟 Modal de detalle 
+<!-- Modal de detalle 
 <div id="modalDetalle" class="modal-overlay" style="display:none;">
   <div class="modal-content" onclick="event.stopPropagation()">
     <span class="modal-close" onclick="cerrarModalDetalle()">&times;</span>
@@ -236,10 +237,8 @@
       <div class="modal-body" id="modalBodyDetalle">
       </div>
 
-      <!-- FOOTER -->
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
-      </div>
+
+
 
     </div>
   </div>
@@ -332,6 +331,7 @@ function actualizarVisibilidad() {
       select.add(opt);
     });
   }
+ 
 
   /* ============================================
      🧩 ELEMENTOS DEL FORMULARIO

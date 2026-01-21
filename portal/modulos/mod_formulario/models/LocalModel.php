@@ -191,26 +191,21 @@ class LocalModel
         $havingTypes = '';
 
         if ($filterEstado !== '') {
-            if ($filterEstado === 'sin_datos') {
-                $havingClauses[] = 'last.fecha_visita IS NULL';
+                if ($filterEstado === 'sin_datos') {
+                $havingClauses[] = 'last_fecha IS NULL';
             } else {
-                $havingClauses[] = 'CASE
-                  WHEN agg.has_impl_aud = 1 THEN \'implementado_auditado\'
-                  WHEN agg.has_impl_any = 1 THEN \'solo_implementado\'
-                  WHEN agg.has_audit    = 1 THEN \'solo_auditoria\'
-                  ELSE last.estado_gestion
-                END = ?';
+                $havingClauses[] = 'estado_agg = ?';
                 $havingParams[] = $filterEstado;
                 $havingTypes .= 's';
             }
         }
         if ($filterDesde) {
-            $havingClauses[] = 'last.fecha_visita >= ?';
+            $havingClauses[] = 'last_fecha >= ?';
             $havingParams[] = $filterDesde;
             $havingTypes .= 's';
         }
         if ($filterHasta) {
-            $havingClauses[] = 'last.fecha_visita <= ?';
+            $havingClauses[] = 'last_fecha <= ?';
             $havingParams[] = $filterHasta;
             $havingTypes .= 's';
         }

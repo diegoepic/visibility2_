@@ -1,180 +1,44 @@
 {
     "success": true,
-    "inserted": 38,
-    "failed": 22,
-    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1768920653.csv",
+    "inserted": 10,
+    "failed": 4,
+    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1769007113.csv",
     "successes": [
-        "L\u00ednea 2: Local 'RIVEROS FAUNDEZ RICARDO FERNANDO' (c\u00f3digo 56760) insertado.",
-        "L\u00ednea 3: Local 'QUIJADA RIVERA ELISA DEL CARMEN' (c\u00f3digo 7343) insertado.",
-        "L\u00ednea 4: Local 'FERNANDO ENRIQUE CABELLO ROJAS' (c\u00f3digo 74079) insertado.",
-        "L\u00ednea 5: Local 'VARGAS LUCERO LORENA DEL PILAR' (c\u00f3digo 4209) insertado.",
-        "L\u00ednea 8: Local 'ELIZABETH DEL CARMEN ESCOBEDO CORDOVA' (c\u00f3digo 14758) insertado.",
-        "L\u00ednea 9: Local 'RAMON ANTONIO FLORES SANTIS' (c\u00f3digo 68942) insertado.",
-        "L\u00ednea 10: Local 'CESPEDES CESPEDES EMILIO SALVADOR' (c\u00f3digo 24412) insertado.",
-        "L\u00ednea 11: Local 'COMERCIO TORRES SPA' (c\u00f3digo 99977) insertado.",
-        "L\u00ednea 16: Local 'ULLOA FIGUEROA CLAUDIA ESTER' (c\u00f3digo 24246) insertado.",
-        "L\u00ednea 17: Local 'SORIANO Y ESPINOZA SPA' (c\u00f3digo 93844) insertado.",
-        "L\u00ednea 21: Local 'AMADA MAGALI FERNANDEZ QUIROGA' (c\u00f3digo 94484) insertado.",
-        "L\u00ednea 22: Local 'MARIA MARGARITA MARTINEZ PAILAMILLA' (c\u00f3digo 90968) insertado.",
-        "L\u00ednea 23: Local 'SANTIS CATALAN SILVIA PATRICIA' (c\u00f3digo 11743) insertado.",
-        "L\u00ednea 24: Local 'MINIMARKET ANTONIA SPA' (c\u00f3digo 93406) insertado.",
-        "L\u00ednea 25: Local 'NUNEZ QUINTEROS CARLOS DIEGO' (c\u00f3digo 11744) insertado.",
-        "L\u00ednea 26: Local 'GUAJARDO PARRA NALDY DEL CARMEN' (c\u00f3digo 14846) insertado.",
-        "L\u00ednea 27: Local 'MARIA RAQUEL GUZMAN OROZCO' (c\u00f3digo 91368) insertado.",
-        "L\u00ednea 28: Local 'ROMAN RAMIREZ EVELYN PATRICIA' (c\u00f3digo 4023) insertado.",
-        "L\u00ednea 30: Local 'COMERCIAL GOMINOLA SPA' (c\u00f3digo 95810) insertado.",
-        "L\u00ednea 31: Local 'GONZALEZ GONZALEZ LETICIA ADRIANA' (c\u00f3digo 4177) insertado.",
-        "L\u00ednea 32: Local 'VERD. FERNANDO FEDERICO RODRIGUZ GONZALEZ EIRL' (c\u00f3digo 74421) insertado.",
-        "L\u00ednea 41: Local 'SOC.COMERCIAL LOS FLAMENCOS SPA' (c\u00f3digo SA123654) insertado.",
-        "L\u00ednea 43: Local 'CANTILLANA LOYOLA ELSA DE LAS' (c\u00f3digo 15876) insertado.",
-        "L\u00ednea 45: Local 'CARLOS ALBERTO MENA HUERTA' (c\u00f3digo 91618) insertado.",
-        "L\u00ednea 46: Local 'PRADES TERREU ARELY' (c\u00f3digo 14800) insertado.",
-        "L\u00ednea 48: Local 'ALMACEN PATRICIO NAVARRETE GARRIDO E.I.R.L' (c\u00f3digo 75338) insertado.",
-        "L\u00ednea 49: Local 'MANUEL VALLADARES TOLEDO' (c\u00f3digo 75732) insertado.",
-        "L\u00ednea 51: Local 'MAGIC PRINCESS SPA' (c\u00f3digo 97905) insertado.",
-        "L\u00ednea 52: Local 'TIENDAS ALMENDRA SPA' (c\u00f3digo 68802) insertado.",
-        "L\u00ednea 53: Local 'MARIN SEPULVEDA FERNANDO ANTONIO' (c\u00f3digo 3900) insertado.",
-        "L\u00ednea 54: Local 'BAZAR MARKET GOMEZ LOZANO CECIL CAROLINA E.I.R.L.' (c\u00f3digo 4057) insertado.",
-        "L\u00ednea 55: Local 'CANTILLANA GRACIELA' (c\u00f3digo 4073) insertado.",
-        "L\u00ednea 56: Local 'ECOEMPORIO SHANTI SPA' (c\u00f3digo 75000) insertado.",
-        "L\u00ednea 57: Local 'CAFETERIA CHRISTIAN MANUEL FIGUEROA SOTO E.I.R.L.' (c\u00f3digo 90418) insertado.",
-        "L\u00ednea 58: Local 'PANADERIA Y PASTELERIA IVETTE DEL' (c\u00f3digo 24704) insertado.",
-        "L\u00ednea 59: Local 'COMERCIAL TADEVA LTDA' (c\u00f3digo 66971) insertado.",
-        "L\u00ednea 60: Local 'COMERCIALIZADORA GROUP FRIENDS LIMITADA' (c\u00f3digo 93703) insertado.",
-        "L\u00ednea 61: Local 'COMIDA AL PASO AMASANDERIA JENNIFER ARAVENA EIRL' (c\u00f3digo SA123655) insertado."
+        "L\u00ednea 6: Local 'ANA ESTER VERGARA ULLOA' (c\u00f3digo 605044) insertado.",
+        "L\u00ednea 7: Local 'RAQUEL TAPIA' (c\u00f3digo 614313) insertado.",
+        "L\u00ednea 8: Local 'ANDREA CASTILLO' (c\u00f3digo 750352) insertado.",
+        "L\u00ednea 9: Local 'MARIA NILO' (c\u00f3digo 5252503) insertado.",
+        "L\u00ednea 10: Local 'WILLIANS SEGOVIA' (c\u00f3digo 3429109) insertado.",
+        "L\u00ednea 11: Local 'ANDRES SANTANDER' (c\u00f3digo 3111991) insertado.",
+        "L\u00ednea 12: Local 'SILVIA MILLA' (c\u00f3digo 7359724) insertado.",
+        "L\u00ednea 13: Local 'ROXANA RUIZ' (c\u00f3digo 118601) insertado.",
+        "L\u00ednea 14: Local 'LETICIA CASTRO' (c\u00f3digo 92161) insertado.",
+        "L\u00ednea 15: Local 'HUMBERTO ARAYA' (c\u00f3digo 3230422) insertado."
     ],
     "failures": [
         {
-            "line": 6,
-            "codigo": "39485",
-            "nombre": "PIZARRO PIZARRO KHAREM MARINA",
-            "reason": "El c\u00f3digo de local '39485' ya existe (l\u00ednea 6)."
+            "line": 2,
+            "codigo": "4483955",
+            "nombre": "YUBICA BONILLA GUERRERO",
+            "reason": "El c\u00f3digo de local '4483955' ya existe (l\u00ednea 2)."
         },
         {
-            "line": 7,
-            "codigo": "11974",
-            "nombre": "MINIMARKET ULI ANTO MAGDA SOFI Y FAMILIA",
-            "reason": "El c\u00f3digo de local '11974' ya existe (l\u00ednea 7)."
+            "line": 3,
+            "codigo": "3498539",
+            "nombre": "MARISOL NU\u00d1EZ GARCIA",
+            "reason": "El c\u00f3digo de local '3498539' ya existe (l\u00ednea 3)."
         },
         {
-            "line": 12,
-            "codigo": "11197",
-            "nombre": "ELIZABETH DEL CARMEN ALARCON ESCOBAR",
-            "reason": "El c\u00f3digo de local '11197' ya existe (l\u00ednea 12)."
+            "line": 4,
+            "codigo": "1211522",
+            "nombre": "LOS ALMENDROS LIMITADA",
+            "reason": "El c\u00f3digo de local '1211522' ya existe (l\u00ednea 4)."
         },
         {
-            "line": 13,
-            "codigo": "3859",
-            "nombre": "TORRES VENEGAS XIMENA LORETO",
-            "reason": "El c\u00f3digo de local '3859' ya existe (l\u00ednea 13)."
-        },
-        {
-            "line": 14,
-            "codigo": "10615",
-            "nombre": "PENALOZA MEZA JUAN",
-            "reason": "El c\u00f3digo de local '10615' ya existe (l\u00ednea 14)."
-        },
-        {
-            "line": 15,
-            "codigo": "3922",
-            "nombre": "SABATINI CABRERA KATHERINE ANDREA",
-            "reason": "El c\u00f3digo de local '3922' ya existe (l\u00ednea 15)."
-        },
-        {
-            "line": 18,
-            "codigo": "89714",
-            "nombre": "SOCIEDAD DE INVERSIONES DEPORTIVAS PATCHA LIMITADA",
-            "reason": "El c\u00f3digo de local '89714' ya existe (l\u00ednea 18)."
-        },
-        {
-            "line": 19,
-            "codigo": "69700",
-            "nombre": "CARLOS RAFAEL MUNOZ OLGUIN",
-            "reason": "El c\u00f3digo de local '69700' ya existe (l\u00ednea 19)."
-        },
-        {
-            "line": 20,
-            "codigo": "4162",
-            "nombre": "ACEVEDO MENARES PAOLA ANDREA",
-            "reason": "El c\u00f3digo de local '4162' ya existe (l\u00ednea 20)."
-        },
-        {
-            "line": 29,
-            "codigo": "9349",
-            "nombre": "SANCHEZ SANCHEZ MAGALI BIENVENIDA",
-            "reason": "El c\u00f3digo de local '9349' ya existe (l\u00ednea 29)."
-        },
-        {
-            "line": 33,
-            "codigo": "14734",
-            "nombre": "LAVADIE DIAZ VALERIA DALY",
-            "reason": "El c\u00f3digo de local '14734' ya existe (l\u00ednea 33)."
-        },
-        {
-            "line": 34,
-            "codigo": "4240",
-            "nombre": "ALEJANDRA ESPINOZA LTDA",
-            "reason": "El c\u00f3digo de local '4240' ya existe (l\u00ednea 34)."
-        },
-        {
-            "line": 35,
-            "codigo": "12182",
-            "nombre": "CODOCEDO GUTIERREZ ESTER PATRICIA",
-            "reason": "El c\u00f3digo de local '12182' ya existe (l\u00ednea 35)."
-        },
-        {
-            "line": 36,
-            "codigo": "14765",
-            "nombre": "HERRERA BENAVIDES JAIME ENRIQUE",
-            "reason": "El c\u00f3digo de local '14765' ya existe (l\u00ednea 36)."
-        },
-        {
-            "line": 37,
-            "codigo": "88813",
-            "nombre": "SERGIO SEBASTIAN JARA RIVERA",
-            "reason": "El c\u00f3digo de local '88813' ya existe (l\u00ednea 37)."
-        },
-        {
-            "line": 38,
-            "codigo": "3810",
-            "nombre": "GALVEZ VALENZUELA BLANCA LUISA",
-            "reason": "El c\u00f3digo de local '3810' ya existe (l\u00ednea 38)."
-        },
-        {
-            "line": 39,
-            "codigo": "23713",
-            "nombre": "PANIFICADORA LA MARITIMA LIMITADA",
-            "reason": "El c\u00f3digo de local '23713' ya existe (l\u00ednea 39)."
-        },
-        {
-            "line": 40,
-            "codigo": "66798",
-            "nombre": "BARRIOS SALGADO MARGARETH JULIE",
-            "reason": "El c\u00f3digo de local '66798' ya existe (l\u00ednea 40)."
-        },
-        {
-            "line": 42,
-            "codigo": "14906",
-            "nombre": "PENAILILLO VILCHES AIDA DEL CARME",
-            "reason": "El c\u00f3digo de local '14906' ya existe (l\u00ednea 42)."
-        },
-        {
-            "line": 44,
-            "codigo": "24567",
-            "nombre": "SUPERMERCADO LOS MAITENES SPA",
-            "reason": "El c\u00f3digo de local '24567' ya existe (l\u00ednea 44)."
-        },
-        {
-            "line": 47,
-            "codigo": "70361",
-            "nombre": "SOCIEDAD COMERCIAL SANTIS MOYA Y CIA LTDA",
-            "reason": "El c\u00f3digo de local '70361' ya existe (l\u00ednea 47)."
-        },
-        {
-            "line": 50,
-            "codigo": "86200",
-            "nombre": "ALOJAMIENTO Y DE SERVICIO DE COMIDAS ERIC GAETE EIRL",
-            "reason": "El c\u00f3digo de local '86200' ya existe (l\u00ednea 50)."
+            "line": 5,
+            "codigo": "7357083",
+            "nombre": "FAMA E HIJAS",
+            "reason": "El c\u00f3digo de local '7357083' ya existe (l\u00ednea 5)."
         }
     ]
 }

@@ -5,16 +5,16 @@ Array
             [name] => CARGA DE LOCALES.csv
             [full_path] => CARGA DE LOCALES.csv
             [type] => text/csv
-            [tmp_name] => /tmp/phpPr27AK
+            [tmp_name] => /tmp/phpRkyYeG
             [error] => 0
-            [size] => 10937
+            [size] => 2452
         )
 
 )
 
 Array
 (
-    [csrf_token] => 2e60cd3766d7f816a37558287b4064b4823e311a3721c68accf21e592eccf420
+    [csrf_token] => 6c0570222c75661097d54f92cb27b8f43e6ff6fd698fafed4e6d83902fc48b8a
     [empresa_id] => 103
     [division_id] => 13
 )

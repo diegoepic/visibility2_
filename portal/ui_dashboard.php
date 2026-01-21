@@ -119,11 +119,16 @@ $sql_ipt = "
         DATE(f.fechaTermino) AS fechaTermino,
         e.nombre AS nombre_empresa,
         COUNT(DISTINCT fq.id_local) AS locales_programados,
-        COUNT(DISTINCT CASE 
+        /*COUNT(DISTINCT CASE 
              WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','en proceso','solo_retirado','cancelado')
              THEN CONCAT(l.codigo, fq.fechaVisita)
              END
-        ) AS locales_visitados,
+        ) AS locales_visitados,*/
+        COUNT(DISTINCT CASE 
+                     WHEN fq.fechaVisita <> '0000-00-00 00:00:00'
+                     THEN CONCAT(l.codigo, fq.fechaVisita)
+                     END
+                ) AS locales_visitados,        
         COUNT(DISTINCT CASE
              WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','solo_retirado')
              THEN CONCAT(l.codigo, fq.fechaVisita)
@@ -182,7 +187,7 @@ SELECT
     END AS locales_programados,
 
     /* ---- VISITADOS ---- */
-    CASE 
+    /*CASE 
         WHEN f.modalidad = 'solo_auditoria'
             THEN COUNT(
                 CASE
@@ -209,7 +214,23 @@ SELECT
                     THEN l.codigo
                 END
             )
-    END AS locales_visitados,
+    END AS locales_visitados,*/
+    
+    CASE 
+            WHEN f.modalidad = 'solo_auditoria'
+                THEN COUNT(
+                    CASE
+                        WHEN fq.fechaVisita <> '0000-00-00 00:00:00'
+                        THEN fq.id
+                    END
+                )
+            ELSE COUNT(DISTINCT
+                    CASE
+                        WHEN fq.fechaVisita <> '0000-00-00 00:00:00'
+                        THEN l.codigo
+                    END
+                )
+        END AS locales_visitados,    
 
     /* ---- IMPLEMENTADOS ---- */
     CASE 
