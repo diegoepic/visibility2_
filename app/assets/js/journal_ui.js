@@ -268,7 +268,7 @@
   function chipForStatus(st){
     if (st === 'success')      return '<span class="jr-chip jr-chip--ok">Subida OK</span>';
     if (st === 'running')      return '<span class="jr-chip jr-chip--run">Enviando</span>';
-    if (st === 'blocked_auth') return '<span class="jr-chip jr-chip--block">Requiere login</span>';
+    if (st === 'blocked_auth') return '<span class="jr-chip jr-chip--block">Requiere reloguear</span>';
     if (st === 'blocked_csrf') return '<span class="jr-chip jr-chip--block">CSRF inválido</span>';
     if (st === 'error')        return '<span class="jr-chip jr-chip--err">Error terminal</span>';
     if (st === 'canceled')     return '<span class="jr-chip jr-chip--cancel">Cancelado</span>';

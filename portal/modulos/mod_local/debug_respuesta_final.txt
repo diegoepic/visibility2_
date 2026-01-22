@@ -1,44 +1,49 @@
 {
     "success": true,
-    "inserted": 10,
-    "failed": 4,
-    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1769007113.csv",
+    "inserted": 3,
+    "failed": 6,
+    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1769102783.csv",
     "successes": [
-        "L\u00ednea 6: Local 'ANA ESTER VERGARA ULLOA' (c\u00f3digo 605044) insertado.",
-        "L\u00ednea 7: Local 'RAQUEL TAPIA' (c\u00f3digo 614313) insertado.",
-        "L\u00ednea 8: Local 'ANDREA CASTILLO' (c\u00f3digo 750352) insertado.",
-        "L\u00ednea 9: Local 'MARIA NILO' (c\u00f3digo 5252503) insertado.",
-        "L\u00ednea 10: Local 'WILLIANS SEGOVIA' (c\u00f3digo 3429109) insertado.",
-        "L\u00ednea 11: Local 'ANDRES SANTANDER' (c\u00f3digo 3111991) insertado.",
-        "L\u00ednea 12: Local 'SILVIA MILLA' (c\u00f3digo 7359724) insertado.",
-        "L\u00ednea 13: Local 'ROXANA RUIZ' (c\u00f3digo 118601) insertado.",
-        "L\u00ednea 14: Local 'LETICIA CASTRO' (c\u00f3digo 92161) insertado.",
-        "L\u00ednea 15: Local 'HUMBERTO ARAYA' (c\u00f3digo 3230422) insertado."
+        "L\u00ednea 5: Local 'SOCIEDAD LOS TABILOS' (c\u00f3digo 6896693) insertado.",
+        "L\u00ednea 7: Local 'GILBERTO VERGARA RUBEN' (c\u00f3digo 4344528) insertado.",
+        "L\u00ednea 8: Local 'MARIA SANTANDER' (c\u00f3digo 2118817) insertado."
     ],
     "failures": [
         {
             "line": 2,
-            "codigo": "4483955",
-            "nombre": "YUBICA BONILLA GUERRERO",
-            "reason": "El c\u00f3digo de local '4483955' ya existe (l\u00ednea 2)."
+            "codigo": "6041038",
+            "nombre": "JAMOUS JEHAD",
+            "reason": "El c\u00f3digo de local '6041038' ya existe (l\u00ednea 2)."
         },
         {
             "line": 3,
-            "codigo": "3498539",
-            "nombre": "MARISOL NU\u00d1EZ GARCIA",
-            "reason": "El c\u00f3digo de local '3498539' ya existe (l\u00ednea 3)."
+            "codigo": "170947",
+            "nombre": "AMADA LOPEZ",
+            "reason": "El c\u00f3digo de local '170947' ya existe (l\u00ednea 3)."
         },
         {
             "line": 4,
-            "codigo": "1211522",
-            "nombre": "LOS ALMENDROS LIMITADA",
-            "reason": "El c\u00f3digo de local '1211522' ya existe (l\u00ednea 4)."
+            "codigo": "6184168",
+            "nombre": "VERONICA GONZALEZ",
+            "reason": "El c\u00f3digo de local '6184168' ya existe (l\u00ednea 4)."
         },
         {
-            "line": 5,
-            "codigo": "7357083",
-            "nombre": "FAMA E HIJAS",
-            "reason": "El c\u00f3digo de local '7357083' ya existe (l\u00ednea 5)."
+            "line": 6,
+            "codigo": "6150343",
+            "nombre": "MINIMARKET NINO SPA",
+            "reason": "El c\u00f3digo de local '6150343' ya existe (l\u00ednea 6)."
+        },
+        {
+            "line": 9,
+            "codigo": "172634",
+            "nombre": "SOLEDAD HEVIA",
+            "reason": "El c\u00f3digo de local '172634' ya existe (l\u00ednea 9)."
+        },
+        {
+            "line": 10,
+            "codigo": "6929997",
+            "nombre": "ELIAS MORALES",
+            "reason": "El c\u00f3digo de local '6929997' ya existe (l\u00ednea 10)."
         }
     ]
 }

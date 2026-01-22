@@ -13,6 +13,103 @@
   const AUTH_RECOVERY_INTERVAL_MS = 10 * 1000;
   const CSRF_REFRESH_INTERVAL_MS = 10 * 60 * 1000; // Refrescar CSRF cada 10 minutos proactivamente
   const MAX_RESPONSE_SNIPPET = 500;
+  const LOCK_LEASE_MS = 30 * 1000; // Lease de 30 segundos para locks cross-tab
+  const LOCK_CHANNEL_NAME = 'v2-queue-locks';
+
+  // --------------------------------------------------------------------------------
+  // Sistema de Locks Cross-Tab para evitar duplicados
+  // --------------------------------------------------------------------------------
+  const CrossTabLock = {
+    _locks: new Map(),
+    _channel: null,
+    _tabId: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+
+    init() {
+      if (this._channel) return;
+      try {
+        if ('BroadcastChannel' in window) {
+          this._channel = new BroadcastChannel(LOCK_CHANNEL_NAME);
+          this._channel.onmessage = (e) => this._handleMessage(e.data);
+        }
+      } catch(_) {}
+      // Limpiar locks expirados cada 10 segundos
+      setInterval(() => this._cleanup(), 10000);
+    },
+
+    _handleMessage(msg) {
+      if (!msg || msg.tabId === this._tabId) return;
+      if (msg.type === 'lock_acquired') {
+        this._locks.set(msg.jobId, { tabId: msg.tabId, expires: msg.expires });
+      } else if (msg.type === 'lock_released') {
+        const lock = this._locks.get(msg.jobId);
+        if (lock && lock.tabId === msg.tabId) {
+          this._locks.delete(msg.jobId);
+        }
+      }
+    },
+
+    _cleanup() {
+      const now = Date.now();
+      for (const [jobId, lock] of this._locks.entries()) {
+        if (lock.expires < now) {
+          this._locks.delete(jobId);
+        }
+      }
+    },
+
+    _broadcast(msg) {
+      try {
+        if (this._channel) {
+          this._channel.postMessage(msg);
+        }
+      } catch(_) {}
+    },
+
+    // Intenta adquirir lock. Retorna true si se obtuvo, false si otro tab lo tiene
+    tryAcquire(jobId) {
+      const now = Date.now();
+      const existing = this._locks.get(jobId);
+
+      // Si existe un lock válido de otra pestaña, no podemos adquirir
+      if (existing && existing.tabId !== this._tabId && existing.expires > now) {
+        return false;
+      }
+
+      const expires = now + LOCK_LEASE_MS;
+      this._locks.set(jobId, { tabId: this._tabId, expires });
+      this._broadcast({ type: 'lock_acquired', jobId, tabId: this._tabId, expires });
+      return true;
+    },
+
+    // Libera el lock de un job
+    release(jobId) {
+      const lock = this._locks.get(jobId);
+      if (lock && lock.tabId === this._tabId) {
+        this._locks.delete(jobId);
+        this._broadcast({ type: 'lock_released', jobId, tabId: this._tabId });
+      }
+    },
+
+    // Renueva el lease de un lock existente
+    renew(jobId) {
+      const lock = this._locks.get(jobId);
+      if (lock && lock.tabId === this._tabId) {
+        lock.expires = Date.now() + LOCK_LEASE_MS;
+        this._broadcast({ type: 'lock_acquired', jobId, tabId: this._tabId, expires: lock.expires });
+        return true;
+      }
+      return false;
+    },
+
+    // Verifica si tenemos el lock
+    hasLock(jobId) {
+      const lock = this._locks.get(jobId);
+      return lock && lock.tabId === this._tabId && lock.expires > Date.now();
+    }
+  };
+
+  // Inicializar sistema de locks
+  CrossTabLock.init();
 
   // --------------------------------------------------------------------------------
   // Event bus (para UI Avance)
@@ -65,18 +162,46 @@
         },
         signal
       }), 6000, 'E_CSRF_TIMEOUT');
-      
-      
-      if (r.status === 401) return { ok:false, blocked:'auth' };
+
+
+      if (r.status === 401) {
+        queueState.csrfStale = true;
+        queueState.csrfRefreshAttempts++;
+        return { ok:false, blocked:'auth' };
+      }
       const parsed = await parseResponseSafe(r);
       const js = parsed.json;
       if (js && js.csrf_token) {
         window.CSRF_TOKEN = js.csrf_token;
+        // Reset estado de CSRF
+        queueState.csrfStale = false;
+        queueState.lastCsrfRefresh = Date.now();
+        queueState.csrfRefreshAttempts = 0;
         return { ok:true, token: js.csrf_token };
       }
-      if (parsed.isHtml) return { ok:false, blocked:'auth' };
-    } catch(_) {}
+      if (parsed.isHtml) {
+        queueState.csrfStale = true;
+        queueState.csrfRefreshAttempts++;
+        return { ok:false, blocked:'auth' };
+      }
+    } catch(err) {
+      // Marcar CSRF como stale si falla el refresh
+      queueState.csrfStale = true;
+      queueState.csrfRefreshAttempts++;
+      console.warn('[Queue] CSRF refresh falló:', err.message || err);
+    }
     return { ok:false };
+  }
+
+  // Verificar si necesitamos refrescar CSRF antes de un POST
+  function needsCsrfRefresh() {
+    // Si está marcado como stale
+    if (queueState.csrfStale) return true;
+    // Si no tenemos token
+    if (!window.CSRF_TOKEN) return true;
+    // Si el último refresh fue hace más de 9 minutos (antes del intervalo de 10)
+    if (Date.now() - queueState.lastCsrfRefresh > 9 * 60 * 1000) return true;
+    return false;
   }
 
    async function heartbeat(){
@@ -140,9 +265,16 @@
 
     const timeoutMs = typeof task.timeoutMs === 'number' ? task.timeoutMs : 20000;
 
-    // Refresca CSRF si es necesario
-    if (task.sendCSRF !== false) {
-      await refreshCSRF();
+    // Refresca CSRF si es necesario o está marcado como stale
+    if (task.sendCSRF !== false && needsCsrfRefresh()) {
+      const csrfResult = await refreshCSRF();
+      // Si el CSRF falla y hay demasiados intentos, abortar
+      if (!csrfResult.ok && queueState.csrfRefreshAttempts >= 3) {
+        const err = new Error('CSRF refresh falló múltiples veces');
+        err.status = 419;
+        err.csrfFailed = true;
+        throw err;
+      }
     }
 
     let url = task.url;
@@ -377,12 +509,39 @@
     };
   }
 
+  // Configuración de reintentos por tipo de error
+  const RETRY_CONFIG = {
+    'NETWORK':       { maxAttempts: 12, baseDelayMs: 1000, maxDelayMs: 60000 },
+    'TIMEOUT':       { maxAttempts: 10, baseDelayMs: 2000, maxDelayMs: 120000 },
+    'HTTP_502':      { maxAttempts: 8,  baseDelayMs: 3000, maxDelayMs: 180000 },
+    'HTTP_503':      { maxAttempts: 8,  baseDelayMs: 5000, maxDelayMs: 300000 },
+    'HTTP_504':      { maxAttempts: 8,  baseDelayMs: 5000, maxDelayMs: 300000 },
+    'HTTP_500':      { maxAttempts: 6,  baseDelayMs: 5000, maxDelayMs: 300000 },
+    'HTTP_408':      { maxAttempts: 8,  baseDelayMs: 2000, maxDelayMs: 60000 },
+    'HTTP_429':      { maxAttempts: 6,  baseDelayMs: 10000, maxDelayMs: 300000 },
+    'LOGICAL_ERROR': { maxAttempts: 3,  baseDelayMs: 5000, maxDelayMs: 30000 },
+    'DUPLICATE':     { maxAttempts: 1,  baseDelayMs: 0, maxDelayMs: 0 }, // No reintentar, es éxito lógico
+    'DEFAULT':       { maxAttempts: 8,  baseDelayMs: 2000, maxDelayMs: 300000 }
+  };
+
+  function getRetryConfig(errorCode) {
+    // Buscar configuración específica o usar default
+    if (RETRY_CONFIG[errorCode]) return RETRY_CONFIG[errorCode];
+    // Para códigos HTTP genéricos, buscar por prefijo
+    if (errorCode && errorCode.startsWith('HTTP_')) {
+      const status = parseInt(errorCode.replace('HTTP_', ''), 10);
+      if (status >= 500) return RETRY_CONFIG['HTTP_500'];
+    }
+    return RETRY_CONFIG['DEFAULT'];
+  }
+
   function classifyFailure({ response, parsed, error }){
     if (error && isNetworkishError(error)) {
-      return { code: 'NETWORK', retryable: true };
+      return { code: 'NETWORK', retryable: true, retryConfig: RETRY_CONFIG['NETWORK'] };
     }
     if (error && error.name === 'AbortError') {
-      return { code: error.timeoutCode || 'TIMEOUT', retryable: true };
+      const code = error.timeoutCode || 'TIMEOUT';
+      return { code, retryable: true, retryConfig: RETRY_CONFIG['TIMEOUT'] };
     }
     if (response) {
       const status = response.status;
@@ -399,17 +558,43 @@
         return { code: 'FORBIDDEN', retryable: false };
       }
 
+      // 409 = Conflict (idempotencia duplicada) - tratar como éxito lógico
+      if (status === 409) {
+        return { code: 'DUPLICATE', retryable: false, success: true, retryConfig: RETRY_CONFIG['DUPLICATE'] };
+      }
+
       if (status === 419) {
         return { code: 'CSRF_INVALID', retryable: false, blocked: 'csrf' };
       }
-      if ([408, 429].includes(status) || status >= 500) {
-        return { code: `HTTP_${status}`, retryable: true };
+
+      // 408 Request Timeout
+      if (status === 408) {
+        return { code: 'HTTP_408', retryable: true, retryConfig: RETRY_CONFIG['HTTP_408'] };
       }
+
+      // 429 Too Many Requests - backoff más largo
+      if (status === 429) {
+        return { code: 'HTTP_429', retryable: true, retryConfig: RETRY_CONFIG['HTTP_429'] };
+      }
+
+      // 502/503/504 - errores de gateway, reintentar con backoff
+      if ([502, 503, 504].includes(status)) {
+        const code = `HTTP_${status}`;
+        return { code, retryable: true, retryConfig: RETRY_CONFIG[code] || RETRY_CONFIG['HTTP_502'] };
+      }
+
+      // Otros 5xx
+      if (status >= 500) {
+        return { code: `HTTP_${status}`, retryable: true, retryConfig: RETRY_CONFIG['HTTP_500'] };
+      }
+
+      // 4xx genéricos (excepto los ya manejados)
       if (status >= 400) {
         return { code: `HTTP_${status}`, retryable: false };
       }
+
       if (!isLogicalSuccess(parsed && parsed.json)) {
-        return { code: 'LOGICAL_ERROR', retryable: false };
+        return { code: 'LOGICAL_ERROR', retryable: false, retryConfig: RETRY_CONFIG['LOGICAL_ERROR'] };
       }
     }
     return { code: 'UNKNOWN', retryable: false };
@@ -511,7 +696,10 @@
   const queueState = {
     blocked: null,
     blockedAt: null,
-    authRecoveryTimer: null
+    authRecoveryTimer: null,
+    csrfStale: false,         // Flag para indicar que el CSRF necesita refresh
+    lastCsrfRefresh: 0,       // Timestamp del último refresh exitoso
+    csrfRefreshAttempts: 0    // Contador de intentos fallidos
   };
   let _drainPromise = null;
 
@@ -522,6 +710,13 @@
       const job = AppDB.normalizeJob ? AppDB.normalizeJob(raw) : raw;
       const startedAt = job.startedAt || job.updatedAt || job.createdAt || 0;
       if (startedAt && now - startedAt > STALE_RUNNING_MS) {
+        // PATCH: Verificar si otra pestaña tiene el lock antes de re-encolar
+        // Si no podemos adquirir el lock, otra pestaña está procesando este job
+        if (!CrossTabLock.tryAcquire(job.id)) {
+          console.log('[Queue] Job', job.id, 'tiene lock activo en otra pestaña, no re-encolar');
+          return;
+        }
+
         const attempts = (job.attempts || 0) + 1;
         const lastError = buildLastError({
           code: 'STALE_RUNNING',
@@ -539,6 +734,9 @@
         });
         QueueEvents.emit('queue:dispatch:error', { job, error: 'STALE_RUNNING' });
         jr('onError', job, 'STALE_RUNNING');
+
+        // Liberar lock después de re-encolar
+        CrossTabLock.release(job.id);
       }
     }));
   }
@@ -608,10 +806,18 @@
     }
   }
 
-  function computeBackoff(attempts){
-    const base = Math.min(5 * 60 * 1000, 2000 * Math.pow(2, attempts));
-    const jitter = Math.floor(Math.random() * 750);
+  function computeBackoff(attempts, errorCode){
+    const config = getRetryConfig(errorCode);
+    const baseDelay = config.baseDelayMs || 2000;
+    const maxDelay = config.maxDelayMs || 300000;
+    const base = Math.min(maxDelay, baseDelay * Math.pow(2, attempts));
+    const jitter = Math.floor(Math.random() * Math.min(750, base * 0.1));
     return base + jitter;
+  }
+
+  function getMaxAttemptsForError(errorCode, defaultMax) {
+    const config = getRetryConfig(errorCode);
+    return config.maxAttempts || defaultMax || 8;
   }
 
   async function resetQueuedBackoff(reason){
@@ -664,6 +870,12 @@
           if (nextTryAt && nextTryAt > now) continue;
           if (t.dependsOn && !CompletedDeps.has(t.dependsOn)) continue;
 
+          // PATCH: Adquirir lock cross-tab antes de procesar
+          if (!CrossTabLock.tryAcquire(t.id)) {
+            console.log('[Queue] Job', t.id, 'está siendo procesado por otra pestaña');
+            continue;
+          }
+
           t.meta = t.meta || inferMetaFromTask(t);
 
           const attempts = (t.attempts || 0) + 1;
@@ -679,6 +891,7 @@
           // Si el job ya no existe, continuar con el siguiente
           if (updateResult && updateResult.__notFound) {
             console.warn('[Queue] Job desapareció durante drain:', t.id);
+            CrossTabLock.release(t.id);
             continue;
           }
 
@@ -688,6 +901,7 @@
           try {
             const result = await processTask(t);
             await AppDB.remove(t.id);
+            CrossTabLock.release(t.id); // Liberar lock tras éxito
             QueueEvents.emit('queue:dispatch:success', { job: t, responseStatus: result.status || 200, response: result.data });
             jr('onSuccess', t, result.data, result.status);
             window.dispatchEvent(new CustomEvent('queue:done', { detail: { id: t.id, type: t.type, response: result.data } }));
@@ -695,11 +909,23 @@
             const parsed = err && err.parsed ? err.parsed : null;
             const responseStub = err && err.status ? { status: err.status } : null;
             const failure = classifyFailure({ response: responseStub, parsed, error: err });
-            const maxAttempts = t.maxAttempts || 8;
+
+            // Si es duplicado (409), tratar como éxito
+            if (failure.success && failure.code === 'DUPLICATE') {
+              console.log('[Queue] Job', t.id, 'es duplicado (409), marcando como completado');
+              await AppDB.remove(t.id);
+              CrossTabLock.release(t.id);
+              QueueEvents.emit('queue:dispatch:success', { job: t, responseStatus: 409, response: { duplicate: true } });
+              jr('onSuccess', t, { duplicate: true }, 409);
+              continue;
+            }
+
+            // Usar maxAttempts específico para el tipo de error
+            const maxAttempts = getMaxAttemptsForError(failure.code, t.maxAttempts || 8);
             const exhausted = attempts >= maxAttempts;
             const finalRetryable = failure.retryable && !exhausted;
             const status = failure.blocked === 'auth' ? 'blocked_auth' : failure.blocked === 'csrf' ? 'blocked_csrf' : finalRetryable ? 'queued' : 'error';
-            const wait = finalRetryable ? computeBackoff(attempts) : 0;
+            const wait = finalRetryable ? computeBackoff(attempts, failure.code) : 0;
             const lastError = buildLastError({
               code: failure.code,
               message: err && err.message ? err.message : 'Error',
@@ -715,6 +941,7 @@
               lastError,
               updatedAt: now
             });
+            CrossTabLock.release(t.id); // Liberar lock tras error
             t.status = status;
             t.attempts = attempts;
             t.nextTryAt = status === 'queued' ? now + wait : null;
@@ -1106,10 +1333,15 @@
     computeBackoff,
     parseResponseSafe,
     recoverStaleRunning,
-    isDraining: () => !!_drainPromise
+    isDraining: () => !!_drainPromise,
+    getRetryConfig,
+    getMaxAttemptsForError,
+    needsCsrfRefresh,
+    CrossTabLock
   };
   window.Queue.CompletedDeps = CompletedDeps;
   window.Queue.LocalByGuid = LocalByGuid;
+  window.Queue.CrossTabLock = CrossTabLock;
 
   // --------------------------------------------------------------------------------
   // Fallback de AppDB (IndexedDB) por si no viene provisto en assets/js/db.js

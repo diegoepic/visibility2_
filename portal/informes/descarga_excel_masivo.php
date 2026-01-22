@@ -122,7 +122,9 @@ function getCampaignData($idForm) {
             f.fechaInicio,
             f.fechaTermino,
             f.modalidad AS modalidad,
+            f.tipo,
             e.nombre AS nombre_empresa,
+            de.nombre AS nombre_division,
             COUNT(DISTINCT l.codigo) AS locales_programados,
             SUM(
                 CASE WHEN fq.pregunta IN (
@@ -137,10 +139,11 @@ function getCampaignData($idForm) {
             ) AS locales_implementados
         FROM formulario f
         INNER JOIN empresa e             ON e.id = f.id_empresa
+        LEFT JOIN division_empresa de    ON de.id = f.id_division
         INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
         INNER JOIN local l               ON l.id = fq.id_local
         WHERE f.id = ?
-        GROUP BY f.id, f.nombre, f.fechaInicio, f.fechaTermino, e.nombre
+        GROUP BY f.id, f.nombre, f.fechaInicio, f.fechaTermino, f.modalidad, f.tipo, e.nombre, de.nombre
     ";
     $stmt = $conn->prepare($sql);
     $stmt->bind_param('i', $idForm);
@@ -186,15 +189,34 @@ function getLocalesDetails($idForm) {
                 ELSE 'NO VISITADO'
             END                                AS ESTADO_VISTA,
             CASE
-                WHEN IFNULL(fq.valor, 0) >= 1 THEN 'IMPLEMENTADO'
-                WHEN IFNULL(fq.valor, 0) = 0 THEN 'NO IMPLEMENTADO'
-                WHEN LOWER(fq.pregunta) = 'solo_implementado'      THEN 'IMPLEMENTADO'
-                WHEN LOWER(fq.pregunta) = 'solo_auditado'          THEN 'AUDITORIA'
-                WHEN LOWER(fq.pregunta) = 'solo_auditoria'         THEN 'AUDITORIA'
-                WHEN LOWER(fq.pregunta) = 'retiro'                 THEN 'RETIRO'
-                WHEN LOWER(fq.pregunta) = 'entrega'                THEN 'ENTREGA'
-                WHEN LOWER(fq.pregunta) = 'implementado_auditado'  THEN 'IMPLEMENTADO/AUDITADO'
-                ELSE 'NO IMPLEMENTADO'
+                WHEN f.modalidad = 'retiro' THEN
+                    CASE
+                        WHEN IFNULL(fq.valor, 0) >= 1 THEN 'RETIRADO'
+                        WHEN IFNULL(fq.valor, 0) = 0 THEN 'NO RETIRADO'
+                        WHEN LOWER(fq.pregunta) = 'solo_implementado' THEN 'RETIRADO'
+                        WHEN LOWER(fq.pregunta) = 'implementado_auditado' THEN 'RETIRADO'
+                        ELSE 'NO RETIRADO'
+                    END
+                WHEN f.modalidad = 'entrega' THEN
+                    CASE
+                        WHEN IFNULL(fq.valor, 0) >= 1 THEN 'ENTREGADO'
+                        WHEN IFNULL(fq.valor, 0) = 0 THEN 'NO ENTREGADO'
+                        WHEN LOWER(fq.pregunta) = 'solo_implementado' THEN 'ENTREGADO'
+                        WHEN LOWER(fq.pregunta) = 'implementado_auditado' THEN 'ENTREGADO'
+                        ELSE 'NO ENTREGADO'
+                    END
+                ELSE
+                    CASE
+                        WHEN IFNULL(fq.valor, 0) >= 1 THEN 'IMPLEMENTADO'
+                        WHEN IFNULL(fq.valor, 0) = 0 THEN 'NO IMPLEMENTADO'
+                        WHEN LOWER(fq.pregunta) = 'solo_implementado'      THEN 'IMPLEMENTADO'
+                        WHEN LOWER(fq.pregunta) = 'solo_auditado'          THEN 'AUDITORIA'
+                        WHEN LOWER(fq.pregunta) = 'solo_auditoria'         THEN 'AUDITORIA'
+                        WHEN LOWER(fq.pregunta) = 'retiro'                 THEN 'RETIRO'
+                        WHEN LOWER(fq.pregunta) = 'entrega'                THEN 'ENTREGA'
+                        WHEN LOWER(fq.pregunta) = 'implementado_auditado'  THEN 'IMPLEMENTADO/AUDITADO'
+                        ELSE 'NO IMPLEMENTADO'
+                    END
             END AS ESTADO_ACTIVIDAD,
             UPPER(
               REPLACE(
@@ -493,8 +515,76 @@ function removerFotosDeEncuesta(array $encuesta): array {
 }
 
 // Render de tablas (sin envolver en <html>)
-function renderSeccionTablas($locales, $encuesta, $inline, $fotosLocales, $maxFotosLocales): string {
+function renderSeccionTablas($locales, $encuesta, $inline, $fotosLocales, $maxFotosLocales, $allCampaignsData = []): string {
     $html = '';
+
+    // Determinar etiquetas según modalidad
+    // Si hay múltiples campañas con diferentes modalidades, usamos etiquetas genéricas
+    $modalidades = [];
+    foreach ($allCampaignsData as $campData) {
+        if (!empty($campData)) {
+            $modalidades[] = strtolower(trim($campData[0]['modalidad'] ?? ''));
+        }
+    }
+    $modalidadesUnicas = array_unique($modalidades);
+
+    $etiquetaMaterial = 'MATERIAL';
+    $etiquetaCantidad = 'CANTIDAD MATERIAL EJECUTADO';
+
+    // Solo cambiamos etiquetas si todas las campañas tienen la misma modalidad
+    if (count($modalidadesUnicas) === 1) {
+        $modalidadLower = reset($modalidadesUnicas);
+        if ($modalidadLower === 'retiro') {
+            $etiquetaMaterial = 'MATERIAL RETIRADO';
+            $etiquetaCantidad = 'CANTIDAD MATERIAL RETIRADO';
+        } elseif ($modalidadLower === 'entrega') {
+            $etiquetaMaterial = 'MATERIAL ENTREGADO';
+            $etiquetaCantidad = 'CANTIDAD MATERIAL ENTREGADO';
+        }
+    }
+
+    // Recuadros de información de todas las campañas
+    if (!empty($allCampaignsData)) {
+        foreach ($allCampaignsData as $campaignData) {
+            if (empty($campaignData)) continue;
+
+            $campInfo = $campaignData[0];
+            $fechaInicio = !empty($campInfo['fechaInicio']) ? date('d-m-Y', strtotime($campInfo['fechaInicio'])) : '-';
+            $fechaTermino = !empty($campInfo['fechaTermino']) ? date('d-m-Y', strtotime($campInfo['fechaTermino'])) : '-';
+            $modalidadDisplay = ucwords(str_replace('_', ' ', $campInfo['modalidad'] ?? '-'));
+
+            $tipoDisplay = '-';
+            if (isset($campInfo['tipo'])) {
+                switch ($campInfo['tipo']) {
+                    case 1:
+                        $tipoDisplay = 'Campaña Programada';
+                        break;
+                    case 2:
+                        $tipoDisplay = 'Campaña Complementaria';
+                        break;
+                    case 3:
+                        $tipoDisplay = 'Campaña IPT';
+                        break;
+                    default:
+                        $tipoDisplay = 'Tipo ' . $campInfo['tipo'];
+                }
+            }
+
+            $html .= "<div class='info-box'>";
+            $html .= "<b>DATOS DEL FORMULARIO</b><br>";
+            $html .= "<table>";
+            $html .= "<tr><td><b>Campaña:</b></td><td>" . e($campInfo['nombre']) . "</td></tr>";
+            $html .= "<tr><td><b>Fecha Inicio:</b></td><td>" . e($fechaInicio) . "</td></tr>";
+            $html .= "<tr><td><b>Fecha Término:</b></td><td>" . e($fechaTermino) . "</td></tr>";
+            $html .= "<tr><td><b>Modalidad:</b></td><td>" . e($modalidadDisplay) . "</td></tr>";
+            $html .= "<tr><td><b>Tipo:</b></td><td>" . e($tipoDisplay) . "</td></tr>";
+            $html .= "<tr><td><b>Empresa:</b></td><td>" . e($campInfo['nombre_empresa'] ?? '-') . "</td></tr>";
+            $html .= "<tr><td><b>División:</b></td><td>" . e($campInfo['nombre_division'] ?? '-') . "</td></tr>";
+            $html .= "</table>";
+            $html .= "</div>";
+        }
+        $html .= "<br>";
+    }
 
     if (!empty($locales)) {
         $html .= "<b>Detalle de Locales</b>"
@@ -513,14 +603,16 @@ function renderSeccionTablas($locales, $encuesta, $inline, $fotosLocales, $maxFo
               .  "    <th>REGION</th>"
               .  "    <th>JEFE VENTA</th>"
               .  "    <th>USUARIO</th>"
+              .  "    <th>FECHA INICIO</th>"
+              .  "    <th>FECHA TÉRMINO</th>"
               .  "    <th>FECHA PLANIFICADA</th>"
               .  "    <th>FECHA VISITA</th>"
               .  "    <th>HORA</th>"
               .  "    <th>ESTADO VISITA</th>"
               .  "    <th>ESTADO ACTIVIDAD</th>"
               .  "    <th>MOTIVO</th>"
-              .  "    <th>MATERIAL</th>"
-              .  "    <th>CANTIDAD MATERIAL EJECUTADO</th>"
+              .  "    <th>{$etiquetaMaterial}</th>"
+              .  "    <th>{$etiquetaCantidad}</th>"
               .  "    <th>MATERIAL PROPUESTO</th>"
               .  "    <th>OBSERVACION</th>";
 
@@ -533,6 +625,12 @@ function renderSeccionTablas($locales, $encuesta, $inline, $fotosLocales, $maxFo
         $html .= "</tr>";
 
         foreach ($locales as $l) {
+            $fechaInicioCamp = ($l['fechaInicio'] !== null && $l['fechaInicio'] !== '0000-00-00')
+                              ? $l['fechaInicio']
+                              : '-';
+            $fechaTerminoCamp = ($l['fechaTermino'] !== null && $l['fechaTermino'] !== '0000-00-00')
+                              ? $l['fechaTermino']
+                              : '-';
             $fechaPropuesta = ($l['fechaPropuesta'] !== null && $l['fechaPropuesta'] !== '0000-00-00')
                               ? $l['fechaPropuesta']
                               : '-';
@@ -553,6 +651,8 @@ function renderSeccionTablas($locales, $encuesta, $inline, $fotosLocales, $maxFo
                         <td>" . e($l['region']) . "</td>
                         <td>" . e($l['jefeVenta']) . "</td>
                         <td>" . e($l['gestionado_por']) . "</td>
+                        <td>{$fechaInicioCamp}</td>
+                        <td>{$fechaTerminoCamp}</td>
                         <td>{$fechaPropuesta}</td>
                         <td>{$fechaVisita}</td>
                         <td>" . e($l['hora']) . "</td>
@@ -718,17 +818,41 @@ $html = <<<HTML
         max-height: 120px;
         cursor: pointer;
       }
+      .info-box {
+        background-color: #f0f0f0;
+        border: 2px solid #333;
+        padding: 10px;
+        margin-bottom: 20px;
+        font-size: 10pt;
+      }
+      .info-box table {
+        width: auto;
+        border: none;
+      }
+      .info-box td {
+        border: none;
+        padding: 3px 10px;
+      }
     </style>
   </head>
   <body>
 HTML;
+
+// Para el descarga masiva, recopilamos los datos de todas las campañas
+$allCampaignsData = [];
+foreach ($reportes as $rep) {
+    if (!empty($rep['campaign'])) {
+        $allCampaignsData[] = $rep['campaign'];
+    }
+}
 
 $html .= renderSeccionTablas(
     $localesGlobal,
     $encuestaGlobal,
     $inline,
     $fotosLocalesGlobal,
-    $maxFotosLocalesGlobal
+    $maxFotosLocalesGlobal,
+    $allCampaignsData
 );
 
 if ($inline) {

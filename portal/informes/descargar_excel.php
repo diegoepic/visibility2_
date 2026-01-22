@@ -68,12 +68,15 @@ $stmt_modal->close();
 function getCampaignData($idForm) {
     global $conn;
     $sql = "
-        SELECT 
+        SELECT
             f.id,
             f.nombre,
             f.fechaInicio,
             f.fechaTermino,
+            f.modalidad,
+            f.tipo,
             e.nombre AS nombre_empresa,
+            de.nombre AS nombre_division,
             COUNT(DISTINCT l.codigo) AS locales_programados,
             SUM(
                 CASE WHEN fq.pregunta IN (
@@ -88,10 +91,11 @@ function getCampaignData($idForm) {
             ) AS locales_implementados
         FROM formulario f
         INNER JOIN empresa e             ON e.id = f.id_empresa
+        LEFT JOIN division_empresa de    ON de.id = f.id_division
         INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
         INNER JOIN local l               ON l.id = fq.id_local
         WHERE f.id = ?
-        GROUP BY f.id, f.nombre, f.fechaInicio, f.fechaTermino, e.nombre
+        GROUP BY f.id, f.nombre, f.fechaInicio, f.fechaTermino, f.modalidad, f.tipo, e.nombre, de.nombre
     ";
     $stmt = $conn->prepare($sql);
     $stmt->bind_param('i', $idForm);
@@ -131,21 +135,40 @@ function getLocalesDetails($idForm) {
             fq.valor,
             UPPER(fq.observacion) AS observacion,
             CASE
-                WHEN fq.fechaVisita IS NOT NULL 
+                WHEN fq.fechaVisita IS NOT NULL
                      AND fq.fechaVisita <> '0000-00-00 00:00:00'
                 THEN 'VISITADO'
                 ELSE 'NO VISITADO'
             END                                AS ESTADO_VISTA,
             CASE
-                WHEN IFNULL(fq.valor, 0) >= 1 THEN 'IMPLEMENTADO'
-                WHEN IFNULL(fq.valor, 0) = 0 THEN 'NO IMPLEMENTADO'
-                WHEN LOWER(fq.pregunta) = 'solo_implementado'      THEN 'IMPLEMENTADO'
-                WHEN LOWER(fq.pregunta) = 'solo_auditado'          THEN 'AUDITORIA'
-                WHEN LOWER(fq.pregunta) = 'solo_auditoria'         THEN 'AUDITORIA'
-                WHEN LOWER(fq.pregunta) = 'retiro'                 THEN 'RETIRO'
-                WHEN LOWER(fq.pregunta) = 'entrega'                THEN 'ENTREGA'
-                WHEN LOWER(fq.pregunta) = 'implementado_auditado'  THEN 'IMPLEMENTADO/AUDITADO'
-                ELSE 'NO IMPLEMENTADO'
+                WHEN f.modalidad = 'retiro' THEN
+                    CASE
+                        WHEN IFNULL(fq.valor, 0) >= 1 THEN 'RETIRADO'
+                        WHEN IFNULL(fq.valor, 0) = 0 THEN 'NO RETIRADO'
+                        WHEN LOWER(fq.pregunta) = 'solo_implementado' THEN 'RETIRADO'
+                        WHEN LOWER(fq.pregunta) = 'implementado_auditado' THEN 'RETIRADO'
+                        ELSE 'NO RETIRADO'
+                    END
+                WHEN f.modalidad = 'entrega' THEN
+                    CASE
+                        WHEN IFNULL(fq.valor, 0) >= 1 THEN 'ENTREGADO'
+                        WHEN IFNULL(fq.valor, 0) = 0 THEN 'NO ENTREGADO'
+                        WHEN LOWER(fq.pregunta) = 'solo_implementado' THEN 'ENTREGADO'
+                        WHEN LOWER(fq.pregunta) = 'implementado_auditado' THEN 'ENTREGADO'
+                        ELSE 'NO ENTREGADO'
+                    END
+                ELSE
+                    CASE
+                        WHEN IFNULL(fq.valor, 0) >= 1 THEN 'IMPLEMENTADO'
+                        WHEN IFNULL(fq.valor, 0) = 0 THEN 'NO IMPLEMENTADO'
+                        WHEN LOWER(fq.pregunta) = 'solo_implementado'      THEN 'IMPLEMENTADO'
+                        WHEN LOWER(fq.pregunta) = 'solo_auditado'          THEN 'AUDITORIA'
+                        WHEN LOWER(fq.pregunta) = 'solo_auditoria'         THEN 'AUDITORIA'
+                        WHEN LOWER(fq.pregunta) = 'retiro'                 THEN 'RETIRO'
+                        WHEN LOWER(fq.pregunta) = 'entrega'                THEN 'ENTREGA'
+                        WHEN LOWER(fq.pregunta) = 'implementado_auditado'  THEN 'IMPLEMENTADO/AUDITADO'
+                        ELSE 'NO IMPLEMENTADO'
+                    END
             END AS ESTADO_ACTIVIDAD,
             UPPER(
               REPLACE(
@@ -453,7 +476,7 @@ GROUP_CONCAT(
 // Generador de HTML/XLS
 // -----------------------------------------------------------------------------
 
-function generarExcel($campaign, $locales, $encuesta, $archivo = null, $inline = false, $fotosLocales = [], $maxFotosLocales = 0) {
+function generarExcel($campaign, $locales, $encuesta, $archivo = null, $inline = false, $fotosLocales = [], $maxFotosLocales = 0, $modalidad = '') {
     $normalizarUrlEncuesta = function (string $url): string {
         $url = trim($url);
         if ($url === '') {
@@ -524,6 +547,19 @@ $normalized = $normalizarUrlEncuesta($p);
     }
     unset($fila);
 
+    // Determinar etiquetas según modalidad
+    $modalidadLower = strtolower(trim($modalidad));
+    $etiquetaMaterial = 'MATERIAL';
+    $etiquetaCantidad = 'CANTIDAD MATERIAL EJECUTADO';
+
+    if ($modalidadLower === 'retiro') {
+        $etiquetaMaterial = 'MATERIAL RETIRADO';
+        $etiquetaCantidad = 'CANTIDAD MATERIAL RETIRADO';
+    } elseif ($modalidadLower === 'entrega') {
+        $etiquetaMaterial = 'MATERIAL ENTREGADO';
+        $etiquetaCantidad = 'CANTIDAD MATERIAL ENTREGADO';
+    }
+
     // Construcción del HTML
     $html = <<<HTML
 <html>
@@ -546,10 +582,63 @@ $normalized = $normalizarUrlEncuesta($p);
         max-height: 120px;
         cursor: pointer;
       }
+      .info-box {
+        background-color: #f0f0f0;
+        border: 2px solid #333;
+        padding: 10px;
+        margin-bottom: 20px;
+        font-size: 10pt;
+      }
+      .info-box table {
+        width: auto;
+        border: none;
+      }
+      .info-box td {
+        border: none;
+        padding: 3px 10px;
+      }
     </style>
   </head>
   <body>
 HTML;
+
+    // —– Recuadro de Información del Formulario ——
+    if (!empty($campaign)) {
+        $campInfo = $campaign[0];
+        $fechaInicio = !empty($campInfo['fechaInicio']) ? date('d-m-Y', strtotime($campInfo['fechaInicio'])) : '-';
+        $fechaTermino = !empty($campInfo['fechaTermino']) ? date('d-m-Y', strtotime($campInfo['fechaTermino'])) : '-';
+        $modalidadDisplay = ucwords(str_replace('_', ' ', $campInfo['modalidad'] ?? '-'));
+
+        $tipoDisplay = '-';
+        if (isset($campInfo['tipo'])) {
+            switch ($campInfo['tipo']) {
+                case 1:
+                    $tipoDisplay = 'Campaña Programada';
+                    break;
+                case 2:
+                    $tipoDisplay = 'Campaña Complementaria';
+                    break;
+                case 3:
+                    $tipoDisplay = 'Campaña IPT';
+                    break;
+                default:
+                    $tipoDisplay = 'Tipo ' . $campInfo['tipo'];
+            }
+        }
+
+        $html .= "<div class='info-box'>";
+        $html .= "<b>DATOS DEL FORMULARIO</b><br>";
+        $html .= "<table>";
+        $html .= "<tr><td><b>Campaña:</b></td><td>" . e($campInfo['nombre']) . "</td></tr>";
+        $html .= "<tr><td><b>Fecha Inicio:</b></td><td>" . e($fechaInicio) . "</td></tr>";
+        $html .= "<tr><td><b>Fecha Término:</b></td><td>" . e($fechaTermino) . "</td></tr>";
+        $html .= "<tr><td><b>Modalidad:</b></td><td>" . e($modalidadDisplay) . "</td></tr>";
+        $html .= "<tr><td><b>Tipo:</b></td><td>" . e($tipoDisplay) . "</td></tr>";
+        $html .= "<tr><td><b>Empresa:</b></td><td>" . e($campInfo['nombre_empresa'] ?? '-') . "</td></tr>";
+        $html .= "<tr><td><b>División:</b></td><td>" . e($campInfo['nombre_division'] ?? '-') . "</td></tr>";
+        $html .= "</table>";
+        $html .= "</div>";
+    }
 
     // —– Detalle de Locales —— 
     if (!empty($locales)) {
@@ -569,14 +658,16 @@ HTML;
                       <th>REGION</th>
                       <th>JEFE VENTA</th>
                       <th>USUARIO</th>
+                      <th>FECHA INICIO</th>
+                      <th>FECHA TÉRMINO</th>
                       <th>FECHA PLANIFICADA</th>
                       <th>FECHA VISITA</th>
                       <th>HORA</th>
                       <th>ESTADO VISITA</th>
                       <th>ESTADO ACTIVIDAD</th>
                       <th>MOTIVO</th>
-                      <th>MATERIAL</th>
-                      <th>CANTIDAD MATERIAL EJECUTADO</th>
+                      <th>{$etiquetaMaterial}</th>
+                      <th>{$etiquetaCantidad}</th>
                       <th>MATERIAL PROPUESTO</th>
                       <th>OBSERVACION</th>
 ";
@@ -598,6 +689,13 @@ HTML;
                               ? $l['fechaVisita']
                               : '-';
 
+            $fechaInicioCamp = ($l['fechaInicio'] !== null && $l['fechaInicio'] !== '0000-00-00')
+                              ? $l['fechaInicio']
+                              : '-';
+            $fechaTerminoCamp = ($l['fechaTermino'] !== null && $l['fechaTermino'] !== '0000-00-00')
+                              ? $l['fechaTermino']
+                              : '-';
+
             $html .= "<tr>
                         <td>" . e($l['idLocal']) . "</td>
                         <td>" . e($l['codigo_local']) . "</td>
@@ -611,6 +709,8 @@ HTML;
                         <td>" . e($l['region']) . "</td>
                         <td>" . e($l['jefeVenta']) . "</td>
                         <td>" . e($l['gestionado_por']) . "</td>
+                        <td>{$fechaInicioCamp}</td>
+                        <td>{$fechaTerminoCamp}</td>
                         <td>{$fechaPropuesta}</td>
                         <td>{$fechaVisita}</td>
                         <td>" . e($l['hora']) . "</td>
@@ -821,9 +921,9 @@ $archivo = "Reporte_{$nombreCampaña}_" . date('Y-m-d_His') . ".xls";
 
 // Render / descarga
 if ($inline) {
-    echo generarExcel($campaignData, $localesDetails, $encuestaPivot, null, true, $fotosLocales, $maxFotosLocales);
+    echo generarExcel($campaignData, $localesDetails, $encuestaPivot, null, true, $fotosLocales, $maxFotosLocales, $modalidad);
     exit();
 }
 
-generarExcel($campaignData, $localesDetails, $encuestaPivot, $archivo, false, $fotosLocales, $maxFotosLocales);
+generarExcel($campaignData, $localesDetails, $encuestaPivot, $archivo, false, $fotosLocales, $maxFotosLocales, $modalidad);
 ?>

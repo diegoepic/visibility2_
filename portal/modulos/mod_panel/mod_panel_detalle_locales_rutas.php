@@ -160,7 +160,7 @@
       </thead>
       <tbody>
         <?php if ($locales): foreach($locales as $loc):
-          $nombreCamp  = htmlspecialchars($loc['nombre_campana']); // NUEVO
+          $nombreCamp  = htmlspecialchars($loc['nombre_campana']); 
           $codigoLocal = htmlspecialchars($loc['codigo']);
           $nombreLoc   = htmlspecialchars($loc['nombre_local']);
           $dirLoc      = htmlspecialchars($loc['direccion_local']);
@@ -300,10 +300,10 @@ function actualizarVisibilidad() {
   const valor = parseInt(tipoGestion?.value || 0);
   if (!campoCampana || !campoDesde || !campoHasta) return;
 
-  // Mostrar campaña solo cuando tipo = 1
+
   campoCampana.style.display = (valor === 1) ? "block" : "none";
 
-  // Mostrar fechas cuando tipo = 1 o 3
+  
   const mostrarFechas = (valor === 1 || valor === 3);
   campoDesde.style.display = mostrarFechas ? "block" : "none";
   campoHasta.style.display = mostrarFechas ? "block" : "none";
