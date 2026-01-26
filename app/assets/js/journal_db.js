@@ -243,6 +243,64 @@
     return upsert(cur);
   }
 
+  /**
+   * Limpia registros stale (error/blocked) relacionados con un job exitoso.
+   * Usa client_guid, visita_local_id o local_id+form_id+kind como criterio.
+   */
+  async function cleanupStaleRecords(successJob){
+    try {
+      const meta = successJob.meta || {};
+      const fields = successJob.fields || {};
+      const clientGuid = meta.client_guid || successJob.client_guid || fields.client_guid;
+      const visitaLocalId = fields.visita_local_id;
+      const localId = meta.local_id || fields.id_local || fields.idLocal;
+      const formId = meta.form_id || fields.id_formulario || fields.idCampana;
+      const kind = (meta.kind || successJob.type || '').toLowerCase();
+      const successId = successJob.id;
+
+      // Obtener todos los registros del mismo día
+      const ymd = ymdLocal(new Date());
+      const rows = await listByYMD(ymd);
+
+      // Buscar registros relacionados en estado error/blocked
+      const staleIds = [];
+      for (const r of rows){
+        if (r.id === successId) continue; // No eliminar el registro exitoso
+        if (r.status !== 'error' && r.status !== 'blocked_auth' && r.status !== 'blocked_csrf') continue;
+
+        let isRelated = false;
+        // Criterio 1: Mismo client_guid
+        if (clientGuid && r.client_guid === clientGuid) {
+          isRelated = true;
+        }
+        // Criterio 2: Mismo visita_local_id y kind
+        if (!isRelated && visitaLocalId && r.visita_local_id === visitaLocalId) {
+          const rKind = (r.kind || '').toLowerCase();
+          if (rKind === kind) isRelated = true;
+        }
+        // Criterio 3: Mismo local_id + form_id + kind
+        if (!isRelated && localId && formId) {
+          const rLocalId = r.local_id;
+          const rFormId = r.form_id;
+          const rKind = (r.kind || '').toLowerCase();
+          if (rLocalId == localId && rFormId == formId && rKind === kind) {
+            isRelated = true;
+          }
+        }
+
+        if (isRelated) staleIds.push(r.id);
+      }
+
+      // Eliminar registros stale
+      await Promise.all(staleIds.map(id => remove(id)));
+      if (staleIds.length) {
+        console.log('[JournalDB] Cleaned up', staleIds.length, 'stale records for job', successId);
+      }
+    } catch(err){
+      console.warn('[JournalDB] Error cleaning stale records:', err);
+    }
+  }
+
   async function onSuccess(job, response, httpStatus){
     const cur = await get(job.id);
 
@@ -283,32 +341,75 @@
       attempts: rec.attempts,
       url: job.url || null
     }));
+
+    // MEJORA: Limpiar registros stale relacionados
+    await cleanupStaleRecords(job);
+
     return upsert(rec);
   }
 
-  async function onError(job, errorMessage, httpStatus){
+  // Máximo de caracteres para el response truncado
+  const MAX_RESPONSE_SNIPPET = 500;
+
+  /**
+   * Trunca un texto a un máximo de caracteres
+   */
+  function truncateText(text, maxLen = MAX_RESPONSE_SNIPPET) {
+    if (!text || typeof text !== 'string') return null;
+    if (text.length <= maxLen) return text;
+    return text.slice(0, maxLen) + '... [truncated]';
+  }
+
+  async function onError(job, errorMessage, httpStatus, responseBody){
     const cur = await get(job.id);
     const errObj = (errorMessage && typeof errorMessage === 'object')
       ? errorMessage
       : { message: String(errorMessage || 'Error') };
+
+    // MEJORA: Guardar response truncado para diagnóstico
+    let responseSnippet = null;
+    if (responseBody) {
+      if (typeof responseBody === 'string') {
+        responseSnippet = truncateText(responseBody);
+      } else if (typeof responseBody === 'object') {
+        try {
+          responseSnippet = truncateText(JSON.stringify(responseBody));
+        } catch(_) {}
+      }
+    } else if (errObj.responseSnippet) {
+      responseSnippet = truncateText(errObj.responseSnippet);
+    }
+
+    // MEJORA: Extraer error_id del servidor si viene
+    const error_id = errObj.error_id ||
+                     (responseBody && responseBody.error_id) ||
+                     null;
+
     const rec = normalizeFromQueue(
       job,
       Object.assign({}, cur || {}, {
         status  : job.status || 'error',
         progress: (cur && cur.progress > 50) ? cur.progress : 50,
         error   : errObj.message || String(errorMessage || 'Error'),
-        last_error: errObj,
+        last_error: Object.assign({}, errObj, {
+          responseSnippet: responseSnippet,
+          error_id: error_id,
+          timestamp: Date.now()
+        }),
         http_status: httpStatus || (cur && cur.http_status) || errObj.httpStatus || null,
         next_try_at: job.nextTryAt || (cur && cur.next_try_at) || null,
         attempts: job.attempts || (cur && cur.attempts) || 0
       })
     );
+
     await addEvent(buildEvent(job, {
       type: 'attempt_error',
       status: rec.status,
       http_status: rec.http_status,
       error: errObj.code || errObj.message || 'ERROR',
+      error_id: error_id,
       message: errObj.message || String(errorMessage || 'Error'),
+      responseSnippet: responseSnippet,
       attempts: rec.attempts,
       url: job.url || null
     }));

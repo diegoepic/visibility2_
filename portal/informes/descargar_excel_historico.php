@@ -1,8 +1,8 @@
 <?php
 ob_start();
 
-ini_set('display_errors', 0);              // no mostrar errores en pantalla (evita romper headers)
-ini_set('log_errors', 1);                  // loguear errores
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 ini_set('error_log', __DIR__ . '/descargar_excel_historico.error.log');
 error_reporting(E_ALL);
 
@@ -13,15 +13,16 @@ set_time_limit(0);
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
+
 // Liberar la sesión para evitar bloqueos
 session_write_close();
 
-// Conexión
+// Incluir el archivo de conexión a la base de datos
 include $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
 mysqli_set_charset($conn, 'utf8mb4');
 
 /**
- * Escape seguro: null -> '' y a string.
+ * Helper de escape seguro que convierte null -> '' y castea a string
  */
 if (!function_exists('e')) {
     function e($v): string {
@@ -31,14 +32,18 @@ if (!function_exists('e')) {
 
 // 1) Validar parámetros
 if (!isset($_GET['id']) || !filter_var($_GET['id'], FILTER_VALIDATE_INT)) {
-    // limpiar buffer para no enviar headers parciales
     if (ob_get_length()) { ob_end_clean(); }
     die('ID de formulario inválido.');
 }
-$formulario_id = intval($_GET['id']);
-$inline        = isset($_GET['inline']) && $_GET['inline'] === '1';
+$formulario_id         = intval($_GET['id']);
+$inline                = isset($_GET['inline']) && $_GET['inline'] === '1';
+$incluirFotosMaterial  = !isset($_GET['fotos'])
+    || $_GET['fotos'] === '1'
+    || strtolower((string)$_GET['fotos']) === 'true';
+$incluirFotosEncuesta  = !isset($_GET['fotos_encuesta'])
+    || $_GET['fotos_encuesta'] === '1'
+    || strtolower((string)$_GET['fotos_encuesta']) === 'true';
 
-// Obtener nombre de campaña (para el nombre del archivo)
 $stmt_form = $conn->prepare("SELECT nombre FROM formulario WHERE id = ? LIMIT 1");
 $stmt_form->bind_param("i", $formulario_id);
 $stmt_form->execute();
@@ -49,462 +54,364 @@ if (!$stmt_form->fetch()) {
 }
 $stmt_form->close();
 
-/* -----------------------------------------------------------------------------
-   Funciones de obtención de datos (HÍBRIDO):
-   - Base = TODOS los programados desde formularioQuestion (FQ)
-   - Overlay = ÚLTIMA gestión por ejecución desde gestion_visita (GV)
-   - + Extra = GV con id_formularioQuestion = 0 (solo auditoría / cancelado / pendiente)
------------------------------------------------------------------------------ */
+$stmt_modal = $conn->prepare("SELECT modalidad FROM formulario WHERE id = ? LIMIT 1");
+$stmt_modal->bind_param("i", $formulario_id);
+$stmt_modal->execute();
+$stmt_modal->bind_result($modalidad);
+$stmt_modal->fetch();
+$stmt_modal->close();
+
+// -----------------------------------------------------------------------------
+// Funciones de obtención de datos DESDE gestion_visita + visita (HISTÓRICO)
+// -----------------------------------------------------------------------------
 
 function getCampaignData($idForm) {
     global $conn;
     $sql = "
-        SELECT 
+        SELECT
             f.id,
             f.nombre,
             f.fechaInicio,
             f.fechaTermino,
+            f.modalidad,
+            f.tipo,
             e.nombre AS nombre_empresa,
+            de.nombre AS nombre_division,
 
-            /* Programados: base FQ */
-            (
-               SELECT COUNT(DISTINCT l2.codigo)
-               FROM formularioQuestion fq2
-               JOIN local l2 ON l2.id = fq2.id_local
-               WHERE fq2.id_formulario = f.id
-            ) AS locales_programados,
+            /* Locales programados: desde formularioQuestion (base) */
+            (SELECT COUNT(DISTINCT l2.codigo)
+             FROM formularioQuestion fq2
+             JOIN local l2 ON l2.id = fq2.id_local
+             WHERE fq2.id_formulario = f.id) AS locales_programados,
 
-            /* Visitados: al menos una GV con fecha válida o visita asociada (incluye id_fq = 0) */
-            (
-               SELECT COUNT(DISTINCT l3.codigo)
-               FROM gestion_visita gv3
-               JOIN local l3 ON l3.id = gv3.id_local
-               LEFT JOIN visita v3 ON v3.id = gv3.visita_id
-               WHERE gv3.id_formulario = f.id
-                 AND (
-                      (gv3.fecha_visita IS NOT NULL AND gv3.fecha_visita <> '0000-00-00 00:00:00')
-                      OR v3.id IS NOT NULL
-                 )
-            ) AS locales_visitados,
+            /* Locales visitados: desde gestion_visita */
+            (SELECT COUNT(DISTINCT l3.codigo)
+             FROM gestion_visita gv3
+             JOIN local l3 ON l3.id = gv3.id_local
+             WHERE gv3.id_formulario = f.id
+               AND gv3.fecha_visita IS NOT NULL
+               AND gv3.fecha_visita <> '0000-00-00 00:00:00') AS locales_visitados,
 
-            /* Implementados: desde GV */
-            (
-               SELECT COUNT(DISTINCT l4.codigo)
-               FROM gestion_visita gv4
-               JOIN local l4 ON l4.id = gv4.id_local
-               WHERE gv4.id_formulario = f.id
-                 AND (
-                       IFNULL(gv4.valor_real,0) > 0
-                       OR LOWER(gv4.estado_gestion) IN ('implementado_auditado','solo_implementado','solo_auditoria')
-                     )
-            ) AS locales_implementados
+            /* Locales implementados: desde gestion_visita */
+            (SELECT COUNT(DISTINCT l4.codigo)
+             FROM gestion_visita gv4
+             JOIN local l4 ON l4.id = gv4.id_local
+             WHERE gv4.id_formulario = f.id
+               AND (IFNULL(gv4.valor_real, 0) > 0
+                    OR LOWER(gv4.estado_gestion) IN ('implementado_auditado','solo_implementado','solo_auditoria'))) AS locales_implementados
 
         FROM formulario f
-        JOIN empresa e ON e.id = f.id_empresa
-        WHERE f.id = {$idForm}
-        GROUP BY f.id, f.nombre, f.fechaInicio, f.fechaTermino, e.nombre
+        INNER JOIN empresa e             ON e.id = f.id_empresa
+        LEFT JOIN division_empresa de    ON de.id = f.id_division
+        WHERE f.id = ?
+        GROUP BY f.id, f.nombre, f.fechaInicio, f.fechaTermino, f.modalidad, f.tipo, e.nombre, de.nombre
     ";
-    $res = mysqli_query($conn, $sql);
-    if (!$res) {
-        if (ob_get_length()) { ob_end_clean(); }
-        die("Error en getCampaignData: " . mysqli_error($conn));
-    }
-    return mysqli_fetch_all($res, MYSQLI_ASSOC);
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param('i', $idForm);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    return $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 }
 
 /**
- * Devuelve una fila por ejecución programada (FQ) con overlay de la
- * ÚLTIMA GV por id_formularioQuestion. Además agrega (UNION ALL) una fila
- * por local con la ÚLTIMA GV donde id_formularioQuestion = 0.
- * Primera columna: ID_EJECUCION (para GV sin FQ -> 0).
+ * Obtiene el detalle histórico desde gestion_visita + visita
+ * Una fila por cada registro en gestion_visita (histórico completo)
  */
-function getLocalesDetails($idForm) {
+function getLocalesDetailsHistorico($idForm) {
     global $conn;
-
     $sql = "
-        /* =========================
-         * BLOQUE A: FQ + última GV por FQ
-         * ========================= */
-        SELECT 
-            /* 1) ID_EJECUCION */
-            fq.id                                        AS id_ejecucion,
-
-            /* Identidad Local */
-            l.id                                         AS idLocal,
-            l.codigo                                     AS codigo_local,
-            CASE
-              WHEN l.nombre REGEXP '^[0-9]+' THEN SUBSTRING_INDEX(l.nombre, ' ', 1)
-              ELSE CAST(l.codigo AS UNSIGNED)
-            END                                          AS numero_local,
-
-            /* Campaña */
-            f.modalidad                                  AS modalidad,
-            UPPER(f.nombre)                              AS nombreCampaña,
-            DATE(f.fechaInicio)                          AS fechaInicio,
-            DATE(f.fechaTermino)                         AS fechaTermino,
-
-            /* FECHA VISITA / HORA */
-            DATE(
-              COALESCE(
-                NULLIF(gv_last.fecha_visita,'0000-00-00 00:00:00'),
-                v_last.fecha_fin,
-                v_last.fecha_inicio
-              )
-            )                                            AS fechaVisita,
-            TIME(
-              COALESCE(
-                NULLIF(gv_last.fecha_visita,'0000-00-00 00:00:00'),
-                v_last.fecha_fin,
-                v_last.fecha_inicio
-              )
-            )                                            AS hora,
-
-            /* PLANIFICADA (FQ) */
-            DATE(fq.fechaPropuesta)                      AS fechaPropuesta,
-
-            /* Datos del local */
-            UPPER(l.nombre)                              AS nombre_local,
-            UPPER(l.direccion)                           AS direccion_local,
-            UPPER(cm.comuna)                             AS comuna,
-            UPPER(re.region)                             AS region,
-            UPPER(cu.nombre)                             AS cuenta,
-            UPPER(ca.nombre)                             AS cadena,
-
-            /* MATERIAL: si GV trae id_material, usar catálogo; si no, FQ.material */
-            UPPER(COALESCE(m.nombre, fq.material))       AS material,
-
-            /* JEFE VENTA */
-            UPPER(jv.nombre)                             AS jefeVenta,
-
-            /* PROPUESTO (FQ) */
-            fq.valor_propuesto                           AS valor_propuesto,
-
-            /* CANTIDAD EJECUTADA (GV) */
-            gv_last.valor_real                           AS valor,
-
-            /* OBSERVACIÓN (prioriza GV) */
-            UPPER(COALESCE(gv_last.observacion, fq.observacion, '')) AS observacion,
-
-            /* GESTIONADO POR: usuario de la última GV o el asignado en FQ */
-            UPPER(COALESCE(u_gv.usuario, u_fq.usuario))  AS gestionado_por,
-
-            /* ESTADO VISITA */
-            CASE
-              WHEN (gv_last.id IS NOT NULL AND (gv_last.fecha_visita IS NOT NULL AND gv_last.fecha_visita <> '0000-00-00 00:00:00'))
-                   OR v_last.id IS NOT NULL
-              THEN 'VISITADO'
-              ELSE 'NO VISITADO'
-            END                                          AS ESTADO_VISTA,
-
-            /* ESTADO ACTIVIDAD */
-            CASE
-              WHEN gv_last.id IS NULL                     THEN 'NO IMPLEMENTADO'
-              WHEN IFNULL(gv_last.valor_real,0) > 0       THEN 'IMPLEMENTADO'
-              WHEN LOWER(gv_last.estado_gestion) = 'solo_implementado'                THEN 'IMPLEMENTADO'
-              WHEN LOWER(gv_last.estado_gestion) IN ('solo_auditoria','solo_auditado') THEN 'AUDITORIA'
-              WHEN LOWER(gv_last.estado_gestion) = 'retiro'                            THEN 'RETIRO'
-              WHEN LOWER(gv_last.estado_gestion) = 'entrega'                           THEN 'ENTREGA'
-              WHEN LOWER(gv_last.estado_gestion) = 'implementado_auditado'             THEN 'IMPLEMENTADO/AUDITADO'
-              ELSE 'NO IMPLEMENTADO'
-            END                                          AS ESTADO_ACTIVIDAD,
-
-            /* MOTIVO (prioriza GV) */
-            UPPER(
-              REPLACE(
-                TRIM(
-                  COALESCE(
-                    NULLIF(gv_last.motivo_no_implementacion,''),
-                    NULLIF(
-                      TRIM(
-                        SUBSTRING_INDEX(
-                          REPLACE(COALESCE(gv_last.observacion,''),'|','-'),
-                          '-',
-                          1
-                        )
-                      ), ''
-                    ),
-                    NULLIF(gv_last.estado_gestion,''),
-                    ''
-                  )
-                )
-              , '_', ' ')
-            )                                            AS MOTIVO
-
-        FROM formulario f
-        INNER JOIN formularioQuestion fq   ON fq.id_formulario = f.id
-        INNER JOIN local l                 ON l.id = fq.id_local
-
-        /* Última GV por ejecución (LEFT JOIN: puede no existir) */
-        LEFT JOIN (
-            SELECT gv1.*
-            FROM gestion_visita gv1
-            JOIN (
-                SELECT 
-                    id_formularioQuestion,
-                    MAX(
-                      COALESCE(
-                        NULLIF(fecha_visita,'0000-00-00 00:00:00'),
-                        created_at
-                      )
-                    ) AS max_ts
-                FROM gestion_visita
-                WHERE id_formulario = {$idForm}
-                  AND id_formularioQuestion IS NOT NULL
-                  AND id_formularioQuestion <> 0
-                GROUP BY id_formularioQuestion
-            ) t ON t.id_formularioQuestion = gv1.id_formularioQuestion
-               AND COALESCE(
-                     NULLIF(gv1.fecha_visita,'0000-00-00 00:00:00'),
-                     gv1.created_at
-                   ) = t.max_ts
-            WHERE gv1.id_formulario = {$idForm}
-        ) gv_last ON gv_last.id_formularioQuestion = fq.id
-
-        LEFT JOIN visita  v_last ON v_last.id = gv_last.visita_id
-        LEFT JOIN material m     ON m.id      = gv_last.id_material
-        LEFT JOIN usuario u_gv   ON u_gv.id   = gv_last.id_usuario
-        LEFT JOIN usuario u_fq   ON u_fq.id   = fq.id_usuario
-        LEFT JOIN jefe_venta jv  ON jv.id     = l.id_jefe_venta
-
-        INNER JOIN cuenta cu  ON cu.id = l.id_cuenta
-        INNER JOIN cadena ca  ON ca.id = l.id_cadena
-        INNER JOIN comuna cm  ON cm.id = l.id_comuna
-        INNER JOIN region re  ON re.id = cm.id_region
-
-        WHERE f.id = {$idForm}
-
-        UNION ALL
-
-        /* ===========================================
-         * BLOQUE B: Última GV sin FQ (id_fq = 0 / NULL)
-         * Una fila por (id_formulario, id_local)
-         * =========================================== */
         SELECT
-            /* ID_EJECUCION inexistente */
-            0                                           AS id_ejecucion,
-
-            /* Identidad Local */
-            l2.id                                       AS idLocal,
-            l2.codigo                                   AS codigo_local,
+            l.id                               AS idLocal,
+            gv.id                              AS id_gestion_visita,
+            gv.id_formularioQuestion           AS id_formularioQuestion,
+            l.codigo                           AS codigo_local,
             CASE
-              WHEN l2.nombre REGEXP '^[0-9]+' THEN SUBSTRING_INDEX(l2.nombre, ' ', 1)
-              ELSE CAST(l2.codigo AS UNSIGNED)
-            END                                         AS numero_local,
+              WHEN l.nombre REGEXP '^[0-9]+'
+              THEN SUBSTRING_INDEX(l.nombre, ' ', 1)
+              ELSE CAST(l.codigo AS UNSIGNED)
+            END AS numero_local,
+            f.modalidad AS modalidad,
+            UPPER(f.nombre) AS nombreCampaña,
+            DATE(f.fechaInicio) AS fechaInicio,
+            DATE(f.fechaTermino) AS fechaTermino,
 
-            /* Campaña */
-            f2.modalidad                                AS modalidad,
-            UPPER(f2.nombre)                            AS nombreCampaña,
-            DATE(f2.fechaInicio)                        AS fechaInicio,
-            DATE(f2.fechaTermino)                       AS fechaTermino,
+            /* Fecha y hora de la visita desde gestion_visita o visita */
+            DATE(COALESCE(
+                NULLIF(gv.fecha_visita, '0000-00-00 00:00:00'),
+                v.fecha_fin,
+                v.fecha_inicio
+            )) AS fechaVisita,
+            TIME(COALESCE(
+                NULLIF(gv.fecha_visita, '0000-00-00 00:00:00'),
+                v.fecha_fin,
+                v.fecha_inicio
+            )) AS hora,
 
-            /* FECHA VISITA / HORA (GV0) */
-            DATE(
-              COALESCE(
-                NULLIF(gv0.fecha_visita,'0000-00-00 00:00:00'),
-                v0.fecha_fin,
-                v0.fecha_inicio
-              )
-            )                                           AS fechaVisita,
-            TIME(
-              COALESCE(
-                NULLIF(gv0.fecha_visita,'0000-00-00 00:00:00'),
-                v0.fecha_fin,
-                v0.fecha_inicio
-              )
-            )                                           AS hora,
+            /* Fecha planificada desde formularioQuestion si existe */
+            DATE(fq.fechaPropuesta) AS fechaPropuesta,
 
-            /* PLANIFICADA: no existe (no hay FQ representativo) */
-            NULL                                        AS fechaPropuesta,
+            UPPER(l.nombre) AS nombre_local,
+            UPPER(l.direccion) AS direccion_local,
+            UPPER(cm.comuna) AS comuna,
+            UPPER(re.region) AS region,
+            UPPER(cu.nombre) AS cuenta,
+            UPPER(ca.nombre) AS cadena,
 
-            /* Datos del local */
-            UPPER(l2.nombre)                            AS nombre_local,
-            UPPER(l2.direccion)                         AS direccion_local,
-            UPPER(cm2.comuna)                           AS comuna,
-            UPPER(re2.region)                           AS region,
-            UPPER(cu2.nombre)                           AS cuenta,
-            UPPER(ca2.nombre)                           AS cadena,
+            /* Material: preferir catálogo, si no usar el de FQ */
+            UPPER(COALESCE(m.nombre, fq.material, 'N/A')) AS material,
 
-            /* MATERIAL: si trae id_material, catálogo; si no, 'N/A' */
-            UPPER(COALESCE(m2.nombre, 'N/A'))           AS material,
+            UPPER(jv.nombre) AS jefeVenta,
 
-            /* JEFE VENTA */
-            UPPER(jv2.nombre)                           AS jefeVenta,
+            /* Valor propuesto desde FQ */
+            fq.valor_propuesto,
 
-            /* PROPUESTO: no aplica */
-            NULL                                        AS valor_propuesto,
+            /* Valor ejecutado desde gestion_visita */
+            gv.valor_real AS valor,
 
-            /* CANTIDAD EJECUTADA (GV0) */
-            gv0.valor_real                              AS valor,
+            /* Observación: priorizar gestion_visita */
+            UPPER(COALESCE(gv.observacion, fq.observacion, '')) AS observacion,
 
-            /* OBSERVACIÓN (GV0) */
-            UPPER(COALESCE(gv0.observacion, ''))        AS observacion,
-
-            /* GESTIONADO POR: usuario de GV0 */
-            UPPER(u_gv0.usuario)                        AS gestionado_por,
-
-            /* ESTADO VISITA */
+            /* Estado visita */
             CASE
-              WHEN (gv0.fecha_visita IS NOT NULL AND gv0.fecha_visita <> '0000-00-00 00:00:00')
-                   OR v0.id IS NOT NULL
-              THEN 'VISITADO'
-              ELSE 'NO VISITADO'
-            END                                         AS ESTADO_VISTA,
+                WHEN gv.fecha_visita IS NOT NULL
+                     AND gv.fecha_visita <> '0000-00-00 00:00:00'
+                THEN 'VISITADO'
+                WHEN v.id IS NOT NULL
+                THEN 'VISITADO'
+                ELSE 'NO VISITADO'
+            END AS ESTADO_VISTA,
 
-            /* ESTADO ACTIVIDAD (solo GV0) */
+            /* Estado actividad basado en gestion_visita */
             CASE
-              WHEN IFNULL(gv0.valor_real,0) > 0                           THEN 'IMPLEMENTADO'
-              WHEN LOWER(gv0.estado_gestion) = 'solo_implementado'        THEN 'IMPLEMENTADO'
-              WHEN LOWER(gv0.estado_gestion) IN ('solo_auditoria','solo_auditado','pendiente','cancelado')
-                   THEN UPPER(LOWER(gv0.estado_gestion))  /* AUDITORIA / PENDIENTE / CANCELADO */
-              WHEN LOWER(gv0.estado_gestion) = 'retiro'                    THEN 'RETIRO'
-              WHEN LOWER(gv0.estado_gestion) = 'entrega'                   THEN 'ENTREGA'
-              WHEN LOWER(gv0.estado_gestion) = 'implementado_auditado'     THEN 'IMPLEMENTADO/AUDITADO'
-              ELSE 'NO IMPLEMENTADO'
-            END                                         AS ESTADO_ACTIVIDAD,
+                WHEN f.modalidad = 'retiro' THEN
+                    CASE
+                        WHEN IFNULL(gv.valor_real, 0) >= 1 THEN 'RETIRADO'
+                        WHEN LOWER(gv.estado_gestion) = 'solo_implementado' THEN 'RETIRADO'
+                        WHEN LOWER(gv.estado_gestion) = 'implementado_auditado' THEN 'RETIRADO'
+                        ELSE 'NO RETIRADO'
+                    END
+                WHEN f.modalidad = 'entrega' THEN
+                    CASE
+                        WHEN IFNULL(gv.valor_real, 0) >= 1 THEN 'ENTREGADO'
+                        WHEN LOWER(gv.estado_gestion) = 'solo_implementado' THEN 'ENTREGADO'
+                        WHEN LOWER(gv.estado_gestion) = 'implementado_auditado' THEN 'ENTREGADO'
+                        ELSE 'NO ENTREGADO'
+                    END
+                ELSE
+                    CASE
+                        WHEN IFNULL(gv.valor_real, 0) >= 1 THEN 'IMPLEMENTADO'
+                        WHEN LOWER(gv.estado_gestion) = 'solo_implementado'      THEN 'IMPLEMENTADO'
+                        WHEN LOWER(gv.estado_gestion) = 'solo_auditado'          THEN 'AUDITORIA'
+                        WHEN LOWER(gv.estado_gestion) = 'solo_auditoria'         THEN 'AUDITORIA'
+                        WHEN LOWER(gv.estado_gestion) = 'retiro'                 THEN 'RETIRO'
+                        WHEN LOWER(gv.estado_gestion) = 'entrega'                THEN 'ENTREGA'
+                        WHEN LOWER(gv.estado_gestion) = 'implementado_auditado'  THEN 'IMPLEMENTADO/AUDITADO'
+                        WHEN LOWER(gv.estado_gestion) = 'pendiente'              THEN 'PENDIENTE'
+                        WHEN LOWER(gv.estado_gestion) = 'cancelado'              THEN 'CANCELADO'
+                        ELSE 'NO IMPLEMENTADO'
+                    END
+            END AS ESTADO_ACTIVIDAD,
 
-            /* MOTIVO (GV0) */
+            /* Motivo: priorizar gestion_visita */
             UPPER(
               REPLACE(
-                TRIM(
-                  COALESCE(
-                    NULLIF(gv0.motivo_no_implementacion,''),
-                    NULLIF(
-                      TRIM(
-                        SUBSTRING_INDEX(
-                          REPLACE(COALESCE(gv0.observacion,''),'|','-'),
-                          '-',
-                          1
-                        )
-                      ), ''
-                    ),
-                    NULLIF(gv0.estado_gestion,''),
-                    ''
-                  )
+                COALESCE(
+                  NULLIF(gv.motivo_no_implementacion, ''),
+                  NULLIF(TRIM(SUBSTRING_INDEX(REPLACE(COALESCE(gv.observacion,''),'|','-'),'-',1)), ''),
+                  gv.estado_gestion,
+                  ''
                 )
               , '_', ' ')
-            )                                           AS MOTIVO
+            ) AS MOTIVO,
 
-        FROM (
-            /* última GV con id_fq 0/NULL por (id_formulario, id_local) */
-            SELECT gv1.*
-            FROM gestion_visita gv1
-            JOIN (
-                SELECT 
-                    id_formulario,
-                    id_local,
-                    MAX(
-                      COALESCE(
-                        NULLIF(fecha_visita,'0000-00-00 00:00:00'),
-                        created_at
-                      )
-                    ) AS max_ts
-                FROM gestion_visita
-                WHERE id_formulario = {$idForm}
-                  AND (id_formularioQuestion IS NULL OR id_formularioQuestion = 0)
-                GROUP BY id_formulario, id_local
-            ) t ON t.id_formulario = gv1.id_formulario
-               AND t.id_local      = gv1.id_local
-               AND COALESCE(
-                     NULLIF(gv1.fecha_visita,'0000-00-00 00:00:00'),
-                     gv1.created_at
-                   ) = t.max_ts
-            WHERE gv1.id_formulario = {$idForm}
-              AND (gv1.id_formularioQuestion IS NULL OR gv1.id_formularioQuestion = 0)
-        ) gv0
-        JOIN formulario f2 ON f2.id = gv0.id_formulario
-        JOIN local     l2  ON l2.id = gv0.id_local
-        LEFT JOIN visita   v0  ON v0.id = gv0.visita_id
-        LEFT JOIN material m2  ON m2.id = gv0.id_material
-        LEFT JOIN usuario  u_gv0 ON u_gv0.id = gv0.id_usuario
-        LEFT JOIN jefe_venta jv2 ON jv2.id = l2.id_jefe_venta
-        JOIN cuenta cu2 ON cu2.id = l2.id_cuenta
-        JOIN cadena ca2 ON ca2.id = l2.id_cadena
-        JOIN comuna cm2 ON cm2.id = l2.id_comuna
-        JOIN region re2 ON re2.id = cm2.id_region
+            UPPER(u.usuario) AS gestionado_por,
 
-        WHERE f2.id = {$idForm}
+            /* ID de visita para referencia */
+            gv.visita_id
+
+        FROM gestion_visita gv
+        INNER JOIN formulario   f  ON f.id  = gv.id_formulario
+        INNER JOIN local        l  ON l.id  = gv.id_local
+        LEFT  JOIN visita       v  ON v.id  = gv.visita_id
+        LEFT  JOIN formularioQuestion fq ON fq.id = gv.id_formularioQuestion
+        LEFT  JOIN material     m  ON m.id  = gv.id_material
+        LEFT  JOIN jefe_venta   jv ON jv.id = l.id_jefe_venta
+        INNER JOIN usuario      u  ON u.id  = gv.id_usuario
+        INNER JOIN cuenta       cu ON cu.id = l.id_cuenta
+        INNER JOIN cadena       ca ON ca.id = l.id_cadena
+        INNER JOIN comuna       cm ON cm.id = l.id_comuna
+        INNER JOIN region       re ON re.id = cm.id_region
+        WHERE f.id = ?
+        ORDER BY l.codigo, gv.fecha_visita ASC, gv.created_at ASC
     ";
-
-    /* Envolvemos el UNION para poder ordenar por alias */
-    $sql_wrapped = "
-        SELECT * FROM (
-            {$sql}
-        ) AS x
-        ORDER BY codigo_local,
-                 COALESCE(fechaVisita, '1900-01-01'),
-                 COALESCE(hora, '00:00:00')
-    ";
-
-    $res = mysqli_query($conn, $sql_wrapped);
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param('i', $idForm);
+    $stmt->execute();
+    $res = $stmt->get_result();
     if (!$res) {
         if (ob_get_length()) { ob_end_clean(); }
-        die("Error en getLocalesDetails: " . mysqli_error($conn));
+        die("Error en getLocalesDetailsHistorico: " . $conn->error);
     }
-    $rows = mysqli_fetch_all($res, MYSQLI_ASSOC);
+    return $res->fetch_all(MYSQLI_ASSOC);
+}
 
-    // Normalizar numero_local si faltó
-    foreach ($rows as &$loc) {
-        if (empty($loc['numero_local'])) {
-            $loc['numero_local'] = preg_replace('/\D+/', '', (string)($loc['codigo_local'] ?? ''));
+function getFotosImplementaciones($idForm, array $gvIds): array {
+    global $conn;
+
+    $normalizarFoto = function (string $url): string {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+
+        if (preg_match('#^https?://#i', $url)) {
+            return $url;
+        }
+
+        $url = ltrim($url, '/');
+        return 'https://www.visibility.cl/visibility2/app/' . $url;
+    };
+
+    $gvIds = array_values(array_filter(array_unique(array_map('intval', $gvIds)), function ($v) {
+        return $v > 0;
+    }));
+
+    if (empty($gvIds)) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($gvIds), '?'));
+    $types        = 'i' . str_repeat('i', count($gvIds));
+
+    // Buscar fotos por id_formularioQuestion (vinculado a gestion_visita)
+    $sql = "
+        SELECT fv.id_formularioQuestion, fv.url
+        FROM fotoVisita fv
+        WHERE fv.id_formulario = ?
+          AND fv.id_formularioQuestion IN (
+              SELECT gv.id_formularioQuestion
+              FROM gestion_visita gv
+              WHERE gv.id IN ($placeholders)
+          )
+        ORDER BY fv.id ASC
+    ";
+
+    $stmt       = $conn->prepare($sql);
+    $params     = array_merge([$types], [$idForm], $gvIds);
+    $bindParams = [];
+    foreach ($params as $k => $v) {
+        $bindParams[$k] = &$params[$k];
+    }
+    call_user_func_array([$stmt, 'bind_param'], $bindParams);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if (!$res) {
+        return [];
+    }
+
+    $out = [];
+    while ($row = $res->fetch_assoc()) {
+        $fqId = (int)$row['id_formularioQuestion'];
+        $out[$fqId][] = $normalizarFoto($row['url']);
+    }
+    return $out;
+}
+
+function renderValorConImagen(string $valor, bool $inline): string {
+    $vs = trim($valor);
+    if ($vs === '') {
+        return '';
+    }
+
+    $parts = preg_split('/\s*;\s*/', $vs);
+
+    if ($inline) {
+        $out = [];
+        foreach ($parts as $p) {
+            if ($p === '') continue;
+            if (!preg_match('#^https?://#i', $p)) {
+                $out[] = e($p);
+                continue;
+            }
+            $safe = e($p);
+            $out[] =
+                '<a href="' . $safe . '" target="_blank">' .
+                    '<img class="inline-img" src="' . $safe . '" ' .
+                        'data-toggle="modal" data-target="#imgModal" data-src="' . $safe . '">' .
+                '</a>';
+        }
+        return $out ? implode('<br>', $out) : e($vs);
+    }
+
+    $out = [];
+    foreach ($parts as $p) {
+        if ($p === '') continue;
+        if (preg_match('#^https?://#i', $p)) {
+            $safe = e($p);
+            $out[] = '<a href="' . $safe . '">' . $safe . '</a>';
+        } else {
+            $out[] = e($p);
         }
     }
-    unset($loc);
-
-    return $rows;
+    return $out ? implode('; ', $out) : e($vs);
 }
 
 function getEncuestaPivot($idForm) {
     global $conn;
-    // Preguntas en orden
+
     $allQuestions = [];
     $qry = "
         SELECT question_text
         FROM form_questions
-        WHERE id_formulario = {$idForm}
+        WHERE id_formulario = ?
         ORDER BY sort_order
     ";
-    $resQ = mysqli_query($conn, $qry)
-        or die("Error al obtener preguntas: " . mysqli_error($conn));
-    while ($rQ = mysqli_fetch_assoc($resQ)) {
+    $stmtQ = $conn->prepare($qry);
+    $stmtQ->bind_param('i', $idForm);
+    $stmtQ->execute();
+    $resQ = $stmtQ->get_result();
+    if (!$resQ) {
+        if (ob_get_length()) { ob_end_clean(); }
+        die("Error al obtener preguntas: " . $conn->error);
+    }
+    while ($rQ = $resQ->fetch_assoc()) {
         $allQuestions[] = $rQ['question_text'];
     }
+    $stmtQ->close();
 
-    // Respuestas pivot
     $sql = "
         SELECT
-            f.id                                        AS idCampana,
-            UPPER(f.nombre)                             AS nombreCampana,
-            UPPER(l.codigo)                             AS codigo_local,
-            UPPER(
+            f.id AS idCampana,
+            ANY_VALUE(UPPER(f.nombre))           AS nombreCampana,
+            l.codigo                             AS codigo_local,
+            ANY_VALUE(
               CASE
                 WHEN l.nombre REGEXP '^[0-9]+'
                 THEN SUBSTRING_INDEX(l.nombre, ' ', 1)
                 ELSE ''
               END
-            )                                           AS numero_local,
-            UPPER(l.nombre)                             AS nombre_local,
-            UPPER(l.direccion)                          AS direccion_local,
-            UPPER(cu.nombre)                            AS cuenta,
-            UPPER(ca.nombre)                            AS cadena,
-            UPPER(cm.comuna)                            AS comuna,
-            UPPER(re.region)                            AS region,
-            UPPER(u.usuario)                            AS usuario,
-            DATE(fqr.created_at)                        AS fechaVisita,
-            UPPER(fp.question_text)                     AS question_text,
+            )                                    AS numero_local,
+            ANY_VALUE(UPPER(l.nombre))           AS nombre_local,
+            ANY_VALUE(UPPER(l.direccion))        AS direccion_local,
+            ANY_VALUE(UPPER(cu.nombre))          AS cuenta,
+            ANY_VALUE(UPPER(ca.nombre))          AS cadena,
+            ANY_VALUE(UPPER(cm.comuna))          AS comuna,
+            ANY_VALUE(UPPER(re.region))          AS region,
+            ANY_VALUE(UPPER(u.usuario))          AS usuario,
+            DATE(fqr.created_at)                 AS fechaVisita,
+            UPPER(fp.question_text)              AS question_text,
             UPPER(
               GROUP_CONCAT(
-                DISTINCT fqr.answer_text
-                ORDER BY fp.sort_order
+                fqr.answer_text
+                ORDER BY fqr.id
                 SEPARATOR '; '
               )
-            )                                           AS concat_answers,
-            UPPER(
-              GROUP_CONCAT(
-                DISTINCT CASE WHEN fqr.valor <> '0.00' THEN fqr.valor END
-                ORDER BY fp.sort_order
-                SEPARATOR '; '
-              )
-            )                                           AS concat_valores
+            ) AS concat_answers,
+            GROUP_CONCAT(
+              CASE WHEN fqr.valor <> '0.00' THEN fqr.valor END
+              ORDER BY fqr.id
+              SEPARATOR '; '
+            ) AS concat_valores
         FROM formulario f
         JOIN form_questions fp           ON fp.id_formulario = f.id
         JOIN form_question_responses fqr ON fqr.id_form_question = fp.id
@@ -513,20 +420,25 @@ function getEncuestaPivot($idForm) {
         JOIN cuenta cu                   ON cu.id = l.id_cuenta
         JOIN cadena ca                   ON ca.id = l.id_cadena
         JOIN comuna cm                   ON cm.id = l.id_comuna
-        JOIN region re                   ON re.id   = cm.id_region
-        WHERE f.id = {$idForm}
+        JOIN region re                   ON re.id = cm.id_region
+        WHERE f.id = ?
         GROUP BY
             l.codigo,
             DATE(fqr.created_at),
             fp.question_text
-        ORDER BY l.codigo, fp.sort_order
+        ORDER BY l.codigo, fp.question_text
     ";
-    $res = mysqli_query($conn, $sql)
-        or die("Error en getEncuestaPivot: " . mysqli_error($conn));
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param('i', $idForm);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if (!$res) {
+        if (ob_get_length()) { ob_end_clean(); }
+        die("Error en getEncuestaPivot: " . $conn->error);
+    }
 
-    // Agrupar por Local + Fecha
     $grouped = [];
-    while ($row = mysqli_fetch_assoc($res)) {
+    while ($row = $res->fetch_assoc()) {
         $key = $row['codigo_local'] . '_' . $row['fechaVisita'];
         if (!isset($grouped[$key])) {
             $grouped[$key] = [
@@ -552,7 +464,6 @@ function getEncuestaPivot($idForm) {
         ];
     }
 
-    // Pivotear columnas de encuesta
     $final = [];
     foreach ($grouped as $g) {
         $rowOut = [
@@ -581,13 +492,14 @@ function getEncuestaPivot($idForm) {
         $final[] = $rowOut;
     }
 
-    // Eliminar columnas “_valor” totalmente vacías
     $valorCols = [];
     foreach ($final as $r) {
         foreach ($r as $c => $v) {
             if (strpos($c, '_valor') !== false) {
                 $valorCols[$c] = $valorCols[$c] ?? false;
-                if (trim((string)$v) !== '') $valorCols[$c] = true;
+                if (trim((string)$v) !== '') {
+                    $valorCols[$c] = true;
+                }
             }
         }
     }
@@ -601,23 +513,86 @@ function getEncuestaPivot($idForm) {
     return $final;
 }
 
-/* -----------------------------------------------------------------------------
-   Generador de HTML/XLS (mismas columnas + primera columna ID_EJECUCION)
------------------------------------------------------------------------------ */
+// -----------------------------------------------------------------------------
+// Generador de HTML/XLS (idéntico a descargar_excel.php)
+// -----------------------------------------------------------------------------
 
-function generarExcel($campaign, $locales, $encuesta, $archivo = null, $inline = false) {
-    // Si es inline, corregir URLs relativas de imágenes en Encuesta
-    if ($inline) {
-        foreach ($encuesta as &$fila) {
-            foreach ($fila as $col => $valor) {
-                $valorStr = (string)($valor ?? '');
-                if (preg_match('#^/?visibility2/#', $valorStr)) {
-                    $ruta = ltrim($valorStr, '/');
-                    $fila[$col] = 'https://visibility.cl/' . $ruta;
+function generarExcel($campaign, $locales, $encuesta, $archivo = null, $inline = false, $fotosLocales = [], $maxFotosLocales = 0, $modalidad = '') {
+    $normalizarUrlEncuesta = function (string $url): string {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+
+        if (preg_match('#^https?://#i', $url)) {
+            return $url;
+        }
+
+        if (!preg_match('#(uploads|visibility2|app/|pregunta_)\b#i', $url)
+            && !preg_match('#\.(webp|jpe?g|png|gif)$#i', $url)) {
+            return $url;
+        }
+
+        $url     = str_replace('\\', '/', $url);
+        $url     = ltrim($url, '/');
+        $urlLow  = strtolower($url);
+        $baseUrl = 'https://www.visibility.cl/';
+
+        if (preg_match('#^visibility2/#i', $url)) {
+            return $baseUrl . $urlLow;
+        }
+        if (preg_match('#^app/#i', $url)) {
+            return $baseUrl . 'visibility2/' . $urlLow;
+        }
+        if (preg_match('#^uploads_fotos_pregunta/#i', $url)) {
+            return $baseUrl . 'visibility2/app/uploads/' . $urlLow;
+        }
+        if (preg_match('#^uploads/#i', $url)) {
+            return $baseUrl . 'visibility2/app/' . $urlLow;
+        }
+
+        return $baseUrl . 'visibility2/app/' . $urlLow;
+    };
+
+    foreach ($encuesta as &$fila) {
+        foreach ($fila as $col => $valor) {
+            $valorStr = trim((string)($valor ?? ''));
+            if ($valorStr === '') {
+                continue;
+            }
+
+            $parts   = array_map('trim', explode(';', $valorStr));
+            $changed = false;
+
+            foreach ($parts as &$p) {
+                if ($p === '') {
+                    continue;
+                }
+                $normalized = $normalizarUrlEncuesta($p);
+                if ($normalized !== $p) {
+                    $p       = $normalized;
+                    $changed = true;
                 }
             }
+            unset($p);
+
+            if ($changed) {
+                $fila[$col] = implode('; ', $parts);
+            }
         }
-        unset($fila);
+    }
+    unset($fila);
+
+    $modalidadLower = strtolower(trim($modalidad));
+    $etiquetaMaterial = 'MATERIAL';
+    $etiquetaCantidad = 'CANTIDAD MATERIAL EJECUTADO';
+
+    if ($modalidadLower === 'retiro') {
+        $etiquetaMaterial = 'MATERIAL RETIRADO';
+        $etiquetaCantidad = 'CANTIDAD MATERIAL RETIRADO';
+    } elseif ($modalidadLower === 'entrega') {
+        $etiquetaMaterial = 'MATERIAL ENTREGADO';
+        $etiquetaCantidad = 'CANTIDAD MATERIAL ENTREGADO';
     }
 
     $html = <<<HTML
@@ -628,20 +603,91 @@ function generarExcel($campaign, $locales, $encuesta, $archivo = null, $inline =
           href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <style>
       table { width: 100%; table-layout: auto; border-collapse: collapse; }
-      th, td { border: 1px solid #666; padding: 4px; white-space: normal; word-wrap: break-word; vertical-align: top; }
-      img.inline-img { max-width: 120px; max-height: 120px; cursor: pointer; }
+      th, td {
+        border: 1px solid #666;
+        padding: 4px;
+        white-space: normal;
+        word-wrap: break-word;
+        vertical-align: top;
+      }
+      img.inline-img {
+        max-width: 120px;
+        max-height: 120px;
+        cursor: pointer;
+      }
+      .info-box {
+        background-color: #f0f0f0;
+        border: 2px solid #333;
+        padding: 10px;
+        margin-bottom: 20px;
+        font-size: 10pt;
+      }
+      .info-box table {
+        width: auto;
+        border: none;
+      }
+      .info-box td {
+        border: none;
+        padding: 3px 10px;
+      }
+      .historico-badge {
+        background-color: #17a2b8;
+        color: white;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 9pt;
+        margin-left: 10px;
+      }
     </style>
   </head>
   <body>
 HTML;
 
-    /* —– Detalle de Locales —— */
+    // Recuadro de Información del Formulario
+    if (!empty($campaign)) {
+        $campInfo = $campaign[0];
+        $fechaInicio = !empty($campInfo['fechaInicio']) ? date('d-m-Y', strtotime($campInfo['fechaInicio'])) : '-';
+        $fechaTermino = !empty($campInfo['fechaTermino']) ? date('d-m-Y', strtotime($campInfo['fechaTermino'])) : '-';
+        $modalidadDisplay = ucwords(str_replace('_', ' ', $campInfo['modalidad'] ?? '-'));
+
+        $tipoDisplay = '-';
+        if (isset($campInfo['tipo'])) {
+            switch ($campInfo['tipo']) {
+                case 1:
+                    $tipoDisplay = 'Campaña Programada';
+                    break;
+                case 2:
+                    $tipoDisplay = 'Campaña Complementaria';
+                    break;
+                case 3:
+                    $tipoDisplay = 'Campaña IPT';
+                    break;
+                default:
+                    $tipoDisplay = 'Tipo ' . $campInfo['tipo'];
+            }
+        }
+
+        $html .= "<div class='info-box'>";
+        $html .= "<b>DATOS DEL FORMULARIO</b><span class='historico-badge'>REPORTE HISTORICO</span><br>";
+        $html .= "<table>";
+        $html .= "<tr><td><b>Campaña:</b></td><td>" . e($campInfo['nombre']) . "</td></tr>";
+        $html .= "<tr><td><b>Fecha Inicio:</b></td><td>" . e($fechaInicio) . "</td></tr>";
+        $html .= "<tr><td><b>Fecha Término:</b></td><td>" . e($fechaTermino) . "</td></tr>";
+        $html .= "<tr><td><b>Modalidad:</b></td><td>" . e($modalidadDisplay) . "</td></tr>";
+        $html .= "<tr><td><b>Tipo:</b></td><td>" . e($tipoDisplay) . "</td></tr>";
+        $html .= "<tr><td><b>Empresa:</b></td><td>" . e($campInfo['nombre_empresa'] ?? '-') . "</td></tr>";
+        $html .= "<tr><td><b>División:</b></td><td>" . e($campInfo['nombre_division'] ?? '-') . "</td></tr>";
+        $html .= "<tr><td><b>Fuente de datos:</b></td><td>gestion_visita + visita (histórico)</td></tr>";
+        $html .= "</table>";
+        $html .= "</div>";
+    }
+
+    // Detalle de Locales
     if (!empty($locales)) {
-        $html .= "<b>Detalle de Locales</b>
-                  <table border='1' 
+        $html .= "<b>Detalle de Locales (Histórico de Visitas)</b>
+                  <table border='1'
                          style='border-collapse:collapse; table-layout:auto; font-size:9pt;'>
                     <tr>
-                      <th>ID_EJECUCION</th>
                       <th>ID LOCAL</th>
                       <th>CODIGO</th>
                       <th>N° LOCAL</th>
@@ -654,26 +700,45 @@ HTML;
                       <th>REGION</th>
                       <th>JEFE VENTA</th>
                       <th>USUARIO</th>
+                      <th>FECHA INICIO</th>
+                      <th>FECHA TÉRMINO</th>
                       <th>FECHA PLANIFICADA</th>
                       <th>FECHA VISITA</th>
                       <th>HORA</th>
                       <th>ESTADO VISITA</th>
                       <th>ESTADO ACTIVIDAD</th>
                       <th>MOTIVO</th>
-                      <th>MATERIAL</th>
-                      <th>CANTIDAD MATERIAL EJECUTADO</th>
+                      <th>{$etiquetaMaterial}</th>
+                      <th>{$etiquetaCantidad}</th>
                       <th>MATERIAL PROPUESTO</th>
                       <th>OBSERVACION</th>
+";
+
+        if ($maxFotosLocales > 0) {
+            for ($i = 1; $i <= $maxFotosLocales; $i++) {
+                $html .= "                      <th>FOTO {$i}</th>\n";
+            }
+        }
+
+        $html .= "
                     </tr>";
 
         foreach ($locales as $l) {
             $fechaPropuesta = ($l['fechaPropuesta'] !== null && $l['fechaPropuesta'] !== '0000-00-00')
-                              ? $l['fechaPropuesta'] : '-';
+                              ? $l['fechaPropuesta']
+                              : '-';
             $fechaVisita    = ($l['fechaVisita'] !== null && $l['fechaVisita'] !== '0000-00-00')
-                              ? $l['fechaVisita'] : '-';
+                              ? $l['fechaVisita']
+                              : '-';
+
+            $fechaInicioCamp = ($l['fechaInicio'] !== null && $l['fechaInicio'] !== '0000-00-00')
+                              ? $l['fechaInicio']
+                              : '-';
+            $fechaTerminoCamp = ($l['fechaTermino'] !== null && $l['fechaTermino'] !== '0000-00-00')
+                              ? $l['fechaTermino']
+                              : '-';
 
             $html .= "<tr>
-                        <td>" . e($l['id_ejecucion']) . "</td>
                         <td>" . e($l['idLocal']) . "</td>
                         <td>" . e($l['codigo_local']) . "</td>
                         <td>" . e($l['numero_local']) . "</td>
@@ -686,6 +751,8 @@ HTML;
                         <td>" . e($l['region']) . "</td>
                         <td>" . e($l['jefeVenta']) . "</td>
                         <td>" . e($l['gestionado_por']) . "</td>
+                        <td>{$fechaInicioCamp}</td>
+                        <td>{$fechaTerminoCamp}</td>
                         <td>{$fechaPropuesta}</td>
                         <td>{$fechaVisita}</td>
                         <td>" . e($l['hora']) . "</td>
@@ -695,16 +762,27 @@ HTML;
                         <td>" . e($l['material']) . "</td>
                         <td>" . e($l['valor']) . "</td>
                         <td>" . e($l['valor_propuesto']) . "</td>
-                        <td>" . e($l['observacion']) . "</td>
-                      </tr>";
+                        <td>" . e($l['observacion']) . "</td>";
+
+            $fotos = [];
+            if (!empty($l['id_formularioQuestion']) && isset($fotosLocales[$l['id_formularioQuestion']])) {
+                $fotos = $fotosLocales[$l['id_formularioQuestion']];
+            }
+
+            for ($fi = 0; $fi < $maxFotosLocales; $fi++) {
+                $url = trim((string)($fotos[$fi] ?? ''));
+                $html .= "<td>" . renderValorConImagen($url, $inline) . "</td>";
+            }
+
+            $html .= "</tr>";
         }
 
         $html .= "</table><br>";
     }
 
-    /* —– Encuesta Pivot —— */
+    // Encuesta Pivot
     $html .= "<b>Encuesta</b>
-              <table border='1' 
+              <table border='1'
                      style='border-collapse:collapse; table-layout:auto; font-size:9pt;'>
                 <tr>";
     if (!empty($encuesta)) {
@@ -718,27 +796,12 @@ HTML;
         $html .= "<tr>";
         foreach ($row as $v) {
             $vs = (string)($v ?? '');
-            if ($inline && preg_match('#^https?://#', $vs)) {
-                $urls  = preg_split('/\s*;\s*/', $vs);
-                $first = trim($urls[0] ?? '');
-                if (preg_match('#\.(jpe?g|png|gif|webp)$#i', $first)) {
-                    $html .= "<td><img class=\"inline-img\" src=\"" 
-                           . e($first) 
-                           . "\" data-toggle=\"modal\" data-target=\"#imgModal\" data-src=\"" 
-                           . e($first) 
-                           . "\"></td>";
-                } else {
-                    $html .= "<td>" . e($vs) . "</td>";
-                }
-            } else {
-                $html .= "<td>" . e($vs) . "</td>";
-            }
+            $html .= "<td>" . renderValorConImagen($vs, $inline) . "</td>";
         }
         $html .= "</tr>";
     }
     $html .= "</table>";
 
-    // Modal para zoom de imágenes (solo inline)
     if ($inline) {
         $html .= <<<HTML
 <!-- Modal -->
@@ -751,6 +814,7 @@ HTML;
     </div>
   </div>
 </div>
+
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
 <script>
@@ -769,7 +833,6 @@ HTML;
         return $html;
     }
 
-    // Descargar como .xls (HTML compatible con Excel)
     $content = "\xEF\xBB\xBF" . $html;
     $content = strtr(
         $content,
@@ -781,7 +844,6 @@ HTML;
         ]
     );
 
-    // limpiar cualquier salida previa antes de headers
     if (ob_get_length()) { ob_end_clean(); }
 
     header("Cache-Control: no-cache, must-revalidate");
@@ -794,29 +856,106 @@ HTML;
     exit();
 }
 
-/* -----------------------------------------------------------------------------
-   Punto de entrada
------------------------------------------------------------------------------ */
+function removerFotosDeEncuesta(array $encuesta): array {
+    $esUrlFoto = function (string $valor): bool {
+        $v = trim($valor);
+        if ($v === '') {
+            return false;
+        }
 
-$campaignData   = getCampaignData($formulario_id);
-$localesDetails = getLocalesDetails($formulario_id);     // HÍBRIDO (FQ + última GV + GV id_fq=0)
-$encuestaPivot  = getEncuestaPivot($formulario_id);
+        return preg_match('#https?://#i', $v)
+            || preg_match('#\.(?:jpe?g|png|gif|webp)(?:\?.*)?$#i', $v)
+            || preg_match('#\buploads#i', $v)
+            || preg_match('#\bvisibility2\b#i', $v);
+    };
+
+    foreach ($encuesta as &$fila) {
+        foreach ($fila as $col => $valor) {
+            $valorStr = (string)($valor ?? '');
+            if ($valorStr === '') {
+                continue;
+            }
+
+            $partsFiltradas = [];
+            foreach (preg_split('/\s*;\s*/', $valorStr) as $parte) {
+                if ($parte === '') {
+                    continue;
+                }
+                if ($esUrlFoto($parte)) {
+                    continue;
+                }
+                $partsFiltradas[] = $parte;
+            }
+
+            $fila[$col] = $partsFiltradas ? implode('; ', $partsFiltradas) : '';
+        }
+    }
+    unset($fila);
+
+    return $encuesta;
+}
+
+// -----------------------------------------------------------------------------
+// Punto de entrada
+// -----------------------------------------------------------------------------
+$campaignData = getCampaignData($formulario_id);
+
+$localesDetails = [];
+$encuestaPivot  = [];
+
+switch (strtolower(trim($modalidad))) {
+    case 'solo_implementacion':
+        $localesDetails = getLocalesDetailsHistorico($formulario_id);
+        break;
+
+    case 'solo_auditoria':
+        $encuestaPivot = getEncuestaPivot($formulario_id);
+        break;
+
+    case 'implementacion_auditoria':
+        $localesDetails = getLocalesDetailsHistorico($formulario_id);
+        $encuestaPivot  = getEncuestaPivot($formulario_id);
+        break;
+
+    default:
+        $localesDetails = getLocalesDetailsHistorico($formulario_id);
+        $encuestaPivot  = getEncuestaPivot($formulario_id);
+        break;
+}
+
+$fotosLocales    = [];
+$maxFotosLocales = 0;
+if ($incluirFotosMaterial && !empty($localesDetails)) {
+    $gvIds        = array_column($localesDetails, 'id_gestion_visita');
+    $fotosLocales = getFotosImplementaciones($formulario_id, $gvIds);
+    foreach ($fotosLocales as $lista) {
+        $maxFotosLocales = max($maxFotosLocales, count($lista));
+    }
+}
+
+if (!$incluirFotosEncuesta && !empty($encuestaPivot)) {
+    $encuestaPivot = removerFotosDeEncuesta($encuestaPivot);
+}
+
+foreach ($localesDetails as &$loc) {
+    if (empty($loc['numero_local'])) {
+        $loc['numero_local'] = preg_replace('/\D+/', '', (string)($loc['codigo_local'] ?? ''));
+    }
+}
+unset($loc);
 
 if (empty($campaignData) && empty($localesDetails) && empty($encuestaPivot)) {
     if (ob_get_length()) { ob_end_clean(); }
-    die("No se encontraron datos para la campaña.");
+    die("No se encontraron datos históricos para la campaña.");
 }
 
-// Preparar nombre de archivo
 $nombreCampaña = preg_replace('/[^A-Za-z0-9_\-]/', '_', (string)$nombreForm);
 $archivo = "Historico_{$nombreCampaña}_" . date('Y-m-d_His') . ".xls";
 
-// Mostrar inline o descargar
 if ($inline) {
-    // limpiar buffer antes de imprimir HTML inline
     if (ob_get_length()) { ob_end_clean(); }
-    echo generarExcel($campaignData, $localesDetails, $encuestaPivot, null, true);
+    echo generarExcel($campaignData, $localesDetails, $encuestaPivot, null, true, $fotosLocales, $maxFotosLocales, $modalidad);
     exit();
 }
 
-generarExcel($campaignData, $localesDetails, $encuestaPivot, $archivo);
+generarExcel($campaignData, $localesDetails, $encuestaPivot, $archivo, false, $fotosLocales, $maxFotosLocales, $modalidad);

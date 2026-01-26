@@ -1,10 +1,18 @@
 <?php
 declare(strict_types=1);
 
+// CRÍTICO: Para endpoints JSON, NUNCA mostrar errores en output
+ini_set('display_errors', '0');
+ini_set('display_startup_errors', '0');
+error_reporting(E_ALL);
+ini_set('log_errors', '1');
+
+// Output buffering: captura cualquier output accidental
+ob_start();
+
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
-ini_set('display_errors','0');
 date_default_timezone_set('America/Santiago');
 
 if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
@@ -20,12 +28,18 @@ require_once __DIR__ . '/lib/idempotency.php';
 
 /* -------------------- Helpers -------------------- */
 function json_fail(int $code, string $message, array $extra = []): void {
+  // Limpiar cualquier output previo (warnings PHP, espacios, etc.)
+  while (ob_get_level()) { ob_end_clean(); }
   http_response_code($code);
+  header('Content-Type: application/json; charset=utf-8');
   echo json_encode(['ok'=>false,'status'=>'error','message'=>$message] + $extra, JSON_UNESCAPED_UNICODE);
   exit;
 }
 function json_ok(array $payload): void {
+  // Limpiar cualquier output previo
+  while (ob_get_level()) { ob_end_clean(); }
   http_response_code(200);
+  header('Content-Type: application/json; charset=utf-8');
   echo json_encode(['ok'=>true,'status'=>'ok'] + $payload, JSON_UNESCAPED_UNICODE);
   exit;
 }
@@ -257,13 +271,16 @@ try {
 
   // 3) Crear si no existe
   if ($visita_id === 0) {
-    // Normalizar/crear GUID (32 chars) si viene muy largo o vacío
+    // Normalizar/crear GUID si viene vacío
+    // IMPORTANTE: UUIDs estándar tienen 36 chars (con guiones), NO hashear
+    // Solo generar si está vacío o truncar si excede límite de columna (64 chars)
     if ($client_guid === '') {
       try { $client_guid = bin2hex(random_bytes(16)); } // 32
       catch (Throwable $e) { $client_guid = substr(hash('sha1', uniqid((string)$user_id, true)), 0, 32); }
     } else {
-      if (strlen($client_guid) > 34) {
-        $client_guid = substr(hash('sha1', $client_guid), 0, 32);
+      // Solo truncar si excede 64 chars (límite típico de columna VARCHAR)
+      if (strlen($client_guid) > 64) {
+        $client_guid = substr(hash('sha256', $client_guid), 0, 64);
       }
     }
 
@@ -384,6 +401,3 @@ try {
   exit;
 }
 
-// Recomendación de índice para acelerar reuse de visitas abiertas por guid
-// ALTER TABLE visita
-//   ADD INDEX idx_visita_open_lookup (id_usuario, id_formulario, id_local, client_guid, fecha_fin, id);

@@ -324,34 +324,242 @@
   }
 
   // --------------------------------------------------------------------------------
-  // Mapas auxiliares en localStorage
+  // Mapas auxiliares con persistencia dual (localStorage + IndexedDB)
+  // MEJORA CRÍTICA: Evita pérdida de mappings si se limpia localStorage
   // --------------------------------------------------------------------------------
+
+  // Store para IDB de mappings
+  const MAPPING_IDB_NAME = 'v2_mappings';
+  const MAPPING_IDB_VER = 1;
+  let _mappingDb = null;
+
+  async function getMappingDb() {
+    if (_mappingDb) return _mappingDb;
+    if (!('indexedDB' in window)) return null;
+
+    return new Promise((resolve) => {
+      try {
+        const req = indexedDB.open(MAPPING_IDB_NAME, MAPPING_IDB_VER);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('mappings')) {
+            db.createObjectStore('mappings', { keyPath: 'key' });
+          }
+        };
+        req.onsuccess = () => {
+          _mappingDb = req.result;
+          resolve(_mappingDb);
+        };
+        req.onerror = () => resolve(null);
+      } catch (_) {
+        resolve(null);
+      }
+    });
+  }
+
+  async function idbGet(key) {
+    const db = await getMappingDb();
+    if (!db) return null;
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction('mappings', 'readonly');
+        const store = tx.objectStore('mappings');
+        const req = store.get(key);
+        req.onsuccess = () => resolve(req.result?.data || null);
+        req.onerror = () => resolve(null);
+      } catch (_) {
+        resolve(null);
+      }
+    });
+  }
+
+  async function idbSet(key, data) {
+    const db = await getMappingDb();
+    if (!db) return false;
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction('mappings', 'readwrite');
+        const store = tx.objectStore('mappings');
+        store.put({ key, data, updatedAt: Date.now() });
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      } catch (_) {
+        resolve(false);
+      }
+    });
+  }
+
   const Visits = {
     key: 'v2_visit_map', // { local-uuid: visita_id_real }
-    load(){ try { return JSON.parse(localStorage.getItem(this.key) || '{}'); } catch(_) { return {}; } },
-    save(m){ localStorage.setItem(this.key, JSON.stringify(m)); },
-    set(localId, realId){ const m = this.load(); m[localId]=realId; this.save(m); },
-    get(localId){ const m = this.load(); return m[localId] || null; }
+    _cache: null,
+
+    async load() {
+      // Intentar cargar de IDB primero (más confiable)
+      try {
+        const idbData = await idbGet(this.key);
+        if (idbData && typeof idbData === 'object') {
+          this._cache = idbData;
+          // Sincronizar a localStorage como backup
+          try { localStorage.setItem(this.key, JSON.stringify(idbData)); } catch(_) {}
+          return idbData;
+        }
+      } catch (_) {}
+
+      // Fallback a localStorage
+      try {
+        const lsData = JSON.parse(localStorage.getItem(this.key) || '{}');
+        this._cache = lsData;
+        // Intentar persistir en IDB para próxima vez
+        idbSet(this.key, lsData).catch(() => {});
+        return lsData;
+      } catch (_) {
+        return {};
+      }
+    },
+
+    loadSync() {
+      if (this._cache) return this._cache;
+      try { return JSON.parse(localStorage.getItem(this.key) || '{}'); } catch(_) { return {}; }
+    },
+
+    async save(m) {
+      this._cache = m;
+      localStorage.setItem(this.key, JSON.stringify(m));
+      await idbSet(this.key, m);
+    },
+
+    async set(localId, realId) {
+      const m = await this.load();
+      m[localId] = realId;
+      await this.save(m);
+    },
+
+    async get(localId) {
+      const m = await this.load();
+      return m[localId] || null;
+    },
+
+    // Versión síncrona para compatibilidad con código existente
+    getSync(localId) {
+      const m = this.loadSync();
+      return m[localId] || null;
+    }
   };
 
   const LocalByGuid = {
-    key: 'v2_local_by_guid', // { client_guid: 'local-uuid' }
-    load(){ try { return JSON.parse(localStorage.getItem(this.key) || '{}'); } catch(_) { return {}; } },
-    save(m){ localStorage.setItem(this.key, JSON.stringify(m)); },
-    set(g, lid){ const m=this.load(); m[g]=lid; this.save(m); },
-    get(g){ return this.load()[g] || null; },
-    del(g){ const m=this.load(); delete m[g]; this.save(m); }
+    key: 'v2_local_by_guid', // { client_guid: visita_id_real }
+    _cache: null,
+
+    async load() {
+      try {
+        const idbData = await idbGet(this.key);
+        if (idbData && typeof idbData === 'object') {
+          this._cache = idbData;
+          try { localStorage.setItem(this.key, JSON.stringify(idbData)); } catch(_) {}
+          return idbData;
+        }
+      } catch (_) {}
+
+      try {
+        const lsData = JSON.parse(localStorage.getItem(this.key) || '{}');
+        this._cache = lsData;
+        idbSet(this.key, lsData).catch(() => {});
+        return lsData;
+      } catch (_) {
+        return {};
+      }
+    },
+
+    loadSync() {
+      if (this._cache) return this._cache;
+      try { return JSON.parse(localStorage.getItem(this.key) || '{}'); } catch(_) { return {}; }
+    },
+
+    async save(m) {
+      this._cache = m;
+      localStorage.setItem(this.key, JSON.stringify(m));
+      await idbSet(this.key, m);
+    },
+
+    async set(g, lid) {
+      const m = await this.load();
+      m[g] = lid;
+      await this.save(m);
+    },
+
+    async get(g) {
+      const m = await this.load();
+      return m[g] || null;
+    },
+
+    getSync(g) {
+      return this.loadSync()[g] || null;
+    },
+
+    async del(g) {
+      const m = await this.load();
+      delete m[g];
+      await this.save(m);
+    }
   };
 
   const CompletedDeps = {
     key: 'v2_completed_deps', // ['create:<client_guid>', ...]
-    all(){ try{ return JSON.parse(localStorage.getItem(this.key)||'[]'); }catch(_){ return []; } },
-    has(tag){ return this.all().includes(tag); },
-    add(tag){
-      const m = this.all();
-      if(!m.includes(tag)){ m.push(tag); localStorage.setItem(this.key, JSON.stringify(m)); }
+    _cache: null,
+
+    async all() {
+      try {
+        const idbData = await idbGet(this.key);
+        if (Array.isArray(idbData)) {
+          this._cache = idbData;
+          try { localStorage.setItem(this.key, JSON.stringify(idbData)); } catch(_) {}
+          return idbData;
+        }
+      } catch (_) {}
+
+      try {
+        const lsData = JSON.parse(localStorage.getItem(this.key) || '[]');
+        this._cache = Array.isArray(lsData) ? lsData : [];
+        idbSet(this.key, this._cache).catch(() => {});
+        return this._cache;
+      } catch (_) {
+        return [];
+      }
+    },
+
+    allSync() {
+      if (this._cache) return this._cache;
+      try { return JSON.parse(localStorage.getItem(this.key) || '[]'); } catch(_) { return []; }
+    },
+
+    has(tag) {
+      return this.allSync().includes(tag);
+    },
+
+    async hasAsync(tag) {
+      const all = await this.all();
+      return all.includes(tag);
+    },
+
+    async add(tag) {
+      const m = await this.all();
+      if (!m.includes(tag)) {
+        m.push(tag);
+        this._cache = m;
+        localStorage.setItem(this.key, JSON.stringify(m));
+        await idbSet(this.key, m);
+      }
     }
   };
+
+  // Inicializar caches de mappings al cargar
+  (async function initMappings() {
+    try {
+      await Visits.load();
+      await LocalByGuid.load();
+      await CompletedDeps.all();
+    } catch (_) {}
+  })();
 
   // --------------------------------------------------------------------------------
   // Helpers varios
@@ -521,6 +729,8 @@
     'HTTP_429':      { maxAttempts: 6,  baseDelayMs: 10000, maxDelayMs: 300000 },
     'LOGICAL_ERROR': { maxAttempts: 3,  baseDelayMs: 5000, maxDelayMs: 30000 },
     'DUPLICATE':     { maxAttempts: 1,  baseDelayMs: 0, maxDelayMs: 0 }, // No reintentar, es éxito lógico
+    'SERVER_ERROR':  { maxAttempts: 6,  baseDelayMs: 3000, maxDelayMs: 120000 }, // Server devolvió HTML inesperado
+    'VISITA_PENDING':{ maxAttempts: 20, baseDelayMs: 2000, maxDelayMs: 30000 }, // Visita aún no creada, reintentar pronto
     'DEFAULT':       { maxAttempts: 8,  baseDelayMs: 2000, maxDelayMs: 300000 }
   };
 
@@ -547,8 +757,28 @@
       const status = response.status;
       const isHtml = parsed && parsed.isHtml;
 
-      // 401 = sesión expirada, bloquear cola y esperar re-login
-      if (status === 401 || isHtml) {
+      // 401 = sesión expirada, bloquear cola
+      if (status === 401) {
+        return { code: 'AUTH_EXPIRED', retryable: false, blocked: 'auth' };
+      }
+
+      // isHtml con HTTP 200: puede ser output basura del servidor (warnings PHP)
+      // Solo bloquear como auth si realmente parece una página de login
+      if (isHtml && status >= 200 && status < 300) {
+        const text = (parsed && parsed.text) || '';
+        // Detectar si es realmente una página de login/auth
+        const looksLikeLoginPage = /login|iniciar.?sesi|unauthorized|access.?denied/i.test(text);
+        if (looksLikeLoginPage) {
+          return { code: 'AUTH_EXPIRED', retryable: false, blocked: 'auth' };
+        }
+        // Si no parece login, es probablemente un error del servidor
+        console.warn('[Queue] Server returned HTML instead of JSON with HTTP', status);
+        return { code: 'SERVER_HTML_ERROR', retryable: true, retryConfig: RETRY_CONFIG['SERVER_ERROR'] };
+      }
+
+      // isHtml con otros códigos HTTP: tratarlo según el código
+      if (isHtml && (status === 302 || status === 301)) {
+        // Redirect a login
         return { code: 'AUTH_EXPIRED', retryable: false, blocked: 'auth' };
       }
 
@@ -558,8 +788,19 @@
         return { code: 'FORBIDDEN', retryable: false };
       }
 
-      // 409 = Conflict (idempotencia duplicada) - tratar como éxito lógico
+      // 409 = Conflict - puede ser duplicado exitoso o request en progreso
       if (status === 409) {
+        const errorCode = parsed?.json?.error_code;
+        // REQUEST_IN_PROGRESS significa que otro request está procesando, reintentar
+        if (errorCode === 'REQUEST_IN_PROGRESS') {
+          const retryAfter = parsed?.json?.retry_after || 5;
+          return { code: 'REQUEST_IN_PROGRESS', retryable: true, retryConfig: { maxAttempts: 15, baseDelayMs: retryAfter * 1000, maxDelayMs: 60000 } };
+        }
+        // IDEMPOTENCY_PAYLOAD_MISMATCH es error permanente
+        if (errorCode === 'IDEMPOTENCY_PAYLOAD_MISMATCH') {
+          return { code: 'IDEMPOTENCY_MISMATCH', retryable: false };
+        }
+        // Otros 409 (duplicado real) - tratar como éxito lógico
         return { code: 'DUPLICATE', retryable: false, success: true, retryConfig: RETRY_CONFIG['DUPLICATE'] };
       }
 
@@ -575,6 +816,11 @@
       // 429 Too Many Requests - backoff más largo
       if (status === 429) {
         return { code: 'HTTP_429', retryable: true, retryConfig: RETRY_CONFIG['HTTP_429'] };
+      }
+
+      // 503 con VISITA_PENDING - la visita aún no fue creada, reintentar pronto
+      if (status === 503 && parsed && parsed.json && parsed.json.error_code === 'VISITA_PENDING') {
+        return { code: 'VISITA_PENDING', retryable: true, retryConfig: RETRY_CONFIG['VISITA_PENDING'] };
       }
 
       // 502/503/504 - errores de gateway, reintentar con backoff
@@ -868,7 +1114,38 @@
           const t = AppDB.normalizeJob ? AppDB.normalizeJob(raw) : raw;
           const nextTryAt = t.nextTryAt || t.nextTry || 0;
           if (nextTryAt && nextTryAt > now) continue;
-          if (t.dependsOn && !CompletedDeps.has(t.dependsOn)) continue;
+
+          // MEJORA: Validación mejorada de dependencias
+          if (t.dependsOn && !CompletedDeps.has(t.dependsOn)) {
+            // Verificar si la dependencia existe como job pendiente
+            const depJobExists = pending.some(j => {
+              const job = AppDB.normalizeJob ? AppDB.normalizeJob(j) : j;
+              return job.type === 'create_visita' &&
+                     job.fields?.client_guid === t.fields?.client_guid;
+            });
+
+            if (!depJobExists) {
+              // La dependencia no existe y nunca se completó
+              // Verificar si ya pasó mucho tiempo (>10 min) - marcar como error permanente
+              const createdAt = t.createdAt || 0;
+              if (createdAt && (now - createdAt) > 10 * 60 * 1000) {
+                console.error('[Queue] Dependencia faltante para job:', t.id, 'depende de:', t.dependsOn);
+                await AppDB.update(t.id, {
+                  status: 'failed_permanent',
+                  finishedAt: now,
+                  lastError: buildLastError({
+                    code: 'MISSING_DEPENDENCY',
+                    message: 'La visita asociada nunca fue creada. Dependencia: ' + t.dependsOn,
+                    url: t.url
+                  }),
+                  updatedAt: now
+                });
+                QueueEvents.emit('queue:dispatch:error', { job: t, error: 'MISSING_DEPENDENCY' });
+                jr('onError', t, 'MISSING_DEPENDENCY');
+              }
+            }
+            continue;
+          }
 
           // PATCH: Adquirir lock cross-tab antes de procesar
           if (!CrossTabLock.tryAcquire(t.id)) {
@@ -898,14 +1175,23 @@
           QueueEvents.emit('queue:dispatch:start', { job: t });
           jr('onStart', t);
 
+          // MEJORA: Lock renewal cada 10s para jobs largos (fotos grandes)
+          const lockRenewalInterval = setInterval(() => {
+            if (CrossTabLock.hasLock(t.id)) {
+              CrossTabLock.renew(t.id);
+            }
+          }, 10000);
+
           try {
             const result = await processTask(t);
+            clearInterval(lockRenewalInterval);
             await AppDB.remove(t.id);
             CrossTabLock.release(t.id); // Liberar lock tras éxito
             QueueEvents.emit('queue:dispatch:success', { job: t, responseStatus: result.status || 200, response: result.data });
             jr('onSuccess', t, result.data, result.status);
             window.dispatchEvent(new CustomEvent('queue:done', { detail: { id: t.id, type: t.type, response: result.data } }));
           } catch (err) {
+            clearInterval(lockRenewalInterval);
             const parsed = err && err.parsed ? err.parsed : null;
             const responseStub = err && err.status ? { status: err.status } : null;
             const failure = classifyFailure({ response: responseStub, parsed, error: err });
@@ -1235,6 +1521,16 @@
       return AppDB.listByStatus('queued');
     },
 
+    async listRunning(){
+      return AppDB.listByStatus('running');
+    },
+
+    async listErrors(){
+      const errors = await AppDB.listByStatus('error');
+      const permanent = await AppDB.listByStatus('failed_permanent');
+      return [...errors, ...permanent];
+    },
+
     /**
      * Fuerza un intento de drenaje ahora (útil para botón "Reintentar ahora")
      */
@@ -1244,13 +1540,120 @@
     },
 
     /**
+     * NUEVO: Obtiene estado agregado de la cola
+     * @returns {Promise<{pending: number, running: number, error: number, blocked: string|null}>}
+     */
+    async getStatus(){
+      const pending = await AppDB.listByStatus('queued');
+      const running = await AppDB.listByStatus('running');
+      const errors = await AppDB.listByStatus('error');
+      const failedPermanent = await AppDB.listByStatus('failed_permanent');
+      const blockedAuth = await AppDB.listByStatus('blocked_auth');
+      const blockedCsrf = await AppDB.listByStatus('blocked_csrf');
+
+      return {
+        pending: pending.length,
+        running: running.length,
+        error: errors.length + failedPermanent.length,
+        blocked: queueState.blocked,
+        blockedAuth: blockedAuth.length,
+        blockedCsrf: blockedCsrf.length,
+        online: navigator.onLine,
+        csrfStale: queueState.csrfStale
+      };
+    },
+
+    /**
+     * NUEVO: Obtiene estado de sincronización por local/form específico
+     * Útil para mostrar badges en la UI del index
+     * @param {number} localId ID del local
+     * @param {number[]} formIds IDs de los formularios
+     * @returns {Promise<{state: string, label: string, detail: string, jobs: Object[]}>}
+     */
+    async getGestionStatus(localId, formIds = []){
+      if (!window.AppDB) {
+        return { state: 'unknown', label: '?', detail: 'Base de datos no disponible', jobs: [] };
+      }
+
+      localId = Number(localId);
+      const formIdSet = new Set(formIds.map(Number));
+
+      // Obtener todos los jobs que coincidan con el local
+      const allJobs = [
+        ...(await AppDB.listByStatus('queued')),
+        ...(await AppDB.listByStatus('running')),
+        ...(await AppDB.listByStatus('error')),
+        ...(await AppDB.listByStatus('failed_permanent')),
+        ...(await AppDB.listByStatus('blocked_auth')),
+        ...(await AppDB.listByStatus('blocked_csrf'))
+      ];
+
+      const matchingJobs = allJobs.filter(job => {
+        const f = job.fields || {};
+        const jobLocalId = Number(f.id_local || f.idLocal || f.local_id || 0);
+        const jobFormId = Number(f.id_formulario || f.idCampana || f.id_campana || 0);
+
+        if (jobLocalId !== localId) return false;
+        if (formIdSet.size > 0 && !formIdSet.has(jobFormId)) return false;
+        return true;
+      });
+
+      if (matchingJobs.length === 0) {
+        return { state: 'synced', label: '✓', detail: 'Sincronizado', jobs: [] };
+      }
+
+      const hasError = matchingJobs.some(j => j.status === 'error' || j.status === 'failed_permanent');
+      const hasBlocked = matchingJobs.some(j => j.status === 'blocked_auth' || j.status === 'blocked_csrf');
+      const hasRunning = matchingJobs.some(j => j.status === 'running');
+      const pending = matchingJobs.filter(j => j.status === 'queued').length;
+
+      if (hasError) {
+        const errorJob = matchingJobs.find(j => j.status === 'error' || j.status === 'failed_permanent');
+        const errorMsg = errorJob?.lastError?.message || 'Error desconocido';
+        return {
+          state: 'error',
+          label: '⚠️',
+          detail: `Error: ${errorMsg}`,
+          jobs: matchingJobs
+        };
+      }
+
+      if (hasBlocked) {
+        return {
+          state: 'blocked',
+          label: '🔒',
+          detail: 'Sesión expirada - inicia sesión nuevamente',
+          jobs: matchingJobs
+        };
+      }
+
+      if (hasRunning) {
+        return {
+          state: 'syncing',
+          label: '⏳',
+          detail: 'Sincronizando...',
+          jobs: matchingJobs
+        };
+      }
+
+      return {
+        state: 'pending',
+        label: `⏳ ${pending}`,
+        detail: `${pending} elemento${pending > 1 ? 's' : ''} en cola`,
+        jobs: matchingJobs
+      };
+    },
+
+    /**
      * Suscripción a eventos de la cola (atajo)
      */
     on: QueueEvents.on,
 
     drain,
     state: queueState,
-    unblock: unblockQueue
+    unblock: unblockQueue,
+    Visits,
+    LocalByGuid
   };
 
   async function resumeFromBackground(){

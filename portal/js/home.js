@@ -7,9 +7,9 @@ const MAX_DIAS_RANGO = 2000; // límite de días permitido para el rango de fech
 
 // Endpoints backend (usa los que realmente existen)
 const URL_IMPLEMENTACION_MC     = "modulos/descargar_data_ipt.php";
-const URL_ENCUESTA_MC           = "modulos/descargar_data_ipt_E.php";
+const URL_ENCUESTA_MC           = "modulos/descargar_data_ipt_E_binario.php";
 const URL_IMPLEMENTACION_OTRAS  = "modulos/descargar_data_ipt.php";
-const URL_ENCUESTA_OTRAS        = "modulos/descargar_data_ipt_E.php";
+const URL_ENCUESTA_OTRAS        = "modulos/descargar_data_ipt_E_binario.php";
 // (Opcional) Solo si lo usas: define vacío para evitar ReferenceError si no existe
 // const URL_LISTAR_EJECUTORES     = "modulos/listar_ejecutores.php"; 
 
@@ -157,8 +157,8 @@ function descargarDataIPT_Unificado() {
     // Debug útil si algo falla:
     // console.log('status:', xhr.status, 'ct:', ct);
 
-    if (xhr.status === 401 || isHtml) {
-      alert('Tu sesión expiró o no tienes acceso. Inicia sesión de nuevo.');
+    if (xhr.status === 401) {
+      alert('Tu sesión expiró o no tienes acceso.');
       return;
     }
 

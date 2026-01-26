@@ -155,24 +155,91 @@
     return `${r.ymd || ''}|${localKey}`;
   }
 
+  /**
+   * Crea una clave de agrupación para detectar items relacionados.
+   * Usa client_guid si existe, sino visita_local_id+kind, sino local_id+form_id+kind.
+   */
+  function itemGroupingKey(it){
+    if (it.client_guid) return `guid:${it.client_guid}`;
+    const kind = (it.kind || '').toLowerCase();
+    if (it.visita_local_id) return `visita:${it.visita_local_id}:${kind}`;
+    if (it.local_id && it.form_id) return `local:${it.local_id}:${it.form_id}:${kind}`;
+    return null; // No agrupable
+  }
+
+  /**
+   * Filtra items stale: si hay un item exitoso para una agrupación,
+   * descarta items de la misma agrupación que estén en error/blocked.
+   * Esto evita mostrar errores de intentos anteriores cuando ya hubo éxito.
+   */
+  function filterStaleItems(items){
+    if (!items || !items.length) return items;
+
+    // Agrupar por clave de agrupación
+    const byKey = {};
+    const noKey = [];
+
+    for (const it of items){
+      const key = itemGroupingKey(it);
+      if (key){
+        (byKey[key] = byKey[key] || []).push(it);
+      } else {
+        noKey.push(it);
+      }
+    }
+
+    const filtered = [...noKey];
+
+    // Para cada grupo, verificar si hay éxitos
+    for (const key of Object.keys(byKey)){
+      const group = byKey[key];
+      const hasSuccess = group.some(x => x.status === 'success');
+
+      if (hasSuccess){
+        // Si hay éxito, solo mantener los exitosos (descartar errores stale)
+        const successOnly = group.filter(x => x.status === 'success');
+        filtered.push(...successOnly);
+      } else {
+        // Sin éxitos, mantener todo (incluyendo errores que necesitan atención)
+        filtered.push(...group);
+      }
+    }
+
+    return filtered;
+  }
+
+  /**
+   * Calcula el estado agregado del grupo.
+   * MEJORA: Si todos los errores/blocked son de items que tienen un equivalente exitoso
+   * del mismo tipo/kind, considerar el grupo como exitoso.
+   */
   function aggStatus(items){
-    if (items.some(x => x.status === 'blocked_auth')) return 'blocked_auth';
-    if (items.some(x => x.status === 'blocked_csrf')) return 'blocked_csrf';
-    if (items.some(x => x.status === 'error'))        return 'error';
-    if (items.some(x => x.status === 'running'))      return 'running';
-    if (items.some(x => x.status === 'queued'))       return 'queued';
+    // Primero filtrar items stale
+    const filtered = filterStaleItems(items);
+
+    // Si después de filtrar todos son success, retornar success
+    if (filtered.every(x => x.status === 'success')) return 'success';
+
+    // Orden de prioridad de estados problemáticos
+    if (filtered.some(x => x.status === 'blocked_auth')) return 'blocked_auth';
+    if (filtered.some(x => x.status === 'blocked_csrf')) return 'blocked_csrf';
+    if (filtered.some(x => x.status === 'error'))        return 'error';
+    if (filtered.some(x => x.status === 'running'))      return 'running';
+    if (filtered.some(x => x.status === 'queued'))       return 'queued';
     return 'success';
   }
 
   function aggProgress(items){
-    if (!items.length) return 0;
-    const sum = items.reduce((a, x) => a + (x.status === 'success' ? 100 : (x.progress || 0)), 0);
-    return Math.round(sum / items.length);
+    const filtered = filterStaleItems(items);
+    if (!filtered.length) return 0;
+    const sum = filtered.reduce((a, x) => a + (x.status === 'success' ? 100 : (x.progress || 0)), 0);
+    return Math.round(sum / filtered.length);
   }
 
   function countByKind(items){
+    const filtered = filterStaleItems(items);
     const c = { materialPhotos:0, surveyPhotos:0, answers:0, create:0, other:0 };
-    for (const it of items){
+    for (const it of filtered){
       const kind = (it.kind || '').toLowerCase();
       const phts = (it.counts && it.counts.photos) ? Number(it.counts.photos) : 0;
 
@@ -239,13 +306,15 @@
     }
 
     Object.values(g).forEach(gr => {
+      // MEJORA: Filtrar items stale para renderizado y stats
+      gr.filteredItems = filterStaleItems(gr.items);
       gr.status     = aggStatus(gr.items);
       gr.progress   = aggProgress(gr.items);
       gr.kindCounts = countByKind(gr.items);
       gr.expl       = explFromCounts(gr.kindCounts);
       gr.counts     = {
-        total:   gr.items.length,
-        pending: gr.items.filter(x => x.status === 'queued').length
+        total:   gr.filteredItems.length,
+        pending: gr.filteredItems.filter(x => x.status === 'queued').length
       };
       gr.campaigns = uniq(Array.from(gr.campaigns));
 
@@ -286,16 +355,17 @@
 
     const content = popoverHTML(gr).replace(/"/g, '&quot;');
     const canRetry = (gr.status !== 'success' && gr.status !== 'blocked_auth' && gr.status !== 'blocked_csrf'); // si todo ok, se desactiva
-    const nextTryAt = gr.items
+    const displayItems = gr.filteredItems || gr.items;
+    const nextTryAt = displayItems
       .map(it => it.next_try_at || it.nextTryAt || null)
       .filter(Boolean)
       .sort()[0] || null;
     const retryLine = nextTryAt ? `<div class="jr-subline jr-retry-line">${esc(fmtRetry(nextTryAt))}</div>` : '';
-    const errCodes = gr.items
+    const errCodes = displayItems
       .map(it => it.last_error && it.last_error.code ? it.last_error.code : null)
       .filter(Boolean);
     const errCode = errCodes.length ? errCodes[0] : null;
-    const errHttp = gr.items
+    const errHttp = displayItems
       .map(it => it.http_status || (it.last_error && it.last_error.httpStatus))
       .filter(Boolean)[0] || null;
     const errLine = (gr.status === 'error' || gr.status === 'blocked_auth' || gr.status === 'blocked_csrf')
@@ -353,7 +423,7 @@
         </div>
       </div>
       <div class="jr-details" data-for="${esc(gr.key)}" hidden>
-        ${gr.items.map(it => {
+        ${(gr.filteredItems || gr.items).map(it => {
           const p = (it.status === 'success' ? 100 : (it.progress || 0));
           const kind =
             (it.kind || '').includes('upload_material') ? 'Fotos de materiales' :

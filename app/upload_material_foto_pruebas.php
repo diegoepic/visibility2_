@@ -1,7 +1,16 @@
 <?php
 
 declare(strict_types=1);
+
+// CRÍTICO: Para endpoints JSON, NUNCA mostrar errores en output
 ini_set('display_errors', '0');
+ini_set('display_startup_errors', '0');
+error_reporting(E_ALL);
+ini_set('log_errors', '1');
+
+// Output buffering: captura cualquier output accidental
+ob_start();
+
 date_default_timezone_set('America/Santiago');
 
 if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
@@ -32,7 +41,10 @@ function abs_url(string $rel): string {
 
 /* ---------------- Helpers varios ---------------- */
 function json_fail(int $code, string $msg, array $extra = []): void {
+  // Limpiar cualquier output previo (warnings PHP, espacios, etc.)
+  while (ob_get_level()) { ob_end_clean(); }
   http_response_code($code);
+  header('Content-Type: application/json; charset=utf-8');
   echo json_encode(['ok'=>false,'status'=>'error','message'=>$msg] + $extra, JSON_UNESCAPED_UNICODE);
   exit;
 }
@@ -91,6 +103,7 @@ $usuario_id = (int)$_SESSION['usuario_id'];
 $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
 
 if (getenv('V2_TEST_MODE') === '1') {
+  while (ob_get_level()) { ob_end_clean(); }
   echo json_encode([
     'ok' => true,
     'status' => 'success',

@@ -675,14 +675,6 @@ if ($division_id > 0) {
           <label class="form-check-label" for="separar">Una fila por respuesta (no agrupar)</label>
         </div>          
             <div class="text-right">
-              <!-- Grupo MC -->
-              <button type="button" class="btn btn-primary" id="btnDescargarImplementacionExceliptMC" style="display:none;">
-                Descargar implementaciones (MC)
-              </button>
-              <button type="button" class="btn btn-primary" id="btnDescargarEncuestaiptMC" style="display:none;">
-                Descargar encuesta (MC)
-              </button>
-            
               <!-- Grupo otras divisiones -->
               <button type="button" class="btn btn-primary" id="btnDescargarImplementacionExcelipt" style="display:none;">
                 Descargar implementaciones
@@ -701,159 +693,6 @@ if ($division_id > 0) {
     </div>
   </div>
 </div>
-
-
-<script>
-(function () {
-  // Límite duro (no se permite pasar)
-  const MAX_DAYS = 90;       // ~3 meses
-  // Umbral de advertencia (solo aviso, sí se permite)
-  const SOFT_WARN_DAYS = 31; // ~1 mes
-
-  const $fi = document.getElementById('fecha_inicio_ipt');
-  const $ff = document.getElementById('fecha_fin_ipt');
-  const $ayuda = document.getElementById('ayudaRango');
-
-  const downloadButtons = [
-    'btnDescargarImplementacionExceliptMC',
-    'btnDescargarEncuestaiptMC',
-    'btnDescargarImplementacionExcelipt',
-    'btnDescargarEncuestaipt'
-  ].map(id => document.getElementById(id)).filter(Boolean);
-
-  const toYMD = d => d.toISOString().slice(0,10);
-  const parseYMD = s => {
-    const [y,m,d] = (s || '').split('-').map(n => parseInt(n,10));
-    if (!y || !m || !d) return null;
-    return new Date(y, m-1, d);
-  };
-  const addDays = (date, days) => {
-    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    d.setDate(d.getDate() + days);
-    return d;
-  };
-  const diffDays = (a, b) => {
-    const d1 = new Date(a.getFullYear(), a.getMonth(), a.getDate());
-    const d2 = new Date(b.getFullYear(), b.getMonth(), b.getDate());
-    return Math.round((d2 - d1) / 86400000);
-  };
-
-  // helper de mensaje (usa clases Bootstrap)
-  function setHelpMsg(msg, level='muted') {
-    if (!$ayuda) return;
-    $ayuda.textContent = msg;
-    $ayuda.classList.remove('text-muted','text-warning','text-danger');
-    $ayuda.classList.add(
-      level === 'danger' ? 'text-danger' :
-      level === 'warning' ? 'text-warning' : 'text-muted'
-    );
-  }
-
-  function refreshConstraints() {
-    const fi = parseYMD($fi.value);
-    const ff = parseYMD($ff.value);
-
-    // Limita FIN a FI + MAX_DAYS
-    if (fi) {
-      const maxFF = addDays(fi, MAX_DAYS);
-      $ff.min = toYMD(fi);
-      $ff.max = toYMD(maxFF);
-      if (ff && ff > maxFF) $ff.value = toYMD(maxFF);
-    } else {
-      $ff.removeAttribute('min');
-      $ff.removeAttribute('max');
-    }
-
-    // Limita INICIO a FF - MAX_DAYS
-    if (ff) {
-      const minFI = addDays(ff, -MAX_DAYS);
-      $fi.max = toYMD(ff);
-      $fi.min = toYMD(minFI);
-      if (fi && fi < minFI) $fi.value = toYMD(minFI);
-    } else {
-      $fi.removeAttribute('min');
-      $fi.removeAttribute('max');
-    }
-
-    // Mensajería
-    const fi2 = parseYMD($fi.value);
-    const ff2 = parseYMD($ff.value);
-        if (fi2 && ff2) {
-          const d = diffDays(fi2, ff2);
-        
-          // Fecha fin antes que fecha inicio
-          if (d < 0) {
-            setHelpMsg('La fecha de fin debe ser igual o posterior a la fecha de inicio.', 'danger');
-          }
-        
-          // Bloqueo duro
-          else if (d > MAX_DAYS) {
-            setHelpMsg(`El rango máximo permitido es de ${MAX_DAYS} días. Seleccionaste ${d} días.`, 'danger');
-          }
-        
-          // Advertencia suave
-          else if (d > SOFT_WARN_DAYS) {
-            setHelpMsg(`Aviso: el rango es de ${d} días (supera ${SOFT_WARN_DAYS}). La descarga puede tardar más.`, 'warning');
-          }
-        
-          // OK
-          else {
-            setHelpMsg('Sugerencia: usar rangos acotados puede acelerar la descarga.', 'muted');
-          }
-        } 
-        else {
-          setHelpMsg('Selecciona fechas de inicio y término para comenzar.', 'muted');
-        }
-
-  // Validación final ANTES de descargar:
-  // - Solo bloquea si falta fecha, si fin < inicio o si d > MAX_DAYS.
-    function validateRangeOrWarn() {
-      const fi = parseYMD($fi.value);
-      const ff = parseYMD($ff.value);
-    
-      if (!fi || !ff) {
-        alert('Debes seleccionar Fecha Inicio y Fecha Fin.');
-        return false;
-      }
-    
-      if (ff < fi) {
-        alert('La Fecha Fin no puede ser anterior a la Fecha Inicio.');
-        return false;
-      }
-    
-      const d = diffDays(fi, ff);
-    
-      if (d > MAX_DAYS) {
-        alert(`El rango máximo permitido es de ${MAX_DAYS} días. Seleccionaste ${d} días.`);
-        return false;
-      }
-    
-      // ⚠️ Si d > SOFT_WARN_DAYS: no bloquea, solo se muestra en UI
-      return true;
-    }
-
-  if ($fi) $fi.addEventListener('change', refreshConstraints);
-  if ($ff) $ff.addEventListener('change', refreshConstraints);
-
-  downloadButtons.forEach(btn => {
-    btn.addEventListener('click', function (e) {
-      if (!validateRangeOrWarn()) {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-      // Aquí sigue tu flujo normal de descarga (submit/fetch)
-      // document.getElementById('formFiltros2').submit();
-    });
-  });
-
-  document.addEventListener('DOMContentLoaded', refreshConstraints);
-  // Si usas Bootstrap modal con jQuery, revalida al abrir:
-  if (window.jQuery) $('#modalDataIPT').on('shown.bs.modal', refreshConstraints);
-})();
-</script>
-
-
 
 
   <!-- Main Sidebar Container -->
@@ -1341,14 +1180,7 @@ if ($division_id > 0) {
         });
 
 });
-        
-        
-
-              
-        
-        
-
-    
+  
     $(document).ready(function() {
         // Al abrir el modal, cargar opciones de Canal y Distrito
         $('#modalDataLocalesUltimaGestion').on('show.bs.modal', function () {
@@ -1455,7 +1287,7 @@ function descargarDataAdicionales(formato) {
    window.location.href = url;
 } 
     
-        function descargarEncuestaPivot(formato) {
+function descargarEncuestaPivot(formato) {
         var canal     = document.getElementById('canal_programados').value;
         var distrito  = document.getElementById('distrito_programados').value;
         var division  = document.getElementById('division_programados').value;
@@ -1525,27 +1357,7 @@ function setDlProgress(percent, text) {
   document.getElementById('dlText').textContent = text ?? (p + '%');
 }
 
-
-
-function descargarDataIPTencuesta(formato) {
-    var canal3 = document.getElementById('canal_ipt').value;
-    var distrito3 = document.getElementById('distrito_ipt').value;
-    var division3 = document.getElementById('division_ipt').value;
-    console.log("Valor de división:", division3);
-    var fecha_inicio3 = document.getElementById('fecha_inicio_ipt').value;
-    var fecha_fin3 = document.getElementById('fecha_fin_ipt').value;
-    const ejecutor     = $('#ejecutor_ipt').val();
-    
-    var url = "modulos/descargar_data_ipt_E.php?formato=" + encodeURIComponent(formato)
-              + "&id_canal=" + encodeURIComponent(canal3)
-              + "&id_distrito=" + encodeURIComponent(distrito3)
-              + "&id_division=" + encodeURIComponent(division3)
-              + "&fecha_inicio=" + encodeURIComponent(fecha_inicio3)
-              + "&fecha_fin=" + encodeURIComponent(fecha_fin3);
-     if (ejecutor) url += "&id_usuario=" + encodeURIComponent(ejecutor);
-    window.location.href = url;     
-}
-    
+   
     function toggleDownloadButtons() {
     var tipo = document.getElementById("tipo_gestion").value;
     if (tipo === "implementacion") {

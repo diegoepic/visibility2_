@@ -1,15 +1,14 @@
 <?php
-// Solo mostrar errores en desarrollo, nunca en producción
-if (getenv('APP_ENV') !== 'production') {
-    ini_set('display_errors', 1);
-    ini_set('display_startup_errors', 1);
-    error_reporting(E_ALL);
-} else {
-    ini_set('display_errors', 0);
-    ini_set('display_startup_errors', 0);
-    error_reporting(E_ALL);
-    ini_set('log_errors', 1);
-}
+// CRÍTICO: Para endpoints JSON, NUNCA mostrar errores en output
+// Los errores se loguean pero no se imprimen (evita SERVER_HTML_ERROR)
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
+error_reporting(E_ALL);
+ini_set('log_errors', 1);
+
+// Output buffering: captura cualquier output accidental (warnings, espacios, etc.)
+// y lo descarta antes de enviar JSON
+ob_start();
 
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 
@@ -23,6 +22,8 @@ function wants_json(): bool {
 }
 function respond_ok(array $payload, ?string $redirect = null) {
   if (wants_json()) {
+    // Limpiar cualquier output previo (warnings PHP, espacios, etc.)
+    while (ob_get_level()) { ob_end_clean(); }
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['ok'=>true,'status'=>'success'] + $payload, JSON_UNESCAPED_UNICODE);
     exit;
@@ -34,6 +35,8 @@ function respond_ok(array $payload, ?string $redirect = null) {
 }
 function respond_err(string $msg, int $http = 400, ?string $redirect = null) {
   if (wants_json()) {
+    // Limpiar cualquier output previo (warnings PHP, espacios, etc.)
+    while (ob_get_level()) { ob_end_clean(); }
     http_response_code($http);
     header('Content-Type: application/json; charset=utf-8');
     $retryable = ($http >= 500 || in_array($http, [408, 429], true));
@@ -74,7 +77,8 @@ if (!isset($conn) || !($conn instanceof mysqli)) { require_once __DIR__ . '/con_
 if (!isset($conn) || !($conn instanceof mysqli)) { respond_err('No hay conexión a BD',500); }
 @$conn->set_charset('utf8mb4');
 
-/* ---------------- Idempotencia ---------------- */
+/* ---------------- API Helpers + Idempotencia ---------------- */
+require_once __DIR__ . '/lib/api_helpers.php';
 require_once __DIR__ . '/lib/idempotency.php';
 if (function_exists('idempo_claim_or_fail')) { idempo_claim_or_fail($conn, 'procesar_gestion'); }
 
@@ -436,8 +440,34 @@ if (!empty($errores)) {
 }
 
 /* ========================================================
- * C) Transacción principal
+ * C) Patrón SAGA: Crear draft antes de la transacción
  * ====================================================== */
+
+// Crear draft de gestión para tracking/recovery (patrón SAGA)
+$draft_id = null;
+if ($client_guid !== '' && function_exists('create_gestion_draft')) {
+  $draft_id = create_gestion_draft(
+    $conn,
+    $client_guid,
+    $usuario_id,
+    $idCampana,
+    $idLocal,
+    $estadoGestion,
+    [
+      'visita_id' => $visita_id,
+      'expected_photos' => count($archivosReestructurados) + (isset($_POST['fotos']) ? count($_POST['fotos'], COUNT_RECURSIVE) - count($_POST['fotos']) : 0),
+      'started_at' => $started_at ?: $now,
+      'lat' => $latGestion,
+      'lng' => $lngGestion
+    ]
+  );
+}
+
+// Marcar draft como 'processing'
+if ($draft_id && function_exists('update_gestion_draft')) {
+  update_gestion_draft($conn, $client_guid, 'processing', ['visita_id' => $visita_id]);
+}
+
 $conn->begin_transaction();
 
 $fechaVisita = $now;
@@ -712,6 +742,14 @@ try {
 
   $conn->commit();
 
+  // SAGA: Marcar draft como completado
+  if ($client_guid !== '' && function_exists('update_gestion_draft')) {
+    update_gestion_draft($conn, $client_guid, 'completed', [
+      'visita_id' => $visita_id,
+      'uploaded_photos' => $metrics['inserts_fv']
+    ]);
+  }
+
   if (function_exists('idempo_get_key') && idempo_get_key()) {
     idempo_store_and_reply($conn, 'procesar_gestion', 200, [
       'status'=>'success','visita_id'=>$visita_id,
@@ -729,17 +767,37 @@ try {
     if (is_string($abs) && $abs !== '' && @file_exists($abs)) @unlink($abs);
   }
 
-  error_log("Error en procesar_gestion_pruebas.php: ".$e->getMessage());
+  // SAGA: Marcar draft como fallido
+  $error_id = function_exists('generate_error_id') ? generate_error_id() : 'ERR-' . time();
+  if ($client_guid !== '' && function_exists('update_gestion_draft')) {
+    update_gestion_draft($conn, $client_guid, 'failed', [
+      'error_code' => 'TRANSACTION_FAILED',
+      'error_message' => $e->getMessage()
+    ]);
+  }
+
+  // Log a error_log con ID único
+  if (function_exists('log_error_to_db')) {
+    log_error_to_db($conn, $error_id, 'procesar_gestion_pruebas.php', [
+      'error_code' => 'TRANSACTION_FAILED',
+      'error_message' => $e->getMessage(),
+      'client_guid' => $client_guid,
+      'visita_id' => $visita_id
+    ]);
+  }
+
+  error_log("[{$error_id}] Error en procesar_gestion_pruebas.php: ".$e->getMessage());
 
   if (function_exists('idempo_get_key') && idempo_get_key()) {
     idempo_store_and_reply($conn, 'procesar_gestion', 500, [
       'status'=>'error',
-      'message'=>"No se pudo procesar la gestión: ".$e->getMessage()
+      'message'=>"No se pudo procesar la gestión: ".$e->getMessage(),
+      'error_id'=>$error_id
     ]);
     exit;
   }
 
-  respond_err("No se pudo procesar la gestión: ".$e->getMessage(), 500,
+  respond_err("No se pudo procesar la gestión: ".$e->getMessage()." (Ref: {$error_id})", 500,
     "gestionarPruebas.php?idCampana=$idCampana&nombreCampana=".urlencode($nombreCampana)."&idLocal=$idLocal"
   );
 }

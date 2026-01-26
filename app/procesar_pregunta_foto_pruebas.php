@@ -9,7 +9,15 @@
 // - Inserción en FQR con columnas dinámicas (created_at/valor/foto_visita_id si existen)
 
 declare(strict_types=1);
+
+// CRÍTICO: Para endpoints JSON, NUNCA mostrar errores en output
 ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
+error_reporting(E_ALL);
+ini_set('log_errors', 1);
+
+// Output buffering: captura cualquier output accidental
+ob_start();
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -19,7 +27,10 @@ date_default_timezone_set('America/Santiago');
 
 /* ===== Helpers ===== */
 function json_out(int $code, array $payload): void {
+  // Limpiar cualquier output previo (warnings PHP, espacios, etc.)
+  while (ob_get_level()) { ob_end_clean(); }
   http_response_code($code);
+  header('Content-Type: application/json; charset=utf-8');
   echo json_encode($payload, JSON_UNESCAPED_UNICODE);
   exit;
 }
@@ -83,10 +94,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
   json_out(405, ['status'=>'error','message'=>'Método inválido']);
 }
 
-/* ===== Idempotencia ===== */
+/* ===== Idempotencia - cargar librería pero NO reclamar aún ===== */
+// CRÍTICO: NO llamar idempo_claim_or_fail() aquí porque si la visita no existe,
+// retornamos 503 VISITA_PENDING y el reintento fallaría con 409 REQUEST_IN_PROGRESS
 require_once __DIR__ . '/lib/idempotency.php';
 sanitize_idempotency_key();
-idempo_claim_or_fail($conn, 'pregunta_foto'); // si existe respuesta previa, responde y exit
+// idempo_claim_or_fail() se llama MÁS ABAJO, después de resolver la visita
 
 /* ===== inputs ===== */
 $visita_id        = post_int('visita_id', 0);
@@ -145,27 +158,31 @@ $stmt->close();
 
 /* ===== resolver/crear visita si no llega visita_id (fallback offline por client_guid) ===== */
 if ($visita_id <= 0) {
-  // 1) por client_guid (abierta)
+  // 1) por client_guid - CRÍTICO: NO filtrar por fecha_fin
+  //    Las fotos de encuesta pueden llegar DESPUÉS de que procesar_gestion cerró la visita.
+  //    Si existe una visita con ese client_guid, usarla aunque esté cerrada.
   if ($client_guid !== '') {
     if ($q = $conn->prepare("
-      SELECT id, fecha_fin
+      SELECT id
         FROM visita
        WHERE id_usuario=? AND id_formulario=? AND id_local=? AND client_guid=?
+       ORDER BY id DESC
        LIMIT 1
     ")) {
       $q->bind_param("iiis", $usuario_id, $id_formulario, $id_local, $client_guid);
       $q->execute();
       $r = $q->get_result();
       if ($row = $r->fetch_assoc()) {
-        if (empty($row['fecha_fin']) || $row['fecha_fin']==='0000-00-00 00:00:00') {
-          $visita_id = (int)$row['id'];
-        }
+        // Usar la visita encontrada, sin importar si está cerrada o no
+        $visita_id = (int)$row['id'];
       }
       $q->close();
     }
   }
-  // 2) abierta genérica
-  if ($visita_id <= 0) {
+
+  // 2) abierta genérica (solo si no hay client_guid o no encontró por guid)
+  //    Este fallback es para gestiones muy antiguas sin client_guid
+  if ($visita_id <= 0 && $client_guid === '') {
     if ($q2 = $conn->prepare("
       SELECT id
         FROM visita
@@ -183,9 +200,24 @@ if ($visita_id <= 0) {
       $q2->close();
     }
   }
-  // 3) crear si aún no existe (usa client_guid; si no viene, genera uno)
+
+  // 3) crear solo si no existe ninguna visita para este client_guid
+  //    IMPORTANTE: Si había client_guid pero no encontró, es porque la visita
+  //    aún no fue creada. Retornar error para que el cliente reintente.
   if ($visita_id <= 0) {
-    if ($client_guid === '') { $client_guid = bin2hex(random_bytes(16)); }
+    // Si hay client_guid pero no encontró la visita, la gestión aún no llegó al servidor
+    // Retornar error reintentable para que el cliente reintente después
+    if ($client_guid !== '') {
+      json_out(503, [
+        'status'=>'error',
+        'message'=>'La visita asociada aún no existe. Reintentando automáticamente.',
+        'error_code'=>'VISITA_PENDING',
+        'retryable'=>true
+      ]);
+    }
+
+    // Solo crear si no hay client_guid (flujo legacy)
+    $client_guid = bin2hex(random_bytes(16));
     if ($ins = $conn->prepare("
       INSERT INTO visita
         (id_usuario, id_formulario, id_local, client_guid, fecha_inicio, latitud, longitud)
@@ -202,6 +234,11 @@ if ($visita_id <= 0) {
     }
   }
 }
+
+/* ===== Idempotencia - reclamar AHORA que sabemos que la visita existe ===== */
+// CRÍTICO: Solo reclamar después de validar que la visita existe.
+// Si hubiéramos reclamado antes y retornado 503 VISITA_PENDING, el reintento fallaría con 409.
+idempo_claim_or_fail($conn, 'pregunta_foto'); // si existe respuesta previa completada, responde y exit
 
 /* ===== conversión a WebP (soporta HEIC si hay dependencias) ===== */
 function convertToWebP($srcPath, $dstPath, $maxDim = 1280, $quality = 80): bool {

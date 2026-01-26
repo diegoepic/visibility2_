@@ -1,5 +1,5 @@
 //version del service  worker (subir en 0.0.1 para refrescar cache de los archivos estaticos, tambien subir a la misma version el sw en assets/js/v2_cache.js)
-const VERSION        = 'v4.0.4';
+const VERSION        = 'v4.0.7';
 const APP_SCOPE      = '/visibility2/app';
 const STATIC_CACHE   = `static-${VERSION}`;
 const RUNTIME_CACHE  = `runtime-${VERSION}`;

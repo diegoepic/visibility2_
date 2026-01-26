@@ -196,6 +196,110 @@
     });
   }
 
+  // NUEVO: Contar jobs por status
+  async function countByStatus(status='queued'){
+    const db = await openDB();
+    const normalizedStatus = normalizeStatus(status);
+    return new Promise((res, rej) => {
+      const t = db.transaction(STORE, 'readonly');
+      const os = t.objectStore(STORE);
+      const idx = os.index('status');
+      const req = idx.count(normalizedStatus);
+      req.onsuccess = () => res(req.result || 0);
+      req.onerror = () => rej(req.error);
+    });
+  }
+
+  // NUEVO: Obtener por dedupeKey
+  async function getByDedupeKey(key){
+    const db = await openDB();
+    return new Promise((res, rej) => {
+      const t = db.transaction(STORE, 'readonly');
+      const os = t.objectStore(STORE);
+      const idx = os.index('dedupeKey');
+      const req = idx.getAll(key);
+      req.onsuccess = () => {
+        const all = (req.result || []).map(normalizeJob).filter(Boolean);
+        res(all.find(j => ['queued','running'].includes(j.status)) || null);
+      };
+      req.onerror = () => rej(req.error);
+    });
+  }
+
+  // NUEVO: Listar jobs por client_guid
+  async function listByClientGuid(guid){
+    const db = await openDB();
+    return new Promise((res, rej) => {
+      const t = db.transaction(STORE, 'readonly');
+      const os = t.objectStore(STORE);
+      const req = os.getAll();
+      req.onsuccess = () => {
+        const all = (req.result || [])
+          .map(normalizeJob)
+          .filter(Boolean)
+          .filter(j => j.client_guid === guid || j.fields?.client_guid === guid);
+        res(all);
+      };
+      req.onerror = () => rej(req.error);
+    });
+  }
+
+  // NUEVO: Obtener estadísticas generales
+  async function getStats(){
+    const db = await openDB();
+    return new Promise((res, rej) => {
+      const t = db.transaction(STORE, 'readonly');
+      const os = t.objectStore(STORE);
+      const req = os.getAll();
+      req.onsuccess = () => {
+        const all = (req.result || []).map(normalizeJob).filter(Boolean);
+        const stats = {
+          total: all.length,
+          queued: 0,
+          running: 0,
+          error: 0,
+          failed_permanent: 0,
+          blocked_auth: 0,
+          blocked_csrf: 0,
+          success: 0,
+          canceled: 0
+        };
+        all.forEach(job => {
+          const s = job.status;
+          if (stats.hasOwnProperty(s)) stats[s]++;
+          else if (s === 'done') stats.success++;
+        });
+        res(stats);
+      };
+      req.onerror = () => rej(req.error);
+    });
+  }
+
+  // NUEVO: Limpiar jobs antiguos completados/fallidos
+  async function cleanup(maxAgeDays = 7){
+    const db = await openDB();
+    const cutoff = Date.now() - (maxAgeDays * 24 * 60 * 60 * 1000);
+    return new Promise((res, rej) => {
+      const t = db.transaction(STORE, 'readwrite');
+      const os = t.objectStore(STORE);
+      const req = os.getAll();
+      let removed = 0;
+      req.onsuccess = () => {
+        const all = req.result || [];
+        all.forEach(job => {
+          const isFinal = ['success', 'done', 'error', 'failed_permanent', 'canceled'].includes(job.status);
+          const finishedAt = job.finishedAt || job.updatedAt || 0;
+          if (isFinal && finishedAt && finishedAt < cutoff) {
+            os.delete(job.id);
+            removed++;
+          }
+        });
+      };
+      t.oncomplete = () => res(removed);
+      t.onerror = () => rej(t.error);
+    });
+  }
+
   window.AppDB = {
     add,
     listByStatus,
@@ -203,6 +307,11 @@
     get,
     update,
     remove,
-    normalizeJob
+    normalizeJob,
+    countByStatus,
+    getByDedupeKey,
+    listByClientGuid,
+    getStats,
+    cleanup
   };
 })();
