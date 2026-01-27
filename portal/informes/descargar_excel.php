@@ -399,13 +399,13 @@ GROUP_CONCAT(
         if (!isset($grouped[$key])) {
             $grouped[$key] = [
                 'ID CAMPAÑA'     => $row['idCampana'],
+                'NOMBRE CAMPAÑA' => $row['nombreCampana'], 
+                'CUENTA'         => $row['cuenta'],
+                'CADENA'         => $row['cadena'],                
                 'CODIGO LOCAL'   => $row['codigo_local'],
                 'N° LOCAL'       => $row['numero_local'],
-                'NOMBRE CAMPAÑA' => $row['nombreCampana'],
-                'LOCAL'          => $row['nombre_local'],
+                'LOCAL'          => $row['nombre_local'],                     
                 'DIRECCION'      => $row['direccion_local'],
-                'CUENTA'         => $row['cuenta'],
-                'CADENA'         => $row['cadena'],
                 'COMUNA'         => $row['comuna'],
                 'REGION'         => $row['region'],
                 'USUARIO'        => $row['usuario'],
@@ -425,13 +425,13 @@ GROUP_CONCAT(
     foreach ($grouped as $g) {
         $rowOut = [
             'ID CAMPAÑA'     => $g['ID CAMPAÑA'],
-            'CODIGO LOCAL'   => $g['CODIGO LOCAL'],
-            'N° LOCAL'       => $g['N° LOCAL'],
             'NOMBRE CAMPAÑA' => $g['NOMBRE CAMPAÑA'],
             'CUENTA'         => $g['CUENTA'],
-            'CADENA'         => $g['CADENA'],
+            'CADENA'         => $g['CADENA'],            
+            'CODIGO LOCAL'   => $g['CODIGO LOCAL'],
+            'N° LOCAL'       => $g['N° LOCAL'],
             'LOCAL'          => $g['LOCAL'],
-            'DIRECCION'      => $g['DIRECCION'],
+            'DIRECCION'      => $g['DIRECCION'],            
             'COMUNA'         => $g['COMUNA'],
             'REGION'         => $g['REGION'],
             'USUARIO'        => $g['USUARIO'],
@@ -627,7 +627,7 @@ HTML;
         }
 
         $html .= "<div class='info-box'>";
-        $html .= "<b>DATOS DEL FORMULARIO</b><br>";
+    /*    $html .= "<b>DATOS DEL FORMULARIO</b><br>";
         $html .= "<table>";
         $html .= "<tr><td><b>Campaña:</b></td><td>" . e($campInfo['nombre']) . "</td></tr>";
         $html .= "<tr><td><b>Fecha Inicio:</b></td><td>" . e($fechaInicio) . "</td></tr>";
@@ -636,7 +636,7 @@ HTML;
         $html .= "<tr><td><b>Tipo:</b></td><td>" . e($tipoDisplay) . "</td></tr>";
         $html .= "<tr><td><b>Empresa:</b></td><td>" . e($campInfo['nombre_empresa'] ?? '-') . "</td></tr>";
         $html .= "<tr><td><b>División:</b></td><td>" . e($campInfo['nombre_division'] ?? '-') . "</td></tr>";
-        $html .= "</table>";
+        $html .= "</table>"; */
         $html .= "</div>";
     }
 
@@ -646,23 +646,23 @@ HTML;
                   <table border='1' 
                          style='border-collapse:collapse; table-layout:auto; font-size:9pt;'>
                     <tr>
-                      <th>ID LOCAL</th>
-                      <th>CODIGO</th>
-                      <th>N° LOCAL</th>
+                      <th>ID LOCAL</th>                    
                       <th>CAMPAÑA</th>
                       <th>CUENTA</th>
                       <th>CADENA</th>
+                      <th>CODIGO</th>
+                      <th>N° LOCAL</th>                      
                       <th>LOCAL</th>
                       <th>DIRECCION</th>
                       <th>COMUNA</th>
                       <th>REGION</th>
                       <th>JEFE VENTA</th>
-                      <th>USUARIO</th>
                       <th>FECHA INICIO</th>
-                      <th>FECHA TÉRMINO</th>
+                      <th>FECHA TÉRMINO</th>                      
                       <th>FECHA PLANIFICADA</th>
                       <th>FECHA VISITA</th>
                       <th>HORA</th>
+                      <th>USUARIO</th>                      
                       <th>ESTADO VISITA</th>
                       <th>ESTADO ACTIVIDAD</th>
                       <th>MOTIVO</th>
@@ -698,22 +698,22 @@ HTML;
 
             $html .= "<tr>
                         <td>" . e($l['idLocal']) . "</td>
-                        <td>" . e($l['codigo_local']) . "</td>
-                        <td>" . e($l['numero_local']) . "</td>
                         <td>" . e($l['nombreCampaña']) . "</td>
                         <td>" . e($l['cuenta']) . "</td>
                         <td>" . e($l['cadena']) . "</td>
+                        <td>" . e($l['codigo_local']) . "</td>
+                        <td>" . e($l['numero_local']) . "</td>
                         <td>" . e($l['nombre_local']) . "</td>
                         <td>" . e($l['direccion_local']) . "</td>
                         <td>" . e($l['comuna']) . "</td>
                         <td>" . e($l['region']) . "</td>
                         <td>" . e($l['jefeVenta']) . "</td>
-                        <td>" . e($l['gestionado_por']) . "</td>
                         <td>{$fechaInicioCamp}</td>
-                        <td>{$fechaTerminoCamp}</td>
+                        <td>{$fechaTerminoCamp}</td>                        
                         <td>{$fechaPropuesta}</td>
                         <td>{$fechaVisita}</td>
                         <td>" . e($l['hora']) . "</td>
+                        <td>" . e($l['gestionado_por']) . "</td>
                         <td>" . e($l['ESTADO_VISTA']) . "</td>
                         <td>" . e($l['ESTADO_ACTIVIDAD']) . "</td>
                         <td>" . e($l['MOTIVO']) . "</td>

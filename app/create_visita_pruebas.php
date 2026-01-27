@@ -1,7 +1,6 @@
 <?php
 declare(strict_types=1);
 
-// CRÍTICO: Para endpoints JSON, NUNCA mostrar errores en output
 ini_set('display_errors', '0');
 ini_set('display_startup_errors', '0');
 error_reporting(E_ALL);

@@ -677,7 +677,7 @@ HTML;
         $html .= "<tr><td><b>Tipo:</b></td><td>" . e($tipoDisplay) . "</td></tr>";
         $html .= "<tr><td><b>Empresa:</b></td><td>" . e($campInfo['nombre_empresa'] ?? '-') . "</td></tr>";
         $html .= "<tr><td><b>División:</b></td><td>" . e($campInfo['nombre_division'] ?? '-') . "</td></tr>";
-        $html .= "<tr><td><b>Fuente de datos:</b></td><td>gestion_visita + visita (histórico)</td></tr>";
+       
         $html .= "</table>";
         $html .= "</div>";
     }

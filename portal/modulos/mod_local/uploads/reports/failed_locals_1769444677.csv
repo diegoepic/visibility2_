@@ -1,0 +1,5 @@
+linea;codigo;"nombre local";"motivo de fallo"
+2;6075891;"PASTELERIA PAOLA ANDREA LAVIN";"El código de local '6075891' ya existe (línea 2)."
+3;7532218;"LICORES DEL VALLE SPA";"El código de local '7532218' ya existe (línea 3)."
+4;3532512;"IVONNE VARGAS";"El código de local '3532512' ya existe (línea 4)."
+6;6866666;"RION SPA";"El código de local '6866666' ya existe (línea 6)."
