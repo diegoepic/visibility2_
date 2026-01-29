@@ -15,7 +15,7 @@ try {
             'ok' => false,
             'status' => 'no_session',
             'error_code' => 'NO_SESSION',
-            'message' => 'Sesión expirada',
+            'message' => 'Sesi��n expirada',
             'retryable' => false
         ], JSON_UNESCAPED_UNICODE);
         exit;
@@ -33,7 +33,7 @@ try {
     $empresa_id  = (int)($_SESSION['empresa_id']  ?? 0);
     $division_id = (int)($_SESSION['division_id'] ?? 0);
 
-    // -------- Parámetros de rango de fechas
+    // -------- Par��metros de rango de fechas
     $tz  = new DateTimeZone('America/Santiago');
     $now = new DateTime('now', $tz);
 
@@ -50,7 +50,7 @@ try {
     if (!empty($_GET['delta_since'])) {
         $tmp = date_create((string)$_GET['delta_since']);
         if ($tmp !== false) {
-            $deltaSince = $tmp->format('Y-m-d H:i:00'); // minuto-resolución
+            $deltaSince = $tmp->format('Y-m-d H:i:00'); // minuto-resoluci��n
         }
     }
 
@@ -69,7 +69,7 @@ try {
         ];
     };
 
-    // -------- 1) Campañas relevantes (para ETag y alcance)
+    // -------- 1) Campa�0�9as relevantes (para ETag y alcance)
     $sqlCamp = "
         SELECT DISTINCT
             f.id,
@@ -204,10 +204,10 @@ try {
         [ 'url' => "$APP_SCOPE/assets/plugins/bootstrap/js/bootstrap.min.js" ],
         [ 'url' => "$APP_SCOPE/assets/js/db.js" ],
         [ 'url' => "$APP_SCOPE/assets/js/offline-queue.js" ],
-       // [ 'url' => "$APP_SCOPE/assets/js/v2_cache.js" ],
-        //[ 'url' => "$APP_SCOPE/assets/js/bootstrap_index_cache.js" ],
-        [ 'url' => "$APP_SCOPE/gestionar_spa.html" ],
-        [ 'url' => "$APP_SCOPE/assets/js/gestionar_spa.js" ],
+        [ 'url' => "$APP_SCOPE/assets/js/v2_cache.js" ],
+        [ 'url' => "$APP_SCOPE/assets/js/bootstrap_index_cache.js" ],
+        [ 'url' => "$APP_SCOPE/assets/js/journal_db.js" ],
+        [ 'url' => "$APP_SCOPE/assets/js/journal_ui.js" ],
         [ 'url' => "$APP_SCOPE/assets/css/offline.css" ],
     ];
 
@@ -259,7 +259,7 @@ try {
         }
     }
 
-    // material (por división)
+    // material (por divisi��n)
     $stmt = $conn->prepare(
         "SELECT MAX(COALESCE(updated_at, '1970-01-01 00:00:00')) AS mx FROM material WHERE (id_division = ? OR ? = 0)"
     );

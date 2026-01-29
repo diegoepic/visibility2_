@@ -1,0 +1,394 @@
+{
+    "exported_at": "2026-01-28T21:26:26.399Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Mobile Safari/537.36",
+    "sw_version": "v5.0.5",
+    "stats": {
+        "today": {
+            "ymd": "2026-01-28",
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 1,
+            "blocked": 0,
+            "total": 1
+        },
+        "overall": {
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 1,
+            "blocked": 0,
+            "total": 1
+        }
+    },
+    "queue": {
+        "total_records": 1,
+        "last_created_at": 1769634491888,
+        "last_updated_at": 1769635057124
+    },
+    "recent_events": [
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769635057123:871b9b9891463",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769635057123,
+            "type": "attempt_error",
+            "status": "error",
+            "http_status": 500,
+            "error": "HTTP_500",
+            "message": "HTTP 500",
+            "attempts": 6,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"status\":\"error\",\"message\":\"No se pudo procesar la gestión: Debe adjuntar al menos una foto para el estado Cancelado.\",\"error_id\":\"ERR-20260128-180933-1e945f20\"}"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769635057122:bd3612ffa696b8",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769635057122,
+            "type": "attempt_error",
+            "status": "error",
+            "http_status": 500,
+            "error": "HTTP_500",
+            "message": "HTTP 500",
+            "attempts": 6,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"status\":\"error\",\"message\":\"No se pudo procesar la gestión: Debe adjuntar al menos una foto para el estado Cancelado.\",\"error_id\":\"ERR-20260128-180933-1e945f20\"}"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769635033264:e85211aa36ebd8",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769635033264,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 5,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769635033263:aae8f2d5c3a2b8",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769635033263,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 5,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634999988:32bb2327360d5",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634999988,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 500,
+            "error": "HTTP_500",
+            "message": "HTTP 500",
+            "attempts": 5,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"status\":\"error\",\"message\":\"No se pudo procesar la gestión: Debe adjuntar al menos una foto para el estado Cancelado.\",\"error_id\":\"ERR-20260128-180933-1e945f20\"}"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634999988:02f479ac96f6f8",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634999988,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 500,
+            "error": "HTTP_500",
+            "message": "HTTP 500",
+            "attempts": 5,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"status\":\"error\",\"message\":\"No se pudo procesar la gestión: Debe adjuntar al menos una foto para el estado Cancelado.\",\"error_id\":\"ERR-20260128-180933-1e945f20\"}"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634974902:720e56193b3a9",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634974902,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 4,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634974902:6e45f1df184b",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634974902,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 4,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634908828:d0dcf650320718",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634908828,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 500,
+            "error": "HTTP_500",
+            "message": "HTTP 500",
+            "attempts": 4,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"status\":\"error\",\"message\":\"No se pudo procesar la gestión: Debe adjuntar al menos una foto para el estado Cancelado.\",\"error_id\":\"ERR-20260128-180933-1e945f20\"}"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634908828:10a5edcd725e4",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634908828,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 500,
+            "error": "HTTP_500",
+            "message": "HTTP 500",
+            "attempts": 4,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"status\":\"error\",\"message\":\"No se pudo procesar la gestión: Debe adjuntar al menos una foto para el estado Cancelado.\",\"error_id\":\"ERR-20260128-180933-1e945f20\"}"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634882953:6c0bedc27b0fa",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634882953,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 3,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634882953:647913800797",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634882953,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 3,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634854351:c766c3a3342d2",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634854351,
+            "type": "attempt_error",
+            "status": "running",
+            "http_status": null,
+            "error": "STALE_RUNNING",
+            "message": "STALE_RUNNING",
+            "attempts": 2,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634854351:791774ceec07a8",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634854351,
+            "type": "attempt_error",
+            "status": "running",
+            "http_status": null,
+            "error": "STALE_RUNNING",
+            "message": "STALE_RUNNING",
+            "attempts": 2,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634553346:6d096cf0506f98",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634553346,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634553346:0f66631d1c60f8",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634553346,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634516601:49ac4a4bf561d8",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634516601,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Network error calling /visibility2/app/procesar_gestion_pruebas.php: Failed to fetch",
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634516601:2a84aa877f60e8",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634516601,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Network error calling /visibility2/app/procesar_gestion_pruebas.php: Failed to fetch",
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634516591:e01cb3e6a63f8",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634516591,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634516591:47ae12d6393c38",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634516591,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "idemp-1769634484695-30e3afd0a93c:1769634516582:ed99709676a8c",
+            "job_id": "idemp-1769634484695-30e3afd0a93c",
+            "created": 1769634516582,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1769634484695-30e3afd0a93c:1769634516582:41087c5a2f4f",
+            "job_id": "idemp-1769634484695-30e3afd0a93c",
+            "created": 1769634516582,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1769634484695-30e3afd0a93c:1769634516386:8844bb18506d08",
+            "job_id": "idemp-1769634484695-30e3afd0a93c",
+            "created": 1769634516386,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1769634484695-30e3afd0a93c:1769634516386:19b5ce1c65d7f",
+            "job_id": "idemp-1769634484695-30e3afd0a93c",
+            "created": 1769634516386,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        }
+    ],
+    "storage_estimate": {
+        "usage": 44231635,
+        "quota": 599602807602,
+        "percent_used": 0
+    },
+    "connection_info": {
+        "effectiveType": "4g",
+        "downlink": 10,
+        "rtt": null,
+        "saveData": false
+    },
+    "service_worker": {
+        "active": "active",
+        "installing": null,
+        "waiting": null,
+        "scope": "https://visibility.cl/visibility2/app/"
+    },
+    "idb_databases": [
+        {
+            "name": "v2_journal",
+            "version": 9
+        },
+        {
+            "name": "v2_mappings",
+            "version": 1
+        },
+        {
+            "name": "v2_offline",
+            "version": 9
+        },
+        {
+            "name": "visibility2-v2",
+            "version": 9
+        }
+    ],
+    "recent_errors": [
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "kind": "procesar_gestion",
+            "status": "error",
+            "http_status": 500,
+            "error": "HTTP 500",
+            "error_code": "HTTP_500",
+            "attempts": 6,
+            "created": 1769634491888,
+            "updated": 1769635057124
+        }
+    ],
+    "client_time": {
+        "local": "Wed Jan 28 2026 18:26:26 GMT-0300 (hora de verano de Chile)",
+        "timezone": "America/Santiago",
+        "offset_minutes": 180
+    },
+    "csrf_token": "9ae5a4d020e96642b7f87e71f61d792bd964b94538cbda373a3d4aa9defba5dc"
+}

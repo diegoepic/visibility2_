@@ -550,7 +550,17 @@ foreach ($locales_reag as $local) {
       #journalPanel .nav-tabs{ flex-wrap:wrap; }
     } 
    
-    </style>
+    
+.queue-panel{position:fixed;right:12px;bottom:12px;z-index:1050;background:#fff;border:1px solid rgba(0,0,0,.15);border-radius:8px;padding:10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.15);width:240px;font-size:12px;}
+.queue-panel__row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:8px;}
+.queue-panel__detail{color:#555;line-height:1.3;}
+.queue-panel__actions{display:flex;gap:6px;margin-top:8px;}
+.queue-panel__actions .btn{flex:1;padding:4px 6px;font-size:12px;}
+.net-badge{display:inline-block;padding:2px 6px;border-radius:999px;font-weight:700;font-size:11px;border:1px solid rgba(0,0,0,.12);}
+.net-badge.is-online{background:#e8f7ee;color:#198754;}
+.net-badge.is-offline{background:#fdecea;color:#b02a37;}
+.queue-muted{color:#888;}
+</style>
 </head>
 <body>
 <?php
@@ -559,6 +569,18 @@ if (isset($_SESSION['success'])) {
     unset($_SESSION['success']);
 }
 ?>
+<div id="queuePanel" class="queue-panel" aria-live="polite">
+  <div class="queue-panel__row">
+    <span id="netBadge" class="net-badge">-</span>
+    <span id="queueCount" class="queue-muted">Cola: -</span>
+  </div>
+  <div id="queueDetail" class="queue-panel__detail">Estado de sincronizacion: -</div>
+  <div class="queue-panel__actions">
+    <button type="button" id="queueRetryBtn" class="btn btn-xs btn-info">Reintentar</button>
+    <button type="button" id="queueClearBtn" class="btn btn-xs btn-default">Limpiar</button>
+  </div>
+</div>
+
 <!-- Navbar -->
 <div class="navbar navbar-inverse navbar-fixed-top">
    <div class="container">
@@ -1537,7 +1559,7 @@ function collectCurrentPoints(){
   const cont  = (window.modoLocal === 'prog') ? '#localesProgCollapse' : '#localesReagCollapse';
   const selId = (window.modoLocal==='prog')?'#filtroFechaProg':'#filtroFechaReag';
   const fechaSel = $(selId).val(); const modo = window.modoLocal;
-  const filas = $(`${cont} table[data-fechaTabla="${fechaSel}"]:visible tbody tr:visible`);
+  const filas = $(`${cont} table[data-fechaTabla="${fechaSel}"]:visible tbody tr:visible:not([data-done="1"])`);
   const pts=[]; filas.each(function(){
     const idLocal = parseInt($(this).data('idlocal'),10);
     const lat = parseFloat($(this).data('lat')); const lng = parseFloat($(this).data('lng'));
@@ -1621,7 +1643,7 @@ function setMode(mode){
 function updateCounts(){
   const mode   = window.modoLocal || 'prog';
   const panel  = (mode==='prog') ? '#localesProgCollapse' : '#localesReagCollapse';
-  $('#countTabla').text($(panel+' table[data-fechaTabla] tbody tr:visible').length);
+  $('#countTabla').text($(panel+' table[data-fechaTabla] tbody tr:visible:not([data-done="1"])').length);
   const markers=(mode==='prog')?window.markersProg:window.markersReag;
   const count=Object.values(markers).filter(m=>m.marker.getMap()!==null).length;
   $('#countMapa').text(count);
@@ -1677,7 +1699,7 @@ window.applyFilters = function(){
   }
   Object.entries(markers).forEach(([id,m])=>{
     const sameDate = (m.fechaPropuesta === fechaSel);
-    const visibleRow = $(`${container} table[data-fechaTabla="${fechaSel}"] tbody tr[data-idlocal="${id}"]:visible`).length > 0;
+    const visibleRow = $(`${container} table[data-fechaTabla="${fechaSel}"] tbody tr[data-idlocal="${id}"]:visible:not([data-done="1"])`).length > 0;
     m.marker.setMap( (sameDate && visibleRow) ? window.mapa : null );
   });
   const visibles = Object.values(markers).filter(m=>m.marker.getMap()!==null);
@@ -1917,6 +1939,47 @@ $(document).ready(function(){
 </script>
 
 <script>
+function localYmd(d){
+  const dt = d instanceof Date ? d : new Date();
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth()+1).padStart(2,'0');
+  const da = String(dt.getDate()).padStart(2,'0');
+  return y + '-' + m + '-' + da;
+}
+
+(function(){
+  function buildGestionarUrl(t){
+    if (!t || !t.idCampana || !t.idLocal || !t.idUsuario) return null;
+    const params = new URLSearchParams({
+      idCampana: String(t.idCampana),
+      nombreCampana: String(t.nombreCampana || ''),
+      idLocal: String(t.idLocal),
+      idUsuario: String(t.idUsuario)
+    });
+    return `/visibility2/app/gestionarPruebas.php?${params.toString()}`;
+  }
+
+  function precacheTargets(){
+    const list = Array.isArray(window.__GESTIONAR_PRECACHE_TARGETS) ? window.__GESTIONAR_PRECACHE_TARGETS : [];
+    const limit = Number(window.__GESTIONAR_PRECACHE_LIMIT || 0) || 0;
+    if (!list.length || !limit) return;
+    const urls = list.slice(0, limit).map(buildGestionarUrl).filter(Boolean);
+    if (!urls.length) return;
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'PRECACHE_ASSETS', assets: urls });
+    } else if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready.then((reg) => {
+        const sw = reg.active || reg.waiting || reg.installing;
+        if (sw) sw.postMessage({ type: 'PRECACHE_ASSETS', assets: urls });
+      }).catch(()=>{});
+    }
+  }
+
+  if ('serviceWorker' in navigator) {
+    if (document.readyState === 'complete') precacheTargets();
+    else window.addEventListener('load', precacheTargets);
+  }
+})();
 
 
 (function(){
@@ -1960,7 +2023,7 @@ $(document).ready(function(){
 
     if (!lid) return;
 
-    var ymd = (new Date()).toISOString().slice(0,10);
+    var ymd = localYmd();
 
     // Aplica el mismo comportamiento histórico que tenía online
     await applyGestionOutcomeLocally(
@@ -1997,6 +2060,109 @@ $(document).ready(function(){
   window.addEventListener('online', setNetBadge);
   window.addEventListener('offline', setNetBadge);
   setNetBadge();
+
+  async function updateQueuePanel(){
+  const panel = document.getElementById('queuePanel');
+  if (!panel) return;
+  const countEl = document.getElementById('queueCount');
+  const detailEl = document.getElementById('queueDetail');
+
+  if (!window.Queue || !window.AppDB || typeof Queue.getStatus !== 'function') {
+    if (countEl) countEl.textContent = 'Cola: -';
+    if (detailEl) detailEl.textContent = 'Cola no disponible.';
+    return;
+  }
+
+  try {
+    const st = await Queue.getStatus();
+    const pending = Number(st.pending || 0);
+    const running = Number(st.running || 0);
+    const error = Number(st.error || 0);
+    if (countEl) countEl.textContent = 'Cola: ' + pending;
+    const parts = [];
+    parts.push('Pendientes: ' + pending);
+    parts.push('Enviando: ' + running);
+    parts.push('Errores: ' + error);
+    if (st.blocked === 'auth') parts.push('Bloqueada por sesi�n');
+    if (st.blocked === 'csrf') parts.push('Bloqueada por CSRF');
+
+    let typeLine = '';
+    try {
+      const jobs = [];
+      if (typeof Queue.listPending === 'function') {
+        const p = await Queue.listPending();
+        if (Array.isArray(p)) jobs.push(...p);
+      }
+      if (typeof Queue.listRunning === 'function') {
+        const r = await Queue.listRunning();
+        if (Array.isArray(r)) jobs.push(...r);
+      }
+
+      if (jobs.length) {
+        const counts = { encuesta: 0, material: 0, gestion: 0, visita: 0, otros: 0 };
+        jobs.forEach(j => {
+          const kind = (j && j.meta && j.meta.kind) ? String(j.meta.kind) : String(j.type || j.url || '');
+          const k = kind.toLowerCase();
+          const photoCount = Array.isArray(j && j.files) ? j.files.length : 0;
+          if (k.includes('pregunta_foto')) counts.encuesta += (photoCount || 1);
+          else if (k.includes('upload_material')) counts.material += (photoCount || 1);
+          else if (k.includes('procesar_gestion')) counts.gestion += 1;
+          else if (k.includes('create_visita')) counts.visita += 1;
+          else counts.otros += 1;
+        });
+        const detailParts = [];
+        if (counts.encuesta) detailParts.push('Encuesta: ' + counts.encuesta);
+        if (counts.material) detailParts.push('Material: ' + counts.material);
+        if (counts.gestion) detailParts.push('Gestiones: ' + counts.gestion);
+        if (counts.visita) detailParts.push('Visitas: ' + counts.visita);
+        if (counts.otros) detailParts.push('Otros: ' + counts.otros);
+        if (detailParts.length) typeLine = detailParts.join(', ');
+      }
+    } catch (_) {
+      typeLine = '';
+    }
+
+    if (detailEl) detailEl.textContent = parts.join(' � ') + (typeLine ? ' | ' + typeLine : '');
+  } catch (e) {
+    if (detailEl) detailEl.textContent = 'No se pudo leer estado de cola.';
+  }
+}
+
+  function wireQueuePanel(){
+    const retryBtn = document.getElementById('queueRetryBtn');
+    const clearBtn = document.getElementById('queueClearBtn');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', async () => {
+        retryBtn.disabled = true;
+        try { await Queue.flushNow(); } catch(_){ }
+        setTimeout(updateQueuePanel, 500);
+        retryBtn.disabled = false;
+      });
+    }
+    if (clearBtn) {
+      clearBtn.addEventListener('click', async () => {
+        const ok = confirm('Esto limpiara el historial de colas finalizadas. �Continuar?');
+        if (!ok) return;
+        try { await AppDB.cleanup(0); } catch(_){ }
+        setTimeout(updateQueuePanel, 200);
+      });
+    }
+  }
+
+  window.addEventListener('queue:update', updateQueuePanel);
+  window.addEventListener('queue:blocked', updateQueuePanel);
+  window.addEventListener('queue:unblocked', updateQueuePanel);
+  window.addEventListener('queue:enqueue', updateQueuePanel);
+  window.addEventListener('queue:enqueued', updateQueuePanel);
+  window.addEventListener('queue:dispatch:success', updateQueuePanel);
+  window.addEventListener('queue:dispatch:error', updateQueuePanel);
+  window.addEventListener('online', updateQueuePanel);
+  window.addEventListener('offline', updateQueuePanel);
+
+  document.addEventListener('DOMContentLoaded', () => {
+    wireQueuePanel();
+    updateQueuePanel();
+  });
 
   // --- 2) Pintado de listas desde IndexedDB ---
   function paintList(sel, rows){
@@ -2072,7 +2238,7 @@ $(document).ready(function(){
         lat: r.latitud, lng: r.lng,
         campanasIds: r.campanasIds || [],
         estado: estado,
-        hoy: r.fechaPropuesta === (new Date().toISOString().slice(0,10))
+        hoy: r.fechaPropuesta === localYmd()
       }));
 
       const prog = norm(phpProgramados, 'programado');
@@ -2162,3 +2328,14 @@ if ('serviceWorker' in navigator) {
 <?php
 $conn->close();
 ?>
+
+
+
+
+
+
+
+
+
+
+

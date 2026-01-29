@@ -1,209 +1,69 @@
 {
-    "success": true,
-    "inserted": 13,
-    "failed": 31,
-    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1769520731.csv",
-    "successes": [
-        "L\u00ednea 3: Local 'FLORES LLANCA SANDRA' (c\u00f3digo 4048) insertado.",
-        "L\u00ednea 5: Local 'MINIMARKET WALTER RODRIGUEZ ARANDA EMPRESA INDIVIDUAL DE RESPONSABILID' (c\u00f3digo 89447) insertado.",
-        "L\u00ednea 6: Local 'MINIMARKET EL FARO DE ALGARROBO SPA' (c\u00f3digo 86131) insertado.",
-        "L\u00ednea 10: Local 'COSTA MARKET SPA' (c\u00f3digo 63922) insertado.",
-        "L\u00ednea 13: Local 'SONIA DE LAS MERCEDES MALDONADO MARIN' (c\u00f3digo 71970) insertado.",
-        "L\u00ednea 17: Local 'GONZALEZ CURIANTE JACQUELINE DEL' (c\u00f3digo 3977) insertado.",
-        "L\u00ednea 20: Local 'EMMA PINTO E HIJOS LTDA' (c\u00f3digo 3870) insertado.",
-        "L\u00ednea 24: Local 'INVERSIONES SENORA ISABEL LIMITADA' (c\u00f3digo 4021) insertado.",
-        "L\u00ednea 25: Local 'JOSE MANZO Y CIA LTDA.' (c\u00f3digo 3864) insertado.",
-        "L\u00ednea 26: Local 'COMERCIALIZADORA LA NARANJA SPA' (c\u00f3digo 62805) insertado.",
-        "L\u00ednea 28: Local 'COMERCIAL Y BOTILLERIA EVITA SPA' (c\u00f3digo 86367) insertado.",
-        "L\u00ednea 32: Local 'JUAN CARLOS GONZALEZ FUENTES' (c\u00f3digo 3874) insertado.",
-        "L\u00ednea 34: Local 'ROJAS GOMEZ SIXTO' (c\u00f3digo 3848) insertado."
-    ],
+    "success": false,
+    "inserted": 0,
+    "failed": 10,
+    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1769698269.csv",
+    "successes": [],
     "failures": [
         {
             "line": 2,
-            "codigo": "3901",
-            "nombre": "SUPERMERCADO RINGOSS SOCIEDAD DE",
-            "reason": "El c\u00f3digo de local '3901' ya existe (l\u00ednea 2)."
+            "codigo": "7366661",
+            "nombre": "ROLF VON BISCHOFFSHAUSEN",
+            "reason": "El c\u00f3digo de local '7366661' ya existe (l\u00ednea 2)."
+        },
+        {
+            "line": 3,
+            "codigo": "4458118",
+            "nombre": "THIECK ENGDAHL MONICA BLANCA",
+            "reason": "El c\u00f3digo de local '4458118' ya existe (l\u00ednea 3)."
         },
         {
             "line": 4,
-            "codigo": "4039",
-            "nombre": "ARANDA PEREZ CAROLINA ANDREA",
-            "reason": "El c\u00f3digo de local '4039' ya existe (l\u00ednea 4)."
+            "codigo": "1065018",
+            "nombre": "VIDAL ABELLO MABEL DEL CARMEN",
+            "reason": "El c\u00f3digo de local '1065018' ya existe (l\u00ednea 4)."
+        },
+        {
+            "line": 5,
+            "codigo": "7016122",
+            "nombre": "TRAIWE TURISMO Y EXPEDICIONES",
+            "reason": "El c\u00f3digo de local '7016122' ya existe (l\u00ednea 5)."
+        },
+        {
+            "line": 6,
+            "codigo": "5167088",
+            "nombre": "LAGO CENTER SPA",
+            "reason": "El c\u00f3digo de local '5167088' ya existe (l\u00ednea 6)."
         },
         {
             "line": 7,
-            "codigo": "93629",
-            "nombre": "JUAN ALFONSO REYES BURCE",
-            "reason": "El c\u00f3digo de local '93629' ya existe (l\u00ednea 7)."
+            "codigo": "4171744",
+            "nombre": "ALVAREZ ALVARADO ADELA DEL CARMEN",
+            "reason": "El c\u00f3digo de local '4171744' ya existe (l\u00ednea 7)."
         },
         {
             "line": 8,
-            "codigo": "4044",
-            "nombre": "SANCHEZ REYES OSCAR ARIEL",
-            "reason": "El c\u00f3digo de local '4044' ya existe (l\u00ednea 8)."
+            "codigo": "7211178",
+            "nombre": "SOCIEDAD COMERCIAL LOS ROJO LTDA",
+            "reason": "El c\u00f3digo de local '7211178' ya existe (l\u00ednea 8)."
         },
         {
             "line": 9,
-            "codigo": "7344",
-            "nombre": "GALAZ VERA PEDRO",
-            "reason": "El c\u00f3digo de local '7344' ya existe (l\u00ednea 9)."
+            "codigo": "90976",
+            "nombre": "HECHENLEITNER KAHLER MAR\u00cdA ORIANA",
+            "reason": "El c\u00f3digo de local '90976' ya existe (l\u00ednea 9)."
+        },
+        {
+            "line": 10,
+            "codigo": "7478334",
+            "nombre": "LA PRALINE SPA",
+            "reason": "El c\u00f3digo de local '7478334' ya existe (l\u00ednea 10)."
         },
         {
             "line": 11,
-            "codigo": "66289",
-            "nombre": "RUIZ DE GAMBOA ASTORGA JESSICA DE",
-            "reason": "El c\u00f3digo de local '66289' ya existe (l\u00ednea 11)."
-        },
-        {
-            "line": 12,
-            "codigo": "72471",
-            "nombre": "SOCIEDAD CATALINA ASTUDILLO TAPIA",
-            "reason": "El c\u00f3digo de local '72471' ya existe (l\u00ednea 12)."
-        },
-        {
-            "line": 14,
-            "codigo": "89831",
-            "nombre": "ISABEL PAULINA PEREZ GARCIA",
-            "reason": "El c\u00f3digo de local '89831' ya existe (l\u00ednea 14)."
-        },
-        {
-            "line": 15,
-            "codigo": "11040",
-            "nombre": "VIDAL ALVAREZ ROBERTO MATIAS",
-            "reason": "El c\u00f3digo de local '11040' ya existe (l\u00ednea 15)."
-        },
-        {
-            "line": 16,
-            "codigo": "14711",
-            "nombre": "PLAZA CORDOVA JUAN ANTONIO",
-            "reason": "El c\u00f3digo de local '14711' ya existe (l\u00ednea 16)."
-        },
-        {
-            "line": 18,
-            "codigo": "89988",
-            "nombre": "PLAN COSTANERA SPA",
-            "reason": "El c\u00f3digo de local '89988' ya existe (l\u00ednea 18)."
-        },
-        {
-            "line": 19,
-            "codigo": "3872",
-            "nombre": "HERNANDEZ VERA CELIA MARGARITA",
-            "reason": "El c\u00f3digo de local '3872' ya existe (l\u00ednea 19)."
-        },
-        {
-            "line": 21,
-            "codigo": "3859",
-            "nombre": "TORRES VENEGAS XIMENA LORETO",
-            "reason": "El c\u00f3digo de local '3859' ya existe (l\u00ednea 21)."
-        },
-        {
-            "line": 22,
-            "codigo": "4171",
-            "nombre": "SUPERMERCADO FLORENCIA LIMITADA",
-            "reason": "El c\u00f3digo de local '4171' ya existe (l\u00ednea 22)."
-        },
-        {
-            "line": 23,
-            "codigo": "94101",
-            "nombre": "MINIMARKET MANUEL ALEJANDRO CASTRO LAGOS E.I.R.L.",
-            "reason": "El c\u00f3digo de local '94101' ya existe (l\u00ednea 23)."
-        },
-        {
-            "line": 27,
-            "codigo": "61876",
-            "nombre": "BOTILLERIA PERELY LTDA",
-            "reason": "El c\u00f3digo de local '61876' ya existe (l\u00ednea 27)."
-        },
-        {
-            "line": 29,
-            "codigo": "92280",
-            "nombre": "UTILES DE ASEO JORGE ISAIAS OGAZ CIFUENTES E.I.R.L.",
-            "reason": "El c\u00f3digo de local '92280' ya existe (l\u00ednea 29)."
-        },
-        {
-            "line": 30,
-            "codigo": "86658",
-            "nombre": "COMERCIAL URRUTIA Y COMPANIA SPA",
-            "reason": "El c\u00f3digo de local '86658' ya existe (l\u00ednea 30)."
-        },
-        {
-            "line": 31,
-            "codigo": "66718",
-            "nombre": "GUTIERREZ ULLOA JUAN",
-            "reason": "El c\u00f3digo de local '66718' ya existe (l\u00ednea 31)."
-        },
-        {
-            "line": 33,
-            "codigo": "66302",
-            "nombre": "FLORES PERALTA RUTH ELIZABETH",
-            "reason": "El c\u00f3digo de local '66302' ya existe (l\u00ednea 33)."
-        },
-        {
-            "line": 35,
-            "codigo": "4162",
-            "nombre": "ACEVEDO MENARES PAOLA ANDREA",
-            "reason": "El c\u00f3digo de local '4162' ya existe (l\u00ednea 35)."
-        },
-        {
-            "line": 36,
-            "codigo": "3797",
-            "nombre": "MARCHANT VELASQUEZ VICTORIA MARISOL",
-            "reason": "El c\u00f3digo de local '3797' ya existe (l\u00ednea 36)."
-        },
-        {
-            "line": 37,
-            "codigo": "66306",
-            "nombre": "SOCIEDAD COMERCIAL TORRES Y",
-            "reason": "El c\u00f3digo de local '66306' ya existe (l\u00ednea 37)."
-        },
-        {
-            "line": 38,
-            "codigo": "56319",
-            "nombre": "SUAREZ ARRIAGADA ANA DEL CARMEN",
-            "reason": "El c\u00f3digo de local '56319' ya existe (l\u00ednea 38)."
-        },
-        {
-            "line": 39,
-            "codigo": "3812",
-            "nombre": "GIULIANI GIULIUCCI LEDDA ANTONELL",
-            "reason": "El c\u00f3digo de local '3812' ya existe (l\u00ednea 39)."
-        },
-        {
-            "line": 40,
-            "codigo": "46171",
-            "nombre": "SOCIEDAD COMERCIALIZADORA DE",
-            "reason": "El c\u00f3digo de local '46171' ya existe (l\u00ednea 40)."
-        },
-        {
-            "line": 41,
-            "codigo": "70908",
-            "nombre": "ESTEBAN AARON LAGOS MARTINEZ",
-            "reason": "El c\u00f3digo de local '70908' ya existe (l\u00ednea 41)."
-        },
-        {
-            "line": 42,
-            "codigo": "73337",
-            "nombre": "COMERCIAL RODRIGUEZ SPA",
-            "reason": "El c\u00f3digo de local '73337' ya existe (l\u00ednea 42)."
-        },
-        {
-            "line": 43,
-            "codigo": "4234",
-            "nombre": "PINO MUNOZ ADRIANA",
-            "reason": "El c\u00f3digo de local '4234' ya existe (l\u00ednea 43)."
-        },
-        {
-            "line": 44,
-            "codigo": "61668",
-            "nombre": "SOCIEDAD COMERCIALIZADORA DE",
-            "reason": "El c\u00f3digo de local '61668' ya existe (l\u00ednea 44)."
-        },
-        {
-            "line": 45,
-            "codigo": "4232",
-            "nombre": "VASQUEZ PAREDES JOSE GENARO",
-            "reason": "El c\u00f3digo de local '4232' ya existe (l\u00ednea 45)."
+            "codigo": "6605965",
+            "nombre": "VERGARA RUIZ MARCELO EDUARDO",
+            "reason": "El c\u00f3digo de local '6605965' ya existe (l\u00ednea 11)."
         }
     ]
 }

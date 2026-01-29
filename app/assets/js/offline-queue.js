@@ -260,10 +260,15 @@
   // --------------------------------------------------------------------------------
   // POST con idempotencia + refresco CSRF
   // --------------------------------------------------------------------------------
+  function defaultTimeoutMs(task){
+    const hasFiles = Array.isArray(task && task.files) && task.files.some(f => f && f.blob);
+    return hasFiles ? 120000 : 20000;
+  }
+
   async function httpPost(task){
     if (!task || !task.url) throw new Error('Task sin URL');
 
-    const timeoutMs = typeof task.timeoutMs === 'number' ? task.timeoutMs : 20000;
+    const timeoutMs = typeof task.timeoutMs === 'number' ? task.timeoutMs : defaultTimeoutMs(task);
 
     // Refresca CSRF si es necesario o está marcado como stale
     if (task.sendCSRF !== false && needsCsrfRefresh()) {
@@ -548,18 +553,64 @@
         this._cache = m;
         localStorage.setItem(this.key, JSON.stringify(m));
         await idbSet(this.key, m);
+
+        // MEJORA: Broadcast a otras tabs
+        if (this._channel) {
+          try {
+            this._channel.postMessage({ type: 'dep_added', tag });
+          } catch(_) {}
+        }
       }
-    }
+    },
+
+    // MEJORA: Inicializar BroadcastChannel para sincronización cross-tab
+    initChannel() {
+      if (typeof BroadcastChannel !== 'undefined' && !this._channel) {
+        try {
+          this._channel = new BroadcastChannel('v2-completed-deps');
+          this._channel.onmessage = (e) => {
+            if (e.data && e.data.type === 'dep_added' && e.data.tag) {
+              // Agregar a cache local sin re-broadcast
+              if (this._cache && !this._cache.includes(e.data.tag)) {
+                this._cache.push(e.data.tag);
+                localStorage.setItem(this.key, JSON.stringify(this._cache));
+              }
+            }
+          };
+        } catch(_) {}
+      }
+    },
+
+    _channel: null
   };
 
+  // MEJORA: Exponer promesa de inicialización para que drain() pueda esperar
+  let _mappingsReady = false;
+  let _mappingsPromise = null;
+
+  async function ensureMappingsLoaded() {
+    if (_mappingsReady) return true;
+    if (_mappingsPromise) return _mappingsPromise;
+
+    _mappingsPromise = (async () => {
+      try {
+        await Visits.load();
+        await LocalByGuid.load();
+        await CompletedDeps.all();
+        CompletedDeps.initChannel(); // Inicializar canal cross-tab
+        _mappingsReady = true;
+        return true;
+      } catch (_) {
+        _mappingsReady = true; // Marcar como listo aunque falle
+        return false;
+      }
+    })();
+
+    return _mappingsPromise;
+  }
+
   // Inicializar caches de mappings al cargar
-  (async function initMappings() {
-    try {
-      await Visits.load();
-      await LocalByGuid.load();
-      await CompletedDeps.all();
-    } catch (_) {}
-  })();
+  ensureMappingsLoaded();
 
   // --------------------------------------------------------------------------------
   // Helpers varios
@@ -727,7 +778,7 @@
     'HTTP_500':      { maxAttempts: 6,  baseDelayMs: 5000, maxDelayMs: 300000 },
     'HTTP_408':      { maxAttempts: 8,  baseDelayMs: 2000, maxDelayMs: 60000 },
     'HTTP_429':      { maxAttempts: 6,  baseDelayMs: 10000, maxDelayMs: 300000 },
-    'LOGICAL_ERROR': { maxAttempts: 3,  baseDelayMs: 5000, maxDelayMs: 30000 },
+    'LOGICAL_ERROR': { maxAttempts: 5,  baseDelayMs: 5000, maxDelayMs: 30000 }, // MEJORA: aumentado de 3 a 5
     'DUPLICATE':     { maxAttempts: 1,  baseDelayMs: 0, maxDelayMs: 0 }, // No reintentar, es éxito lógico
     'SERVER_ERROR':  { maxAttempts: 6,  baseDelayMs: 3000, maxDelayMs: 120000 }, // Server devolvió HTML inesperado
     'VISITA_PENDING':{ maxAttempts: 20, baseDelayMs: 2000, maxDelayMs: 30000 }, // Visita aún no creada, reintentar pronto
@@ -943,6 +994,7 @@
     blocked: null,
     blockedAt: null,
     authRecoveryTimer: null,
+    csrfRecoveryTimer: null,
     csrfStale: false,         // Flag para indicar que el CSRF necesita refresh
     lastCsrfRefresh: 0,       // Timestamp del último refresh exitoso
     csrfRefreshAttempts: 0    // Contador de intentos fallidos
@@ -994,6 +1046,28 @@
     }
   }
 
+  function stopCsrfRecovery(){
+    if (queueState.csrfRecoveryTimer){
+      clearInterval(queueState.csrfRecoveryTimer);
+      queueState.csrfRecoveryTimer = null;
+    }
+  }
+
+  async function attemptCsrfRecovery(){
+    if (queueState.blocked !== 'csrf') return;
+    const refreshed = await refreshCSRF();
+    if (refreshed && refreshed.ok) {
+      await requeueBlocked('csrf');
+      unblockQueue();
+      await drain();
+      return;
+    }
+    if (refreshed && refreshed.blocked === 'auth') {
+      stopCsrfRecovery();
+      blockQueue('auth', refreshed);
+    }
+  }
+
   async function requeueBlocked(reason){
     const status = reason === 'auth' ? 'blocked_auth' : reason === 'csrf' ? 'blocked_csrf' : null;
     if (!status || !window.AppDB) return;
@@ -1014,10 +1088,18 @@
     queueState.blockedAt = Date.now();
     QueueEvents.emit('queue:blocked', { reason, detail });
     if (reason === 'auth') {
+      stopCsrfRecovery();
       stopAuthRecovery();
       attemptAuthRecovery().catch(()=>{});
       queueState.authRecoveryTimer = setInterval(() => {
         try { attemptAuthRecovery(); } catch(_){}
+      }, AUTH_RECOVERY_INTERVAL_MS);
+    } else if (reason === 'csrf') {
+      stopAuthRecovery();
+      stopCsrfRecovery();
+      attemptCsrfRecovery().catch(()=>{});
+      queueState.csrfRecoveryTimer = setInterval(() => {
+        try { attemptCsrfRecovery(); } catch(_){}
       }, AUTH_RECOVERY_INTERVAL_MS);
     }
   }
@@ -1026,6 +1108,7 @@
     if (!queueState.blocked) return;
     const reason = queueState.blocked;
     stopAuthRecovery();
+    stopCsrfRecovery();
     queueState.blocked = null;
     queueState.blockedAt = null;
     QueueEvents.emit('queue:unblocked', {});
@@ -1093,6 +1176,10 @@
 
     _drainPromise = (async () => {
       try {
+        // MEJORA: Esperar a que los mappings estén cargados antes de procesar
+        // Esto evita race conditions donde visita_id no se resuelve correctamente
+        await ensureMappingsLoaded();
+
         // Siempre recupera trabajos "running" estancados aunque estemos offline para
         // que queden listos cuando vuelva la conexión.
         await recoverStaleRunning();
@@ -1117,34 +1204,42 @@
 
           // MEJORA: Validación mejorada de dependencias
           if (t.dependsOn && !CompletedDeps.has(t.dependsOn)) {
-            // Verificar si la dependencia existe como job pendiente
-            const depJobExists = pending.some(j => {
-              const job = AppDB.normalizeJob ? AppDB.normalizeJob(j) : j;
-              return job.type === 'create_visita' &&
-                     job.fields?.client_guid === t.fields?.client_guid;
-            });
+            const guid = t.fields?.client_guid;
+            const mapped = guid ? LocalByGuid.get(guid) : null;
 
-            if (!depJobExists) {
-              // La dependencia no existe y nunca se completó
-              // Verificar si ya pasó mucho tiempo (>10 min) - marcar como error permanente
-              const createdAt = t.createdAt || 0;
-              if (createdAt && (now - createdAt) > 10 * 60 * 1000) {
-                console.error('[Queue] Dependencia faltante para job:', t.id, 'depende de:', t.dependsOn);
-                await AppDB.update(t.id, {
-                  status: 'failed_permanent',
-                  finishedAt: now,
-                  lastError: buildLastError({
-                    code: 'MISSING_DEPENDENCY',
-                    message: 'La visita asociada nunca fue creada. Dependencia: ' + t.dependsOn,
-                    url: t.url
-                  }),
-                  updatedAt: now
-                });
-                QueueEvents.emit('queue:dispatch:error', { job: t, error: 'MISSING_DEPENDENCY' });
-                jr('onError', t, 'MISSING_DEPENDENCY');
+            if (mapped && !String(mapped).startsWith('local-')) {
+              CompletedDeps.add(t.dependsOn);
+            } else {
+              // Verificar si la dependencia existe como job pendiente
+              const depJobExists = pending.some(j => {
+                const job = AppDB.normalizeJob ? AppDB.normalizeJob(j) : j;
+                return job.type === 'create_visita' &&
+                       job.fields?.client_guid === t.fields?.client_guid;
+              });
+
+              if (!depJobExists) {
+                // La dependencia no existe y nunca se completó
+                // Verificar si ya pasó mucho tiempo (>10 min) - marcar como error permanente
+                const createdAt = t.createdAt || 0;
+                if (createdAt && (now - createdAt) > 10 * 60 * 1000) {
+                  console.error('[Queue] Dependencia faltante para job:', t.id, 'depende de:', t.dependsOn);
+                  await AppDB.update(t.id, {
+                    status: 'failed_permanent',
+                    finishedAt: now,
+                    lastError: buildLastError({
+                      code: 'MISSING_DEPENDENCY',
+                      message: 'La visita asociada nunca fue creada. Dependencia: ' + t.dependsOn,
+                      url: t.url
+                    }),
+                    updatedAt: now
+                  });
+                  QueueEvents.emit('queue:dispatch:error', { job: t, error: 'MISSING_DEPENDENCY' });
+                  jr('onError', t, 'MISSING_DEPENDENCY');
+                }
+                continue;
               }
+              continue;
             }
-            continue;
           }
 
           // PATCH: Adquirir lock cross-tab antes de procesar
@@ -1184,14 +1279,12 @@
 
           try {
             const result = await processTask(t);
-            clearInterval(lockRenewalInterval);
             await AppDB.remove(t.id);
             CrossTabLock.release(t.id); // Liberar lock tras éxito
             QueueEvents.emit('queue:dispatch:success', { job: t, responseStatus: result.status || 200, response: result.data });
             jr('onSuccess', t, result.data, result.status);
             window.dispatchEvent(new CustomEvent('queue:done', { detail: { id: t.id, type: t.type, response: result.data } }));
           } catch (err) {
-            clearInterval(lockRenewalInterval);
             const parsed = err && err.parsed ? err.parsed : null;
             const responseStub = err && err.status ? { status: err.status } : null;
             const failure = classifyFailure({ response: responseStub, parsed, error: err });
@@ -1242,6 +1335,9 @@
               break;
             }
             await backoff(200);
+          } finally {
+            // MEJORA: Siempre limpiar el interval, incluso si hay excepciones no manejadas
+            clearInterval(lockRenewalInterval);
           }
         }
 
@@ -1361,7 +1457,8 @@
         id: opts.id || opts.idempotencyKey || undefined,
         dedupeKey: opts.dedupeKey || undefined,
         dependsOn: opts.dependsOn || undefined,
-        client_guid: opts.client_guid || fields.client_guid || undefined
+        client_guid: opts.client_guid || fields.client_guid || undefined,
+        timeoutMs: typeof opts.timeoutMs === 'number' ? opts.timeoutMs : undefined
       };
 
       task.meta = Object.assign({}, inferMetaFromTask(task), opts.meta || {});
@@ -1372,10 +1469,11 @@
      * Intenta enviar inmediatamente; si falla (offline o error), encola.
      */
     smartPost: async function(url, fdOrFields, options = {}) {
-      const type          = options.type || 'generic';
-      const needCSRF      = options.sendCSRF !== false;
-      const timeoutMs     = typeof options.timeoutMs === 'number' ? options.timeoutMs : 20000;
-      const enqueueOnFail = options.enqueueOnFail !== false;
+      const type             = options.type || 'generic';
+      const needCSRF         = options.sendCSRF !== false;
+      const timeoutMsOpt     = typeof options.timeoutMs === 'number' ? options.timeoutMs : null;
+      const enqueueOnFail    = options.enqueueOnFail !== false;
+      const enqueueOnBlocked = options.enqueueOnBlocked !== false;
 
       let fields = {}, files = [];
       if (fdOrFields instanceof FormData) {
@@ -1397,7 +1495,7 @@
         dedupeKey: options.dedupeKey || undefined,
         dependsOn: options.dependsOn || undefined,
         client_guid: options.client_guid || fields.client_guid || undefined,
-        timeoutMs
+        timeoutMs: timeoutMsOpt || undefined
       };
 
       if (!task.id) {
@@ -1432,7 +1530,8 @@
           // Ahora el job SIEMPRE tiene id
           QueueEvents.emit('queue:dispatch:start', { job: task });
           jr('onStart', task);
-          const result = await withTimeout(() => processTask(task), timeoutMs, 'E_SMART_TIMEOUT');
+          const effectiveTimeoutMs = typeof task.timeoutMs === 'number' ? task.timeoutMs : defaultTimeoutMs(task);
+          const result = await withTimeout(() => processTask(task), effectiveTimeoutMs, 'E_SMART_TIMEOUT');
 
           QueueEvents.emit('queue:dispatch:success', {
             job: task,
@@ -1454,10 +1553,18 @@
           }), e && e.status ? e.status : null);
           if (failure.blocked === 'auth') {
             blockQueue('auth', failure);
+            if (shouldEnqueue && enqueueOnFail && enqueueOnBlocked) {
+              const id = await this.enqueue(task);
+              return { queued:true, ok:true, id, blocked:'auth' };
+            }
             return { queued:false, ok:false, blocked:'auth' };
           }
           if (failure.blocked === 'csrf') {
             blockQueue('csrf', failure);
+            if (shouldEnqueue && enqueueOnFail && enqueueOnBlocked) {
+              const id = await this.enqueue(task);
+              return { queued:true, ok:true, id, blocked:'csrf' };
+            }
             return { queued:false, ok:false, blocked:'csrf' };
           }
           if (shouldEnqueue && (failure.retryable || isNetworkishError(e))) {
