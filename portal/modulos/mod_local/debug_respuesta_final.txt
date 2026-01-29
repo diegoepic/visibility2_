@@ -1,69 +1,25 @@
 {
-    "success": false,
-    "inserted": 0,
-    "failed": 10,
-    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1769698269.csv",
-    "successes": [],
+    "success": true,
+    "inserted": 9,
+    "failed": 1,
+    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1769712679.csv",
+    "successes": [
+        "L\u00ednea 2: Local 'LUARTE FERNANDEZ LTDA' (c\u00f3digo 7438765) insertado.",
+        "L\u00ednea 3: Local 'CORTES CORTES YENNIFER MACARENA' (c\u00f3digo 5425877) insertado.",
+        "L\u00ednea 4: Local 'MUNOZ ORTIZ JACQUELINE DEL CARMEN' (c\u00f3digo 6194247) insertado.",
+        "L\u00ednea 6: Local 'PIZARRO GODOY IVONNE DEL CARMEN' (c\u00f3digo 5458450) insertado.",
+        "L\u00ednea 7: Local 'EXPRESS MART SPA' (c\u00f3digo 7263314) insertado.",
+        "L\u00ednea 8: Local 'PORTILLO JOPIA JESSICA ELIZABETH' (c\u00f3digo 6095926) insertado.",
+        "L\u00ednea 9: Local 'ROTISERIA RUBY HENRIQUEZ RAMIREZ' (c\u00f3digo 7054804) insertado.",
+        "L\u00ednea 10: Local 'DISTRIBUIDORA THOMAS SPA' (c\u00f3digo 7247170) insertado.",
+        "L\u00ednea 11: Local 'PALOMINOS HERNANDEZ ERIKA ELENA DEL' (c\u00f3digo 105205) insertado."
+    ],
     "failures": [
         {
-            "line": 2,
-            "codigo": "7366661",
-            "nombre": "ROLF VON BISCHOFFSHAUSEN",
-            "reason": "El c\u00f3digo de local '7366661' ya existe (l\u00ednea 2)."
-        },
-        {
-            "line": 3,
-            "codigo": "4458118",
-            "nombre": "THIECK ENGDAHL MONICA BLANCA",
-            "reason": "El c\u00f3digo de local '4458118' ya existe (l\u00ednea 3)."
-        },
-        {
-            "line": 4,
-            "codigo": "1065018",
-            "nombre": "VIDAL ABELLO MABEL DEL CARMEN",
-            "reason": "El c\u00f3digo de local '1065018' ya existe (l\u00ednea 4)."
-        },
-        {
             "line": 5,
-            "codigo": "7016122",
-            "nombre": "TRAIWE TURISMO Y EXPEDICIONES",
-            "reason": "El c\u00f3digo de local '7016122' ya existe (l\u00ednea 5)."
-        },
-        {
-            "line": 6,
-            "codigo": "5167088",
-            "nombre": "LAGO CENTER SPA",
-            "reason": "El c\u00f3digo de local '5167088' ya existe (l\u00ednea 6)."
-        },
-        {
-            "line": 7,
-            "codigo": "4171744",
-            "nombre": "ALVAREZ ALVARADO ADELA DEL CARMEN",
-            "reason": "El c\u00f3digo de local '4171744' ya existe (l\u00ednea 7)."
-        },
-        {
-            "line": 8,
-            "codigo": "7211178",
-            "nombre": "SOCIEDAD COMERCIAL LOS ROJO LTDA",
-            "reason": "El c\u00f3digo de local '7211178' ya existe (l\u00ednea 8)."
-        },
-        {
-            "line": 9,
-            "codigo": "90976",
-            "nombre": "HECHENLEITNER KAHLER MAR\u00cdA ORIANA",
-            "reason": "El c\u00f3digo de local '90976' ya existe (l\u00ednea 9)."
-        },
-        {
-            "line": 10,
-            "codigo": "7478334",
-            "nombre": "LA PRALINE SPA",
-            "reason": "El c\u00f3digo de local '7478334' ya existe (l\u00ednea 10)."
-        },
-        {
-            "line": 11,
-            "codigo": "6605965",
-            "nombre": "VERGARA RUIZ MARCELO EDUARDO",
-            "reason": "El c\u00f3digo de local '6605965' ya existe (l\u00ednea 11)."
+            "codigo": "6928403",
+            "nombre": "MERCADO HOUSE SPA",
+            "reason": "El c\u00f3digo de local '6928403' ya existe (l\u00ednea 5)."
         }
     ]
 }
