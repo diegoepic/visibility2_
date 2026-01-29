@@ -15,7 +15,7 @@
   }
 
   function showSuccessAlert(payload){
-    const msg = (payload && payload.message) || 'La gestión se subió correctamente.';
+    const msg = (payload && payload.message) || 'La gestion se subio correctamente.';
     let alertEl = document.getElementById('success-alert');
     if (!alertEl){
       alertEl = document.createElement('div');
@@ -38,11 +38,17 @@
   }
 
   function handleLiveSuccess(payload){
-    if (!payload) return;
-    persistSuccessForReload(payload);
-    try { localStorage.setItem('v2_gestion_success_pending', JSON.stringify(payload)); } catch(_){ }
-    window.location.reload();
-  }
+  if (!payload) return;
+  persistSuccessForReload(payload);
+  try { localStorage.setItem('v2_gestion_success_pending', JSON.stringify(payload)); } catch(_){ }
+  showSuccessAlert(payload);
+  try { hideDoneRows(); } catch(_){ }
+  try {
+    if (window.BootstrapIndex && typeof window.BootstrapIndex.refreshToday === 'function') {
+      window.BootstrapIndex.refreshToday();
+    }
+  } catch(_){ }
+}
 
   function readPendingSuccess(){
     let data = null;
@@ -124,11 +130,11 @@
   });
 
   // =========================================================================
-  // PATCH 4: Escuchar eventos de éxito de cola para actualizar UI sin reload
+  // PATCH 4: Escuchar eventos de exito de cola para actualizar UI sin reload
   // =========================================================================
 
   /**
-   * Oculta una fila específica con animación suave
+   * Oculta una fila especifica con animacion suave
    */
   function hideRowWithAnimation(tr, delay = 0) {
     setTimeout(() => {
@@ -155,7 +161,7 @@
     const count = visibleRows.length;
     countEl.textContent = String(count);
 
-    // Si no hay más pendientes, mostrar mensaje
+    // Si no hay mas pendientes, mostrar mensaje
     if (count === 0) {
       const emptyMsg = document.querySelector('.empty-agenda-message, [data-empty-message]');
       if (emptyMsg) emptyMsg.style.display = 'block';
@@ -163,7 +169,7 @@
   }
 
   /**
-   * Maneja el éxito de una gestión desde la cola - actualización incremental
+   * Maneja el exito de una gestion desde la cola - actualizacion incremental
    */
   function handleQueueSuccess(detail) {
     const job = detail.job || {};
@@ -202,7 +208,7 @@
     let hidden = false;
 
     rows.forEach(tr => {
-      // Si hay formId, verificar que la fila corresponde a esa campaña
+      // Si hay formId, verificar que la fila corresponde a esa campa�0�9a
       if (formId) {
         const camps = (tr.getAttribute('data-campanas') || '').split(',').filter(Boolean);
         const matchesCampaign = camps.length === 0 || camps.includes(String(formId));
@@ -211,24 +217,24 @@
           hidden = true;
         }
       } else {
-        // Sin formId específico, ocultar todas las filas de ese local
+        // Sin formId especifico, ocultar todas las filas de ese local
         hideRowWithAnimation(tr);
         hidden = true;
       }
     });
 
-    // Mostrar alerta de éxito
+    // Mostrar alerta de exito
     if (hidden) {
       const localName = rows[0]?.querySelector('.local-name, [data-local-name]')?.textContent || `Local ${localId}`;
       showSuccessAlert({
-        message: `Gestión enviada: ${localName}`,
+        message: `Gestion enviada: ${localName}`,
         local_id: localId,
         form_id: formId
       });
     }
   }
 
-  // Escuchar evento de éxito individual de la cola
+  // Escuchar evento de exito individual de la cola
   window.addEventListener('queue:dispatch:success', function(ev) {
     try {
       handleQueueSuccess(ev.detail || {});
@@ -237,7 +243,7 @@
     }
   });
 
-  // También escuchar el evento personalizado queue:done
+  // Tambien escuchar el evento personalizado queue:done
   window.addEventListener('queue:done', function(ev) {
     try {
       const detail = ev.detail || {};
@@ -249,7 +255,7 @@
     }
   });
 
-  // Escuchar evento específico de gestión completada
+  // Escuchar evento especifico de gestion completada
   window.addEventListener('queue:gestion_success', function(ev) {
     try {
       handleQueueSuccess(ev.detail || {});
@@ -258,12 +264,15 @@
     }
   });
 
-  // Re-ejecutar hideDoneRows cuando la página vuelve a ser visible (por si hubo cambios en background)
+  // Re-ejecutar hideDoneRows cuando la pagina vuelve a ser visible (por si hubo cambios en background)
   document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'visible') {
-      // Pequeño delay para dar tiempo a que se procesen otras actualizaciones
+      // Peque�0�9o delay para dar tiempo a que se procesen otras actualizaciones
       setTimeout(hideDoneRows, 500);
     }
   });
 
 })();
+
+
+

@@ -1,5 +1,5 @@
 //version del service  worker (subir en 0.0.1 para refrescar cache de los archivos estaticos, tambien subir a la misma version el sw en assets/js/v2_cache.js)
-const VERSION        = 'v5.0.0';
+const VERSION        = 'v5.0.5';
 const APP_SCOPE      = '/visibility2/app';
 const STATIC_CACHE   = `static-${VERSION}`;
 const RUNTIME_CACHE  = `runtime-${VERSION}`;
@@ -8,23 +8,33 @@ const RUNTIME_MAX_ITEMS = 80;
 //achivos guardados en la cache
 const STATIC_ASSETS = [
   `${APP_SCOPE}/index_pruebas.php`,
-  `${APP_SCOPE}/gestionar_spa.html`,
   `${APP_SCOPE}/assets/plugins/bootstrap/css/bootstrap.min.css`,
   `${APP_SCOPE}/assets/plugins/jquery/jquery-3.6.0.min.js`,
   `${APP_SCOPE}/assets/plugins/font-awesome/css/font-awesome.min.css`,
   `${APP_SCOPE}/assets/css/main.css`,
   `${APP_SCOPE}/assets/css/main-responsive.css`,
   `${APP_SCOPE}/assets/css/offline.css`,
+  `${APP_SCOPE}/assets/js/db.js`,
   `${APP_SCOPE}/assets/js/v2_cache.js`,
   `${APP_SCOPE}/assets/js/offline-queue.js`,
   `${APP_SCOPE}/assets/js/bootstrap_index_cache.js`,
-  `${APP_SCOPE}/assets/js/gestionar_spa.js`,
+  `${APP_SCOPE}/assets/js/journal_db.js`,
+  `${APP_SCOPE}/assets/js/journal_ui.js`,
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(STATIC_CACHE);
-    try { await cache.addAll(STATIC_ASSETS); } catch (_) { }
+    const adds = STATIC_ASSETS.map(async (u) => {
+      try {
+        const req = new Request(u, { method: 'GET', credentials: 'include' });
+        const res = await fetch(req);
+        if (res && res.ok && res.type !== 'opaque') {
+          await cache.put(req, res.clone());
+        }
+      } catch (_) { }
+    });
+    await Promise.all(adds);
     self.skipWaiting();
   })());
 });

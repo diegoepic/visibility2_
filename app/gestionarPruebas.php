@@ -1147,9 +1147,6 @@ function ensureClientGuid() {
 function getCSRF() {
   return document.querySelector('input[name="csrf_token"]')?.value || '';
 }
-function getCSRF() {
-  return document.querySelector('input[name="csrf_token"]')?.value || '';
-}
 function loadCompletedDeps(){
   try { return JSON.parse(localStorage.getItem('v2_completed_deps') || '[]'); }
   catch(_) { return []; }
@@ -1160,16 +1157,33 @@ function isCreateVisitaResolved(guid){
 }
 async function hasPendingCreateVisita(guid){
   if (!guid) return false;
-  let listFn = null;
-  if (window.Queue && typeof window.Queue.listPending === 'function') {
-    listFn = window.Queue.listPending;
-  } else if (window.AppDB && typeof window.AppDB.listByStatus === 'function') {
-    listFn = () => window.AppDB.listByStatus('pending');
-  }
-  if (!listFn) return false;
 
-  const pending = await listFn();
-  return Array.isArray(pending) && pending.some(t => {
+  let jobs = [];
+  try {
+    if (window.Queue) {
+      if (typeof window.Queue.listPending === "function") {
+        const pending = await window.Queue.listPending();
+        if (Array.isArray(pending)) jobs = jobs.concat(pending);
+      }
+      if (typeof window.Queue.listRunning === "function") {
+        const running = await window.Queue.listRunning();
+        if (Array.isArray(running)) jobs = jobs.concat(running);
+      }
+    }
+    if (!jobs.length && window.AppDB && typeof window.AppDB.listByStatus === "function") {
+      const lists = await Promise.all([
+        window.AppDB.listByStatus('queued'),
+        window.AppDB.listByStatus('running'),
+        window.AppDB.listByStatus('blocked_auth'),
+        window.AppDB.listByStatus('blocked_csrf')
+      ]);
+      jobs = [].concat(...lists);
+    }
+  } catch(_) {
+    jobs = [];
+  }
+
+  return Array.isArray(jobs) && jobs.some(t => {
     if (!t) return false;
     const cg = t.client_guid || (t.fields && t.fields.client_guid);
     return t.type === 'create_visita' && cg && cg === guid;
@@ -1258,7 +1272,7 @@ async function queueCreateVisita(payload, idempKey) {
     type: 'create_visita',
     idempotencyKey: idempKey,
     client_guid: payload.client_guid,
-    dedupeKey: `create:${<?php echo (int)$usuario_id; ?>}:${<?php echo (int)$idCampana; ?>}:${<?php echo (int)$idLocal; ?>}`,
+    dedupeKey: payload.client_guid ? `create_visita:${payload.client_guid}` : undefined,
     meta: QUEUE_META_BASE
   });
 }
@@ -1275,6 +1289,7 @@ async function queueProcesarGestion(formEl, meta={}) {
     type: 'procesar_gestion',
     client_guid: cg,
     dependsOn: `create:${cg}`,
+    timeoutMs: 120000,
     meta: Object.assign({}, QUEUE_META_BASE, meta)
   });
 }
@@ -1478,7 +1493,7 @@ async function subirFotoPregunta(id_form_question, id_local) {
       let data;
       try { data = JSON.parse(xhr.responseText); }
       catch {
-        uploadInstance.innerHTML = `<div class="alert alert-danger" style="margin-top:8px;">Respuesta inválida del servidor.</div>`;
+        enqueueFallback();
         return;
       }
 
@@ -1532,23 +1547,22 @@ async function subirFotoPregunta(id_form_question, id_local) {
     }
 
     // Encolamos el POST completo (incluye el archivo) para que se procese cuando haya red
-    const visitaVal = $('#visita_id').val();
-    const needsCreateSync = !visitaVal || String(visitaVal).startsWith('local-');
+    const dependsOn = clientGuid ? `create:${clientGuid}` : undefined;
 
-    let dependsOn = undefined;
-    if (needsCreateSync && clientGuid) {
-      try {
-        if (await hasPendingCreateVisita(clientGuid)) {
-          dependsOn = `create:${clientGuid}`;
-        }
-      } catch (_) { /* noop */ }
-    }
-
-    const res = await QueueObj.smartPost(
+    let res = await QueueObj.smartPost(
       '/visibility2/app/procesar_pregunta_foto_pruebas.php',
       formData,
-      { type: 'pregunta_foto', sendCSRF: true, dependsOn, client_guid: clientGuid }
+      { type: 'pregunta_foto', sendCSRF: true, dependsOn, client_guid: clientGuid, idempotencyKey: idempo, timeoutMs: 60000, enqueueOnBlocked: true }
     );
+
+    if (res && !res.queued && !res.ok && QueueObj.enqueueFromForm) {
+      const forcedId = await QueueObj.enqueueFromForm(
+        '/visibility2/app/procesar_pregunta_foto_pruebas.php',
+        formData,
+        { type: 'pregunta_foto', sendCSRF: true, dependsOn, client_guid: clientGuid, idempotencyKey: idempo, timeoutMs: 60000 }
+      );
+      res = { queued: true, ok: true, id: forcedId, blocked: res.blocked };
+    }
 
     // Pintamos miniatura local (blob) y badge “En cola” si corresponde
     const blobUrl = URL.createObjectURL(compressedFile);

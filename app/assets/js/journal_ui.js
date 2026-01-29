@@ -16,8 +16,226 @@
 
   let GROUPS_TODAY   = {};
   let GROUPS_WEEK    = {};
-  let OFFLINE_GUIDS  = new Set(); 
-  
+  let OFFLINE_GUIDS  = new Set();
+
+  // ========== MEJORA: Debounce para evitar race conditions en renderizado ==========
+  const RENDER_DEBOUNCE_MS = 150;
+  const PROGRESS_DEBOUNCE_MS = 50; // Más rápido para actualizaciones de progreso
+  let _renderTodayTimer = null;
+  let _renderWeekTimer = null;
+  let _isRenderingToday = false;
+  let _isRenderingWeek = false;
+
+  function debounce(fn, wait) {
+    let timer = null;
+    return function(...args) {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn.apply(this, args), wait);
+    };
+  }
+
+  // ========== MEJORA: Actualizaciones parciales de progreso (sin re-render completo) ==========
+
+  function chipClassForStatus(st) {
+    if (st === 'success')      return 'jr-chip--ok';
+    if (st === 'running')      return 'jr-chip--run';
+    if (st === 'blocked_auth') return 'jr-chip--block';
+    if (st === 'blocked_csrf') return 'jr-chip--block';
+    if (st === 'error')        return 'jr-chip--err';
+    if (st === 'canceled')     return 'jr-chip--cancel';
+    return 'jr-chip--pend';
+  }
+
+  function chipTextForStatus(st) {
+    if (st === 'success')      return 'Subida OK';
+    if (st === 'running')      return 'Enviando';
+    if (st === 'blocked_auth') return 'Requiere reloguear';
+    if (st === 'blocked_csrf') return 'CSRF inválido';
+    if (st === 'error')        return 'Error terminal';
+    if (st === 'canceled')     return 'Cancelado';
+    return 'Pendiente';
+  }
+
+  // Actualizar solo el progreso de un job específico (sin re-render completo)
+  function updateJobProgressOnly(jobId, progress, status) {
+    if (!jobId) return false;
+
+    // Buscar en detalles expandidos
+    const detailRow = document.querySelector(`.jr-detail-row[data-job-id="${jobId}"]`);
+    if (detailRow) {
+      const bar = detailRow.querySelector('.progress-bar');
+      if (bar) {
+        const p = pct(progress);
+        animateProgressBar(bar, p);
+        if (status === 'success' || p >= 100) {
+          bar.classList.add('progress-bar-success');
+        }
+      }
+      const chip = detailRow.querySelector('.jr-chip');
+      if (chip && status) {
+        chip.className = `jr-chip ${chipClassForStatus(status)}`;
+        chip.textContent = chipTextForStatus(status);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  // Generar groupKey desde un job (para actualización parcial)
+  function getGroupKeyFromJobInternal(job) {
+    if (!job) return null;
+    const fields = job.fields || {};
+    const meta = job.meta || {};
+    const localId = meta.local_id || fields.id_local || fields.idLocal || fields.local_id || job.local_id || 0;
+    const ymd = (window.JournalDB && JournalDB.ymdLocal) ? JournalDB.ymdLocal(new Date()) : new Date().toISOString().slice(0,10);
+    return `${ymd}|${localId}`;
+  }
+
+  // Actualizar progreso de un grupo (local) sin re-render completo
+  function updateGroupProgressOnly(groupKey, progress, status) {
+    if (!groupKey) return false;
+
+    const groupEl = document.querySelector(`.jr-group[data-key="${groupKey}"]`);
+    if (!groupEl) return false;
+
+    const bar = groupEl.querySelector('.progress-bar');
+    if (bar) {
+      const p = pct(progress);
+      animateProgressBar(bar, p);
+      if (status === 'success' || p >= 100) {
+        bar.classList.add('progress-bar-success');
+      }
+    }
+
+    const chip = groupEl.querySelector('.jr-chip');
+    if (chip && status) {
+      chip.className = `jr-chip ${chipClassForStatus(status)}`;
+      chip.textContent = chipTextForStatus(status);
+    }
+
+    return true;
+  }
+
+  // Animar barra de progreso suavemente con requestAnimationFrame
+  function animateProgressBar(element, targetPct, durationMs = 150) {
+    if (!element) return;
+
+    // Obtener valor actual
+    const currentWidth = parseFloat(element.style.width) || 0;
+    const targetWidth = Math.max(0, Math.min(100, targetPct));
+
+    // Si la diferencia es pequeña, actualizar directo
+    if (Math.abs(targetWidth - currentWidth) < 2 || !window.requestAnimationFrame) {
+      element.style.width = targetWidth + '%';
+      element.textContent = Math.round(targetWidth) + '%';
+      return;
+    }
+
+    const start = performance.now();
+
+    function frame(now) {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / durationMs, 1);
+
+      // Easing suave (ease-out cubic)
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const currentPct = currentWidth + (targetWidth - currentWidth) * eased;
+
+      element.style.width = currentPct + '%';
+      element.textContent = Math.round(currentPct) + '%';
+
+      if (progress < 1) {
+        requestAnimationFrame(frame);
+      }
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  // Actualizar badges sin re-render completo
+  async function updateBadgesOnly() {
+    try {
+      const ymd = (window.JournalDB && JournalDB.ymdLocal) ? JournalDB.ymdLocal(new Date()) : new Date().toISOString().slice(0,10);
+      const rows = await JournalDB.listByYMD(ymd);
+      const stats = await JournalDB.statsFor(rows);
+
+      badge(qs('#jr-badge-pending'), stats.pending, 'Pendientes');
+      badge(qs('#jr-badge-running'), stats.running, 'Enviando');
+      badge(qs('#jr-badge-success'), stats.success, 'Subidas');
+      badge(qs('#jr-badge-error'),   stats.error,   'Errores');
+      badge(qs('#jr-badge-blocked'), stats.blocked, 'Bloqueadas');
+
+      const total = stats.pending + stats.running + stats.error + stats.success + stats.blocked;
+      setGlobalProgress(stats.success, total);
+    } catch(_) {}
+  }
+
+  // ========== MEJORA: Persistir OFFLINE_GUIDS en localStorage ==========
+  const OFFLINE_GUIDS_STORAGE_KEY = 'jr_offline_guids';
+
+  function loadOfflineGuidsFromStorage() {
+    try {
+      const stored = localStorage.getItem(OFFLINE_GUIDS_STORAGE_KEY);
+      if (stored) {
+        const arr = JSON.parse(stored);
+        if (Array.isArray(arr)) {
+          OFFLINE_GUIDS = new Set(arr);
+        }
+      }
+    } catch(_) {}
+  }
+
+  function saveOfflineGuidsToStorage() {
+    try {
+      const arr = Array.from(OFFLINE_GUIDS).slice(-500); // Limitar a 500 más recientes
+      localStorage.setItem(OFFLINE_GUIDS_STORAGE_KEY, JSON.stringify(arr));
+    } catch(_) {}
+  }
+
+  // Cargar al inicio
+  loadOfflineGuidsFromStorage();
+
+  // ========== MEJORA: Indicador de modo offline ==========
+  function createOfflineIndicator() {
+    if (document.getElementById('jr-offline-indicator')) return;
+    const indicator = document.createElement('div');
+    indicator.id = 'jr-offline-indicator';
+    indicator.className = 'jr-offline-banner';
+    indicator.style.cssText = `
+      display: none;
+      background: linear-gradient(90deg, #f39c12, #e67e22);
+      color: white;
+      padding: 8px 16px;
+      text-align: center;
+      font-weight: 500;
+      font-size: 13px;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    `;
+    indicator.innerHTML = '<i class="fa fa-wifi" style="margin-right:8px;"></i> Sin conexión - Los datos se sincronizarán automáticamente cuando vuelvas a estar online';
+
+    // Insertar al inicio del contenedor principal
+    const container = qs('#jr-list-today')?.parentElement || document.body;
+    container.insertBefore(indicator, container.firstChild);
+  }
+
+  function updateOfflineIndicator() {
+    const indicator = document.getElementById('jr-offline-indicator');
+    if (!indicator) return;
+
+    if (navigator.onLine) {
+      indicator.style.display = 'none';
+    } else {
+      indicator.style.display = 'block';
+    }
+  }
+
+  // Escuchar cambios de conectividad
+  window.addEventListener('online', updateOfflineIndicator);
+  window.addEventListener('offline', updateOfflineIndicator);
+
   // Sanitización mejorada usando DOM API (previene XSS más efectivamente)
   function esc(str){
     if (str == null) return '';
@@ -65,6 +283,20 @@
     if (!ts) return '';
     const d = new Date(ts);
     if (Number.isNaN(d.getTime())) return '';
+
+    // MEJORA: Si el tiempo de reintento ya pasó, mostrar mensaje diferente
+    const now = Date.now();
+    if (d.getTime() < now) {
+      return 'Reintentando pronto...';
+    }
+
+    // Si es en menos de 1 minuto
+    const diffMs = d.getTime() - now;
+    if (diffMs < 60000) {
+      const secs = Math.ceil(diffMs / 1000);
+      return `Reintentará en ${secs} segundo${secs !== 1 ? 's' : ''}`;
+    }
+
     return `Reintentará a las ${fmtTime(d)}`;
   }
 
@@ -133,9 +365,8 @@
   // ---------- OFFLINE GUIDS (para marcar subidas offline) ----------
 
   function collectOfflineGuids(rows){
-    const set = new Set();
+    // MEJORA: Mantener GUIDs existentes y agregar nuevos
     if (!Array.isArray(rows)) {
-      OFFLINE_GUIDS = set;
       return;
     }
     rows.forEach(r => {
@@ -143,9 +374,10 @@
         (r && (r.guid || r.client_guid)) ||
         (r && r.vars && (r.vars.client_guid || r.vars.guid)) ||
         null;
-      if (g) set.add(String(g));
+      if (g) OFFLINE_GUIDS.add(String(g));
     });
-    OFFLINE_GUIDS = set;
+    // Persistir en localStorage
+    saveOfflineGuidsToStorage();
   }
 
   // ---------- Agrupación: DÍA + LOCAL (para cola local) ----------
@@ -160,8 +392,8 @@
    * Usa client_guid si existe, sino visita_local_id+kind, sino local_id+form_id+kind.
    */
   function itemGroupingKey(it){
-    if (it.client_guid) return `guid:${it.client_guid}`;
     const kind = (it.kind || '').toLowerCase();
+    if (it.client_guid) return `guid:${it.client_guid}:${kind}`;
     if (it.visita_local_id) return `visita:${it.visita_local_id}:${kind}`;
     if (it.local_id && it.form_id) return `local:${it.local_id}:${it.form_id}:${kind}`;
     return null; // No agrupable
@@ -191,14 +423,16 @@
     const filtered = [...noKey];
 
     // Para cada grupo, verificar si hay éxitos
+    const isStale = (st) => (st === 'error' || st === 'blocked_auth' || st === 'blocked_csrf');
+
     for (const key of Object.keys(byKey)){
       const group = byKey[key];
       const hasSuccess = group.some(x => x.status === 'success');
 
       if (hasSuccess){
-        // Si hay éxito, solo mantener los exitosos (descartar errores stale)
-        const successOnly = group.filter(x => x.status === 'success');
-        filtered.push(...successOnly);
+        // Si hay éxito, ocultar solo errores/bloqueos stale, pero mantener queued/running.
+        const keep = group.filter(x => !isStale(x.status));
+        filtered.push(...(keep.length ? keep : group.filter(x => x.status === 'success')));
       } else {
         // Sin éxitos, mantener todo (incluyendo errores que necesitan atención)
         filtered.push(...group);
@@ -446,8 +680,24 @@
           const debugLine = (debugParts.length || errMsg)
             ? `<div class="jr-debug">${debugParts.join(' · ')}${errMsg ? ` · ${esc(errMsg)}` : ''}${retryHint}</div>`
             : '';
+
+          // MEJORA: Botones de acción individual por job
+          const canRetryJob = it.status !== 'success' && it.status !== 'running';
+          const canCancelJob = it.status !== 'success' && it.status !== 'canceled';
+          const jobActions = `
+            <button class="btn btn-xs btn-link jr-job-detail" data-job-id="${esc(it.id)}" title="Ver detalle">
+              <i class="fa fa-eye"></i>
+            </button>
+            ${canRetryJob ? `<button class="btn btn-xs btn-link jr-job-retry-inline" data-job-id="${esc(it.id)}" title="Reintentar ahora">
+              <i class="fa fa-refresh"></i>
+            </button>` : ''}
+            ${canCancelJob ? `<button class="btn btn-xs btn-link jr-job-cancel-inline text-danger" data-job-id="${esc(it.id)}" title="Cancelar">
+              <i class="fa fa-times"></i>
+            </button>` : ''}
+          `;
+
           return `
-            <div class="jr-detail-row">
+            <div class="jr-detail-row" data-job-id="${esc(it.id)}">
               <div class="jr-d-left">
                 ${chipForStatus(it.status)}
                 <span class="jr-d-kind">${esc(kind)}${extra}</span>
@@ -460,9 +710,7 @@
                   </div>
                 </div>
                 <div class="jr-d-actions">
-                  <button class="btn btn-xs btn-link jr-job-detail" data-job-id="${esc(it.id)}">
-                    Ver detalle
-                  </button>
+                  ${jobActions}
                 </div>
                 ${debugLine}
               </div>
@@ -1022,11 +1270,15 @@
 
   // ---------- Render Hoy (local + servidor) ----------
 
-  async function renderToday(){
+  // MEJORA: Wrapper con protección contra race conditions
+  async function _renderTodayInternal(){
     if (!$today) return;
+    if (_isRenderingToday) return; // Evitar renders simultáneos
+    _isRenderingToday = true;
 
-    const ymd  = JournalDB.ymdLocal(new Date());
-    const rows = await JournalDB.listByYMD(ymd);
+    try {
+      const ymd  = JournalDB.ymdLocal(new Date());
+      const rows = await JournalDB.listByYMD(ymd);
 
     // GUIDs offline para marcar subidas
     collectOfflineGuids(rows);
@@ -1093,12 +1345,28 @@
 
     $today.innerHTML = finalHtml;
     initPopovers();
+    } finally {
+      _isRenderingToday = false;
+    }
+  }
+
+  // MEJORA: Versión con debounce para llamadas frecuentes
+  const renderToday = debounce(_renderTodayInternal, RENDER_DEBOUNCE_MS);
+
+  // Versión inmediata para init
+  async function renderTodayImmediate() {
+    return _renderTodayInternal();
   }
 
   // ---------- Render Semana (local + servidor) ----------
 
-  async function renderWeek(){
+  // MEJORA: Wrapper con protección contra race conditions
+  async function _renderWeekInternal(){
     if (!$week) return;
+    if (_isRenderingWeek) return;
+    _isRenderingWeek = true;
+
+    try {
 
     const to   = new Date();
     const from = new Date();
@@ -1205,6 +1473,17 @@
       `<div class="jr-empty"><i class="fa fa-calendar-o"></i> Semana sin registros</div>`;
 
     initPopovers();
+    } finally {
+      _isRenderingWeek = false;
+    }
+  }
+
+  // MEJORA: Versión con debounce para llamadas frecuentes
+  const renderWeek = debounce(_renderWeekInternal, RENDER_DEBOUNCE_MS);
+
+  // Versión inmediata para init
+  async function renderWeekImmediate() {
+    return _renderWeekInternal();
   }
 
   // ---------- Interacciones ----------
@@ -1268,25 +1547,59 @@
     }
   });
 
-  // Acciones dentro del modal de tarea
+  // Acciones dentro del modal de tarea y botones inline
   document.addEventListener('click', async (e) => {
-    const retryBtn = e.target.closest('.jr-job-retry');
+    // MEJORA: Retry desde modal o inline
+    const retryBtn = e.target.closest('.jr-job-retry, .jr-job-retry-inline');
     if (retryBtn){
       const jobId = retryBtn.getAttribute('data-job-id');
       if (jobId && window.AppDB?.update) {
-        await AppDB.update(jobId, { status: 'queued', nextTryAt: Date.now(), updatedAt: Date.now() });
-        await window.Queue?.flushNow?.();
-        await renderToday();
+        // Feedback visual
+        const icon = retryBtn.querySelector('i');
+        if (icon) icon.className = 'fa fa-spinner fa-spin';
+
+        try {
+          await AppDB.update(jobId, { status: 'queued', nextTryAt: Date.now(), updatedAt: Date.now() });
+          await window.Queue?.flushNow?.();
+          await renderToday();
+          showMessage('Reintentando', 'La tarea se ha puesto en cola para reintentar.', 'info');
+        } catch(err) {
+          showMessage('Error', 'No se pudo reintentar la tarea.', 'error');
+        } finally {
+          if (icon) icon.className = 'fa fa-refresh';
+        }
       }
       e.preventDefault();
       return;
     }
-    const cancelBtn = e.target.closest('.jr-job-cancel');
+
+    // MEJORA: Cancel desde modal o inline
+    const cancelBtn = e.target.closest('.jr-job-cancel, .jr-job-cancel-inline');
     if (cancelBtn){
       const jobId = cancelBtn.getAttribute('data-job-id');
-      if (jobId && window.Queue?.cancel) {
-        await window.Queue.cancel(jobId, { keepRecord: true });
-        await renderToday();
+      if (jobId) {
+        // Confirmar cancelación
+        const confirmed = window.confirm('¿Estás seguro de cancelar esta tarea? Los datos no sincronizados se perderán.');
+        if (!confirmed) {
+          e.preventDefault();
+          return;
+        }
+
+        // Feedback visual
+        const icon = cancelBtn.querySelector('i');
+        if (icon) icon.className = 'fa fa-spinner fa-spin';
+
+        try {
+          if (window.Queue?.cancel) {
+            await window.Queue.cancel(jobId, { keepRecord: true });
+          }
+          await renderToday();
+          showMessage('Cancelado', 'La tarea ha sido cancelada.', 'warning');
+        } catch(err) {
+          showMessage('Error', 'No se pudo cancelar la tarea.', 'error');
+        } finally {
+          if (icon) icon.className = 'fa fa-times';
+        }
       }
       e.preventDefault();
       return;
@@ -1375,7 +1688,19 @@
     const job = safeJob(e);
     if (!job) return;
     await JournalDB.onStart(job);
-    await renderToday();
+
+    // Intentar actualización parcial primero
+    const groupKey = getGroupKeyFromJobInternal(job);
+    const updated = updateJobProgressOnly(job.id, 50, 'running') ||
+                    updateGroupProgressOnly(groupKey, 50, 'running');
+
+    if (!updated) {
+      // Si no existe el elemento, hacer render completo
+      await renderToday();
+    } else {
+      // Actualizar badges sin re-render
+      updateBadgesOnly();
+    }
   });
 
   window.addEventListener('queue:dispatch:progress', async (e) => {
@@ -1383,7 +1708,17 @@
     const p   = (e.detail && e.detail.progress) || 60;
     if (!job) return;
     await JournalDB.onProgress(job, p);
-    await renderToday();
+
+    // Intentar actualización parcial primero (más fluido)
+    const groupKey = getGroupKeyFromJobInternal(job);
+    const updated = updateJobProgressOnly(job.id, p, 'running') ||
+                    updateGroupProgressOnly(groupKey, p, 'running');
+
+    if (!updated) {
+      // Si no existe el elemento, hacer render completo
+      await renderToday();
+    }
+    // No actualizamos badges en cada progress (demasiado frecuente)
   });
 
   window.addEventListener('queue:dispatch:success',  async (e) => {
@@ -1391,9 +1726,22 @@
     const resp = (e.detail && e.detail.response) || null;
     const httpStatus = (e.detail && e.detail.responseStatus) || null;
     if (!job) return;
+
+    // Actualizar visualmente ANTES de persistir (feedback inmediato)
+    const groupKey = getGroupKeyFromJobInternal(job);
+    updateJobProgressOnly(job.id, 100, 'success');
+    updateGroupProgressOnly(groupKey, 100, 'success');
+
     await JournalDB.onSuccess(job, resp, httpStatus);
-    await renderToday();
-    await renderWeek();
+
+    // Actualizar badges inmediatamente
+    updateBadgesOnly();
+
+    // Re-render completo con pequeño delay para que se vea la animación
+    setTimeout(async () => {
+      await renderToday();
+      await renderWeek();
+    }, 300);
 
     // Mensaje cuando una gestión (procesar_gestion) se sube correctamente
     try {
@@ -1436,10 +1784,16 @@
 
   // Init
   (async function init(){
+    // MEJORA: Crear indicador offline
+    createOfflineIndicator();
+    updateOfflineIndicator();
+
     await JournalDB.openDB();
     await JournalDB.cleanup({ maxDays: 7, maxEvents: 1000, maxSuccessDays: 3 });
-    await renderToday();
-    await renderWeek();  
+
+    // Usar versiones inmediatas en init (no debounced)
+    await renderTodayImmediate();
+    await renderWeekImmediate();
   })();
 
 })();

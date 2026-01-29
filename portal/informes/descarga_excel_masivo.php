@@ -1,4 +1,6 @@
 <?php
+// descargar_excel_masivo.php (HOMOLOGADO a descargar_excel.php en orden de columnas)
+
 // Limpia cualquier buffer previo
 while (ob_get_level()) { ob_end_clean(); }
 ob_start();
@@ -403,15 +405,16 @@ function getEncuestaPivot($idForm) {
     while ($row = $res->fetch_assoc()) {
         $key = $row['codigo_local'] . '_' . $row['fechaVisita'];
         if (!isset($grouped[$key])) {
+            // HOMOLOGADO: orden base igual al individual
             $grouped[$key] = [
                 'ID CAMPAÑA'     => $row['idCampana'],
-                'CODIGO LOCAL'   => $row['codigo_local'],
-                'N° LOCAL'       => $row['numero_local'],
                 'NOMBRE CAMPAÑA' => $row['nombreCampana'],
-                'LOCAL'          => $row['nombre_local'],
-                'DIRECCION'      => $row['direccion_local'],
                 'CUENTA'         => $row['cuenta'],
                 'CADENA'         => $row['cadena'],
+                'CODIGO LOCAL'   => $row['codigo_local'],
+                'N° LOCAL'       => $row['numero_local'],
+                'LOCAL'          => $row['nombre_local'],
+                'DIRECCION'      => $row['direccion_local'],
                 'COMUNA'         => $row['comuna'],
                 'REGION'         => $row['region'],
                 'USUARIO'        => $row['usuario'],
@@ -428,13 +431,14 @@ function getEncuestaPivot($idForm) {
 
     $final = [];
     foreach ($grouped as $g) {
+        // HOMOLOGADO: orden base igual al individual
         $rowOut = [
             'ID CAMPAÑA'     => $g['ID CAMPAÑA'],
-            'CODIGO LOCAL'   => $g['CODIGO LOCAL'],
-            'N° LOCAL'       => $g['N° LOCAL'],
             'NOMBRE CAMPAÑA' => $g['NOMBRE CAMPAÑA'],
             'CUENTA'         => $g['CUENTA'],
             'CADENA'         => $g['CADENA'],
+            'CODIGO LOCAL'   => $g['CODIGO LOCAL'],
+            'N° LOCAL'       => $g['N° LOCAL'],
             'LOCAL'          => $g['LOCAL'],
             'DIRECCION'      => $g['DIRECCION'],
             'COMUNA'         => $g['COMUNA'],
@@ -442,6 +446,7 @@ function getEncuestaPivot($idForm) {
             'USUARIO'        => $g['USUARIO'],
             'FECHA VISITA'   => $g['FECHA VISITA']
         ];
+
         foreach ($allQuestions as $q) {
             if (isset($g['questions'][$q])) {
                 $rowOut[$q]            = $g['questions'][$q]['answer'];
@@ -454,6 +459,7 @@ function getEncuestaPivot($idForm) {
         $final[] = $rowOut;
     }
 
+    // Eliminar columnas *_valor vacías
     $valorCols = [];
     foreach ($final as $r) {
         foreach ($r as $c => $v) {
@@ -543,71 +549,29 @@ function renderSeccionTablas($locales, $encuesta, $inline, $fotosLocales, $maxFo
         }
     }
 
-    // Recuadros de información de todas las campañas
-    if (!empty($allCampaignsData)) {
-        foreach ($allCampaignsData as $campaignData) {
-            if (empty($campaignData)) continue;
-
-            $campInfo = $campaignData[0];
-            $fechaInicio = !empty($campInfo['fechaInicio']) ? date('d-m-Y', strtotime($campInfo['fechaInicio'])) : '-';
-            $fechaTermino = !empty($campInfo['fechaTermino']) ? date('d-m-Y', strtotime($campInfo['fechaTermino'])) : '-';
-            $modalidadDisplay = ucwords(str_replace('_', ' ', $campInfo['modalidad'] ?? '-'));
-
-            $tipoDisplay = '-';
-            if (isset($campInfo['tipo'])) {
-                switch ($campInfo['tipo']) {
-                    case 1:
-                        $tipoDisplay = 'Campaña Programada';
-                        break;
-                    case 2:
-                        $tipoDisplay = 'Campaña Complementaria';
-                        break;
-                    case 3:
-                        $tipoDisplay = 'Campaña IPT';
-                        break;
-                    default:
-                        $tipoDisplay = 'Tipo ' . $campInfo['tipo'];
-                }
-            }
-
-            $html .= "<div class='info-box'>";
-            $html .= "<b>DATOS DEL FORMULARIO</b><br>";
-            $html .= "<table>";
-            $html .= "<tr><td><b>Campaña:</b></td><td>" . e($campInfo['nombre']) . "</td></tr>";
-            $html .= "<tr><td><b>Fecha Inicio:</b></td><td>" . e($fechaInicio) . "</td></tr>";
-            $html .= "<tr><td><b>Fecha Término:</b></td><td>" . e($fechaTermino) . "</td></tr>";
-            $html .= "<tr><td><b>Modalidad:</b></td><td>" . e($modalidadDisplay) . "</td></tr>";
-            $html .= "<tr><td><b>Tipo:</b></td><td>" . e($tipoDisplay) . "</td></tr>";
-            $html .= "<tr><td><b>Empresa:</b></td><td>" . e($campInfo['nombre_empresa'] ?? '-') . "</td></tr>";
-            $html .= "<tr><td><b>División:</b></td><td>" . e($campInfo['nombre_division'] ?? '-') . "</td></tr>";
-            $html .= "</table>";
-            $html .= "</div>";
-        }
-        $html .= "<br>";
-    }
-
+    // ---- Detalle de Locales (HOMOLOGADO a individual) ----
     if (!empty($locales)) {
         $html .= "<b>Detalle de Locales</b>"
               .  "<table border='1'"
               .  "       style='border-collapse:collapse; table-layout:auto; font-size:9pt;'>"
               .  "  <tr>"
               .  "    <th>ID LOCAL</th>"
-              .  "    <th>CODIGO</th>"
-              .  "    <th>N° LOCAL</th>"
               .  "    <th>CAMPAÑA</th>"
               .  "    <th>CUENTA</th>"
               .  "    <th>CADENA</th>"
+              .  "    <th>CODIGO</th>"
+              .  "    <th>N° LOCAL</th>"
               .  "    <th>LOCAL</th>"
               .  "    <th>DIRECCION</th>"
               .  "    <th>COMUNA</th>"
               .  "    <th>REGION</th>"
               .  "    <th>JEFE VENTA</th>"
-              .  "    <th>USUARIO</th>"
               .  "    <th>FECHA INICIO</th>"
               .  "    <th>FECHA TÉRMINO</th>"
               .  "    <th>FECHA PLANIFICADA</th>"
               .  "    <th>FECHA VISITA</th>"
               .  "    <th>HORA</th>"
+              .  "    <th>USUARIO</th>"
               .  "    <th>ESTADO VISITA</th>"
               .  "    <th>ESTADO ACTIVIDAD</th>"
               .  "    <th>MOTIVO</th>"
@@ -640,22 +604,22 @@ function renderSeccionTablas($locales, $encuesta, $inline, $fotosLocales, $maxFo
 
             $html .= "<tr>
                         <td>" . e($l['idLocal']) . "</td>
-                        <td>" . e($l['codigo_local']) . "</td>
-                        <td>" . e($l['numero_local']) . "</td>
                         <td>" . e($l['nombreCampaña']) . "</td>
                         <td>" . e($l['cuenta']) . "</td>
                         <td>" . e($l['cadena']) . "</td>
+                        <td>" . e($l['codigo_local']) . "</td>
+                        <td>" . e($l['numero_local']) . "</td>
                         <td>" . e($l['nombre_local']) . "</td>
                         <td>" . e($l['direccion_local']) . "</td>
                         <td>" . e($l['comuna']) . "</td>
                         <td>" . e($l['region']) . "</td>
                         <td>" . e($l['jefeVenta']) . "</td>
-                        <td>" . e($l['gestionado_por']) . "</td>
                         <td>{$fechaInicioCamp}</td>
                         <td>{$fechaTerminoCamp}</td>
                         <td>{$fechaPropuesta}</td>
                         <td>{$fechaVisita}</td>
                         <td>" . e($l['hora']) . "</td>
+                        <td>" . e($l['gestionado_por']) . "</td>
                         <td>" . e($l['ESTADO_VISTA']) . "</td>
                         <td>" . e($l['ESTADO_ACTIVIDAD']) . "</td>
                         <td>" . e($l['MOTIVO']) . "</td>
@@ -680,19 +644,17 @@ function renderSeccionTablas($locales, $encuesta, $inline, $fotosLocales, $maxFo
         $html .= "</table><br>";
     }
 
+    // ---- Encuesta (HOMOLOGADO a individual en orden de columnas render) ----
     $html .= "<b>Encuesta</b><table border='1' style='border-collapse:collapse; table-layout:auto; font-size:9pt;'><tr>";
-    $keys = [];
-    foreach ($encuesta as $row) {
-        foreach (array_keys($row) as $k) {
-            if (!in_array($k, $keys, true)) {
-                $keys[] = $k;
-            }
-        }
-    }
+
+    // En el individual: toma array_keys($encuesta[0]) para mantener orden estable
+    $keys = !empty($encuesta) ? array_keys($encuesta[0]) : [];
+
     foreach ($keys as $k) {
         $html .= '<th>' . e($k) . '</th>';
     }
     $html .= '</tr>';
+
     foreach ($encuesta as $row) {
         $html .= '<tr>';
         foreach ($keys as $k) {
@@ -781,9 +743,9 @@ if (empty($reportes)) {
 // -----------------------------------------------------------------------------
 // Render final (un solo HTML con todas las campañas en una sola tabla)
 // -----------------------------------------------------------------------------
-$localesGlobal        = [];
-$encuestaGlobal       = [];
-$fotosLocalesGlobal   = [];
+$localesGlobal         = [];
+$encuestaGlobal        = [];
+$fotosLocalesGlobal    = [];
 $maxFotosLocalesGlobal = 0;
 
 foreach ($reportes as $rep) {

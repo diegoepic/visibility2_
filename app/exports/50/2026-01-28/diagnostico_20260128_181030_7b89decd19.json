@@ -1,0 +1,198 @@
+{
+    "exported_at": "2026-01-28T21:10:31.205Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Mobile Safari/537.36",
+    "sw_version": "v5.0.5",
+    "stats": {
+        "today": {
+            "ymd": "2026-01-28",
+            "pending": 0,
+            "running": 1,
+            "success": 1,
+            "error": 0,
+            "blocked": 0,
+            "total": 2
+        },
+        "overall": {
+            "pending": 0,
+            "running": 1,
+            "success": 1,
+            "error": 0,
+            "blocked": 0,
+            "total": 2
+        }
+    },
+    "queue": {
+        "total_records": 2,
+        "last_created_at": 1769634491888,
+        "last_updated_at": 1769634553347
+    },
+    "recent_events": [
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634553346:6d096cf0506f98",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634553346,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634553346:0f66631d1c60f8",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634553346,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634516601:49ac4a4bf561d8",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634516601,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Network error calling /visibility2/app/procesar_gestion_pruebas.php: Failed to fetch",
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634516601:2a84aa877f60e8",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634516601,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Network error calling /visibility2/app/procesar_gestion_pruebas.php: Failed to fetch",
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634516591:e01cb3e6a63f8",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634516591,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9:1769634516591:47ae12d6393c38",
+            "job_id": "8c2a1d7b-c72c-481f-a681-e402c4e10fb9",
+            "created": 1769634516591,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "idemp-1769634484695-30e3afd0a93c:1769634516582:ed99709676a8c",
+            "job_id": "idemp-1769634484695-30e3afd0a93c",
+            "created": 1769634516582,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1769634484695-30e3afd0a93c:1769634516582:41087c5a2f4f",
+            "job_id": "idemp-1769634484695-30e3afd0a93c",
+            "created": 1769634516582,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1769634484695-30e3afd0a93c:1769634516386:8844bb18506d08",
+            "job_id": "idemp-1769634484695-30e3afd0a93c",
+            "created": 1769634516386,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1769634484695-30e3afd0a93c:1769634516386:19b5ce1c65d7f",
+            "job_id": "idemp-1769634484695-30e3afd0a93c",
+            "created": 1769634516386,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        }
+    ],
+    "storage_estimate": {
+        "usage": 23623863,
+        "quota": 599602807602,
+        "percent_used": 0
+    },
+    "connection_info": {
+        "effectiveType": "4g",
+        "downlink": 10,
+        "rtt": null,
+        "saveData": false
+    },
+    "service_worker": {
+        "active": "active",
+        "installing": null,
+        "waiting": null,
+        "scope": "https://visibility.cl/visibility2/app/"
+    },
+    "idb_databases": [
+        {
+            "name": "v2_journal",
+            "version": 9
+        },
+        {
+            "name": "v2_mappings",
+            "version": 1
+        },
+        {
+            "name": "v2_offline",
+            "version": 9
+        },
+        {
+            "name": "visibility2-v2",
+            "version": 9
+        }
+    ],
+    "recent_errors": [],
+    "client_time": {
+        "local": "Wed Jan 28 2026 18:10:31 GMT-0300 (hora de verano de Chile)",
+        "timezone": "America/Santiago",
+        "offset_minutes": 180
+    },
+    "csrf_token": "9ae5a4d020e96642b7f87e71f61d792bd964b94538cbda373a3d4aa9defba5dc"
+}

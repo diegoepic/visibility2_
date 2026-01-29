@@ -517,6 +517,75 @@
       last_updated_at: allRows.length ? Math.max(...allRows.map(r => r.updated || r.created || 0)) : null
     };
 
+    // MEJORA: Información adicional de diagnóstico
+    let storageEstimate = null;
+    let connectionInfo = null;
+    let serviceWorkerStatus = null;
+    let idbDatabases = null;
+
+    // Storage estimate
+    try {
+      if (navigator.storage && navigator.storage.estimate) {
+        const estimate = await navigator.storage.estimate();
+        storageEstimate = {
+          usage: estimate.usage || 0,
+          quota: estimate.quota || 0,
+          percent_used: estimate.quota ? Math.round((estimate.usage / estimate.quota) * 100) : 0
+        };
+      }
+    } catch(_) {}
+
+    // Connection info
+    try {
+      if (navigator.connection) {
+        connectionInfo = {
+          effectiveType: navigator.connection.effectiveType || null,
+          downlink: navigator.connection.downlink || null,
+          rtt: navigator.connection.rtt || null,
+          saveData: navigator.connection.saveData || false
+        };
+      }
+    } catch(_) {}
+
+    // Service Worker status
+    try {
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) {
+          serviceWorkerStatus = {
+            active: reg.active ? 'active' : null,
+            installing: reg.installing ? 'installing' : null,
+            waiting: reg.waiting ? 'waiting' : null,
+            scope: reg.scope || null
+          };
+        }
+      }
+    } catch(_) {}
+
+    // IndexedDB databases list
+    try {
+      if (indexedDB.databases) {
+        const dbs = await indexedDB.databases();
+        idbDatabases = dbs.map(db => ({ name: db.name, version: db.version }));
+      }
+    } catch(_) {}
+
+    // Errores recientes (últimos con status error)
+    const recentErrors = allRows
+      .filter(r => r.status === 'error' || r.status === 'blocked_auth' || r.status === 'blocked_csrf')
+      .slice(-20)
+      .map(r => ({
+        id: r.id,
+        kind: r.kind,
+        status: r.status,
+        http_status: r.http_status,
+        error: r.error || (r.last_error && r.last_error.message),
+        error_code: r.last_error && r.last_error.code,
+        attempts: r.attempts,
+        created: r.created,
+        updated: r.updated
+      }));
+
     return {
       exported_at : nowIso,
       navigator_onLine: online,
@@ -527,7 +596,18 @@
         overall: totalStats
       },
       queue: queueSnapshot,
-      recent_events: events
+      recent_events: events,
+      // MEJORA: Campos adicionales
+      storage_estimate: storageEstimate,
+      connection_info: connectionInfo,
+      service_worker: serviceWorkerStatus,
+      idb_databases: idbDatabases,
+      recent_errors: recentErrors,
+      client_time: {
+        local: new Date().toString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        offset_minutes: new Date().getTimezoneOffset()
+      }
     };
   }
 
