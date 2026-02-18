@@ -51,3 +51,4 @@ Thumbs.db
 # === Vendor/composer (si algún día lo usas) ===
 /vendor/
 composer.lockportal/repositorio/encuestas_csv/
+portal/repositorio/encuestas_csv/
