@@ -55,7 +55,7 @@ $is_mc      = ($user_div === 1);
 $MAX_LIMIT              = 200;    // máximo registros por página
 $MAX_TOTAL_ROWS         = 30000;  // corte duro de "total" que reportamos
 $COUNT_LIMIT_ROWS       = $MAX_TOTAL_ROWS + 1; // para el sub-SELECT del COUNT
-$FACETS_MAX_TOTAL       = 5000;   // si hay más que esto, no calculamos facets
+$FACETS_MAX_TOTAL       = 15000;  // si hay más que esto, no calculamos facets (aumentado para mejor UX)
 $DEFAULT_RANGE_DAYS     = 7;      // fallback: últimos 7 días (incluyendo hoy)
 $MAX_RANGE_DAYS_NO_SCOPE= 31;     // si no hay campaña/usuario/etc, rango > 31 días se marca como "riesgoso"
 $MAX_QFILTERS           = 5;      // máximo de filtros avanzados
@@ -651,18 +651,25 @@ if ($total > $MAX_TOTAL_ROWS) {
     $truncated = true;
 }
 
-// --------- Facets (sólo si el total es razonable) ----------
+// --------- Facets ----------
+// SIEMPRE calculamos facets de usuarios/JV/distritos porque son esenciales para
+// la analítica y tienen baja cardinalidad (típicamente < 500 elementos cada uno).
+// Esto garantiza que el frontend tenga TODOS los filtros disponibles, no solo
+// los de la página actual de resultados.
 
 $facets = null;
-if ($want_facets && $total > 0 && $total <= $FACETS_MAX_TOTAL) {
+$FACETS_LIMIT = 1000; // límite de seguridad por facet
+
+if ($want_facets && $total > 0) {
     $facets = ['usuarios'=>[],'jefes'=>[],'distritos'=>[]];
 
-    // Usuarios
+    // Usuarios - SIEMPRE calcular
     $sqlU = "
       SELECT DISTINCT u.id, u.usuario
       $sqlFrom
       $whereSql
       ORDER BY u.usuario
+      LIMIT $FACETS_LIMIT
     ";
     $st = $conn->prepare($sqlU);
     if ($types) {
@@ -678,12 +685,13 @@ if ($want_facets && $total > 0 && $total <= $FACETS_MAX_TOTAL) {
     }
     $st->close();
 
-    // Jefes
+    // Jefes - SIEMPRE calcular
     $sqlJ = "
       SELECT DISTINCT jv.id, jv.nombre
       $sqlFrom
       $whereSql
       ORDER BY jv.nombre
+      LIMIT $FACETS_LIMIT
     ";
     $st = $conn->prepare($sqlJ);
     if ($types) {
@@ -701,12 +709,13 @@ if ($want_facets && $total > 0 && $total <= $FACETS_MAX_TOTAL) {
     }
     $st->close();
 
-    // Distritos
+    // Distritos - SIEMPRE calcular
     $sqlD = "
       SELECT DISTINCT d.id, d.nombre_distrito
       $sqlFrom
       $whereSql
       ORDER BY d.nombre_distrito
+      LIMIT $FACETS_LIMIT
     ";
     $st = $conn->prepare($sqlD);
     if ($types) {

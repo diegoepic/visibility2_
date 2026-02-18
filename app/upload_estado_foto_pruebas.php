@@ -12,7 +12,7 @@ header('X-Content-Type-Options: nosniff');
 
 const APP_BASE = '/visibility2/app';
 
-/** Normaliza a 'uploads/...' sin prefijos ni barras dobles */
+
 function norm_rel_url(string $u): string {
   $u = str_replace('\\','/',$u);
   $u = preg_replace('#/{2,}#','/',$u);

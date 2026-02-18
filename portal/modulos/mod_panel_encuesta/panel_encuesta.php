@@ -1194,7 +1194,7 @@ if ($sel_div>0 || !$is_mc){
 
         if (meta.default_range && Number(meta.default_range.applied || 0) === 1) {
           const days = meta.default_range.days || DEFAULT_RANGE_DAYS;
-          extras.push(`rango automático últimos ${days} días`);
+          extras.push(`⚠️ Rango automático: últimos ${days} días (selecciona una campaña o ajusta fechas para ver más datos)`);
           if (!$('#f_desde').val() && !$('#f_hasta').val()) {
             setDefaultDates();
           }

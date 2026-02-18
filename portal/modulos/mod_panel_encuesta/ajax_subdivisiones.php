@@ -1,5 +1,15 @@
 <?php
-if (!isset($_SESSION['usuario_id'])) { http_response_code(401); header('Content-Type: text/plain; charset=UTF-8'); exit("Sesión expirada"); }
+// Asegurar sesión activa antes de usar $_SESSION
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['usuario_id'])) {
+    http_response_code(401);
+    header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode(['error' => 'Sesión expirada'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 date_default_timezone_set('America/Santiago');
 ini_set('display_errors', 1);

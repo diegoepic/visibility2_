@@ -1,17 +1,25 @@
 <IfModule mod_rewrite.c>
-  RewriteEngine On
-  RewriteBase /visibility2/portal/
+RewriteEngine On
 
-  # Si es archivo o carpeta real, servirla
-  RewriteCond %{REQUEST_FILENAME} -f [OR]
-  RewriteCond %{REQUEST_FILENAME} -d
-  RewriteRule ^ - [L]
+RewriteBase /visibility2/portal/
 
-  # Ocultar extensi¨®n .php
-  RewriteCond %{REQUEST_FILENAME}\.php -f
-  RewriteRule ^([^/]+)/?$ $1.php [L]
+# ---------------------------
+# 1) PERMITIR APIs SIEMPRE
+# ---------------------------
+RewriteCond %{REQUEST_URI} ^/visibility2/portal/api_ [NC]
+RewriteRule ^ - [L]
 
-  # Front-controller: SOLO para URIs que no sean index.php
-  RewriteCond %{REQUEST_URI} !^/visibility2/portal/index\.php$
-  RewriteRule ^ index.php [L]
+
+# ---------------------------
+# 3) ARCHIVOS REALES
+# ---------------------------
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# ---------------------------
+# 4) FRONT CONTROLLER
+# ---------------------------
+RewriteRule ^ index.php [L]
+
 </IfModule>

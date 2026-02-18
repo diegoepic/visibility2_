@@ -1,219 +1,167 @@
 <?php
 session_start();
-require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
 
-/*
-  Código base que:
-   - Muestra locales de UNA campaña (ver=campana) o TODOS (ver=todos).
-   - Usa la lógica:
-       * ROJO ("no visitado") => sum(countVisita)=0
-       * VERDE ("completado") => todos en estado=1 (completados)
-       * AMARILLO ("pendientes") => caso intermedio
-   - En la TABLA, se muestra 'material' en vez de 'countVisita'.
-   - NUEVO: Añadimos la columna "Prioridad" con un checkbox para is_priority.
-*/
-
-// ========================= Verificación de sesión y perfil =========================
 if (!isset($_SESSION['usuario_id'])) {
     header("Location: ../index.php");
     exit();
 }
 
+/* ================================
+   VARIABLES SESIÓN
+================================ */
 $id_coordinador = intval($_SESSION['usuario_id']);
-$nombreCoord    = $_SESSION['usuario_nombre'] ;
-$apellidoCoord  = $_SESSION['usuario_apellido'] ;
-$id_perfil      = intval($_SESSION['usuario_perfil']);
+$nombreCoord    = $_SESSION['usuario_nombre'];
+$apellidoCoord  = $_SESSION['usuario_apellido'];
 $id_division    = intval($_SESSION['division_id']);
-$id_empresa     = intval($_SESSION['empresa_id'] );
+$id_empresa     = intval($_SESSION['empresa_id']);
 
+/* ================================
+   FILTROS GET
+================================ */
+$division_filtro = isset($_GET['division']) ? intval($_GET['division']) : $id_division;
+$subdivision_filtro = isset($_GET['subdivision']) ? intval($_GET['subdivision']) : 0;
+$fecha_desde = $_GET['fecha_desde'] ?? '';
+$fecha_hasta = $_GET['fecha_hasta'] ?? '';
 
-// ========================= Parámetros GET =========================
+$hoy = date('Y-m-d');
+if (empty($fecha_desde) && empty($fecha_hasta)) {
+    $fecha_desde = $hoy;
+    $fecha_hasta = $hoy;
+}
+
 if (!isset($_GET['id_ejecutor'])) {
     die("Parámetro inválido: falta id_ejecutor.");
 }
 $id_ejecutor = intval($_GET['id_ejecutor']);
 
 $id_campana = isset($_GET['id_campana']) ? intval($_GET['id_campana']) : 0;
-$verModo    = isset($_GET['ver']) ? $_GET['ver'] : 'campana';
+$verModo    = $_GET['ver'] ?? 'campana';
 
-// ========================= Validar Ejecutor =========================
+/* ================================
+   VALIDAR EJECUTOR
+================================ */
 $sql_val_eje = "
     SELECT COUNT(*) AS cnt
     FROM usuario
     WHERE id = ?
       AND id_perfil = 3
+      AND activo = 1
       AND id_division = ?
       AND id_empresa = ?
 ";
 $stmt_eje = $conn->prepare($sql_val_eje);
-if (!$stmt_eje) {
-    die("Error preparando (valida ejecutor): " . htmlspecialchars($conn->error));
-}
-$stmt_eje->bind_param("iii", $id_ejecutor, $id_division, $id_empresa);
+$stmt_eje->bind_param("iii", $id_ejecutor, $division_filtro, $id_empresa);
 $stmt_eje->execute();
-$res_eje = $stmt_eje->get_result();
-$row_eje = $res_eje->fetch_assoc();
+$row_eje = $stmt_eje->get_result()->fetch_assoc();
 $stmt_eje->close();
 
 if ($row_eje['cnt'] == 0) {
-    die("El ejecutor no pertenece a tu división o no existe.");
+    die("El ejecutor no pertenece a la división seleccionada.");
 }
 
-// Obtener nombre del ejecutor
-$sql_nombre_ej = "SELECT nombre, apellido FROM usuario WHERE id = ?";
-$stmt_n = $conn->prepare($sql_nombre_ej);
+/* ================================
+   NOMBRE EJECUTOR
+================================ */
+$stmt_n = $conn->prepare("SELECT nombre, apellido FROM usuario WHERE id = ?");
 $stmt_n->bind_param("i", $id_ejecutor);
 $stmt_n->execute();
-$res_n = $stmt_n->get_result();
-$rowN = $res_n->fetch_assoc();
+$rowN = $stmt_n->get_result()->fetch_assoc();
 $stmt_n->close();
-$nombreEjec = $rowN ? ($rowN['nombre'].' '.$rowN['apellido']) : 'Ejecutor desconocido';
+$nombreEjec = $rowN ? $rowN['nombre'].' '.$rowN['apellido'] : 'Ejecutor';
 
-// ========================= Validar campaña si ver=campana =========================
-$nombreCampana = '';
-if ($verModo === 'campana') {
-    if ($id_campana <= 0) {
-        die("Parámetro id_campana inválido (0 o ausente).");
-    }
-    $sql_val_cam = "
-        SELECT nombre
-        FROM formulario
-        WHERE id = ?
-          AND id_empresa = ?
-        LIMIT 1
-    ";
-    $stmt_cam = $conn->prepare($sql_val_cam);
-    if (!$stmt_cam) {
-        die("Error (valida campaña): " . htmlspecialchars($conn->error));
-    }
-    $stmt_cam->bind_param("ii", $id_campana, $id_empresa);
-    $stmt_cam->execute();
-    $res_cam = $stmt_cam->get_result();
-    $row_cam = $res_cam->fetch_assoc();
-    $stmt_cam->close();
+/* ================================
+   QUERY PRINCIPAL
+================================ */
+$sql_locales = "
+    SELECT 
+      fq.id,
+      l.id AS id_local,
+      upper(l.nombre) as nombre_local,
+      upper(l.direccion) as direccion_local,
+      l.lat,
+      l.lng,
+      fq.estado,
+      fq.fechaVisita,
+      upper(fq.observacion),
+      fq.countVisita,
+      fq.material,
+      fq.is_priority,
+      f.nombre AS nombre_campana
+    FROM formularioQuestion fq
+    INNER JOIN local l ON l.id = fq.id_local
+    INNER JOIN formulario f ON f.id = fq.id_formulario
+    WHERE fq.id_usuario = ?
+      AND f.id_empresa = ?
+      AND f.id_division = ?
+";
 
-    if (!$row_cam) {
-        die("La campaña no existe o no pertenece a tu empresa.");
-    }
-    $nombreCampana = $row_cam['nombre'];
+$params = [$id_ejecutor, $id_empresa, $division_filtro];
+$types  = "iii";
+
+if ($verModo === 'campana' && $id_campana > 0) {
+    $sql_locales .= " AND fq.id_formulario = ?";
+    $types .= "i";
+    $params[] = $id_campana;
 }
 
-// ========================= Consulta principal =========================
-// Agregamos "fq.is_priority" para manejar la prioridad
-if ($verModo === 'campana') {
-    // SOLO locales de ESA campaña
-    $sql_locales = "
-        SELECT 
-          fq.id AS id_form_question,
-          l.id AS id_local,
-          l.nombre AS nombre_local,
-          l.direccion AS direccion_local,
-          l.lat AS latitud,
-          l.lng AS longitud,
-          fq.estado AS estado_local,
-          fq.fechaVisita,
-          fq.observacion,
-          fq.countVisita,
-          fq.material,
-          fq.is_priority
-        FROM formularioQuestion fq
-        INNER JOIN local l ON l.id = fq.id_local
-        WHERE fq.id_usuario = ?
-          AND fq.id_formulario = ?
-    ";
-    $stmt_loc = $conn->prepare($sql_locales);
-    $stmt_loc->bind_param("ii", $id_ejecutor, $id_campana);
-} else {
-    // ver "todos" los locales del ejecutor
-    $sql_locales = "
-        SELECT 
-          fq.id AS id_form_question,
-          l.id AS id_local,
-          l.nombre AS nombre_local,
-          l.direccion AS direccion_local,
-          l.lat AS latitud,
-          l.lng AS longitud,
-          fq.estado AS estado_local,
-          fq.fechaVisita,
-          fq.observacion,
-          fq.countVisita,
-          fq.material,
-          fq.is_priority,
-          f.nombre AS nombre_campana
-        FROM formularioQuestion fq
-        INNER JOIN local l ON l.id = fq.id_local
-        INNER JOIN formulario f ON f.id = fq.id_formulario
-        WHERE fq.id_usuario = ?
-          AND f.id_empresa = ?
-    ";
-    $stmt_loc = $conn->prepare($sql_locales);
-    $stmt_loc->bind_param("ii", $id_ejecutor, $id_empresa);
+if ($subdivision_filtro > 0) {
+    $sql_locales .= " AND f.id_subdivision = ?";
+    $types .= "i";
+    $params[] = $subdivision_filtro;
 }
 
+$inicio = $fecha_desde . " 00:00:00";
+$fin    = $fecha_hasta . " 23:59:59";
+
+$sql_locales .= " AND COALESCE(fq.fechaVisita, fq.fechaPropuesta) BETWEEN ? AND ?";
+$types .= "ss";
+$params[] = $inicio;
+$params[] = $fin;
+
+$stmt_loc = $conn->prepare($sql_locales);
+$stmt_loc->bind_param($types, ...$params);
 $stmt_loc->execute();
 $res_loc = $stmt_loc->get_result();
 
 $locales = [];
-while ($rowL = $res_loc->fetch_assoc()) {
-    $locales[] = $rowL;
+while ($row = $res_loc->fetch_assoc()) {
+    $locales[] = $row;
 }
 $stmt_loc->close();
 $conn->close();
 
-/**
- * Reagrupamos para el MAPA (suma countVisita, ver completados, etc.)
- *   - ROJO => sum(countVisita)=0
- *   - VERDE => todos en estado=1
- *   - AMARILLO => caso intermedio
- */
-$infoLocales = [];
-foreach ($locales as $fila) {
-    $idLocal = (int)$fila['id_local'];
-    if (!isset($infoLocales[$idLocal])) {
-        $infoLocales[$idLocal] = [
-            'id_local'   => $idLocal,
-            'nombre_local' => $fila['nombre_local'],
-            'direccion_local' => $fila['direccion_local'],
-            'latitud'    => (float)$fila['latitud'],
-            'longitud'   => (float)$fila['longitud'],
-            'total_mat'  => 0,
-            'completados'=> 0,
-            'sum_visita' => 0,
-        ];
-    }
-    $infoLocales[$idLocal]['total_mat']++;
-    $infoLocales[$idLocal]['sum_visita'] += (int)$fila['countVisita'];
-    if ((int)$fila['estado_local'] === 1) {
-        $infoLocales[$idLocal]['completados']++;
-    }
-}
+
+/* ================================
+   CONSTRUIR COORDENADAS PARA MAPA
+================================ */
 
 $coordenadas_locales = [];
-foreach ($infoLocales as $loc) {
-    $sumV = $loc['sum_visita'];
-    $totM = $loc['total_mat'];
-    $comp = $loc['completados'];
 
-    // ROJO => sum_visita=0
-    // VERDE => completados == total_mat
-    // AMARILLO => caso intermedio
+foreach ($locales as $loc) {
+
+    if (empty($loc['lat']) || empty($loc['lng'])) {
+        continue;
+    }
+
     $markerColor = 'orange';
-    if ($sumV === 0) {
+
+    if ((int)$loc['countVisita'] === 0) {
         $markerColor = 'red';
-    } elseif ($comp === $totM) {
+    } elseif ((int)$loc['estado'] === 1) {
         $markerColor = 'green';
     }
 
-    $markerTitle = $loc['nombre_local'].' - '.$loc['direccion_local'];
     $coordenadas_locales[] = [
-      'idLocal' => $loc['id_local'],
-      'nombre_local' => $markerTitle,
-      'latitud' => $loc['latitud'],
-      'longitud' => $loc['longitud'],
-      'markerColor' => $markerColor
+        'idLocal' => (int)$loc['id_local'],
+        'nombre_local' => $loc['nombre'] . ' - ' . $loc['direccion'],
+        'latitud' => (float)$loc['lat'],
+        'longitud' => (float)$loc['lng'],
+        'markerColor' => $markerColor
     ];
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -223,59 +171,8 @@ foreach ($infoLocales as $loc) {
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
   <!-- FontAwesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css">
-  <style>
-    body {
-      background-color: #f4f6f9; 
-    }
-    th{
-        font-size: 0.85rem
-    }
-    td{
-        font-size: 0.8rem;
-    }    
-    .card-panel {
-      margin-top: 30px;
-    }
-    .panel-header {
-      background: #6c757d; 
-      color: #fff;
-      padding: 15px;
-      border-radius: 3px 3px 0 0;
-    }
-    h1.panel-title {
-      margin: 0;
-      font-size: 24px;
-    }
-    .table th {
-      background: #f1f1f1;
-    }
-    /* Badge */
-    .badge-custom {
-      font-size: 90%;
-      padding: .4em .6em;
-    }
-    .badge-pendientes {
-      background-color: #f39c12; 
-    }
-    .badge-completados {
-      background-color: #00a65a; 
-    }
-    .badge-cancelados {
-      background-color: #dd4b39;
-    }
-    #map {
-      width: 100%;
-      height: 300px;
-      margin-bottom: 20px;
-    }
-
-    /* Checkbox de prioridad */
-    .chk-prio {
-      transform: scale(1.2);
-      margin: 0 8px;
-      cursor: pointer;
-    }
-  </style>
+  <!-- Estilos personalizados -->
+    <link rel="stylesheet" href="<?= '/visibility2/portal/css/mod_panel.css?v=' . time(); ?>">
 </head>
 <body>
 <div class="container card-panel">
@@ -361,7 +258,8 @@ foreach ($infoLocales as $loc) {
                 $nombreLoc = htmlspecialchars($loc['nombre_local']);
                 $dirLoc    = htmlspecialchars($loc['direccion_local']);
                 $estado    = (int)$loc['estado_local'];
-                $fechaV    = $loc['fechaVisita'] ? date('d-m-Y H:i', strtotime($loc['fechaVisita'])) : '-';
+                $fechaV    = $loc['fechaVisita'] ? date('d-m-Y', strtotime($loc['fechaVisita'])) : '-';
+                $horaV    = $loc['fechaVisita'] ? date('H:i', strtotime($loc['fechaVisita'])) : '-';                
                 $obs       = !empty($loc['observacion']) ? htmlspecialchars($loc['observacion']) : '-';
                 $campana   = isset($loc['nombre_campana']) ? htmlspecialchars($loc['nombre_campana']) : '';
                 $material  = !empty($loc['material']) ? htmlspecialchars($loc['material']) : '-';
@@ -501,9 +399,9 @@ function initMap() {
   pollUbicacionEjecutor(<?php echo $id_ejecutor; ?>);
 
   // Luego cada 30 segundos
-  setInterval(function() {
-    pollUbicacionEjecutor(<?php echo $id_ejecutor; ?>);
-  }, 100);
+    setInterval(function() {
+        pollUbicacionEjecutor(<?= $id_ejecutor ?>);
+    }, 30000); // 30 segundos
 }
 </script>
 </body>

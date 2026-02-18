@@ -213,6 +213,7 @@ while ($row = $result->fetch_assoc()) {
         'comuna'         => htmlspecialchars($row['comuna'], ENT_QUOTES, 'UTF-8')
     ];
 }
+
 $stmt->close();
 
 $locales_por_dia = [];

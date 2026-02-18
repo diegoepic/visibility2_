@@ -1,5 +1,15 @@
 <?php
-if (!isset($_SESSION['usuario_id'])) { http_response_code(401); header('Content-Type: text/plain; charset=UTF-8'); exit("Sesi¨®n expirada"); }
+// Asegurar sesiÃ³n activa antes de usar $_SESSION
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['usuario_id'])) {
+    http_response_code(401);
+    header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode(['error' => 'SesiÃ³n expirada'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 date_default_timezone_set('America/Santiago');
 ini_set('display_errors', 1);
@@ -8,17 +18,17 @@ error_reporting(E_ALL);
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 header('Content-Type: application/json; charset=UTF-8');
 
-// Conexi¨®n
+// Conexiï¿½ï¿½n
 require_once $_SERVER['DOCUMENT_ROOT'].'/visibility2/portal/modulos/db.php';
 
 $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
 $user_div   = (int)($_SESSION['division_id'] ?? 0);
 $is_mc      = ($user_div === 1);
 
-// Par¨¢metro
+// Parï¿½ï¿½metro
 $div = (int)($_GET['division'] ?? 0);
 
-// Si NO es MC, solo puede consultar su divisi¨®n
+// Si NO es MC, solo puede consultar su divisiï¿½ï¿½n
 if (!$is_mc) {
   $div = $user_div;
 }

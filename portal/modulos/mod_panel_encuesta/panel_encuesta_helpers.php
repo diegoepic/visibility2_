@@ -79,29 +79,50 @@ function panel_encuesta_photo_candidates(?string $path): array
         }
     };
 
+    // Caso: uploads/ -> múltiples ubicaciones posibles
     if (str_starts_with($noSlash, 'uploads/')) {
+        $add($base . '/visibility2/app/' . $noSlash);
+        $add($base . '/visibility2/' . $noSlash);
+        $add($base . '/' . $noSlash);
+        return $out;
+    }
+
+    // Caso: uploads_fotos_pregunta/ -> ruta específica de fotos de preguntas
+    if (str_starts_with($noSlash, 'uploads_fotos_pregunta/')) {
+        $add($base . '/visibility2/app/uploads/' . $noSlash);
         $add($base . '/visibility2/app/' . $noSlash);
         $add($base . '/' . $noSlash);
         return $out;
     }
 
+    // Caso: app/ -> dentro de visibility2
     if (str_starts_with($noSlash, 'app/')) {
         $add($base . '/visibility2/' . $noSlash);
         $add($base . '/' . $noSlash);
         return $out;
     }
 
+    // Caso: portal/ -> dentro de visibility2
     if (str_starts_with($noSlash, 'portal/')) {
         $add($base . '/visibility2/' . $noSlash);
         $add($base . '/' . $noSlash);
         return $out;
     }
 
+    // Caso: visibility2/ -> ruta directa
     if (str_starts_with($noSlash, 'visibility2/')) {
         $add($base . '/' . $noSlash);
         return $out;
     }
 
+    // Caso: nombre de archivo directo (sin ruta) -> probar varias ubicaciones
+    if (!str_contains($noSlash, '/')) {
+        $add($base . '/visibility2/app/uploads/uploads_fotos_pregunta/' . $noSlash);
+        $add($base . '/visibility2/app/uploads/' . $noSlash);
+        $add($base . '/visibility2/app/' . $noSlash);
+    }
+
+    // Fallback genérico
     $add($base . $withSlash);
     return $out;
 }
@@ -128,12 +149,37 @@ function panel_encuesta_photo_fs_path(?string $url): ?string
     }
 
     $path = ($path[0] ?? '') === '/' ? $path : ('/' . $path);
+
+    // Intentar ruta directa
     $fs = realpath($docroot . $path);
-    if (!$fs || !is_file($fs)) {
-        return null;
+    if ($fs && is_file($fs)) {
+        return $fs;
     }
 
-    return $fs;
+    // Intentar rutas alternativas si la directa falla
+    $pathNoSlash = ltrim($path, '/');
+    $alternativePaths = [
+        $docroot . '/visibility2/app/uploads/' . $pathNoSlash,
+        $docroot . '/visibility2/app/' . $pathNoSlash,
+        $docroot . '/visibility2/' . $pathNoSlash,
+        $docroot . '/' . $pathNoSlash,
+    ];
+
+    // Si la ruta empieza con visibility2/, probar sin ese prefijo
+    if (str_starts_with($pathNoSlash, 'visibility2/')) {
+        $withoutPrefix = substr($pathNoSlash, strlen('visibility2/'));
+        $alternativePaths[] = $docroot . '/visibility2/app/uploads/' . $withoutPrefix;
+        $alternativePaths[] = $docroot . '/visibility2/app/' . $withoutPrefix;
+    }
+
+    foreach ($alternativePaths as $altPath) {
+        $fs = realpath($altPath);
+        if ($fs && is_file($fs)) {
+            return $fs;
+        }
+    }
+
+    return null;
 }
 
 function panel_encuesta_resolve_photo_url(?string $path): ?string

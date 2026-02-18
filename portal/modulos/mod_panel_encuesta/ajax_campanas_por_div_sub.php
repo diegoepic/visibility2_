@@ -1,5 +1,15 @@
 <?php
-if (!isset($_SESSION['usuario_id'])) { http_response_code(401); header('Content-Type: text/plain; charset=UTF-8'); exit("Sesi¨®n expirada"); }
+// Asegurar sesiÃ³n activa antes de usar $_SESSION
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['usuario_id'])) {
+    http_response_code(401);
+    header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode(['error' => 'SesiÃ³n expirada'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 date_default_timezone_set('America/Santiago');
 ini_set('display_errors', 1);
@@ -9,29 +19,29 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 header('Content-Type: application/json; charset=UTF-8');
 
-// Conexi¨®n
+// Conexiï¿½ï¿½n
 require_once $_SERVER['DOCUMENT_ROOT'].'/visibility2/portal/modulos/db.php';
 
 $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
 $user_div   = (int)($_SESSION['division_id'] ?? 0);
 $is_mc      = ($user_div === 1);
 
-// Par¨¢metros
+// Parï¿½ï¿½metros
 $division    = (int)($_GET['division'] ?? 0);
 $subdivision = (int)($_GET['subdivision'] ?? 0);
-$tipo        = (int)($_GET['tipo'] ?? 0); // 0=1+3; 1 ¨® 3 = filtro exacto
+$tipo        = (int)($_GET['tipo'] ?? 0); // 0=1+3; 1 ï¿½ï¿½ 3 = filtro exacto
 
-// En no-MC, el usuario s¨®lo ve su divisi¨®n (ignoramos la que venga por GET)
+// En no-MC, el usuario sï¿½ï¿½lo ve su divisiï¿½ï¿½n (ignoramos la que venga por GET)
 if (!$is_mc) {
   $division = $user_div;
 }
 
-// Base query
-$sql   = "SELECT id, nombre FROM formulario WHERE id_empresa = ?";
+// Base query - excluir campaÃ±as eliminadas
+$sql   = "SELECT id, nombre FROM formulario WHERE id_empresa = ? AND deleted_at IS NULL";
 $types = 'i';
 $params = [$empresa_id];
 
-// Filtros de ¨¢mbito
+// Filtros de ï¿½ï¿½mbito
 if ($division > 0)    { $sql .= " AND id_division=?";    $types .= 'i'; $params[] = $division; }
 if ($subdivision > 0) { $sql .= " AND id_subdivision=?"; $types .= 'i'; $params[] = $subdivision; }
 
@@ -43,7 +53,7 @@ if (in_array($tipo, [1,3], true)) {
   $sql .= " AND tipo IN (1,3)";
 }
 
-// Orden: m¨¢s recientes primero (usa fechaInicio si existe)
+// Orden: mï¿½ï¿½s recientes primero (usa fechaInicio si existe)
 $sql .= " ORDER BY fechaInicio DESC, id DESC";
 
 $st = $conn->prepare($sql);

@@ -1,0 +1,3 @@
+linea;codigo;"nombre local";"motivo de fallo"
+2;U66;"66 UNIMARC";"El código de local 'U66' ya existe (línea 2)."
+5;U944;"944 UNIMARC";"El código de local 'U944' ya existe (línea 5)."

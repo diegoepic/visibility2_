@@ -5,7 +5,7 @@ ini_set('memory_limit', '2048M');
 require $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 @mysqli_set_charset($conn, 'utf8mb4');
 
-$API_URL = "https://visibility.cl/visibility2/portal/RESTful/api_encuesta_tradicional.php?id_division=14&id_subdivision=1";
+$API_URL = "https://visibility.cl/visibility2/portal/RESTful/api_encuesta_tradicional.php?id_division=14&id_subdivision=3";
 
 $json = file_get_contents($API_URL);
 if ($json === false) {
@@ -18,27 +18,30 @@ if (!is_array($data) || empty($data)) {
 }
 
 $sql = "
-    INSERT INTO db_encuesta_unificada (
-        fuente_origen,
-        archivo_origen,
-        id_campana,
-        nombreCanal,
-        nombreDistrito,
-        codigo_local,
-        cuenta,
-        nombre_local,
-        fecha_respuesta_dt,
-        fecha_respuesta,
-        comuna,
-        region,
-        nombreZona,
-        usuario,
-        pregunta,
-        respuesta,
-        valor,
-        tipo_pregunta,
-        hash_registro
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO db_encuesta_unificada (
+            fuente_origen,
+            archivo_origen,
+            division,
+            subdivision,
+            id_campana,
+            nombre_campana,
+            nombreCanal,
+            nombreDistrito,
+            codigo_local,
+            cuenta,
+            nombre_local,
+            fecha_respuesta_dt,
+            fecha_respuesta,
+            comuna,
+            region,
+            nombreZona,
+            usuario,
+            pregunta,
+            respuesta,
+            valor,
+            tipo_pregunta,
+            hash_registro
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ";
 
 $stmt = $conn->prepare($sql);
@@ -58,8 +61,11 @@ foreach ($data as $row) {
 
     // Asignación
     $fuente          = 'API';
-    $archivo         = 'api_encuesta_tradicional';
+    $archivo         = 'api_encuesta';
+    $division        = $row['division'] ?? null;
+    $subdivision     = $row['subdivision'] ?? null;    
     $idCampana       = (int)$row['idCampana'];
+    $nombreCampana   = $row['nombreCampana'] ?? null;    
     $nombreCanal     = $row['nombreCanal'];
     $nombreDistrito  = $row['nombreDistrito'];
     $codigoLocal     = $row['codigo_local'];
@@ -83,26 +89,29 @@ foreach ($data as $row) {
     );
 
     $stmt->bind_param(
-        "ssissssssssssssdis",
-        $fuente,
-        $archivo,
-        $idCampana,
-        $nombreCanal,
-        $nombreDistrito,
-        $codigoLocal,
-        $cuenta,
-        $nombreLocal,
-        $fechaDT,
-        $fechaD,
-        $comuna,
-        $region,
-        $nombreZona,
-        $usuario,
-        $pregunta,
-        $respuesta,
-        $precio,
-        $tipoPregunta,
-        $hash
+            "ssssissssssssssssssdis",
+            $fuente,
+            $archivo,
+            $division,
+            $subdivision,
+            $idCampana,
+            $nombreCampana,
+            $nombreCanal,
+            $nombreDistrito,
+            $codigoLocal,
+            $cuenta,
+            $nombreLocal,
+            $fechaDT,
+            $fechaD,
+            $comuna,
+            $region,
+            $nombreZona,
+            $usuario,
+            $pregunta,
+            $respuesta,
+            $precio,
+            $tipoPregunta,
+            $hash
     );
 
     if (!$stmt->execute()) {

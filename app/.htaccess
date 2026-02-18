@@ -1,14 +1,25 @@
 <IfModule mod_rewrite.c>
-  RewriteEngine On
-  RewriteBase /visibility2/app/
+RewriteEngine On
 
-  RewriteCond %{REQUEST_FILENAME} -f [OR]
-  RewriteCond %{REQUEST_FILENAME} -d
-  RewriteRule ^ - [L]
+RewriteBase /visibility2/app/
 
-  RewriteCond %{REQUEST_FILENAME}\.php -f
-  RewriteRule ^([^/]+)/?$ $1.php [L]
+# ------------------------------
+# SERVIR ARCHIVOS REALES
+# ------------------------------
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
 
-  RewriteCond %{REQUEST_URI} !^/visibility2/app/index\.php$
-  RewriteRule ^ index.php [L]
+# ------------------------------
+# OCULTAR EXTENSION .php
+# ------------------------------
+RewriteCond %{REQUEST_FILENAME}\.php -f
+RewriteRule ^([^/]+)/?$ $1.php [L]
+
+# ------------------------------
+# FRONT CONTROLLER (SPA / Router)
+# ------------------------------
+RewriteCond %{REQUEST_URI} !^/visibility2/app/index\.php$
+RewriteRule ^ index.php [L]
+
 </IfModule>

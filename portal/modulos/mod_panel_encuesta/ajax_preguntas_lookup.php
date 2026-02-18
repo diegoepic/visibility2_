@@ -117,12 +117,19 @@ if ($q !== '') {
     }
 }
 
-// Búsqueda por texto utilizando la columna normalizada (question_text_norm)
-// Esto hace la búsqueda más robusta (case-insensitive/control de espacios).
+// Búsqueda por texto: usamos LOWER(question_text) directamente ya que
+// la columna question_text_norm puede no existir o estar vacía.
+// También buscamos en qsq.question_text para preguntas de tipo SET.
 if ($q !== '') {
     $qNorm    = mb_strtolower($q, 'UTF-8');
-    $where[]  = 'fq.question_text_norm LIKE ?';
-    $types   .= 's';
+    // Búsqueda en question_text de form_questions
+    $where[]  = '(LOWER(fq.question_text) LIKE ? OR EXISTS (
+        SELECT 1 FROM question_set_questions qsq2
+        WHERE qsq2.id = fq.id_question_set_question
+        AND LOWER(qsq2.question_text) LIKE ?
+    ))';
+    $types   .= 'ss';
+    $params[] = '%' . $qNorm . '%';
     $params[] = '%' . $qNorm . '%';
 }
 
@@ -192,8 +199,9 @@ if ($global) {
       LIMIT 50
     ";
 
-    $typesBind  = $types;
-    $paramsBind = $params;
+    // UNION usa $whereSql DOS veces, así que duplicamos los parámetros
+    $typesBind  = $types . $types;
+    $paramsBind = array_merge($params, $params);
 } else {
     // NO GLOBAL: devolvemos las preguntas concretas de una campaña (form_id),
     // agrupadas igual que en el global, pero además informando la campaña.
@@ -255,8 +263,9 @@ if ($global) {
       LIMIT 50
     ";
 
-    $typesBind  = $types;
-    $paramsBind = $params;
+    // UNION usa $whereSql DOS veces, así que duplicamos los parámetros
+    $typesBind  = $types . $types;
+    $paramsBind = array_merge($params, $params);
 }
 
 // ===== Ejecutar =====

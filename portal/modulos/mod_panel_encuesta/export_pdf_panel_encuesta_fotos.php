@@ -125,19 +125,36 @@ $rowCount = 0;
 // -----------------------------------------------------------------------------
 
 /**
+ * Genera un placeholder SVG como data URI cuando la imagen no está disponible.
+ */
+function pe_placeholder_data_uri(int $w = 70, int $h = 70): string
+{
+    $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'.$w.'" height="'.$h.'" viewBox="0 0 '.$w.' '.$h.'">
+        <rect fill="#f0f0f0" width="'.$w.'" height="'.$h.'"/>
+        <text x="50%" y="50%" font-family="Arial,sans-serif" font-size="10" fill="#999" text-anchor="middle" dy=".3em">Sin imagen</text>
+    </svg>';
+    return 'data:image/svg+xml;base64,' . base64_encode($svg);
+}
+
+/**
  * Genera un thumbnail en JPEG embebido como data URI para Dompdf.
  * - $fotoUrl es la ruta tal como viene de la BD (ej: visibility2/app/uploads/.../img.webp)
- * - Si no se puede leer o convertir, devuelve null.
+ * - Si no se puede leer o convertir, devuelve un placeholder.
  * - maxW/maxH se subieron para tener más resolución interna (mejor zoom).
  */
 function pe_build_thumb_data_uri(?string $fotoUrl, int $maxW = 240, int $maxH = 360): ?string
 {
     if (!$fotoUrl) {
-        return null;
+        return pe_placeholder_data_uri();
     }
     $fs = panel_encuesta_photo_fs_path($fotoUrl);
     if ($fs === null) {
-        return null;
+        // Intentar con la URL directa si es http/https
+        if (preg_match('~^https?://~i', $fotoUrl)) {
+            // Devolver placeholder pero mantener el link
+            return pe_placeholder_data_uri();
+        }
+        return pe_placeholder_data_uri();
     }
 
     $ext = strtolower(pathinfo($fs, PATHINFO_EXTENSION));
@@ -195,7 +212,7 @@ function pe_build_thumb_data_uri(?string $fotoUrl, int $maxW = 240, int $maxH = 
     }
 
     if (!$src) {
-        return null;
+        return pe_placeholder_data_uri();
     }
 
     $w = imagesx($src);
@@ -425,7 +442,7 @@ if (!$loaded || !class_exists('\\Dompdf\\Dompdf')) {
 }
 
 $dompdf = new \Dompdf\Dompdf([
-    'isRemoteEnabled'      => false,  // no necesitamos recursos remotos, todo es inline
+    'isRemoteEnabled'      => true,   // habilitado como fallback para imágenes que no se resuelven localmente
     'isHtml5ParserEnabled' => true,
     'dpi'                  => 144,    // más DPI => mejor nitidez al hacer zoom
     'chroot'               => rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/'),

@@ -5,7 +5,7 @@ ini_set('memory_limit', '2048M');
 require $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 @mysqli_set_charset($conn, 'utf8mb4');
 
-// ================= CONFIG =================
+// ================= CONFIG CSV =================
 $DIR = $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/repositorio/encuestas_csv';
 
 // ================= VALIDACIONES =================
@@ -15,15 +15,14 @@ if (!is_dir($DIR)) {
 
 echo "📂 Leyendo CSV desde: $DIR\n";
 
-// Buscar TODOS los CSV (los 7 actuales y los futuros)
 $files = glob($DIR . '/*.csv');
-
 if (empty($files)) {
     die("⚠️ No se encontraron CSV para procesar.\n");
 }
 
 // ================= LOOP ARCHIVOS =================
 foreach ($files as $filePath) {
+
     $fileName = basename($filePath);
     echo "\n➡️ Procesando archivo: $fileName\n";
 
@@ -32,22 +31,23 @@ foreach ($files as $filePath) {
         continue;
     }
 
-    // -------- Leer encabezados --------
+    // -------- HEADERS --------
     $headers = fgetcsv($handle, 0, ';');
     if (!$headers) {
-        echo "❌ CSV vacío: $fileName\n";
         fclose($handle);
         continue;
     }
-
     $headers = array_map('trim', $headers);
 
-    // -------- SQL PREPARED --------
+    // -------- SQL --------
     $sql = "
         INSERT INTO db_encuesta_unificada (
             fuente_origen,
             archivo_origen,
+            division,
+            subdivision,
             id_campana,
+            nombre_campana,
             nombreCanal,
             nombreDistrito,
             codigo_local,
@@ -64,7 +64,7 @@ foreach ($files as $filePath) {
             valor,
             tipo_pregunta,
             hash_registro
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ";
 
     $stmt = $conn->prepare($sql);
@@ -80,7 +80,6 @@ foreach ($files as $filePath) {
     // ================= LOOP FILAS =================
     while (($data = fgetcsv($handle, 0, ';')) !== false) {
 
-        // Validar columnas
         if (count($headers) !== count($data)) {
             $skipped++;
             continue;
@@ -88,10 +87,9 @@ foreach ($files as $filePath) {
 
         $row = array_combine($headers, $data);
 
-        // -------- Fechas --------
+        // -------- FECHA --------
         $fechaRaw = str_replace('/', '-', trim($row['fecha_respuesta'] ?? ''));
         $ts = strtotime($fechaRaw);
-
         if (!$ts) {
             $skipped++;
             continue;
@@ -100,29 +98,32 @@ foreach ($files as $filePath) {
         $fechaDT = date('Y-m-d H:i:s', $ts);
         $fechaD  = date('Y-m-d', $ts);
 
-        // -------- Precio --------
+        // -------- PRECIO --------
         $precio = (isset($row['precio']) && is_numeric($row['precio']))
             ? (float)$row['precio']
             : null;
 
-        // -------- Asignación --------
+        // -------- ASIGNACIÓN --------
         $fuente         = 'CSV';
         $archivo        = $fileName;
+        $division       = $row['division'] ?? null;
+        $subdivision    = $row['subdivision'] ?? null;
         $idCampana      = (int)($row['idCampana'] ?? 0);
-        $nombreCanal    = $row['nombreCanal']    ?? null;
+        $nombreCampana  = $row['nombreCampana'] ?? null;
+        $nombreCanal    = $row['nombreCanal'] ?? null;
         $nombreDistrito = $row['nombreDistrito'] ?? null;
-        $codigoLocal    = $row['codigo_local']    ?? null;
-        $cuenta         = $row['cuenta']          ?? null;
-        $nombreLocal    = $row['nombre_local']    ?? null;
-        $comuna         = $row['comuna']           ?? null;
-        $region         = $row['region']           ?? null;
-        $nombreZona     = $row['nombreZona']       ?? null;
-        $usuario        = $row['nombreCompleto']   ?? null;
-        $pregunta       = $row['pregunta']         ?? null;
-        $respuesta      = $row['respuesta']        ?? null;
+        $codigoLocal    = $row['codigo_local'] ?? null;
+        $cuenta         = $row['cuenta'] ?? null;
+        $nombreLocal    = $row['nombre_local'] ?? null;
+        $comuna         = $row['comuna'] ?? null;
+        $region         = $row['region'] ?? null;
+        $nombreZona     = $row['nombreZona'] ?? null;
+        $usuario        = $row['nombreCompleto'] ?? null;
+        $pregunta       = $row['pregunta'] ?? null;
+        $respuesta      = $row['respuesta'] ?? null;
         $tipoPregunta   = (int)($row['tipo'] ?? 0);
 
-        // -------- HASH ÚNICO --------
+        // -------- HASH --------
         $hash = md5(
             $idCampana . '|' .
             $codigoLocal . '|' .
@@ -131,33 +132,35 @@ foreach ($files as $filePath) {
             $respuesta
         );
 
-        // -------- Bind --------
+        // -------- BIND --------
         $stmt->bind_param(
-        "ssisssssssssssssdis",
-        $fuente,
-        $archivo,
-        $idCampana,
-        $nombreCanal,
-        $nombreDistrito,
-        $codigoLocal,
-        $cuenta,
-        $nombreLocal,
-        $fechaDT,
-        $fechaD,
-        $comuna,
-        $region,
-        $nombreZona,
-        $usuario,
-        $pregunta,
-        $respuesta,
-        $precio,
-        $tipoPregunta,
-        $hash
-    );
+            "ssssissssssssssssssdis",
+            $fuente,
+            $archivo,
+            $division,
+            $subdivision,
+            $idCampana,
+            $nombreCampana,
+            $nombreCanal,
+            $nombreDistrito,
+            $codigoLocal,
+            $cuenta,
+            $nombreLocal,
+            $fechaDT,
+            $fechaD,
+            $comuna,
+            $region,
+            $nombreZona,
+            $usuario,
+            $pregunta,
+            $respuesta,
+            $precio,
+            $tipoPregunta,
+            $hash
+        );
 
-        // -------- Execute --------
+        // -------- EXEC --------
         if (!$stmt->execute()) {
-            // 1062 = duplicate key (hash)
             if ($conn->errno != 1062) {
                 echo "❌ Error insert ($fileName): {$stmt->error}\n";
             }
@@ -170,10 +173,8 @@ foreach ($files as $filePath) {
     fclose($handle);
     $stmt->close();
 
-    echo "✅ $rows filas insertadas desde $fileName";
-    if ($skipped > 0) {
-        echo " | ⚠️ $skipped filas omitidas";
-    }
+    echo "✅ $rows filas insertadas";
+    if ($skipped > 0) echo " | ⚠️ $skipped omitidas";
     echo "\n";
 }
 

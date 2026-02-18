@@ -861,16 +861,16 @@ if ($division_id > 0) {
               </p>
             </a>
             <ul class="nav nav-treeview">
-              <li class="nav-item">
+              <!--li class="nav-item">
                  <a href="modulos/mod_galeria/mod_galeria_programadas.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Campañas</p>
                 </a>
-              </li>
+              </li-->
               <li class="nav-item">
                    <a href="modulos/mod_galeria/mod_galeria_ipt.php" class="nav-link">
                       <i class="far fa-circle nav-icon"></i>
-                      <p>Rutas</p>
+                      <p>Galeria de imagenes</p>
                   </a>
               </li>
             </ul>
@@ -1025,6 +1025,12 @@ if ($division_id > 0) {
                   <p>ENLACE DE PRUEBAS</p>
                 </a>
               </li>
+            <li class="nav-item">
+            <a href="modulos/mod_panel_encuesta/panel_encuesta.php" class="nav-link">
+              <i class="nav-icon fas fa-th"></i>
+              <p>Panel Encuesta</p>
+            </a>
+          </li>              
             </ul>
           </li>             
             <li class="nav-item">
