@@ -52,3 +52,6 @@ Thumbs.db
 /vendor/
 composer.lockportal/repositorio/encuestas_csv/
 portal/repositorio/encuestas_csv/
+portal/repositorio/encuestas_csv/
+*.csv
+portal/repositorio/encuestas_csv/
