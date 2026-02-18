@@ -50,4 +50,4 @@ Thumbs.db
 
 # === Vendor/composer (si algún día lo usas) ===
 /vendor/
-composer.lock
+composer.lockportal/repositorio/encuestas_csv/
