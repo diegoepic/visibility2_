@@ -5,9 +5,9 @@ Array
             [name] => formato_creacion_locales1.csv
             [full_path] => formato_creacion_locales1.csv
             [type] => text/csv
-            [tmp_name] => /tmp/phpj4ptvc
+            [tmp_name] => /tmp/phposns26
             [error] => 0
-            [size] => 3686
+            [size] => 2088
         )
 
 )

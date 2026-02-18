@@ -425,7 +425,7 @@ if ($sel_div>0 || !$is_mc){
   </div>
 </div>
 
-<!-- Modal de errores (reutilizable) -->
+<!-- Modal de errores (reutilizabl) -->
 <div class="modal fade" id="errorModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-sm modal-dialog-centered">
     <div class="modal-content">
@@ -451,7 +451,7 @@ if ($sel_div>0 || !$is_mc){
   const isRedBull = (USER_DIV === 14); // División Red Bull
 
   const ABS_BASE = (window.location.origin || (location.protocol + '//' + location.host));
-  const DEFAULT_RANGE_DAYS = 7; // mismo criterio que el backend (últimos 7 días)
+  const DEFAULT_RANGE_DAYS = 7; // mismo criterio que el backend (ús)
   const EXPORT_LIMITS = {
     csv: 50000,
     fotosPdf: 250,

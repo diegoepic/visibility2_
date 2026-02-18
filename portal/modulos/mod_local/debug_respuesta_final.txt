@@ -1,29 +1,27 @@
 {
     "success": true,
-    "inserted": 20,
-    "failed": 0,
-    "reportUrl": "",
+    "inserted": 11,
+    "failed": 1,
+    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1771426642.csv",
     "successes": [
-        "L\u00ednea 2: Local 'MARIO ALFARO ALFARO' (c\u00f3digo 5531544) insertado.",
-        "L\u00ednea 3: Local 'FRANCISCI JAVIER PEREZ ROJAS' (c\u00f3digo 1040031) insertado.",
-        "L\u00ednea 4: Local 'GLORIA CARVAJAL RIVERA' (c\u00f3digo 2146705) insertado.",
-        "L\u00ednea 5: Local 'FERNANDO MU\u00d1OZ LOPEZ' (c\u00f3digo 6641573) insertado.",
-        "L\u00ednea 6: Local 'NORMA ALUCENA LOPES' (c\u00f3digo 227173) insertado.",
-        "L\u00ednea 7: Local 'RAUL PIZARRO AHUMADA' (c\u00f3digo 6095945) insertado.",
-        "L\u00ednea 8: Local 'MARIA ALFARO DIAZ' (c\u00f3digo 5722975) insertado.",
-        "L\u00ednea 9: Local 'MIRIAM DEL CARMEN JOFRE' (c\u00f3digo 5729382) insertado.",
-        "L\u00ednea 10: Local 'GLORIA ESTER GUERRA ALFARO' (c\u00f3digo 6737866) insertado.",
-        "L\u00ednea 11: Local 'CAMILA MILENA LEIVA LEIVA' (c\u00f3digo 6796609) insertado.",
-        "L\u00ednea 12: Local 'JUAN CARLOS ASTORGA' (c\u00f3digo 5743728) insertado.",
-        "L\u00ednea 13: Local 'ALICIA GAJARDO CORTES' (c\u00f3digo 5729380) insertado.",
-        "L\u00ednea 14: Local 'VALERIA SALINAS SALINAS' (c\u00f3digo 6882179) insertado.",
-        "L\u00ednea 15: Local 'OSIEL SEGURA GUTIERREZ' (c\u00f3digo 5822011) insertado.",
-        "L\u00ednea 16: Local 'ROMINA TRINCADO HUANCHICAY' (c\u00f3digo 6215960) insertado.",
-        "L\u00ednea 17: Local 'JAVIER BRAVO VENEGAS' (c\u00f3digo 6224868) insertado.",
-        "L\u00ednea 18: Local 'ROMINA OCARANZA VILLANUEVA' (c\u00f3digo 6041020) insertado.",
-        "L\u00ednea 19: Local 'JAVIER TOLEDO RAM\u00cdREZ' (c\u00f3digo 7281367) insertado.",
-        "L\u00ednea 20: Local 'INVERSIONES BROWN Y GOMILA SPA' (c\u00f3digo 7534537) insertado.",
-        "L\u00ednea 21: Local 'LEONARDO OLIVARES RIVERA' (c\u00f3digo 5450292) insertado."
+        "L\u00ednea 3: Local 'SOCIEDAD COMERCIAL VALLE LTDA' (c\u00f3digo 4804449) insertado.",
+        "L\u00ednea 4: Local 'VERONICA VALDEBENITO IBARRA' (c\u00f3digo 3271207) insertado.",
+        "L\u00ednea 5: Local 'INGRID REYES RUIZ' (c\u00f3digo 3271918) insertado.",
+        "L\u00ednea 6: Local 'MARICELA CERNA ALVAREZ' (c\u00f3digo 6545121) insertado.",
+        "L\u00ednea 7: Local 'LUCINA SAEZ FERREIRA' (c\u00f3digo 3271224) insertado.",
+        "L\u00ednea 8: Local 'COMERCIALIZADORA Y MINIMARKET J&R SPA' (c\u00f3digo 7468231) insertado.",
+        "L\u00ednea 9: Local 'MARIO CID BUSTOS' (c\u00f3digo 7481234) insertado.",
+        "L\u00ednea 10: Local 'MARA GONZALEZ CHAVEZ' (c\u00f3digo 5206465) insertado.",
+        "L\u00ednea 11: Local 'MARIA VERGARA NAVARRO' (c\u00f3digo 3270729) insertado.",
+        "L\u00ednea 12: Local 'MARTHA SOTO BARRA' (c\u00f3digo 6228979) insertado.",
+        "L\u00ednea 13: Local 'MABEL JELDRES PAREDES' (c\u00f3digo 2632251) insertado."
     ],
-    "failures": []
+    "failures": [
+        {
+            "line": 2,
+            "codigo": "215957",
+            "nombre": "MARIA ANTONIETA RODRIGUEZ MARDONES",
+            "reason": "El c\u00f3digo de local '215957' ya existe (l\u00ednea 2)."
+        }
+    ]
 }
