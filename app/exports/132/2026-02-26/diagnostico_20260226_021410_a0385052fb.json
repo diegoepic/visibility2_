@@ -1,0 +1,438 @@
+{
+    "exported_at": "2026-02-26T05:14:10.374Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 15; SM-A055M Build/AP3A.240905.015.A2; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/145.0.7632.79 Mobile Safari/537.36 median",
+    "sw_version": "v5.0.6",
+    "stats": {
+        "today": {
+            "ymd": "2026-02-26",
+            "pending": 1,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 1
+        },
+        "overall": {
+            "pending": 12,
+            "running": 0,
+            "success": 1,
+            "error": 0,
+            "blocked": 0,
+            "total": 13
+        }
+    },
+    "queue": {
+        "total_records": 13,
+        "last_created_at": 1772082685517,
+        "last_updated_at": 1772082686130
+    },
+    "recent_events": [
+        {
+            "id": "idemp-1772082685236-2d1967ebe95d08:1772082686125:92ce6d7ea1876",
+            "job_id": "idemp-1772082685236-2d1967ebe95d08",
+            "created": 1772082686125,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 409,
+            "error": "REQUEST_IN_PROGRESS",
+            "message": "Error: HTTP 409",
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"ok\":false,\"status\":\"error\",\"error_code\":\"REQUEST_IN_PROGRESS\",\"message\":\"Este request ya está siendo procesado. Espera unos segundos.\",\"retry_after\":600,\"retryable\":true}"
+        },
+        {
+            "id": "idemp-1772082685236-2d1967ebe95d08:1772082685910:82b886d689a908",
+            "job_id": "idemp-1772082685236-2d1967ebe95d08",
+            "created": 1772082685910,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1772043598084-f12cfdccd88ad8:1772043598939:76f31748abf318",
+            "job_id": "idemp-1772043598084-f12cfdccd88ad8",
+            "created": 1772043598939,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 409,
+            "error": "REQUEST_IN_PROGRESS",
+            "message": "Error: HTTP 409",
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"ok\":false,\"status\":\"error\",\"error_code\":\"REQUEST_IN_PROGRESS\",\"message\":\"Este request ya está siendo procesado. Espera unos segundos.\",\"retry_after\":600,\"retryable\":true}"
+        },
+        {
+            "id": "idemp-1772043598084-f12cfdccd88ad8:1772043598717:04524810dd2ad8",
+            "job_id": "idemp-1772043598084-f12cfdccd88ad8",
+            "created": 1772043598717,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1772036657277-53b975c8ec48c8:1772036658157:34e490ebf4af28",
+            "job_id": "idemp-1772036657277-53b975c8ec48c8",
+            "created": 1772036658157,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 409,
+            "error": "REQUEST_IN_PROGRESS",
+            "message": "Error: HTTP 409",
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"ok\":false,\"status\":\"error\",\"error_code\":\"REQUEST_IN_PROGRESS\",\"message\":\"Este request ya está siendo procesado. Espera unos segundos.\",\"retry_after\":600,\"retryable\":true}"
+        },
+        {
+            "id": "idemp-1772036657277-53b975c8ec48c8:1772036657930:0288449f353e98",
+            "job_id": "idemp-1772036657277-53b975c8ec48c8",
+            "created": 1772036657930,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1772035471631-2b456704a602:1772035473007:9bf571898b81b8",
+            "job_id": "idemp-1772035471631-2b456704a602",
+            "created": 1772035473007,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 500,
+            "error": "HTTP_500",
+            "message": "Error: HTTP 500",
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"status\":\"error\",\"error\":\"E_CREATE_VISITA\",\"message\":\"Error interno al crear la visita.\"}"
+        },
+        {
+            "id": "idemp-1772035471631-2b456704a602:1772035472746:e394ad380c6b08",
+            "job_id": "idemp-1772035471631-2b456704a602",
+            "created": 1772035472746,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1771944322491-177cd3f8ed556:1771944323406:ee0046104cfd28",
+            "job_id": "idemp-1771944322491-177cd3f8ed556",
+            "created": 1771944323406,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 409,
+            "error": "REQUEST_IN_PROGRESS",
+            "message": "Error: HTTP 409",
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"ok\":false,\"status\":\"error\",\"error_code\":\"REQUEST_IN_PROGRESS\",\"message\":\"Este request ya está siendo procesado. Espera unos segundos.\",\"retry_after\":600,\"retryable\":true}"
+        },
+        {
+            "id": "idemp-1771944322491-177cd3f8ed556:1771944323182:ee53c5d6c1982",
+            "job_id": "idemp-1771944322491-177cd3f8ed556",
+            "created": 1771944323182,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1771941310588-e67eb37c9a869:1771941311437:4107f1a8aa1cf8",
+            "job_id": "idemp-1771941310588-e67eb37c9a869",
+            "created": 1771941311437,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 409,
+            "error": "REQUEST_IN_PROGRESS",
+            "message": "Error: HTTP 409",
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"ok\":false,\"status\":\"error\",\"error_code\":\"REQUEST_IN_PROGRESS\",\"message\":\"Este request ya está siendo procesado. Espera unos segundos.\",\"retry_after\":600,\"retryable\":true}"
+        },
+        {
+            "id": "idemp-1771941310588-e67eb37c9a869:1771941311206:f4142e3e721bd",
+            "job_id": "idemp-1771941310588-e67eb37c9a869",
+            "created": 1771941311206,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1771874963820-3ba4841f0115a:1771874964699:209985f6846aa8",
+            "job_id": "idemp-1771874963820-3ba4841f0115a",
+            "created": 1771874964699,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 409,
+            "error": "REQUEST_IN_PROGRESS",
+            "message": "Error: HTTP 409",
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"ok\":false,\"status\":\"error\",\"error_code\":\"REQUEST_IN_PROGRESS\",\"message\":\"Este request ya está siendo procesado. Espera unos segundos.\",\"retry_after\":600,\"retryable\":true}"
+        },
+        {
+            "id": "idemp-1771874963820-3ba4841f0115a:1771874964482:678018df0c5498",
+            "job_id": "idemp-1771874963820-3ba4841f0115a",
+            "created": 1771874964482,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1771874918479-70f35bdd701db:1771874919346:a25f3029c50e48",
+            "job_id": "idemp-1771874918479-70f35bdd701db",
+            "created": 1771874919346,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 409,
+            "error": "REQUEST_IN_PROGRESS",
+            "message": "Error: HTTP 409",
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"ok\":false,\"status\":\"error\",\"error_code\":\"REQUEST_IN_PROGRESS\",\"message\":\"Este request ya está siendo procesado. Espera unos segundos.\",\"retry_after\":600,\"retryable\":true}"
+        },
+        {
+            "id": "idemp-1771874918479-70f35bdd701db:1771874919128:16b84de00ef5e8",
+            "job_id": "idemp-1771874918479-70f35bdd701db",
+            "created": 1771874919128,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1771874881425-3066d3a00cd35:1771874882277:73f45cfa30ff78",
+            "job_id": "idemp-1771874881425-3066d3a00cd35",
+            "created": 1771874882277,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 409,
+            "error": "REQUEST_IN_PROGRESS",
+            "message": "Error: HTTP 409",
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"ok\":false,\"status\":\"error\",\"error_code\":\"REQUEST_IN_PROGRESS\",\"message\":\"Este request ya está siendo procesado. Espera unos segundos.\",\"retry_after\":600,\"retryable\":true}"
+        },
+        {
+            "id": "idemp-1771874881425-3066d3a00cd35:1771874882051:2246c8c998ba58",
+            "job_id": "idemp-1771874881425-3066d3a00cd35",
+            "created": 1771874882051,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1771874632910-e7507871793498:1771874633760:491585b6b280e8",
+            "job_id": "idemp-1771874632910-e7507871793498",
+            "created": 1771874633760,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 409,
+            "error": "REQUEST_IN_PROGRESS",
+            "message": "Error: HTTP 409",
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"ok\":false,\"status\":\"error\",\"error_code\":\"REQUEST_IN_PROGRESS\",\"message\":\"Este request ya está siendo procesado. Espera unos segundos.\",\"retry_after\":600,\"retryable\":true}"
+        },
+        {
+            "id": "idemp-1771874632910-e7507871793498:1771874633555:d40d47e7b56118",
+            "job_id": "idemp-1771874632910-e7507871793498",
+            "created": 1771874633555,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1771874492927-a5197b13886dc8:1771874493801:f76d165473f908",
+            "job_id": "idemp-1771874492927-a5197b13886dc8",
+            "created": 1771874493801,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 409,
+            "error": "REQUEST_IN_PROGRESS",
+            "message": "Error: HTTP 409",
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"ok\":false,\"status\":\"error\",\"error_code\":\"REQUEST_IN_PROGRESS\",\"message\":\"Este request ya está siendo procesado. Espera unos segundos.\",\"retry_after\":600,\"retryable\":true}"
+        },
+        {
+            "id": "idemp-1771874492927-a5197b13886dc8:1771874493588:4240c7687a5698",
+            "job_id": "idemp-1771874492927-a5197b13886dc8",
+            "created": 1771874493588,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1771874422134-ce77e58f502bd:1771874423038:98bb280c3006b8",
+            "job_id": "idemp-1771874422134-ce77e58f502bd",
+            "created": 1771874423038,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": 409,
+            "error": "REQUEST_IN_PROGRESS",
+            "message": "Error: HTTP 409",
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"ok\":false,\"status\":\"error\",\"error_code\":\"REQUEST_IN_PROGRESS\",\"message\":\"Este request ya está siendo procesado. Espera unos segundos.\",\"retry_after\":600,\"retryable\":true}"
+        },
+        {
+            "id": "idemp-1771874422134-ce77e58f502bd:1771874422809:5d1ac35770da58",
+            "job_id": "idemp-1771874422134-ce77e58f502bd",
+            "created": 1771874422809,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "42bf9b29-15f8-4c1b-a76c-791ac0f8ac23:1771857667283:5e46d5a67150d8",
+            "job_id": "42bf9b29-15f8-4c1b-a76c-791ac0f8ac23",
+            "created": 1771857667283,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "42bf9b29-15f8-4c1b-a76c-791ac0f8ac23:1771857667282:9c0e6496d14678",
+            "job_id": "42bf9b29-15f8-4c1b-a76c-791ac0f8ac23",
+            "created": 1771857667282,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "42bf9b29-15f8-4c1b-a76c-791ac0f8ac23:1771857663332:d6b6b6428b20b8",
+            "job_id": "42bf9b29-15f8-4c1b-a76c-791ac0f8ac23",
+            "created": 1771857663332,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "42bf9b29-15f8-4c1b-a76c-791ac0f8ac23:1771857663332:3ebb6425f6024",
+            "job_id": "42bf9b29-15f8-4c1b-a76c-791ac0f8ac23",
+            "created": 1771857663332,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        }
+    ],
+    "storage_estimate": {
+        "usage": 11231745,
+        "quota": 68288711884,
+        "percent_used": 0
+    },
+    "connection_info": {
+        "effectiveType": "4g",
+        "downlink": 9,
+        "rtt": null,
+        "saveData": false
+    },
+    "service_worker": {
+        "active": "active",
+        "installing": null,
+        "waiting": null,
+        "scope": "https://visibility.cl/visibility2/app/"
+    },
+    "idb_databases": [
+        {
+            "name": "v2_journal",
+            "version": 9
+        },
+        {
+            "name": "v2_mappings",
+            "version": 1
+        },
+        {
+            "name": "v2_offline",
+            "version": 9
+        },
+        {
+            "name": "v2_route_cache",
+            "version": 1
+        },
+        {
+            "name": "visibility2-v2",
+            "version": 9
+        }
+    ],
+    "recent_errors": [],
+    "client_time": {
+        "local": "Thu Feb 26 2026 02:14:10 GMT-0300 (hora de verano de Chile)",
+        "timezone": "America/Santiago",
+        "offset_minutes": 180
+    },
+    "csrf_token": "f2bee47f8ff1a135efce8818a53e87cc792d0ce0096ca74ace6af3e0123b7478"
+}

@@ -1,27 +1,22 @@
 {
     "success": true,
-    "inserted": 11,
-    "failed": 1,
-    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1771426642.csv",
+    "inserted": 13,
+    "failed": 0,
+    "reportUrl": "",
     "successes": [
-        "L\u00ednea 3: Local 'SOCIEDAD COMERCIAL VALLE LTDA' (c\u00f3digo 4804449) insertado.",
-        "L\u00ednea 4: Local 'VERONICA VALDEBENITO IBARRA' (c\u00f3digo 3271207) insertado.",
-        "L\u00ednea 5: Local 'INGRID REYES RUIZ' (c\u00f3digo 3271918) insertado.",
-        "L\u00ednea 6: Local 'MARICELA CERNA ALVAREZ' (c\u00f3digo 6545121) insertado.",
-        "L\u00ednea 7: Local 'LUCINA SAEZ FERREIRA' (c\u00f3digo 3271224) insertado.",
-        "L\u00ednea 8: Local 'COMERCIALIZADORA Y MINIMARKET J&R SPA' (c\u00f3digo 7468231) insertado.",
-        "L\u00ednea 9: Local 'MARIO CID BUSTOS' (c\u00f3digo 7481234) insertado.",
-        "L\u00ednea 10: Local 'MARA GONZALEZ CHAVEZ' (c\u00f3digo 5206465) insertado.",
-        "L\u00ednea 11: Local 'MARIA VERGARA NAVARRO' (c\u00f3digo 3270729) insertado.",
-        "L\u00ednea 12: Local 'MARTHA SOTO BARRA' (c\u00f3digo 6228979) insertado.",
-        "L\u00ednea 13: Local 'MABEL JELDRES PAREDES' (c\u00f3digo 2632251) insertado."
+        "L\u00ednea 2: Local 'MU\u00d1OZ HIDALGO NICOLE ESTEFANIA' (c\u00f3digo 4346894) insertado.",
+        "L\u00ednea 3: Local 'RIVAS LOPEZ ZUNILDA DEL CARMEN' (c\u00f3digo 6808596) insertado.",
+        "L\u00ednea 4: Local 'ORIAS ARAVENA JUAN ALEXIS' (c\u00f3digo 5512109) insertado.",
+        "L\u00ednea 5: Local 'BAZA ORELLANA MAURICIO FERNANDO' (c\u00f3digo 7036515) insertado.",
+        "L\u00ednea 6: Local 'UTRERAS CAAMA\u00d1O PAULINA JACQUELINE' (c\u00f3digo 4440454) insertado.",
+        "L\u00ednea 7: Local 'PALMA CONTRERAS CRISTHIAN CESAR' (c\u00f3digo 6816085) insertado.",
+        "L\u00ednea 8: Local 'MARTINEZ CUEVAS IRENIA DEL CARMEN' (c\u00f3digo 4858101) insertado.",
+        "L\u00ednea 9: Local 'HERNANDEZ RIVERA MARCIA MARLENE' (c\u00f3digo 4908040) insertado.",
+        "L\u00ednea 10: Local 'PAZ RIFO MIRTA ELENA' (c\u00f3digo 6295230) insertado.",
+        "L\u00ednea 11: Local 'CARTAGENA SEPULVEDA SARA VICTORIA' (c\u00f3digo 2014896) insertado.",
+        "L\u00ednea 12: Local 'HERNANDEZ SANDOVAL MIRLA' (c\u00f3digo 177522) insertado.",
+        "L\u00ednea 13: Local 'FAUNDEZ VALENZUELA ERIKA MARIANELA' (c\u00f3digo 5126438) insertado.",
+        "L\u00ednea 14: Local 'PANADERIA CRISTIAN SIERRA SPA' (c\u00f3digo 6999281) insertado."
     ],
-    "failures": [
-        {
-            "line": 2,
-            "codigo": "215957",
-            "nombre": "MARIA ANTONIETA RODRIGUEZ MARDONES",
-            "reason": "El c\u00f3digo de local '215957' ya existe (l\u00ednea 2)."
-        }
-    ]
+    "failures": []
 }

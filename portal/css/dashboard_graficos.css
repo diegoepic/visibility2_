@@ -1,0 +1,88 @@
+.graficos {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    max-width: 1400px;
+    margin: 40px auto;
+    background: #ffffff;
+}
+
+.grafico {
+    padding: 35px 40px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Separadores verticales */
+.grafico:nth-child(odd) {
+    border-right: 1px solid #dcdcdc;
+}
+
+/* Separadores horizontales */
+.grafico:nth-child(1),
+.grafico:nth-child(2) {
+    border-bottom: 1px solid #dcdcdc;
+}
+
+.grafico-titulo {
+    font-size: 14px;
+    font-weight: 600;
+    color: #444;
+    text-align: left;
+    width: 100%;
+    margin-bottom: 25px;
+}
+
+.grafico-layout-vertical {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.grafico-chart {
+    width: 220px;
+    height: 220px;
+}
+
+.grafico-chart canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.grafico-leyenda {
+    margin-top: 25px;
+    font-size: 12px;
+    color: #666;
+}
+/* Ítem leyenda */
+.leyenda-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.leyenda-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+.materiales {
+    background: #fff;
+    border: 1px solid #ddd;
+    padding: 15px;
+    border-radius: 6px;
+}
+
+.materiales-chart {
+    width: 100%;
+    height: 300px;
+}
+
+.materiales-chart canvas {
+    width: 100% !important;
+    height: 100% !important;
+}

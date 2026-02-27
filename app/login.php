@@ -28,13 +28,8 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 if (!empty($_SESSION['usuario_id'])) {
-    $divisionId = isset($_SESSION['division_id']) ? (int) $_SESSION['division_id'] : 0;
-
-    if ($divisionId === 14) {
-        header('Location: index_pruebas.php');
-    } else {
-        header('Location: index.php');
-    }
+    // Todos los usuarios van a index_pruebas.php
+    header('Location: index_pruebas.php');
     exit;
 }
 

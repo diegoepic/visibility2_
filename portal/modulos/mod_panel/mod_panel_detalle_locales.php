@@ -1,4 +1,8 @@
 <?php
+foreach ($_GET as $key => $value) {
+    $_GET[$key] = trim($value);
+}
+
 session_start();
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
 
@@ -13,91 +17,132 @@ if (!isset($_SESSION['usuario_id'])) {
 $id_coordinador = intval($_SESSION['usuario_id']);
 $nombreCoord    = $_SESSION['usuario_nombre'];
 $apellidoCoord  = $_SESSION['usuario_apellido'];
-$id_division    = intval($_SESSION['division_id']);
 $id_empresa     = intval($_SESSION['empresa_id']);
-
-/* ================================
-   FILTROS GET
-================================ */
-$division_filtro = isset($_GET['division']) ? intval($_GET['division']) : $id_division;
-$subdivision_filtro = isset($_GET['subdivision']) ? intval($_GET['subdivision']) : 0;
-$fecha_desde = $_GET['fecha_desde'] ?? '';
-$fecha_hasta = $_GET['fecha_hasta'] ?? '';
-
-$hoy = date('Y-m-d');
-if (empty($fecha_desde) && empty($fecha_hasta)) {
-    $fecha_desde = $hoy;
-    $fecha_hasta = $hoy;
-}
-
-if (!isset($_GET['id_ejecutor'])) {
-    die("Parámetro inválido: falta id_ejecutor.");
-}
-$id_ejecutor = intval($_GET['id_ejecutor']);
-
-$id_campana = isset($_GET['id_campana']) ? intval($_GET['id_campana']) : 0;
-$verModo    = $_GET['ver'] ?? 'campana';
 
 /* ================================
    VALIDAR EJECUTOR
 ================================ */
+if (!isset($_GET['id_ejecutor'])) {
+    die("Parámetro inválido: falta id_ejecutor.");
+}
+
+$id_ejecutor = intval($_GET['id_ejecutor']);
+
+/* ================================
+   FILTROS
+================================ */
+$division_formulario = isset($_GET['division_formulario']) ? intval($_GET['division_formulario']) : 0;
+$subdivision_filtro  = isset($_GET['subdivision']) ? intval($_GET['subdivision']) : 0;
+$id_campana          = isset($_GET['id_campana']) ? intval($_GET['id_campana']) : 0;
+$verModo             = $_GET['ver'] ?? 'campana';
+
+/* ================================
+   VALIDAR EJECUTOR EMPRESA
+================================ */
 $sql_val_eje = "
-    SELECT COUNT(*) AS cnt
+    SELECT id_division, nombre, apellido
     FROM usuario
     WHERE id = ?
       AND id_perfil = 3
       AND activo = 1
-      AND id_division = ?
       AND id_empresa = ?
 ";
+
 $stmt_eje = $conn->prepare($sql_val_eje);
-$stmt_eje->bind_param("iii", $id_ejecutor, $division_filtro, $id_empresa);
+$stmt_eje->bind_param("ii", $id_ejecutor, $id_empresa);
 $stmt_eje->execute();
 $row_eje = $stmt_eje->get_result()->fetch_assoc();
 $stmt_eje->close();
 
-if ($row_eje['cnt'] == 0) {
-    die("El ejecutor no pertenece a la división seleccionada.");
+if (!$row_eje) {
+    die("El ejecutor no existe o no pertenece a la empresa.");
 }
 
-/* ================================
-   NOMBRE EJECUTOR
-================================ */
-$stmt_n = $conn->prepare("SELECT nombre, apellido FROM usuario WHERE id = ?");
-$stmt_n->bind_param("i", $id_ejecutor);
-$stmt_n->execute();
-$rowN = $stmt_n->get_result()->fetch_assoc();
-$stmt_n->close();
-$nombreEjec = $rowN ? $rowN['nombre'].' '.$rowN['apellido'] : 'Ejecutor';
+$nombreEjec = $row_eje['nombre'] . ' ' . $row_eje['apellido'];
 
 /* ================================
-   QUERY PRINCIPAL
+   QUERY PRINCIPAL (SIN GROUP BY)
 ================================ */
 $sql_locales = "
-    SELECT 
-      fq.id,
-      l.id AS id_local,
-      upper(l.nombre) as nombre_local,
-      upper(l.direccion) as direccion_local,
-      l.lat,
-      l.lng,
-      fq.estado,
-      fq.fechaVisita,
-      upper(fq.observacion),
-      fq.countVisita,
-      fq.material,
-      fq.is_priority,
-      f.nombre AS nombre_campana
-    FROM formularioQuestion fq
-    INNER JOIN local l ON l.id = fq.id_local
-    INNER JOIN formulario f ON f.id = fq.id_formulario
-    WHERE fq.id_usuario = ?
-      AND f.id_empresa = ?
-      AND f.id_division = ?
+SELECT 
+    fq.id,
+    f.nombre AS nombreCampana,
+    l.id AS id_local,
+    UPPER(l.nombre) AS nombre_local,
+    UPPER(l.direccion) AS direccion_local,
+    l.lat,
+    l.lng,
+    fq.material,
+    fq.valor,
+    CASE
+        WHEN fq.pregunta = 'cancelado' THEN 'CANCELADO'
+        WHEN fq.pregunta = 'completado' THEN 'COMPLETADO'
+    
+        WHEN fq.pregunta IN ('solo_implementado','solo_auditoria','solo_retirado','implementado_auditado') THEN
+            CASE
+                WHEN IFNULL(fq.valor,0) = 0 THEN 'NO IMPLEMENTADO'
+                ELSE
+                    CASE
+                        WHEN fq.pregunta = 'solo_implementado' THEN 'IMPLEMENTADO'
+                        WHEN fq.pregunta = 'solo_auditoria' THEN 'AUDITADO'
+                        WHEN fq.pregunta = 'solo_retirado' THEN 'RETIRADO'
+                        WHEN fq.pregunta = 'implementado_auditado' THEN 'IMPLE/AUDI'
+                        ELSE 'EN PROCESO'
+                    END
+            END
+    
+        WHEN fq.pregunta = 'no_implementado' THEN 'NO IMPLEMENTADO'
+        WHEN fq.pregunta = 'en proceso' OR fq.pregunta IS NULL OR fq.pregunta = '' THEN 'EN PROCESO'
+        ELSE 'EN PROCESO'
+    END AS estado_texto,
+
+    fq.pregunta AS estado_raw,
+
+    UPPER(
+        CASE 
+            WHEN fq.motivo IS NOT NULL AND fq.motivo <> '' THEN fq.motivo
+            WHEN fq.observacion IS NOT NULL AND fq.observacion <> ''
+                THEN 
+                    CASE 
+                        WHEN LOCATE('-', fq.observacion) > 0 
+                            THEN TRIM(SUBSTRING_INDEX(fq.observacion, '-', 1))
+                        ELSE fq.observacion
+                    END
+            ELSE ''
+        END
+    ) AS motivo_final,
+
+    fq.fechaVisita,
+    UPPER(fq.observacion) AS observacion,
+
+    (
+        SELECT GROUP_CONCAT(
+            DISTINCT CONCAT(
+                'https://visibility.cl/visibility2/app/',
+                fv2.url
+            )
+            SEPARATOR '||'
+        )
+        FROM fotoVisita fv2
+        WHERE fv2.id_formularioQuestion = fq.id
+    ) AS urls_fotos
+
+FROM formularioQuestion fq
+INNER JOIN local l ON l.id = fq.id_local
+INNER JOIN formulario f ON f.id = fq.id_formulario
+
+WHERE fq.id_usuario = ?
+  AND f.id_empresa = ?
 ";
 
-$params = [$id_ejecutor, $id_empresa, $division_filtro];
-$types  = "iii";
+$params = [$id_ejecutor, $id_empresa];
+$types  = "ii";
+
+if ($division_formulario > 0) {
+    $sql_locales .= " AND f.id_division = ?";
+    $types .= "i";
+    $params[] = $division_formulario;
+}
 
 if ($verModo === 'campana' && $id_campana > 0) {
     $sql_locales .= " AND fq.id_formulario = ?";
@@ -111,13 +156,7 @@ if ($subdivision_filtro > 0) {
     $params[] = $subdivision_filtro;
 }
 
-$inicio = $fecha_desde . " 00:00:00";
-$fin    = $fecha_hasta . " 23:59:59";
-
-$sql_locales .= " AND COALESCE(fq.fechaVisita, fq.fechaPropuesta) BETWEEN ? AND ?";
-$types .= "ss";
-$params[] = $inicio;
-$params[] = $fin;
+$sql_locales .= " ORDER BY l.nombre ASC";
 
 $stmt_loc = $conn->prepare($sql_locales);
 $stmt_loc->bind_param($types, ...$params);
@@ -128,14 +167,15 @@ $locales = [];
 while ($row = $res_loc->fetch_assoc()) {
     $locales[] = $row;
 }
+
 $stmt_loc->close();
 $conn->close();
 
+$nombreCampana = $locales[0]['nombreCampana'] ?? '';
 
 /* ================================
-   CONSTRUIR COORDENADAS PARA MAPA
+   MAPA
 ================================ */
-
 $coordenadas_locales = [];
 
 foreach ($locales as $loc) {
@@ -144,24 +184,34 @@ foreach ($locales as $loc) {
         continue;
     }
 
+    $estadoRaw = $loc['estado_raw'];
     $markerColor = 'orange';
 
-    if ((int)$loc['countVisita'] === 0) {
-        $markerColor = 'red';
-    } elseif ((int)$loc['estado'] === 1) {
+    if (in_array($estadoRaw, [
+        'completado',
+        'implementado_auditado',
+        'solo_auditoria',
+        'solo_implementado',
+        'solo_retirado'
+    ])) {
         $markerColor = 'green';
+    }
+    elseif (in_array($estadoRaw, [
+        'cancelado',
+        'no_implementado'
+    ])) {
+        $markerColor = 'red';
     }
 
     $coordenadas_locales[] = [
         'idLocal' => (int)$loc['id_local'],
-        'nombre_local' => $loc['nombre'] . ' - ' . $loc['direccion'],
+        'nombre_local' => $loc['nombre_local'] . ' - ' . $loc['direccion_local'],
         'latitud' => (float)$loc['lat'],
         'longitud' => (float)$loc['lng'],
         'markerColor' => $markerColor
     ];
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -173,6 +223,22 @@ foreach ($locales as $loc) {
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css">
   <!-- Estilos personalizados -->
     <link rel="stylesheet" href="<?= '/visibility2/portal/css/mod_panel.css?v=' . time(); ?>">
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
+   
+    
+<style>
+.carousel-item {
+    height: 450px; /* tamaño medio elegante */
+}
+
+.carousel-item img {
+    max-height: 100%;
+    max-width: 100%;
+    object-fit: contain; /* muestra completa sin recorte */
+}
+</style>
+
 </head>
 <body>
 <div class="container card-panel">
@@ -189,9 +255,7 @@ foreach ($locales as $loc) {
   <div class="card mt-3">
     <div class="card-body">
       <h4 style="font-size:0.9rem;">Ejecutor: <?php echo htmlspecialchars($nombreEjec); ?></h4>
-      <?php if ($verModo==='campana'): ?>
-        <h5>Campaña: <?php echo htmlspecialchars($nombreCampana); ?></h5>
-      <?php endif; ?>
+            <h5>Campaña: <?php echo htmlspecialchars($nombreCampana); ?></h5>
 
       <div class="my-3">
         <!-- Botones de modo -->
@@ -228,17 +292,9 @@ foreach ($locales as $loc) {
 
       <hr>
       <h5>Listado de Locales</h5>
-
-      <!-- Iniciamos formulario para marcar prioridad -->
-      <form method="POST" action="procesar_prioridad.php">
-        <!-- Parámetros ocultos para volver aquí con el modo/campaña/ejecutor -->
-        <input type="hidden" name="id_ejecutor" value="<?php echo $id_ejecutor; ?>">
-        <input type="hidden" name="id_campana" value="<?php echo $id_campana; ?>">
-        <input type="hidden" name="ver" value="<?php echo htmlspecialchars($verModo); ?>">
-
         <?php if (!empty($locales)): ?>
           <div class="table-responsive">
-            <table class="table table-striped table-bordered">
+            <table id="tablaLocales" class="table table-striped table-bordered">
               <thead>
                 <tr>
                   <?php if ($verModo==='todos'): ?>
@@ -248,34 +304,49 @@ foreach ($locales as $loc) {
                   <th>Dirección</th>
                   <th>Material</th>
                   <th>Estado</th>
+                  <th>Motivo</th>
                   <th>Fecha Visita</th>
                   <th>Observación</th>
-                  <th>Prioridad</th>
+                  <th>Fotos</th>
                 </tr>
               </thead>
               <tbody>
+                  
               <?php foreach ($locales as $loc):
                 $nombreLoc = htmlspecialchars($loc['nombre_local']);
                 $dirLoc    = htmlspecialchars($loc['direccion_local']);
-                $estado    = (int)$loc['estado_local'];
+                $estadoTexto = $loc['estado_texto'];
+                $estadoRaw   = $loc['estado_raw'];
+                $motivo   = $loc['motivo_final'];
+                $urls = [];
+                if (!empty($loc['urls_fotos'])) {
+                    $urls = explode('||', $loc['urls_fotos']);
+                }
                 $fechaV    = $loc['fechaVisita'] ? date('d-m-Y', strtotime($loc['fechaVisita'])) : '-';
                 $horaV    = $loc['fechaVisita'] ? date('H:i', strtotime($loc['fechaVisita'])) : '-';                
                 $obs       = !empty($loc['observacion']) ? htmlspecialchars($loc['observacion']) : '-';
                 $campana   = isset($loc['nombre_campana']) ? htmlspecialchars($loc['nombre_campana']) : '';
                 $material  = !empty($loc['material']) ? htmlspecialchars($loc['material']) : '-';
 
-                // is_priority
-                // Nota: Ajusta si tu campo se llama distinto
-                $isPrio = isset($loc['is_priority']) ? (int)$loc['is_priority'] : 0;
-
                 // Badge para estado
                 $badgeEstado = '';
-                if ($estado === 0) {
-                    $badgeEstado = '<span class="badge badge-custom badge-pendientes">Pend.</span>';
-                } elseif ($estado === 1) {
-                    $badgeEstado = '<span class="badge badge-custom badge-completados">Compl.</span>';
-                } else {
-                    $badgeEstado = '<span class="badge badge-custom badge-cancelados">Cancel.</span>';
+                
+                switch ($estadoTexto) {
+                    case 'COMPLETADO':
+                    case 'IMPLEMENTADO':
+                    case 'AUDITADO':
+                    case 'RETIRADO':
+                    case 'IMPLE/AUDI':
+                        $badgeEstado = '<span class="badge badge-completados">'.$estadoTexto.'</span>';
+                        break;
+                
+                    case 'NO IMPLEMENTADO':
+                    case 'CANCELADO':
+                        $badgeEstado = '<span class="badge badge-cancelados">'.$estadoTexto.'</span>';
+                        break;
+                
+                    default:
+                        $badgeEstado = '<span class="badge badge-pendientes">EN PROCESO</span>';
                 }
               ?>
                 <tr>
@@ -286,23 +357,29 @@ foreach ($locales as $loc) {
                   <td><?php echo $dirLoc; ?></td>
                   <td><?php echo $material; ?></td>
                   <td class="text-center"><?php echo $badgeEstado; ?></td>
+                  <td class="text-center"><?php echo $motivo; ?></td> 
                   <td class="text-center"><?php echo $fechaV; ?></td>
                   <td><?php echo $obs; ?></td>
-                  <!-- Checkbox de prioridad -->
-                  <td class="text-center">
-                    <input type="checkbox" class="chk-prio"
-                           name="priority[<?php echo $loc['id_local']; ?>]"
-                           value="1"
-                           <?php if ($isPrio===1) echo 'checked'; ?>>
-                  </td>
+                    <td class="text-center">
+                    <?php if (!empty($urls)): ?>
+                    <button 
+                        type="button"
+                        class="btn btn-sm btn-primary btn-ver-fotos"
+                        data-fotos='<?= htmlspecialchars(json_encode($urls), ENT_QUOTES, 'UTF-8') ?>'
+                        data-local="<?= htmlspecialchars($nombreLoc) ?>"
+                        
+                    ><i class="fas fa-images"></i> Ver Fotos</button>
+                    <?php else: ?>
+                        <button class="btn btn-sm btn-secondary" disabled>
+                            <i class="fas fa-images"></i> Sin Fotos
+                        </button>
+                    <?php endif; ?>
+                    </td>                  
                 </tr>
               <?php endforeach; ?>
               </tbody>
             </table>
           </div>
-          <button type="submit" class="btn btn-success">
-            <i class="fas fa-save"></i> Guardar Prioridad
-          </button>
         <?php else: ?>
           <p>No se encontraron registros en esta vista.</p>
         <?php endif; ?>
@@ -313,13 +390,59 @@ foreach ($locales as $loc) {
   </div>
 </div>
 
+<div class="modal fade" id="modalFotos" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Fotos del Local</h5>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+
+        <div id="carouselFotos" class="carousel slide" data-ride="carousel">
+          <div class="carousel-inner" id="carouselInner"></div>
+
+          <a class="carousel-control-prev" href="#carouselFotos" role="button" data-slide="prev">
+            <span class="carousel-control-prev-icon"></span>
+          </a>
+
+          <a class="carousel-control-next" href="#carouselFotos" role="button" data-slide="next">
+            <span class="carousel-control-next-icon"></span>
+          </a>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- jQuery / Bootstrap -->
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+<!-- DataTables JS -->
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
 
 <!-- Google Maps API con callback initMap -->
 <script async defer
   src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw&callback=initMap">
+</script>
+
+<script>
+$(document).ready(function() {
+    $('#tablaLocales').DataTable({
+        order: [[0, "asc"]], // orden inicial por primera columna
+        pageLength: 25,
+        language: {
+            url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json"
+        },
+        columnDefs: [
+            { orderable: false, targets: 7 } // bloquea orden columna 7
+        ]
+    });
+});
 </script>
 
 <script>
@@ -403,6 +526,30 @@ function initMap() {
         pollUbicacionEjecutor(<?= $id_ejecutor ?>);
     }, 30000); // 30 segundos
 }
+</script>
+
+
+<script>
+    $(document).on('click', '.btn-ver-fotos', function() {
+
+    const fotos = $(this).data('fotos');
+    const nombreLocal = $(this).data('local');
+
+    $('#modalFotos .modal-title').text("Fotos - " + nombreLocal);
+
+    let html = '';
+
+    fotos.forEach((url, index) => {
+        html += `
+            <div class="carousel-item ${index === 0 ? 'active' : ''}">
+                <img src="${url}" class="d-block w-100 rounded">
+            </div>
+        `;
+    });
+
+    $('#carouselInner').html(html);
+    $('#modalFotos').modal('show');
+});
 </script>
 </body>
 </html>

@@ -970,7 +970,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                     </div>
                     <div class="col-sm-4">
                         <a class="btn btn-app"
-                           href="UI_informe.php?id=<?php echo $rowP['id_campana']; ?>&division=<?php echo $division_seleccionada; ?>"
+                           href="dashboard/dashboard_campana.php?id=<?php echo $rowP['id_campana']; ?>&division=<?php echo $division_seleccionada; ?>"
                            target="_self">
                           <i class="fas fa-bars"></i> INFORME
                         </a>

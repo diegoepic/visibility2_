@@ -920,7 +920,7 @@ if ($division_id > 0) {
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-users-cog"></i>
               <p>
-                Panel Coordinador
+                Panel de control
                 <i class="fas fa-angle-left right"></i>
               </p>
             </a>
@@ -928,9 +928,15 @@ if ($division_id > 0) {
               <li class="nav-item">
                 <a href="modulos/mod_panel/mod_panel.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
-                  <p>Panel de Control</p>
+                  <p>Panel Merchan</p>
                 </a>
               </li>
+              <li class="nav-item">
+                <a href="modulos/mod_panel/mod_panel_campanas.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Panel Campaña</p>
+                </a>
+              </li>              
             </ul>
           </li>
 

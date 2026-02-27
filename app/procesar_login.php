@@ -185,6 +185,6 @@ $divisionId = isset($u['id_division']) ? (int)$u['id_division'] : 0;
 if ($divisionId === 14) {
     header("Location: index_pruebas.php");
 } else {
-    header("Location: index.php");
+    header("Location: index_pruebas.php");
 }
 exit();

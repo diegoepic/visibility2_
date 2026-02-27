@@ -55,6 +55,7 @@ SELECT
     fp.question_text                       AS pregunta,
     fp.sort_order                          AS ordenPregunta,
     fp.is_valued                           AS preguntaValorizada,
+    fqr.id                                 AS idRespuesta,
     fqr.answer_text                        AS respuesta,
     fqr.valor                              AS valor,
     DATE(fqr.created_at)                   AS fecha_respuesta
@@ -86,7 +87,7 @@ if (empty($rows)) {
 $pivotData = [];
 $questionMeta = [];
 foreach ($rows as $row) {
-    $key = "{$row['idCampana']}|{$row['codigo_local']}";
+    $key = "{$row['idCampana']}|{$row['idLocal']}|{$row['fecha_respuesta']}";
     if (!isset($pivotData[$key])) {
         $pivotData[$key] = [
             'idCampana'       => $row['idCampana'],
@@ -128,6 +129,9 @@ foreach ($rows as $row) {
 }
 
 // Flatten: duplicar filas según el máximo de respuestas
+echo "<pre>";
+print_r($pivotData);
+exit;
 $rowsPivot = [];
 foreach ($pivotData as $data) {
     $replicate = 1;
@@ -172,7 +176,7 @@ $rowsPivot = array_filter($rowsPivot, function($r) use ($questionMeta) {
 });
 
 // Ordenar columnas
-//uksort($questionMeta, function($a,$b) use($questionMeta){return $questionMeta[$a]['order']-$questionMeta[$b]['order'];});
+uksort($questionMeta, function($a,$b) use($questionMeta){return $questionMeta[$a]['order']-$questionMeta[$b]['order'];});
 
 // Definir encabezados
 $cols = array_merge(
@@ -191,7 +195,20 @@ foreach ($cols as $h) echo '<th>'.htmlspecialchars($h,ENT_QUOTES,'UTF-8').'</th>
 echo '</tr></thead><tbody>';
 foreach ($rowsPivot as $r) {
     echo '<tr>';
-    foreach (array_keys($cols) as $i) echo '<td>'.htmlspecialchars($r[array_keys($r)[$i]] ?? '',ENT_QUOTES,'UTF-8').'</td>';
+
+    foreach ($cols as $colName) {
+
+        // Convertir encabezado a clave interna
+        $key = strtolower($colName);
+        $key = str_replace(
+            ['ó','í','é','á','ú','ñ',' ','(valor)','(',')'],
+            ['o','i','e','a','u','n','_','_valor','',''],
+            $key
+        );
+
+        echo '<td>' . htmlspecialchars($r[$key] ?? '', ENT_QUOTES, 'UTF-8') . '</td>';
+    }
+
     echo '</tr>';
 }
 echo '</tbody></table>';

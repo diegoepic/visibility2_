@@ -357,7 +357,7 @@ function getEncuestaPivot($idForm) {
             ANY_VALUE(UPPER(re.region))          AS region,
             ANY_VALUE(UPPER(u.usuario))          AS usuario,
             DATE(fqr.created_at)                 AS fechaVisita,
-            UPPER(fp.question_text)              AS question_text,
+            fp.question_text                     AS question_text,
 UPPER(
   GROUP_CONCAT(
     fqr.answer_text

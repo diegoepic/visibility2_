@@ -170,13 +170,6 @@ if ($update_stmt = $conn->prepare("UPDATE usuario SET login_count = login_count 
 }
 
 
-$ids_index_pruebas = [2, 70, 268]; 
-
-$usuarioId = (int)$u['id'];
-
-if (in_array($usuarioId, $ids_index_pruebas, true)) {
-    header("Location: index_pruebas.php");
-} else {
-    header("Location: index_pruebas.php");
-}
+// Todos los usuarios van a index_pruebas.php
+header("Location: index_pruebas.php");
 exit();

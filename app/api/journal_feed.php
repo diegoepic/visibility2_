@@ -8,7 +8,6 @@ if (!isset($_SESSION['usuario_id'])) { http_response_code(401); echo json_encode
 
 require_once __DIR__ . '/../con_.php';
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
-
 $user_id    = (int)($_SESSION['usuario_id'] ?? 0);
 $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
 
