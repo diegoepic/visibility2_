@@ -547,6 +547,44 @@ $(document).ready(function() {
 
 });
 </script>
+<script>
+(function () {
+  function ymd(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
 
+  function fixFechas() {
+    const desde = document.querySelector('input[name="fecha_desde"]');
+    const hasta = document.querySelector('input[name="fecha_hasta"]');
+    if (!desde || !hasta) return;
+
+    const hoy = new Date();
+
+    // Opción A: desde = hoy
+    const defDesde = ymd(hoy);
+
+    // Opción B: desde = ayer (descomenta si quieres esta lógica)
+    // const ayer = new Date(hoy);
+    // ayer.setDate(hoy.getDate() - 1);
+    // const defDesde = ymd(ayer);
+
+    const defHasta = ymd(hoy);
+
+    if (!desde.value) desde.value = defDesde;
+    if (!hasta.value) hasta.value = defHasta;
+  }
+
+  // Se ejecuta normal
+  document.addEventListener('DOMContentLoaded', fixFechas);
+
+  // 🔥 Se ejecuta también al volver con el botón "atrás" (bfcache)
+  window.addEventListener('pageshow', function (e) {
+    fixFechas();
+  });
+})();
+</script>
 </body>
 </html>

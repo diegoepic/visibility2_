@@ -15,7 +15,6 @@ $sql = "
            UPPER(CONCAT(nombre, ' ', apellido)) AS nombre_completo
     FROM usuario
     WHERE activo = 1
-      AND id_perfil = 3
       AND id_division = ?
     ORDER BY nombre ASC
 ";

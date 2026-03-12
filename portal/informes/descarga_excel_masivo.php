@@ -857,6 +857,11 @@ $content = strtr(
     ]
 );
 
+$downloadToken = $_GET['download_token'] ?? '';
+if ($downloadToken !== '') {
+    setcookie('fileDownloadToken', $downloadToken, 0, '/');
+}
+
 header("Cache-Control: no-cache, must-revalidate");
 header("Pragma: no-cache");
 header('Content-Type: application/vnd.ms-excel; charset=UTF-8');

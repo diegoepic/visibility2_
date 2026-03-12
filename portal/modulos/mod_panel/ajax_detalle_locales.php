@@ -26,29 +26,25 @@ SELECT
     l.codigo,
     UPPER(l.nombre) AS nombre_local,
     UPPER(l.direccion) AS direccion_local,    
-
-    CASE
-        WHEN fq.pregunta = 'cancelado' THEN 'CANCELADO'
-        WHEN fq.pregunta = 'completado' THEN 'COMPLETADO'
-    
-        WHEN fq.pregunta IN ('solo_implementado','solo_auditoria','solo_retirado','implementado_auditado') THEN
-            CASE
-                WHEN IFNULL(fq.valor,0) = 0 THEN 'NO IMPLEMENTADO'
-                ELSE
-                    CASE
-                        WHEN fq.pregunta = 'solo_implementado' THEN 'IMPLEMENTADO'
-                        WHEN fq.pregunta = 'solo_auditoria' THEN 'AUDITADO'
-                        WHEN fq.pregunta = 'solo_retirado' THEN 'RETIRADO'
-                        WHEN fq.pregunta = 'implementado_auditado' THEN 'IMPLE/AUDI'
-                        ELSE 'EN PROCESO'
-                    END
-            END
-    
-        WHEN fq.pregunta = 'no_implementado' THEN 'NO IMPLEMENTADO'
-        WHEN fq.pregunta = 'en proceso' OR fq.pregunta IS NULL OR fq.pregunta = '' THEN 'EN PROCESO'
-        ELSE 'EN PROCESO'
-    END AS estado_texto,
-
+CASE
+    WHEN fq.pregunta = 'cancelado' THEN 'CANCELADO'
+    WHEN fq.pregunta = 'completado' THEN 'COMPLETADO'
+    WHEN fq.pregunta = 'solo_auditoria' THEN 'AUDITADO'
+    WHEN fq.pregunta IN ('solo_implementado','solo_retirado','implementado_auditado') THEN
+        CASE
+            WHEN IFNULL(fq.valor,0) = 0 THEN 'NO IMPLEMENTADO'
+            ELSE
+                CASE
+                    WHEN fq.pregunta = 'solo_implementado' THEN 'IMPLEMENTADO'
+                    WHEN fq.pregunta = 'solo_retirado' THEN 'RETIRADO'
+                    WHEN fq.pregunta = 'implementado_auditado' THEN 'IMPLE/AUDI'
+                    ELSE 'EN PROCESO'
+                END
+        END
+    WHEN fq.pregunta = 'no_implementado' THEN 'NO IMPLEMENTADO'
+    WHEN fq.pregunta = 'en proceso' OR fq.pregunta IS NULL OR fq.pregunta = '' THEN 'EN PROCESO'
+    ELSE 'EN PROCESO'
+END AS estado_texto,
     UPPER(
         CASE 
             WHEN fq.motivo IS NOT NULL AND fq.motivo <> '' THEN fq.motivo

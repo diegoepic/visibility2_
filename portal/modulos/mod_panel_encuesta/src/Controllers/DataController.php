@@ -70,10 +70,12 @@ class DataController
         $total        = min($countLimited, self::MAX_TOTAL_ROWS);
         $truncated    = ($countLimited > self::MAX_TOTAL_ROWS);
 
-        // 7. Facets (solo si se piden y hay datos)
+        // 7. Facets + resumen únicos (solo si se piden y hay datos)
         $facets = null;
+        $uniq   = null;
         if ($fp->wantFacets && $total > 0) {
             $facets = $repo->fetchFacets($where);
+            $uniq   = $repo->fetchUniqueSummary($where);
         }
 
         // 8. Timing
@@ -119,6 +121,7 @@ class DataController
                     'max_days_no_scope' => self::MAX_RANGE_NO_SCOPE,
                 ],
                 'qfilters_match' => $meta['qfilters_match'] ?? 'all',
+                'uniq'           => $uniq,
             ],
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }

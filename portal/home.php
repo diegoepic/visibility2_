@@ -99,6 +99,29 @@ if ($division_id > 0) {
   <!-- overlayScrollbars -->
   <link rel="stylesheet" href="plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
   <link rel="icon" type="image/png" href="images/logo/Logo_MENTE CREATIVA-02.png">  
+  <style>
+.mt-2{
+    font-size: 80%;
+}
+.nav-header{
+    font-size: 80%!important;          
+}
+.d-block{
+    font-size: 80%!important;
+}
+.form-control{
+    font-size: 80%!important;    
+}
+.d-none{
+    font-size: 80%!important;      
+}
+.modal-title{
+    font-size: 80%!important;    
+}
+.t2{
+    font-size: 80%!important;    
+}
+  </style>
 </head>
 <body class="hold-transition sidebar-mini layout-fixed" data-panel-auto-height-mode="height">
 <div class="wrapper">
@@ -306,13 +329,13 @@ if ($division_id > 0) {
               <div class="modal-body">
                   <form id="formFiltrosLocales">
                       <div class="form-group">
-                          <label for="canal">Seleccionar Canal:</label>
+                          <label for="canal" class="t2">Seleccionar Canal:</label>
                           <select class="form-control" id="canal" name="canal">
                               <option value="">Todos los Canales</option>
                           </select>
                       </div>
                       <div class="form-group">
-                          <label for="distrito">Seleccionar Distrito:</label>
+                          <label for="distrito"  class="t2">Seleccionar Distrito:</label>
                           <select class="form-control" id="distrito" name="distrito">
                               <option value="">Todos los Distritos</option>
                           </select>
@@ -320,7 +343,7 @@ if ($division_id > 0) {
                       <!-- Filtro de Divisi車n: mostrar select solo si la divisi車n del usuario es "MC" -->
                       <?php if (strtoupper(trim($division_nombre)) == 'MC'): ?>
                           <div class="form-group">
-                              <label for="division">Seleccionar Divisi&oacute;n:</label>
+                              <label for="division"  class="t2">Seleccionar Divisi&oacute;n:</label>
                               <select class="form-control" id="division" name="division">
                                   <option value="">Todas las Divisiones</option>
                                   <?php 
@@ -699,7 +722,7 @@ if ($division_id > 0) {
   <aside class="main-sidebar sidebar-dark-primary elevation-4">
     <!-- Brand Logo -->
     <a href="home.php" class="brand-link">
-      <img src="../app/assets/imagenes/logo/logo-Visibility.png" alt="MC Logo" style="opacity: .8; width:50%;">
+      <img src="../app/assets/imagenes/logo/logo-Visibility.png" alt="MC Logo" style="opacity: .8; width:40%;">
       <span class="brand-text font-weight-light">Visibility</span>
     </a>
 
@@ -946,7 +969,7 @@ if ($division_id > 0) {
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-edit"></i>
               <p>
-                EMPRESAS
+                Administrador de clientes
                 <i class="fas fa-angle-left right"></i>
               </p>
             </a>
@@ -957,21 +980,33 @@ if ($division_id > 0) {
                   <p>Crear empresa</p>
                 </a>
               </li>
+              <li class="nav-item">
+                <a href="modulos/mod_divisiones.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Crear division</p>
+                </a>
+              </li>              
             </ul>
           </li>
           <li class="nav-item">
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-edit"></i>
               <p>
-                DASHBOARD
+                Administrador de dashboard
                 <i class="fas fa-angle-left right"></i>
               </p>
             </a>
             <ul class="nav nav-treeview">
               <li class="nav-item">
+                <a href="modulos/mod_dashboard_carousel.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Editor menu principal</p>
+                </a>
+              </li>                
+              <li class="nav-item">
                 <a href="UI_crear_dashboard.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
-                  <p>Crear Dashboard</p>
+                  <p>Crear/editar Dashboard</p>
                 </a>
               </li>
             </ul>
@@ -1032,9 +1067,9 @@ if ($division_id > 0) {
                 </a>
               </li>
             <li class="nav-item">
-            <a href="modulos/mod_panel_encuesta/panel_encuesta.php" class="nav-link">
+            <a href="UI_crear_dashboard_test.php" class="nav-link">
               <i class="nav-icon fas fa-th"></i>
-              <p>Panel Encuesta</p>
+              <p>Crear dashboard</p>
             </a>
           </li>              
             </ul>

@@ -131,7 +131,7 @@ $mensaje = isset($_GET['mensaje']) ? htmlspecialchars($_GET['mensaje'], ENT_QUOT
 $sql_materiales = "
     SELECT 
       fq.id,
-      fq.material,
+      CONCAT_WS(' - ', fq.material, fq.marca, fq.categoria) AS material,
       fq.valor_propuesto,
       MAX(fq.valor) AS valor, 
       MAX(fq.fechaVisita) AS fechaVisita,

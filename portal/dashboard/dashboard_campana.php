@@ -78,19 +78,19 @@ SELECT
     COUNT(DISTINCT r.id) AS regiones,
     COUNT(DISTINCT c.id) AS comunas,
 
-    COUNT(DISTINCT CONCAT(fq.id_local, DATE(fq.fechaVisita))) AS totalLocales,
+    COUNT(DISTINCT fq.id_local) AS totalLocales,
 
     COUNT(DISTINCT CASE
         WHEN fq.countVisita > 0
-        THEN CONCAT(fq.id_local, DATE(fq.fechaVisita))
+        THEN fq.id_local
     END) AS cantidadVisitados,
-
+    
     COUNT(DISTINCT CASE
         WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','completado')
              AND CAST(NULLIF(fq.valor,'') AS DECIMAL(10,2)) > 0
-        THEN CONCAT(fq.id_local, DATE(fq.fechaVisita))
+        THEN fq.id_local
     END) AS cantidadImplementados,
-
+    
     COUNT(DISTINCT CASE
         WHEN fq.countVisita > 0
              AND (
@@ -99,7 +99,7 @@ SELECT
                  OR fq.observacion LIKE '%sin_material%'
                  OR fq.observacion LIKE '%local_cerrado%'
              )
-        THEN CONCAT(fq.id_local, DATE(fq.fechaVisita))
+        THEN fq.id_local
     END) AS noEjecutado
 
 FROM formulario f
@@ -130,15 +130,36 @@ $total = (int)$indicadores['totalLocales'];
 $visitados = (int)$indicadores['cantidadVisitados'];
 $implementados = (int)$indicadores['cantidadImplementados'];
 $noEjecutado = (int)$indicadores['noEjecutado'];
+$noImplementados = max(0, $visitados - $implementados);
 
 $pendientes = $total - $visitados;
+$noVisitados = max(0, $total - $visitados);
 
 $visitadoRatio = $total > 0 ? round(($visitados * 100) / $total) : 0;
 $implementacionRatio = $total > 0 ? round(($implementados * 100) / $total) : 0;
 $pendientesRatio = $total > 0 ? round(($pendientes * 100) / $total) : 0;
 
-
 $colorVisitado = $visitadoRatio >= 80 ? '#2E7D32' : '#C62828';
+
+
+// Pendientes por visitar (countVisita = 0)
+$sqlPendientes = "
+SELECT
+  COUNT(DISTINCT CASE WHEN fq.countVisita = 0 THEN fq.id_local END) AS total_pendientes
+FROM formularioQuestion fq
+WHERE fq.id_formulario = ?
+";
+
+$stmtP = $conn->prepare($sqlPendientes);
+$stmtP->bind_param('i', $idCampana);
+$stmtP->execute();
+$resP = $stmtP->get_result();
+$p = $resP->fetch_assoc();
+$stmtP->close();
+
+$totalPendientes = (int)($p['total_pendientes'] ?? 0);
+
+$enProceso = $totalPendientes;
 
 ?>
 <!DOCTYPE html>
@@ -253,6 +274,9 @@ $colorVisitado = $visitadoRatio >= 80 ? '#2E7D32' : '#C62828';
             <div class="grafico-titulo">
                 ESTADO DE LAS SALAS PROGRAMADAS: 
                 <strong><?php echo $total; ?></strong>
+                <div class="grafico-subtitulo">
+                    (Estado del total de locales planificados)
+                </div>                
             </div>
 
             <div class="grafico-layout-vertical">
@@ -267,7 +291,10 @@ $colorVisitado = $visitadoRatio >= 80 ? '#2E7D32' : '#C62828';
         <div class="grafico">
             <div class="grafico-titulo">
                 ESTADO DE LOS LOCALES PENDIENTES POR VISITAR: 
-                <strong><?php echo $pendientes; ?></strong>
+                <strong><?php echo $totalPendientes; ?></strong>
+                <div class="grafico-subtitulo">
+                    (Total de locales pendientes por ser visitados)
+                </div>                  
             </div>
 
             <div class="grafico-layout-vertical">
@@ -283,6 +310,9 @@ $colorVisitado = $visitadoRatio >= 80 ? '#2E7D32' : '#C62828';
             <div class="grafico-titulo">
                 ESTADO DE LOS LOCALES VISITADOS: 
                 <strong><?php echo $visitados; ?></strong>
+                <div class="grafico-subtitulo">
+                    (Estado del total de locales implementados y no implementados)
+                </div>                  
             </div>
 
             <div class="grafico-layout-vertical">
@@ -339,6 +369,7 @@ $colorVisitado = $visitadoRatio >= 80 ? '#2E7D32' : '#C62828';
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
 
+<!--LEYENDAS-->
 <script>
 function crearLeyenda(idContenedor, labels, colores) {
     const contenedor = document.getElementById(idContenedor);
@@ -362,94 +393,24 @@ function crearLeyenda(idContenedor, labels, colores) {
 }
 </script>
 
+<!--VISITADOS-->
 <script>
 const labelsVisitados = ['Visitados', 'No visitados'];
-const coloresVisitados = ['#2E7D32', '#D0D0D0'];
+const coloresVisitados = ['#94C23D', '#D0D0D0'];
+
+const visitados = <?= (int)$visitados ?>;
+const noVisitados = <?= (int)$noVisitados ?>;
+const totalReal = visitados + noVisitados; // asegura consistencia del donut
 
 const ctxVisitados = document.getElementById('graficoVisitados').getContext('2d');
 
 new Chart(ctxVisitados, {
-    type: 'doughnut',
-    data: {
-        labels: labelsVisitados,
-        datasets: [{
-            data: [
-            <?php echo $visitadoRatio; ?>,
-            <?php echo 100 - $visitadoRatio; ?>
-            ],
-            backgroundColor: coloresVisitados,
-            borderWidth: 0
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: '60%',
-        plugins: {
-            legend: { display: false },
-            datalabels: {
-                color: '#fff',
-                font: { weight: 'bold', size: 13 },
-                formatter: (value) => value + '%'
-            }
-        }
-    },
-    plugins: [ChartDataLabels]
-});
-
-// 👉 CREAR LEYENDA
-crearLeyenda('leyendaVisitados', labelsVisitados, coloresVisitados);
-</script>
-
-<script>
-const labelsPendientes = ['En ruta', 'Sin asignar', 'Local cerrado'];
-const coloresPendientes = ['#2E7D32', '#D0D0D0', '#9E9E9E'];
-
-const ctxPendientes = document.getElementById('graficoPendientes').getContext('2d');
-
-new Chart(ctxPendientes, {
-    type: 'doughnut',
-    data: {
-        labels: labelsPendientes,
-        datasets: [{
-            data: [40, 35, 25],
-            backgroundColor: coloresPendientes,
-            borderWidth: 0
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: '60%',
-        plugins: {
-            legend: { display: false },
-            datalabels: {
-                color: '#fff',
-                font: { weight: 'bold', size: 13 },
-                formatter: (value) => value + '%'
-            }
-        }
-    },
-    plugins: [ChartDataLabels]
-});
-
-// 👉 CREAR LEYENDA
-crearLeyenda('leyendaPendientes', labelsPendientes, coloresPendientes);
-</script>
-
-<script>
-const labelsImplementados = ['Implementado', 'No implementado'];
-const coloresImplementados = ['#2E7D32', '#D0D0D0']; // verde + gris
-
-const ctxImplementados = document.getElementById('graficoImplementados').getContext('2d');
-
-new Chart(ctxImplementados, {
   type: 'doughnut',
   data: {
-    labels: labelsImplementados,
+    labels: labelsVisitados,
     datasets: [{
-      data: [60, 40], // <-- ajusta % aquí
-      backgroundColor: coloresImplementados,
+      data: [visitados, noVisitados],
+      backgroundColor: coloresVisitados,
       borderWidth: 0
     }]
   },
@@ -462,15 +423,154 @@ new Chart(ctxImplementados, {
       datalabels: {
         color: '#fff',
         font: { weight: 'bold', size: 13 },
-        formatter: (value) => value + '%'
+        formatter: (value) => {
+          if (!totalReal) return '';
+          const porcentaje = Math.round((value * 100) / totalReal);
+          return porcentaje + '%';
+        }
+      },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const value = ctx.raw ?? 0;
+            const porcentaje = totalReal ? Math.round((value * 100) / totalReal) : 0;
+            return `${ctx.label}: ${value} (${porcentaje}%)`;
+          }
+        }
       }
     }
   },
   plugins: [ChartDataLabels]
 });
 
-// Leyenda externa
-crearLeyenda('leyendaImplementados', labelsImplementados, coloresImplementados);
+crearLeyenda('leyendaVisitados', labelsVisitados, coloresVisitados);
+</script>
+
+<!--NO VISITADOS-->
+<script>
+const labelsPendientes = ['En proceso'];
+const coloresPendientes = ['#D0D0D0'];
+
+const cantPend = <?= (int)$enProceso ?>; // cantidad real (ej: 17)
+
+// Si hay pendientes, el donut debe ser 100%. Si no, 0.
+const dataPendPorc = (cantPend > 0) ? [100] : [0];
+
+const ctxPendientes = document.getElementById('graficoPendientes').getContext('2d');
+
+new Chart(ctxPendientes, {
+  type: 'doughnut',
+  data: {
+    labels: labelsPendientes,
+    datasets: [{
+      data: dataPendPorc,
+      backgroundColor: coloresPendientes,
+      borderWidth: 0
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: '60%',
+    plugins: {
+      legend: { display: false },
+      datalabels: {
+        color: '#fff',
+        font: { weight: 'bold', size: 13 },
+        // Si no hay pendientes, no mostramos etiqueta
+        formatter: (value) => (cantPend > 0 ? value + '%' : '')
+      },
+      tooltip: {
+        callbacks: {
+          label: () => `En proceso: ${cantPend}`
+        }
+      }
+    }
+  },
+  plugins: [ChartDataLabels]
+});
+
+// Leyenda (solo si hay pendientes, si quieres siempre visible quita el if)
+if (cantPend > 0) {
+  crearLeyenda('leyendaPendientes', labelsPendientes, coloresPendientes);
+} else {
+  document.getElementById('leyendaPendientes').innerHTML = '<span style="color:#777;">Sin pendientes</span>';
+}
+</script>
+
+<!--IMPLEMENTADOS-->
+<script>
+const labelsImplementados = ['Implementado', 'No implementado'];
+const coloresImplementados = ['#94C23D', '#D0D0D0'];
+
+const implementados = <?= (int)$implementados ?>;
+const noImplementados = <?= (int)$noImplementados ?>;
+
+const totalVisitados = implementados + noImplementados;
+
+// Si no hay visitados, dibujamos un gris vacío
+const dataFinal = totalVisitados > 0 
+    ? [implementados, noImplementados] 
+    : [1];
+
+const labelsFinal = totalVisitados > 0 
+    ? labelsImplementados 
+    : ['Sin datos'];
+
+const coloresFinal = totalVisitados > 0 
+    ? coloresImplementados 
+    : ['#E0E0E0'];
+
+const ctx = document.getElementById('graficoImplementados');
+
+if (ctx) {
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: labelsFinal,
+      datasets: [{
+        data: dataFinal,
+        backgroundColor: coloresFinal,
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: { display: false },
+        datalabels: {
+          color: '#fff',
+          font: { weight: 'bold', size: 13 },
+          formatter: (value) => {
+            if (!totalVisitados) return '';
+            const porcentaje = Math.round((value * 100) / totalVisitados);
+            return porcentaje + '%';
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              if (!totalVisitados) return 'Sin datos';
+              const value = ctx.raw ?? 0;
+              const porcentaje = Math.round((value * 100) / totalVisitados);
+              return `${ctx.label}: ${value} (${porcentaje}%)`;
+            }
+          }
+        }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+
+  if (totalVisitados > 0) {
+    crearLeyenda('leyendaImplementados', labelsImplementados, coloresImplementados);
+  } else {
+    document.getElementById('leyendaImplementados').innerHTML = 
+      '<span style="color:#777;">Sin locales visitados</span>';
+  }
+}
 </script>
 
 <script>

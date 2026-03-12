@@ -228,6 +228,31 @@ class ResponseRepository
         $st->close();
     }
 
+    /**
+     * Cuenta visitas únicas y locales únicos dentro del filtro actual.
+     */
+    public function fetchUniqueSummary(WhereClause $w): array
+    {
+        $sql = "SELECT COUNT(DISTINCT fqr.visita_id) AS visitas,
+                       COUNT(DISTINCT fqr.id_local)  AS locales
+                " . self::SQL_FROM . "
+                " . $w->sql;
+
+        $st = $this->conn->prepare($sql);
+        if ($w->types) {
+            $st->bind_param($w->types, ...$w->params);
+        }
+        $st->execute();
+        $rs  = $st->get_result();
+        $row = $rs->fetch_assoc();
+        $st->close();
+
+        return [
+            'visitas' => (int)($row['visitas'] ?? 0),
+            'locales' => (int)($row['locales'] ?? 0),
+        ];
+    }
+
     // ----------------------------------------------------------------
 
     private function tipoTexto(int $t): string

@@ -88,21 +88,23 @@ class PanelController
 
         // Pasar variables a la vista via extract + require
         extract([
-            'csrf_token'      => $csrf_token,
-            'user_id'         => $user_id,
-            'user_div'        => $user_div,
-            'empresa_id'      => $empresa_id,
-            'is_mc'           => $is_mc,
-            'divisiones'      => $divisiones,
-            'subdivisiones'   => $subdivisiones,
-            'formularios'     => $formularios,
-            'usuarios'        => $usuarios,
-            'jefes'           => $jefes,
-            'distritos'       => $distritos,
-            'sel_div'         => $sel_div,
-            'sel_sub'         => $sel_sub,
-            'sel_tipo'        => $sel_tipo,
-            'factory_presets' => $factory_presets,
+            'csrf_token'        => $csrf_token,
+            'user_id'           => $user_id,
+            'user_div'          => $user_div,
+            'empresa_id'        => $empresa_id,
+            'is_mc'             => $is_mc,
+            'divisiones'        => $divisiones,
+            'subdivisiones'     => $subdivisiones,
+            'formularios'       => $formularios,
+            'usuarios'          => $usuarios,
+            'jefes'             => $jefes,
+            'distritos'         => $distritos,
+            'sel_div'           => $sel_div,
+            'sel_sub'           => $sel_sub,
+            'sel_tipo'          => $sel_tipo,
+            'factory_presets'   => $factory_presets,
+            'abs_base'          => panel_encuesta_abs_base(),
+            'default_range_days' => 7,
         ]);
 
         require __DIR__ . '/../../views/panel.php';

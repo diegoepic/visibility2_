@@ -1,72 +1,113 @@
-<?php 
-ob_clean();
+<?php
+declare(strict_types=1);
 
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
 error_reporting(E_ALL);
 
-ini_set('memory_limit', '1024M');
+ini_set('memory_limit', '2048M');
 set_time_limit(0);
+date_default_timezone_set('America/Santiago');
 
-
-// Iniciar sesión si aún no está iniciada
-if (session_status() == PHP_SESSION_NONE) {
+if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Liberar la sesión para evitar bloqueos
-session_write_close();
+require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/vendor/autoload.php';
 
-// Incluir el archivo de conexión a la base de datos
-include $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
 mysqli_set_charset($conn, 'utf8mb4');
 
-/**
- * Helper de escape seguro que convierte null -> '' y castea a string
- * Idempotente (no redefine si ya existe).
- */
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+
 if (!function_exists('e')) {
-    function e($v): string {
+    function e($v): string
+    {
         return htmlspecialchars((string)($v ?? ''), ENT_QUOTES, 'UTF-8');
     }
 }
 
-// 1) Validar parámetros
-if (!isset($_GET['id']) || !filter_var($_GET['id'], FILTER_VALIDATE_INT)) {
-    die('ID de formulario inválido.');
+function fail(string $message): void
+{
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    http_response_code(400);
+    exit($message);
 }
-$formulario_id         = intval($_GET['id']);
-$inline                = isset($_GET['inline']) && $_GET['inline'] === '1';
-$incluirFotosMaterial  = !isset($_GET['fotos'])
-    || $_GET['fotos'] === '1'
-    || strtolower((string)$_GET['fotos']) === 'true';
-$incluirFotosEncuesta  = !isset($_GET['fotos_encuesta'])
-    || $_GET['fotos_encuesta'] === '1'
-    || strtolower((string)$_GET['fotos_encuesta']) === 'true';
 
+function limpiarNombreArchivo(string $texto): string
+{
+    $texto = trim($texto);
+    if ($texto === '') {
+        return 'reporte';
+    }
 
-$stmt_form = $conn->prepare("SELECT nombre FROM formulario WHERE id = ? LIMIT 1");
-$stmt_form->bind_param("i", $formulario_id);
-$stmt_form->execute();
-$stmt_form->bind_result($nombreForm);
-if (!$stmt_form->fetch()) {
-    die("Formulario no encontrado.");
+    $texto = preg_replace('/[^\p{L}\p{N}\s\-_]+/u', '', $texto);
+    $texto = preg_replace('/\s+/u', '_', $texto);
+
+    return $texto !== '' ? $texto : 'reporte';
 }
-$stmt_form->close();
 
-$stmt_modal = $conn->prepare("SELECT modalidad FROM formulario WHERE id = ? LIMIT 1");
-$stmt_modal->bind_param("i", $formulario_id);
-$stmt_modal->execute();
-$stmt_modal->bind_result($modalidad);
-$stmt_modal->fetch();
-$stmt_modal->close();
+function setCellByIndex(Worksheet $sheet, int $col, int $row, $value): void
+{
+    $sheet->setCellValue(Coordinate::stringFromColumnIndex($col) . $row, $value);
+}
 
-// -----------------------------------------------------------------------------
-// Funciones de obtención de datos (sin filtro de fechas)
-// -----------------------------------------------------------------------------
+function setStringByIndex(Worksheet $sheet, int $col, int $row, string $value): void
+{
+    $sheet->setCellValueExplicit(
+        Coordinate::stringFromColumnIndex($col) . $row,
+        $value,
+        DataType::TYPE_STRING
+    );
+}
 
-function getCampaignData($idForm) {
-    global $conn;
+function normalizarBooleanGet(string $key, bool $default = true): bool
+{
+    if (!isset($_GET[$key])) {
+        return $default;
+    }
+
+    $value = strtolower(trim((string)$_GET[$key]));
+    return in_array($value, ['1', 'true', 'si', 'sí', 'yes'], true);
+}
+
+function obtenerFormularioBase(mysqli $conn, int $idForm): array
+{
+    $sql = "
+        SELECT id, nombre, modalidad
+        FROM formulario
+        WHERE id = ?
+        LIMIT 1
+    ";
+
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        fail('Error preparando formulario: ' . $conn->error);
+    }
+
+    $stmt->bind_param('i', $idForm);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $row = $res ? $res->fetch_assoc() : null;
+    $stmt->close();
+
+    if (!$row) {
+        fail('Formulario no encontrado.');
+    }
+
+    return $row;
+}
+
+function getCampaignData(mysqli $conn, int $idForm): array
+{
     $sql = "
         SELECT
             f.id,
@@ -78,68 +119,82 @@ function getCampaignData($idForm) {
             e.nombre AS nombre_empresa,
             de.nombre AS nombre_division,
             COUNT(DISTINCT l.codigo) AS locales_programados,
-            SUM(
-                CASE WHEN fq.pregunta IN (
+            COUNT(DISTINCT CASE
+                WHEN fq.pregunta IN (
                     'implementado_auditado','solo_implementado','solo_auditoria',
                     'local_cerrado','no_permitieron'
-                ) AND fq.fechaVisita <> '0000-00-00 00:00:00' THEN 1 ELSE 0 END
-            ) AS locales_visitados,
-            SUM(
-                CASE WHEN fq.pregunta IN (
+                )
+                AND fq.fechaVisita IS NOT NULL
+                AND fq.fechaVisita <> '0000-00-00 00:00:00'
+                THEN l.id
+            END) AS locales_visitados,
+            COUNT(DISTINCT CASE
+                WHEN fq.pregunta IN (
                     'implementado_auditado','solo_implementado','solo_auditoria'
-                ) THEN 1 ELSE 0 END
-            ) AS locales_implementados
+                )
+                THEN l.id
+            END) AS locales_implementados
         FROM formulario f
         INNER JOIN empresa e             ON e.id = f.id_empresa
         LEFT JOIN division_empresa de    ON de.id = f.id_division
         INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
         INNER JOIN local l               ON l.id = fq.id_local
         WHERE f.id = ?
-        GROUP BY f.id, f.nombre, f.fechaInicio, f.fechaTermino, f.modalidad, f.tipo, e.nombre, de.nombre
+        GROUP BY
+            f.id, f.nombre, f.fechaInicio, f.fechaTermino,
+            f.modalidad, f.tipo, e.nombre, de.nombre
     ";
+
     $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        fail('Error preparando getCampaignData: ' . $conn->error);
+    }
+
     $stmt->bind_param('i', $idForm);
     $stmt->execute();
     $res = $stmt->get_result();
-    return $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+
+    $rows = [];
+    while ($row = $res->fetch_assoc()) {
+        $rows[] = $row;
+    }
+
+    $stmt->close();
+    return $rows;
 }
 
-function getLocalesDetails($idForm) {
-    global $conn;
+function getLocalesDetails(mysqli $conn, int $idForm): array
+{
     $sql = "
         SELECT
-            l.id                               AS idLocal,
-            fq.id                              AS id_formularioQuestion,
-            l.codigo                           AS codigo_local,
-            CASE
-              WHEN l.nombre REGEXP '^[0-9]+'
-              THEN SUBSTRING_INDEX(l.nombre, ' ', 1)
-              ELSE CAST(l.codigo AS UNSIGNED)
-            END AS numero_local,
+            l.id AS id_local,
+            fq.id AS id_formulario_question,
+            l.codigo AS codigo_local,
+            SUBSTRING_INDEX(TRIM(l.nombre), ' ', 1) AS numero_local,
             f.modalidad AS modalidad,
-            UPPER(f.nombre) AS nombreCampaña,
-            DATE(f.fechaInicio) AS fechaInicio,
-            DATE(f.fechaTermino) AS fechaTermino,
-            DATE(fq.fechaVisita) AS fechaVisita,
+            UPPER(f.nombre) AS nombre_campana,
+            DATE(f.fechaInicio) AS fecha_inicio,
+            DATE(f.fechaTermino) AS fecha_termino,
+            DATE(fq.fechaVisita) AS fecha_visita,
             TIME(fq.fechaVisita) AS hora,
-            DATE(fq.fechaPropuesta) AS fechaPropuesta,
+            DATE(fq.fechaPropuesta) AS fecha_propuesta,
             UPPER(l.nombre) AS nombre_local,
             UPPER(l.direccion) AS direccion_local,
             UPPER(cm.comuna) AS comuna,
             UPPER(re.region) AS region,
             UPPER(cu.nombre) AS cuenta,
             UPPER(ca.nombre) AS cadena,
-            UPPER(fq.material) AS material,
-            UPPER(jv.nombre) AS jefeVenta,
-            fq.valor_propuesto,
-            fq.valor,
-            UPPER(fq.observacion) AS observacion,
+            UPPER(COALESCE(fq.material, '')) AS material,
+            UPPER(COALESCE(jv.nombre, '')) AS jefe_venta,
+            COALESCE(fq.valor_propuesto, 0) AS valor_propuesto,
+            COALESCE(fq.valor, 0) AS valor,
+            UPPER(COALESCE(fq.observacion, '')) AS observacion,
             CASE
                 WHEN fq.fechaVisita IS NOT NULL
                      AND fq.fechaVisita <> '0000-00-00 00:00:00'
-                THEN 'VISITADO'
+                    THEN 'VISITADO'
                 ELSE 'NO VISITADO'
-            END                                AS ESTADO_VISTA,
+            END AS estado_visita,
             CASE
                 WHEN f.modalidad = 'retiro' THEN
                     CASE
@@ -161,82 +216,85 @@ function getLocalesDetails($idForm) {
                     CASE
                         WHEN IFNULL(fq.valor, 0) >= 1 THEN 'IMPLEMENTADO'
                         WHEN IFNULL(fq.valor, 0) = 0 THEN 'NO IMPLEMENTADO'
-                        WHEN LOWER(fq.pregunta) = 'solo_implementado'      THEN 'IMPLEMENTADO'
-                        WHEN LOWER(fq.pregunta) = 'solo_auditado'          THEN 'AUDITORIA'
-                        WHEN LOWER(fq.pregunta) = 'solo_auditoria'         THEN 'AUDITORIA'
-                        WHEN LOWER(fq.pregunta) = 'retiro'                 THEN 'RETIRO'
-                        WHEN LOWER(fq.pregunta) = 'entrega'                THEN 'ENTREGA'
-                        WHEN LOWER(fq.pregunta) = 'implementado_auditado'  THEN 'IMPLEMENTADO/AUDITADO'
+                        WHEN LOWER(fq.pregunta) = 'solo_implementado' THEN 'IMPLEMENTADO'
+                        WHEN LOWER(fq.pregunta) IN ('solo_auditado', 'solo_auditoria') THEN 'AUDITORIA'
+                        WHEN LOWER(fq.pregunta) = 'retiro' THEN 'RETIRO'
+                        WHEN LOWER(fq.pregunta) = 'entrega' THEN 'ENTREGA'
+                        WHEN LOWER(fq.pregunta) = 'implementado_auditado' THEN 'IMPLEMENTADO/AUDITADO'
                         ELSE 'NO IMPLEMENTADO'
                     END
-            END AS ESTADO_ACTIVIDAD,
+            END AS estado_actividad,
             UPPER(
-              REPLACE(
-                CASE
-                  WHEN IFNULL(fq.valor,0) = 0 THEN
-                    TRIM(SUBSTRING_INDEX(REPLACE(fq.observacion,'|','-'),'-',1))
-                  WHEN LOWER(fq.pregunta) IN ('en proceso','cancelado') THEN
-                    TRIM(SUBSTRING_INDEX(REPLACE(fq.observacion,'|','-'),'-',1))
-                  WHEN LOWER(fq.pregunta) IN ('solo_implementado','solo_auditoria') THEN
-                    ''
-                  ELSE
-                    fq.pregunta
-                END
-              , '_', ' ')
-            ) AS MOTIVO,
-            UPPER(u.usuario)                    AS gestionado_por
+                REPLACE(
+                    CASE
+                        WHEN IFNULL(fq.valor, 0) = 0 THEN
+                            TRIM(SUBSTRING_INDEX(REPLACE(COALESCE(fq.observacion, ''), '|', '-'), '-', 1))
+                        WHEN LOWER(fq.pregunta) IN ('en proceso','cancelado') THEN
+                            TRIM(SUBSTRING_INDEX(REPLACE(COALESCE(fq.observacion, ''), '|', '-'), '-', 1))
+                        WHEN LOWER(fq.pregunta) IN ('solo_implementado','solo_auditoria') THEN ''
+                        ELSE COALESCE(fq.pregunta, '')
+                    END,
+                    '_',
+                    ' '
+                )
+            ) AS motivo,
+            UPPER(u.usuario) AS gestionado_por
         FROM formularioQuestion fq
-        INNER JOIN formulario   f  ON f.id  = fq.id_formulario
-        INNER JOIN local        l  ON l.id  = fq.id_local
-        LEFT  JOIN jefe_venta   jv ON jv.id = l.id_jefe_venta
-        INNER JOIN usuario      u  ON u.id  = fq.id_usuario
-        INNER JOIN cuenta       cu ON cu.id = l.id_cuenta
-        INNER JOIN cadena       ca ON ca.id = l.id_cadena
-        INNER JOIN comuna       cm ON cm.id = l.id_comuna
-        INNER JOIN region       re ON re.id = cm.id_region
+        INNER JOIN formulario f ON f.id = fq.id_formulario
+        INNER JOIN local l ON l.id = fq.id_local
+        LEFT JOIN jefe_venta jv ON jv.id = l.id_jefe_venta
+        INNER JOIN usuario u ON u.id = fq.id_usuario
+        INNER JOIN cuenta cu ON cu.id = l.id_cuenta
+        INNER JOIN cadena ca ON ca.id = l.id_cadena
+        INNER JOIN comuna cm ON cm.id = l.id_comuna
+        INNER JOIN region re ON re.id = cm.id_region
         WHERE f.id = ?
-        ORDER BY l.codigo, fq.fechaVisita ASC
+        ORDER BY l.codigo ASC, fq.fechaVisita ASC
     ";
+
     $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        fail('Error preparando getLocalesDetails: ' . $conn->error);
+    }
+
     $stmt->bind_param('i', $idForm);
     $stmt->execute();
     $res = $stmt->get_result();
-    if (!$res) {
-        die("Error en getLocalesDetails: " . $conn->error);
+
+    $rows = [];
+    while ($row = $res->fetch_assoc()) {
+        $rows[] = $row;
     }
-    return $res->fetch_all(MYSQLI_ASSOC);
+
+    $stmt->close();
+    return $rows;
 }
 
-function getFotosImplementaciones($idForm, array $fqIds): array {
-    global $conn;
-
-    $normalizarFoto = function (string $url): string {
+function getFotosImplementaciones(mysqli $conn, int $idForm, array $fqIds): array
+{
+    $normalizarFoto = static function (string $url): string {
         $url = trim($url);
         if ($url === '') {
             return '';
         }
 
-        // Si ya es absoluta, devolver tal cual
         if (preg_match('#^https?://#i', $url)) {
             return $url;
         }
 
-        // Quitar slash inicial y agregar prefijo completo para hacerlo clickeable
-        $url = ltrim($url, '/');
+        $url = ltrim(str_replace('\\', '/', $url), '/');
         return 'https://www.visibility.cl/visibility2/app/' . $url;
     };
 
-    $fqIds = array_values(array_filter(array_unique(array_map('intval', $fqIds)), function ($v) {
-        return $v > 0;
-    }));
-
+    $fqIds = array_values(array_filter(array_unique(array_map('intval', $fqIds)), static fn($v) => $v > 0));
     if (empty($fqIds)) {
         return [];
     }
 
     $placeholders = implode(',', array_fill(0, count($fqIds), '?'));
-    $types        = 'i' . str_repeat('i', count($fqIds));
-    $sql          = "
+    $types = 'i' . str_repeat('i', count($fqIds));
+
+    $sql = "
         SELECT id_formularioQuestion, url
         FROM fotoVisita
         WHERE id_formulario = ?
@@ -244,132 +302,128 @@ function getFotosImplementaciones($idForm, array $fqIds): array {
         ORDER BY id ASC
     ";
 
-    $stmt       = $conn->prepare($sql);
-    $params     = array_merge([$types], [$idForm], $fqIds);
-    $bindParams = [];
-    foreach ($params as $k => $v) {
-        $bindParams[$k] = &$params[$k];
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        fail('Error preparando getFotosImplementaciones: ' . $conn->error);
     }
-    call_user_func_array([$stmt, 'bind_param'], $bindParams);
+
+    $params = array_merge([$types], [$idForm], $fqIds);
+    $refs = [];
+    foreach ($params as $k => $v) {
+        $refs[$k] = &$params[$k];
+    }
+
+    call_user_func_array([$stmt, 'bind_param'], $refs);
     $stmt->execute();
     $res = $stmt->get_result();
-    if (!$res) {
-        die("Error en getFotosImplementaciones: " . $conn->error);
-    }
 
     $out = [];
     while ($row = $res->fetch_assoc()) {
         $fqId = (int)$row['id_formularioQuestion'];
-        $out[$fqId][] = $normalizarFoto($row['url']);
+        $out[$fqId][] = $normalizarFoto((string)$row['url']);
     }
+
+    $stmt->close();
     return $out;
 }
 
-function renderValorConImagen(string $valor, bool $inline): string {
-    $vs = trim($valor);
-    if ($vs === '') {
+function normalizarUrlEncuesta(string $url): string
+{
+    $url = trim($url);
+    if ($url === '') {
         return '';
     }
 
-    // Soportar varias URLs separadas por ';'
-    $parts = preg_split('/\s*;\s*/', $vs);
-
-    // MODO INLINE (vista en navegador)
-    if ($inline) {
-        $out = [];
-
-        foreach ($parts as $p) {
-            if ($p === '') continue;
-
-       
-            if (!preg_match('#^https?://#i', $p)) {
-                $out[] = e($p);
-                continue;
-            }
-
-            $safe = e($p);
-
-            $out[] =
-                '<a href="' . $safe . '" target="_blank">' .
-                    '<img class="inline-img" src="' . $safe . '" ' .
-                        'data-toggle="modal" data-target="#imgModal" data-src="' . $safe . '">' .
-                '</a>';
-        }
-
-        return $out ? implode('<br>', $out) : e($vs);
+    if (preg_match('#^https?://#i', $url)) {
+        return $url;
     }
 
-    // MODO EXCEL (no inline): siempre hipervínculos
-    $out = [];
-    foreach ($parts as $p) {
-        if ($p === '') continue;
-
-        if (preg_match('#^https?://#i', $p)) {
-            $safe = e($p);
-            $out[] = '<a href="' . $safe . '">' . $safe . '</a>';
-        } else {
-            $out[] = e($p);
-        }
+    if (
+        !preg_match('#(uploads|visibility2|app/|pregunta_)\b#i', $url)
+        && !preg_match('#\.(webp|jpe?g|png|gif)(?:\?.*)?$#i', $url)
+    ) {
+        return $url;
     }
 
-    return $out ? implode('; ', $out) : e($vs);
+    $url = str_replace('\\', '/', $url);
+    $url = ltrim($url, '/');
+    $baseUrl = 'https://www.visibility.cl/';
+
+    if (preg_match('#^visibility2/#i', $url)) {
+        return $baseUrl . $url;
+    }
+    if (preg_match('#^app/#i', $url)) {
+        return $baseUrl . 'visibility2/' . $url;
+    }
+    if (preg_match('#^uploads_fotos_pregunta/#i', $url)) {
+        return $baseUrl . 'visibility2/app/uploads/' . $url;
+    }
+    if (preg_match('#^uploads/#i', $url)) {
+        return $baseUrl . 'visibility2/app/' . $url;
+    }
+
+    return $baseUrl . 'visibility2/app/' . $url;
 }
 
-function getEncuestaPivot($idForm) {
-    global $conn;
-
-    // 3.1) Traer el orden de preguntas (cabeceras)
+function getEncuestaPivot(mysqli $conn, int $idForm): array
+{
     $allQuestions = [];
+
     $qry = "
         SELECT question_text
         FROM form_questions
         WHERE id_formulario = ?
         ORDER BY sort_order
     ";
+
     $stmtQ = $conn->prepare($qry);
+    if (!$stmtQ) {
+        fail('Error preparando preguntas de encuesta: ' . $conn->error);
+    }
+
     $stmtQ->bind_param('i', $idForm);
     $stmtQ->execute();
     $resQ = $stmtQ->get_result();
-    if (!$resQ) die("Error al obtener preguntas: " . $conn->error);
+
     while ($rQ = $resQ->fetch_assoc()) {
-        $allQuestions[] = $rQ['question_text'];
+        $allQuestions[] = (string)$rQ['question_text'];
     }
+
     $stmtQ->close();
 
-    // 3.2) Consulta pivot-friendly (cumple ONLY_FULL_GROUP_BY)
     $sql = "
         SELECT
-            f.id AS idCampana,
-            ANY_VALUE(UPPER(f.nombre))           AS nombreCampana,
-            l.codigo                             AS codigo_local,
+            f.id AS id_campana,
+            ANY_VALUE(UPPER(f.nombre)) AS nombre_campana,
+            l.codigo AS codigo_local,
             ANY_VALUE(
-              CASE
-                WHEN l.nombre REGEXP '^[0-9]+'
-                THEN SUBSTRING_INDEX(l.nombre, ' ', 1)
-                ELSE ''
-              END
-            )                                    AS numero_local,
-            ANY_VALUE(UPPER(l.nombre))           AS nombre_local,
-            ANY_VALUE(UPPER(l.direccion))        AS direccion_local,
-            ANY_VALUE(UPPER(cu.nombre))          AS cuenta,
-            ANY_VALUE(UPPER(ca.nombre))          AS cadena,
-            ANY_VALUE(UPPER(cm.comuna))          AS comuna,
-            ANY_VALUE(UPPER(re.region))          AS region,
-            ANY_VALUE(UPPER(u.usuario))          AS usuario,
-            DATE(fqr.created_at)                 AS fechaVisita,
-            fp.question_text                     AS question_text,
-UPPER(
-  GROUP_CONCAT(
-    fqr.answer_text
-    ORDER BY fqr.id
-    SEPARATOR '; '
-  )
-) AS concat_answers,
-GROUP_CONCAT(
-  CASE WHEN fqr.valor <> '0.00' THEN fqr.valor END
-  ORDER BY fqr.id
-  SEPARATOR '; '
-) AS concat_valores
+                CASE
+                    WHEN l.nombre REGEXP '^[0-9]+'
+                        THEN SUBSTRING_INDEX(l.nombre, ' ', 1)
+                    ELSE ''
+                END
+            ) AS numero_local,
+            ANY_VALUE(UPPER(l.nombre)) AS nombre_local,
+            ANY_VALUE(UPPER(l.direccion)) AS direccion_local,
+            ANY_VALUE(UPPER(cu.nombre)) AS cuenta,
+            ANY_VALUE(UPPER(ca.nombre)) AS cadena,
+            ANY_VALUE(UPPER(cm.comuna)) AS comuna,
+            ANY_VALUE(UPPER(re.region)) AS region,
+            ANY_VALUE(UPPER(u.usuario)) AS usuario,
+            DATE(fqr.created_at) AS fecha_visita,
+            fp.question_text AS question_text,
+            UPPER(
+                GROUP_CONCAT(
+                    fqr.answer_text
+                    ORDER BY fqr.id
+                    SEPARATOR '; '
+                )
+            ) AS concat_answers,
+            GROUP_CONCAT(
+                CASE WHEN fqr.valor <> '0.00' THEN fqr.valor END
+                ORDER BY fqr.id
+                SEPARATOR '; '
+            ) AS concat_valores
         FROM formulario f
         JOIN form_questions fp           ON fp.id_formulario = f.id
         JOIN form_question_responses fqr ON fqr.id_form_question = fp.id
@@ -380,80 +434,96 @@ GROUP_CONCAT(
         JOIN comuna cm                   ON cm.id = l.id_comuna
         JOIN region re                   ON re.id = cm.id_region
         WHERE f.id = ?
-        GROUP BY
-            l.codigo,
-            DATE(fqr.created_at),
-            fp.question_text
-        ORDER BY l.codigo, fp.question_text
+        GROUP BY l.codigo, DATE(fqr.created_at), fp.question_text
+        ORDER BY l.codigo ASC, fp.question_text ASC
     ";
+
     $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        fail('Error preparando getEncuestaPivot: ' . $conn->error);
+    }
+
     $stmt->bind_param('i', $idForm);
     $stmt->execute();
     $res = $stmt->get_result();
-    if (!$res) die("Error en getEncuestaPivot: " . $conn->error);
 
-    // 3.3) Agrupar en estructura {local+fecha} → {pregunta: respuestas}
     $grouped = [];
+
     while ($row = $res->fetch_assoc()) {
-        $key = $row['codigo_local'] . '_' . $row['fechaVisita'];
+        $key = $row['codigo_local'] . '_' . $row['fecha_visita'];
+
         if (!isset($grouped[$key])) {
             $grouped[$key] = [
-                'ID CAMPAÑA'     => $row['idCampana'],
-                'NOMBRE CAMPAÑA' => $row['nombreCampana'], 
+                'ID CAMPAÑA'     => $row['id_campana'],
+                'NOMBRE CAMPAÑA' => $row['nombre_campana'],
                 'CUENTA'         => $row['cuenta'],
-                'CADENA'         => $row['cadena'],                
+                'CADENA'         => $row['cadena'],
                 'CODIGO LOCAL'   => $row['codigo_local'],
                 'N° LOCAL'       => $row['numero_local'],
-                'LOCAL'          => $row['nombre_local'],                     
+                'LOCAL'          => $row['nombre_local'],
                 'DIRECCION'      => $row['direccion_local'],
                 'COMUNA'         => $row['comuna'],
                 'REGION'         => $row['region'],
                 'USUARIO'        => $row['usuario'],
-                'FECHA VISITA'   => $row['fechaVisita'],
+                'FECHA VISITA'   => $row['fecha_visita'],
                 'questions'      => []
             ];
         }
-        $q = $row['question_text'];
-        $grouped[$key]['questions'][$q] = [
+
+        $grouped[$key]['questions'][(string)$row['question_text']] = [
             'answer' => $row['concat_answers'] ?? '',
             'valor'  => $row['concat_valores'] ?? ''
         ];
     }
 
-    // 3.4) Pivot final con todas las preguntas en columnas
+    $stmt->close();
+
     $final = [];
+
     foreach ($grouped as $g) {
         $rowOut = [
             'ID CAMPAÑA'     => $g['ID CAMPAÑA'],
             'NOMBRE CAMPAÑA' => $g['NOMBRE CAMPAÑA'],
             'CUENTA'         => $g['CUENTA'],
-            'CADENA'         => $g['CADENA'],            
+            'CADENA'         => $g['CADENA'],
             'CODIGO LOCAL'   => $g['CODIGO LOCAL'],
             'N° LOCAL'       => $g['N° LOCAL'],
             'LOCAL'          => $g['LOCAL'],
-            'DIRECCION'      => $g['DIRECCION'],            
+            'DIRECCION'      => $g['DIRECCION'],
             'COMUNA'         => $g['COMUNA'],
             'REGION'         => $g['REGION'],
             'USUARIO'        => $g['USUARIO'],
             'FECHA VISITA'   => $g['FECHA VISITA']
         ];
+
         foreach ($allQuestions as $q) {
             if (isset($g['questions'][$q])) {
-                $rowOut[$q]            = $g['questions'][$q]['answer'];
-                $rowOut[$q . '_valor'] = $g['questions'][$q]['valor'];
+                $answer = (string)$g['questions'][$q]['answer'];
+                $parts = array_map('trim', explode(';', $answer));
+                $normalizedParts = [];
+
+                foreach ($parts as $part) {
+                    if ($part === '') {
+                        continue;
+                    }
+                    $normalizedParts[] = normalizarUrlEncuesta($part);
+                }
+
+                $rowOut[$q] = implode('; ', $normalizedParts);
+                $rowOut[$q . '_valor'] = (string)$g['questions'][$q]['valor'];
             } else {
-                $rowOut[$q]            = '';
+                $rowOut[$q] = '';
                 $rowOut[$q . '_valor'] = '';
             }
         }
+
         $final[] = $rowOut;
     }
 
-    // 3.5) Eliminar columnas *_valor vacías
     $valorCols = [];
     foreach ($final as $r) {
         foreach ($r as $c => $v) {
-            if (strpos($c, '_valor') !== false) {
+            if (strpos((string)$c, '_valor') !== false) {
                 $valorCols[$c] = $valorCols[$c] ?? false;
                 if (trim((string)$v) !== '') {
                     $valorCols[$c] = true;
@@ -461,9 +531,12 @@ GROUP_CONCAT(
             }
         }
     }
+
     foreach ($final as &$r) {
         foreach ($valorCols as $c => $has) {
-            if (!$has) unset($r[$c]);
+            if (!$has) {
+                unset($r[$c]);
+            }
         }
     }
     unset($r);
@@ -471,355 +544,9 @@ GROUP_CONCAT(
     return $final;
 }
 
-
-// -----------------------------------------------------------------------------
-// Generador de HTML/XLS
-// -----------------------------------------------------------------------------
-
-function generarExcel($campaign, $locales, $encuesta, $archivo = null, $inline = false, $fotosLocales = [], $maxFotosLocales = 0, $modalidad = '') {
-    $normalizarUrlEncuesta = function (string $url): string {
-        $url = trim($url);
-        if ($url === '') {
-            return '';
-        }
-
-        // Si ya es absoluta, devolver tal cual
-        if (preg_match('#^https?://#i', $url)) {
-            return $url;
-        }
-
-        // Solo intentar normalizar si parece ruta de imagen
-        if (!preg_match('#(uploads|visibility2|app/|pregunta_)\b#i', $url)
-            && !preg_match('#\.(webp|jpe?g|png|gif)$#i', $url)) {
-            return $url;
-        }
-
-        $url     = str_replace('\\', '/', $url);
-        $url     = ltrim($url, '/');
-        $urlLow  = strtolower($url);
-        $baseUrl = 'https://www.visibility.cl/';
-
-        if (preg_match('#^visibility2/#i', $url)) {
-            return $baseUrl . $urlLow;
-        }
-        if (preg_match('#^app/#i', $url)) {
-            return $baseUrl . 'visibility2/' . $urlLow;
-        }
-        if (preg_match('#^uploads_fotos_pregunta/#i', $url)) {
-            return $baseUrl . 'visibility2/app/uploads/' . $urlLow;
-        }
-        if (preg_match('#^uploads/#i', $url)) {
-            return $baseUrl . 'visibility2/app/' . $urlLow;
-        }
-
-        return $baseUrl . 'visibility2/app/' . $urlLow;
-    };
-
-    // Normalizar URLs de imágenes en las respuestas de encuesta
-    foreach ($encuesta as &$fila) {
-        foreach ($fila as $col => $valor) {
-            $valorStr = trim((string)($valor ?? ''));
-            if ($valorStr === '') {
-                continue;
-            }
-
-            // Soporta una o varias URLs separadas por ';'
-            $parts   = array_map('trim', explode(';', $valorStr));
-            $changed = false;
-
-            foreach ($parts as &$p) {
-                if ($p === '') {
-                    continue;
-                }
-$normalized = $normalizarUrlEncuesta($p);
-                if ($normalized !== $p) {
-                    $p       = $normalized;
-                    $changed = true;
-                }
-            }
-            unset($p);
-
-            if ($changed) {
-                // Volvemos a unir por '; ' para no cambiar el formato
-                $fila[$col] = implode('; ', $parts);
-            }
-        }
-    }
-    unset($fila);
-
-    // Determinar etiquetas según modalidad
-    $modalidadLower = strtolower(trim($modalidad));
-    $etiquetaMaterial = 'MATERIAL';
-    $etiquetaCantidad = 'CANTIDAD MATERIAL EJECUTADO';
-
-    if ($modalidadLower === 'retiro') {
-        $etiquetaMaterial = 'MATERIAL RETIRADO';
-        $etiquetaCantidad = 'CANTIDAD MATERIAL RETIRADO';
-    } elseif ($modalidadLower === 'entrega') {
-        $etiquetaMaterial = 'MATERIAL ENTREGADO';
-        $etiquetaCantidad = 'CANTIDAD MATERIAL ENTREGADO';
-    }
-
-    // Construcción del HTML
-    $html = <<<HTML
-<html>
-  <head>
-    <meta charset="UTF-8">
-    <!-- Bootstrap CSS para el modal -->
-    <link rel="stylesheet"
-          href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <style>
-      table { width: 100%; table-layout: auto; border-collapse: collapse; }
-      th, td {
-        border: 1px solid #666;
-        padding: 4px;
-        white-space: normal;
-        word-wrap: break-word;
-        vertical-align: top;
-      }
-      img.inline-img {
-        max-width: 120px;
-        max-height: 120px;
-        cursor: pointer;
-      }
-      .info-box {
-        background-color: #f0f0f0;
-        border: 2px solid #333;
-        padding: 10px;
-        margin-bottom: 20px;
-        font-size: 10pt;
-      }
-      .info-box table {
-        width: auto;
-        border: none;
-      }
-      .info-box td {
-        border: none;
-        padding: 3px 10px;
-      }
-    </style>
-  </head>
-  <body>
-HTML;
-
-    // —– Recuadro de Información del Formulario ——
-    if (!empty($campaign)) {
-        $campInfo = $campaign[0];
-        $fechaInicio = !empty($campInfo['fechaInicio']) ? date('d-m-Y', strtotime($campInfo['fechaInicio'])) : '-';
-        $fechaTermino = !empty($campInfo['fechaTermino']) ? date('d-m-Y', strtotime($campInfo['fechaTermino'])) : '-';
-        $modalidadDisplay = ucwords(str_replace('_', ' ', $campInfo['modalidad'] ?? '-'));
-
-        $tipoDisplay = '-';
-        if (isset($campInfo['tipo'])) {
-            switch ($campInfo['tipo']) {
-                case 1:
-                    $tipoDisplay = 'Campaña Programada';
-                    break;
-                case 2:
-                    $tipoDisplay = 'Campaña Complementaria';
-                    break;
-                case 3:
-                    $tipoDisplay = 'Campaña IPT';
-                    break;
-                default:
-                    $tipoDisplay = 'Tipo ' . $campInfo['tipo'];
-            }
-        }
-
-        $html .= "<div class='info-box'>";
-    /*    $html .= "<b>DATOS DEL FORMULARIO</b><br>";
-        $html .= "<table>";
-        $html .= "<tr><td><b>Campaña:</b></td><td>" . e($campInfo['nombre']) . "</td></tr>";
-        $html .= "<tr><td><b>Fecha Inicio:</b></td><td>" . e($fechaInicio) . "</td></tr>";
-        $html .= "<tr><td><b>Fecha Término:</b></td><td>" . e($fechaTermino) . "</td></tr>";
-        $html .= "<tr><td><b>Modalidad:</b></td><td>" . e($modalidadDisplay) . "</td></tr>";
-        $html .= "<tr><td><b>Tipo:</b></td><td>" . e($tipoDisplay) . "</td></tr>";
-        $html .= "<tr><td><b>Empresa:</b></td><td>" . e($campInfo['nombre_empresa'] ?? '-') . "</td></tr>";
-        $html .= "<tr><td><b>División:</b></td><td>" . e($campInfo['nombre_division'] ?? '-') . "</td></tr>";
-        $html .= "</table>"; */
-        $html .= "</div>";
-    }
-
-    // —– Detalle de Locales —— 
-    if (!empty($locales)) {
-        $html .= "<b>Detalle de Locales</b>
-                  <table border='1' 
-                         style='border-collapse:collapse; table-layout:auto; font-size:9pt;'>
-                    <tr>
-                      <th>ID LOCAL</th>                    
-                      <th>CAMPAÑA</th>
-                      <th>CUENTA</th>
-                      <th>CADENA</th>
-                      <th>CODIGO</th>
-                      <th>N° LOCAL</th>                      
-                      <th>LOCAL</th>
-                      <th>DIRECCION</th>
-                      <th>COMUNA</th>
-                      <th>REGION</th>
-                      <th>JEFE VENTA</th>
-                      <th>FECHA INICIO</th>
-                      <th>FECHA TÉRMINO</th>                      
-                      <th>FECHA PLANIFICADA</th>
-                      <th>FECHA VISITA</th>
-                      <th>HORA</th>
-                      <th>USUARIO</th>                      
-                      <th>ESTADO VISITA</th>
-                      <th>ESTADO ACTIVIDAD</th>
-                      <th>MOTIVO</th>
-                      <th>{$etiquetaMaterial}</th>
-                      <th>{$etiquetaCantidad}</th>
-                      <th>MATERIAL PROPUESTO</th>
-                      <th>OBSERVACION</th>
-";
-
-        if ($maxFotosLocales > 0) {
-            for ($i = 1; $i <= $maxFotosLocales; $i++) {
-                $html .= "                      <th>FOTO {$i}</th>\n";
-            }
-        }
-
-        $html .= "
-                    </tr>";
-
-        foreach ($locales as $l) {
-            $fechaPropuesta = ($l['fechaPropuesta'] !== null && $l['fechaPropuesta'] !== '0000-00-00')
-                              ? $l['fechaPropuesta']
-                              : '-';
-            $fechaVisita    = ($l['fechaVisita'] !== null && $l['fechaVisita'] !== '0000-00-00')
-                              ? $l['fechaVisita']
-                              : '-';
-
-            $fechaInicioCamp = ($l['fechaInicio'] !== null && $l['fechaInicio'] !== '0000-00-00')
-                              ? $l['fechaInicio']
-                              : '-';
-            $fechaTerminoCamp = ($l['fechaTermino'] !== null && $l['fechaTermino'] !== '0000-00-00')
-                              ? $l['fechaTermino']
-                              : '-';
-
-            $html .= "<tr>
-                        <td>" . e($l['idLocal']) . "</td>
-                        <td>" . e($l['nombreCampaña']) . "</td>
-                        <td>" . e($l['cuenta']) . "</td>
-                        <td>" . e($l['cadena']) . "</td>
-                        <td>" . e($l['codigo_local']) . "</td>
-                        <td>" . e($l['numero_local']) . "</td>
-                        <td>" . e($l['nombre_local']) . "</td>
-                        <td>" . e($l['direccion_local']) . "</td>
-                        <td>" . e($l['comuna']) . "</td>
-                        <td>" . e($l['region']) . "</td>
-                        <td>" . e($l['jefeVenta']) . "</td>
-                        <td>{$fechaInicioCamp}</td>
-                        <td>{$fechaTerminoCamp}</td>                        
-                        <td>{$fechaPropuesta}</td>
-                        <td>{$fechaVisita}</td>
-                        <td>" . e($l['hora']) . "</td>
-                        <td>" . e($l['gestionado_por']) . "</td>
-                        <td>" . e($l['ESTADO_VISTA']) . "</td>
-                        <td>" . e($l['ESTADO_ACTIVIDAD']) . "</td>
-                        <td>" . e($l['MOTIVO']) . "</td>
-                        <td>" . e($l['material']) . "</td>
-                        <td>" . e($l['valor']) . "</td>
-                        <td>" . e($l['valor_propuesto']) . "</td>
-                        <td>" . e($l['observacion']) . "</td>";
-
-            $fotos = [];
-            if (!empty($l['id_formularioQuestion']) && isset($fotosLocales[$l['id_formularioQuestion']])) {
-                $fotos = $fotosLocales[$l['id_formularioQuestion']];
-            }
-
-            for ($fi = 0; $fi < $maxFotosLocales; $fi++) {
-                $url = trim((string)($fotos[$fi] ?? ''));
-                $html .= "<td>" . renderValorConImagen($url, $inline) . "</td>";
-            }
-
-            $html .= "</tr>";
-        }
-
-        $html .= "</table><br>";
-    }
-
-    // —– Encuesta Pivot —— 
-    $html .= "<b>Encuesta</b>
-              <table border='1' 
-                     style='border-collapse:collapse; table-layout:auto; font-size:9pt;'>
-                <tr>";
-    if (!empty($encuesta)) {
-        $keys = array_keys($encuesta[0]);
-        foreach ($keys as $k) {
-            $html .= "<th>" . e($k) . "</th>";
-        }
-    }
-    $html .= "</tr>";
-    foreach ($encuesta as $row) {
-        $html .= "<tr>";
-        foreach ($row as $v) {
-            $vs = (string)($v ?? '');
-            $html .= "<td>" . renderValorConImagen($vs, $inline) . "</td>";
-        }
-        $html .= "</tr>";
-    }
-    $html .= "</table>";
-
-    // Modal de Bootstrap para ver la imagen ampliada (solo si es inline)
-    if ($inline) {
-        $html .= <<<HTML
-<!-- Modal -->
-<div class="modal fade" id="imgModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-0 bg-transparent">
-      <div class="modal-body p-0 text-center">
-        <img id="modalImg" src="" class="img-fluid rounded">
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Scripts de Bootstrap y JS para manejar el clic -->
-<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
-<script>
-  // Al abrir el modal, toma la URL del atributo data-src de la miniatura
-  $('#imgModal').on('show.bs.modal', function(e) {
-    var src = $(e.relatedTarget).data('src');
-    $('#modalImg').attr('src', src);
-  });
-</script>
-</body></html>
-HTML;
-    } else {
-        // Cierre normal de HTML si no es inline
-        $html .= "</body></html>";
-    }
-
-    // Si es inline, devolvemos el HTML sin forzar descarga
-    if ($inline) {
-        return $html;
-    }
-
-    // Si no es inline, forzamos descarga Excel
-    $content = "\xEF\xBB\xBF" . $html;
-    $content = strtr(
-        $content,
-        [
-            'Á'=>'A','É'=>'E','Í'=>'I','Ó'=>'O','Ú'=>'U',
-            'á'=>'a','é'=>'e','í'=>'i','ó'=>'o','ú'=>'u',
-            'Ñ'=>'N','ñ'=>'n',
-            'Ü'=>'U','ü'=>'u'
-        ]
-    );    
-    header("Cache-Control: no-cache, must-revalidate");
-    header("Pragma: no-cache");
-    header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
-    header("Expires: 0");
-    header("Content-Disposition: attachment; filename={$archivo}");
-    header("Content-Length: " . strlen($content));
-    echo $content;
-    exit();
-}
-
-
-function removerFotosDeEncuesta(array $encuesta): array {
-    $esUrlFoto = function (string $valor): bool {
+function removerFotosDeEncuesta(array $encuesta): array
+{
+    $esUrlFoto = static function (string $valor): bool {
         $v = trim($valor);
         if ($v === '') {
             return false;
@@ -857,42 +584,388 @@ function removerFotosDeEncuesta(array $encuesta): array {
     return $encuesta;
 }
 
+function obtenerEtiquetasPorModalidad(string $modalidad): array
+{
+    $modalidadLower = strtolower(trim($modalidad));
 
-// -----------------------------------------------------------------------------
+    if ($modalidadLower === 'retiro') {
+        return ['MATERIAL RETIRADO', 'CANTIDAD MATERIAL RETIRADO'];
+    }
+
+    if ($modalidadLower === 'entrega') {
+        return ['MATERIAL ENTREGADO', 'CANTIDAD MATERIAL ENTREGADO'];
+    }
+
+    return ['MATERIAL', 'CANTIDAD MATERIAL EJECUTADO'];
+}
+
+function aplicarEstiloCabecera(Worksheet $sheet, string $range): void
+{
+    $sheet->getStyle($range)->applyFromArray([
+        'font' => [
+            'bold' => true,
+            'color' => ['rgb' => 'FFFFFF'],
+            'size' => 11,
+        ],
+        'fill' => [
+            'fillType' => Fill::FILL_SOLID,
+            'startColor' => ['rgb' => '1F4E78'],
+        ],
+        'alignment' => [
+            'horizontal' => Alignment::HORIZONTAL_CENTER,
+            'vertical' => Alignment::VERTICAL_CENTER,
+            'wrapText' => true,
+        ],
+    ]);
+}
+
+function aplicarEstiloDatos(Worksheet $sheet, string $range): void
+{
+    $sheet->getStyle($range)->applyFromArray([
+        'alignment' => [
+            'vertical' => Alignment::VERTICAL_TOP,
+            'wrapText' => true,
+        ],
+    ]);
+}
+
+function setFixedWidthsDetalleLocales(Worksheet $sheet, int $maxFotosLocales): void
+{
+    $widths = [
+        1  => 12, // ID LOCAL
+        2  => 35, // CAMPAÑA
+        3  => 20, // CUENTA
+        4  => 20, // CADENA
+        5  => 14, // CODIGO
+        6  => 12, // N° LOCAL
+        7  => 30, // LOCAL
+        8  => 35, // DIRECCION
+        9  => 18, // COMUNA
+        10 => 18, // REGION
+        11 => 22, // JEFE VENTA
+        12 => 14, // FECHA INICIO
+        13 => 14, // FECHA TÉRMINO
+        14 => 16, // FECHA PLANIFICADA
+        15 => 14, // FECHA VISITA
+        16 => 12, // HORA
+        17 => 20, // USUARIO
+        18 => 16, // ESTADO VISITA
+        19 => 20, // ESTADO ACTIVIDAD
+        20 => 25, // MOTIVO
+        21 => 25, // MATERIAL
+        22 => 12, // CANTIDAD
+        23 => 18, // MATERIAL PROPUESTO
+        24 => 35, // OBSERVACION
+    ];
+
+    for ($i = 0; $i < $maxFotosLocales; $i++) {
+        $widths[25 + $i] = 40;
+    }
+
+    foreach ($widths as $col => $width) {
+        $sheet->getColumnDimensionByColumn($col)->setWidth($width);
+    }
+}
+
+function setFixedWidthsEncuesta(Worksheet $sheet, array $headers): void
+{
+    foreach ($headers as $i => $header) {
+        $col = $i + 1;
+        $headerUpper = mb_strtoupper((string)$header, 'UTF-8');
+        $width = 20;
+
+        if (in_array($headerUpper, ['ID CAMPAÑA', 'CODIGO LOCAL', 'N° LOCAL'], true)) {
+            $width = 14;
+        } elseif (in_array($headerUpper, ['NOMBRE CAMPAÑA', 'LOCAL', 'DIRECCION'], true)) {
+            $width = 32;
+        } elseif (in_array($headerUpper, ['CUENTA', 'CADENA', 'COMUNA', 'REGION', 'USUARIO'], true)) {
+            $width = 20;
+        } elseif ($headerUpper === 'FECHA VISITA') {
+            $width = 14;
+        } elseif (str_ends_with($headerUpper, '_VALOR')) {
+            $width = 14;
+        } else {
+            $width = 28;
+        }
+
+        $sheet->getColumnDimensionByColumn($col)->setWidth($width);
+    }
+}
+
+function escribirTextoPlano(Worksheet $sheet, int $col, int $row, string $value): void
+{
+    $cell = Coordinate::stringFromColumnIndex($col) . $row;
+    $sheet->setCellValueExplicit($cell, trim($value), DataType::TYPE_STRING);
+}
+
+function escribirMultiplesUrlsComoTexto(Worksheet $sheet, int $col, int $row, string $value): void
+{
+    $parts = array_filter(array_map('trim', preg_split('/\s*;\s*/', $value)));
+    $normalized = [];
+
+    foreach ($parts as $part) {
+        $normalized[] = normalizarUrlEncuesta($part);
+    }
+
+    $texto = implode('; ', $normalized);
+    escribirTextoPlano($sheet, $col, $row, $texto);
+}
+
+function generarExcelPhpSpreadsheet(
+    array $campaign,
+    array $locales,
+    array $encuesta,
+    string $archivo,
+    array $fotosLocales,
+    int $maxFotosLocales,
+    string $modalidad,
+    bool $incluirAutoFiltro = true,
+    bool $congelarCabeceras = false
+): void {
+    [$etiquetaMaterial, $etiquetaCantidad] = obtenerEtiquetasPorModalidad($modalidad);
+
+    $spreadsheet = new Spreadsheet();
+    $spreadsheet->getProperties()
+        ->setCreator('Visibility')
+        ->setLastModifiedBy('Visibility')
+        ->setTitle('Reporte campaña')
+        ->setSubject('Exportación campaña')
+        ->setDescription('Exportación generada con PhpSpreadsheet');
+
+    // =========================
+    // Hoja 1: Detalle Locales
+    // =========================
+    $sheet1 = $spreadsheet->getActiveSheet();
+    $sheet1->setTitle('Detalle Locales');
+
+    $row = 1;
+
+    $headersLocales = [
+        'ID LOCAL',
+        'CAMPAÑA',
+        'CUENTA',
+        'CADENA',
+        'CODIGO',
+        'N° LOCAL',
+        'LOCAL',
+        'DIRECCION',
+        'COMUNA',
+        'REGION',
+        'JEFE VENTA',
+        'FECHA INICIO',
+        'FECHA TÉRMINO',
+        'FECHA PLANIFICADA',
+        'FECHA VISITA',
+        'HORA',
+        'USUARIO',
+        'ESTADO VISITA',
+        'ESTADO ACTIVIDAD',
+        'MOTIVO',
+        $etiquetaMaterial,
+        $etiquetaCantidad,
+        'MATERIAL PROPUESTO',
+        'OBSERVACION',
+    ];
+
+    for ($i = 1; $i <= $maxFotosLocales; $i++) {
+        $headersLocales[] = 'FOTO ' . $i;
+    }
+
+    $headerRow1 = $row;
+    $col = 1;
+    foreach ($headersLocales as $header) {
+        setCellByIndex($sheet1, $col++, $row, $header);
+    }
+
+    $lastCol1 = Coordinate::stringFromColumnIndex(count($headersLocales));
+    aplicarEstiloCabecera($sheet1, "A{$headerRow1}:{$lastCol1}{$headerRow1}");
+    $sheet1->getRowDimension($headerRow1)->setRowHeight(24);
+    $row++;
+
+    foreach ($locales as $l) {
+        $col = 1;
+
+        $numeroLocal = (string)($l['numero_local'] ?? '');
+        if ($numeroLocal === '') {
+            $numeroLocal = preg_replace('/\D+/', '', (string)($l['codigo_local'] ?? ''));
+        }
+
+        setStringByIndex($sheet1, $col++, $row, (string)($l['id_local'] ?? ''));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['nombre_campana'] ?? ''));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['cuenta'] ?? ''));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['cadena'] ?? ''));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['codigo_local'] ?? ''));
+        setStringByIndex($sheet1, $col++, $row, $numeroLocal);
+        setStringByIndex($sheet1, $col++, $row, (string)($l['nombre_local'] ?? ''));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['direccion_local'] ?? ''));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['comuna'] ?? ''));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['region'] ?? ''));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['jefe_venta'] ?? ''));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['fecha_inicio'] ?? '-'));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['fecha_termino'] ?? '-'));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['fecha_propuesta'] ?? '-'));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['fecha_visita'] ?? '-'));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['hora'] ?? ''));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['gestionado_por'] ?? ''));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['estado_visita'] ?? ''));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['estado_actividad'] ?? ''));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['motivo'] ?? ''));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['material'] ?? ''));
+        setCellByIndex($sheet1, $col++, $row, (float)($l['valor'] ?? 0));
+        setCellByIndex($sheet1, $col++, $row, (float)($l['valor_propuesto'] ?? 0));
+        setStringByIndex($sheet1, $col++, $row, (string)($l['observacion'] ?? ''));
+
+        $fotos = [];
+        $fqId = (int)($l['id_formulario_question'] ?? 0);
+        if ($fqId > 0 && isset($fotosLocales[$fqId])) {
+            $fotos = $fotosLocales[$fqId];
+        }
+
+        for ($fi = 0; $fi < $maxFotosLocales; $fi++) {
+            $url = trim((string)($fotos[$fi] ?? ''));
+            escribirTextoPlano($sheet1, $col++, $row, $url);
+        }
+
+        $row++;
+    }
+
+    if ($row > ($headerRow1 + 1)) {
+        aplicarEstiloDatos($sheet1, "A" . ($headerRow1 + 1) . ":{$lastCol1}" . ($row - 1));
+
+        if ($incluirAutoFiltro) {
+            $sheet1->setAutoFilter("A{$headerRow1}:{$lastCol1}" . ($row - 1));
+        }
+
+        if ($congelarCabeceras) {
+            $sheet1->freezePane('A' . ($headerRow1 + 1));
+        }
+    }
+
+    setFixedWidthsDetalleLocales($sheet1, $maxFotosLocales);
+
+    // =========================
+    // Hoja 2: Encuesta
+    // =========================
+    if (!empty($encuesta)) {
+        $sheet2 = $spreadsheet->createSheet();
+        $sheet2->setTitle('Encuesta');
+
+        $row = 1;
+        $headersEncuesta = array_keys($encuesta[0]);
+
+        $headerRow2 = $row;
+        $col = 1;
+        foreach ($headersEncuesta as $header) {
+            setCellByIndex($sheet2, $col++, $row, $header);
+        }
+
+        $lastCol2 = Coordinate::stringFromColumnIndex(count($headersEncuesta));
+        aplicarEstiloCabecera($sheet2, "A{$headerRow2}:{$lastCol2}{$headerRow2}");
+        $sheet2->getRowDimension($headerRow2)->setRowHeight(24);
+        $row++;
+
+        foreach ($encuesta as $fila) {
+            $col = 1;
+            foreach ($headersEncuesta as $header) {
+                $valor = (string)($fila[$header] ?? '');
+
+                if (preg_match('#https?://#i', $valor) || strpos($valor, ';') !== false) {
+                    escribirMultiplesUrlsComoTexto($sheet2, $col++, $row, $valor);
+                } else {
+                    setStringByIndex($sheet2, $col++, $row, $valor);
+                }
+            }
+            $row++;
+        }
+
+        if ($row > ($headerRow2 + 1)) {
+            aplicarEstiloDatos($sheet2, "A" . ($headerRow2 + 1) . ":{$lastCol2}" . ($row - 1));
+
+            if ($incluirAutoFiltro) {
+                $sheet2->setAutoFilter("A{$headerRow2}:{$lastCol2}" . ($row - 1));
+            }
+
+            if ($congelarCabeceras) {
+                $sheet2->freezePane('A' . ($headerRow2 + 1));
+            }
+        }
+
+        setFixedWidthsEncuesta($sheet2, $headersEncuesta);
+    }
+
+    $spreadsheet->setActiveSheetIndex(0);
+
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="' . $archivo . '"');
+    header('Cache-Control: max-age=0');
+    header('Expires: Mon, 26 Jul 1997 05:00:00 GMT');
+    header('Last-Modified: ' . gmdate('D, d M Y H:i:s') . ' GMT');
+    header('Cache-Control: cache, must-revalidate');
+    header('Pragma: public');
+
+    $writer = new Xlsx($spreadsheet);
+    $writer->setPreCalculateFormulas(false);
+    $writer->save('php://output');
+
+    $spreadsheet->disconnectWorksheets();
+    unset($writer, $spreadsheet, $campaign, $locales, $encuesta, $fotosLocales);
+
+    exit;
+}
+
+// =========================
 // Punto de entrada
-// -----------------------------------------------------------------------------
-$campaignData = getCampaignData($formulario_id);
+// =========================
+$formularioId = isset($_GET['id']) && filter_var($_GET['id'], FILTER_VALIDATE_INT)
+    ? (int)$_GET['id']
+    : 0;
 
-// Inicializamos vacíos
+if ($formularioId <= 0) {
+    fail('ID de formulario inválido.');
+}
+
+$incluirFotosMaterial = normalizarBooleanGet('fotos', true);
+$incluirFotosEncuesta = normalizarBooleanGet('fotos_encuesta', true);
+
+$formularioBase = obtenerFormularioBase($conn, $formularioId);
+$nombreForm = (string)$formularioBase['nombre'];
+$modalidad = (string)$formularioBase['modalidad'];
+
+$campaignData = getCampaignData($conn, $formularioId);
 $localesDetails = [];
-$encuestaPivot  = [];
+$encuestaPivot = [];
 
-// Modalidad inteligente
 switch (strtolower(trim($modalidad))) {
     case 'solo_implementacion':
-        $localesDetails = getLocalesDetails($formulario_id);
+        $localesDetails = getLocalesDetails($conn, $formularioId);
         break;
 
     case 'solo_auditoria':
-        $encuestaPivot = getEncuestaPivot($formulario_id);
+        $encuestaPivot = getEncuestaPivot($conn, $formularioId);
         break;
 
     case 'implementacion_auditoria':
-        $localesDetails = getLocalesDetails($formulario_id);
-        $encuestaPivot  = getEncuestaPivot($formulario_id);
+        $localesDetails = getLocalesDetails($conn, $formularioId);
+        $encuestaPivot = getEncuestaPivot($conn, $formularioId);
         break;
 
     default:
-        $localesDetails = getLocalesDetails($formulario_id);
-        $encuestaPivot  = getEncuestaPivot($formulario_id);
+        $localesDetails = getLocalesDetails($conn, $formularioId);
+        $encuestaPivot = getEncuestaPivot($conn, $formularioId);
         break;
 }
 
-$fotosLocales    = [];
+$fotosLocales = [];
 $maxFotosLocales = 0;
+
 if ($incluirFotosMaterial && !empty($localesDetails)) {
-    $fqIds        = array_column($localesDetails, 'id_formularioQuestion');
-    $fotosLocales = getFotosImplementaciones($formulario_id, $fqIds);
+    $fqIds = array_column($localesDetails, 'id_formulario_question');
+    $fotosLocales = getFotosImplementaciones($conn, $formularioId, $fqIds);
+
     foreach ($fotosLocales as $lista) {
         $maxFotosLocales = max($maxFotosLocales, count($lista));
     }
@@ -902,28 +975,21 @@ if (!$incluirFotosEncuesta && !empty($encuestaPivot)) {
     $encuestaPivot = removerFotosDeEncuesta($encuestaPivot);
 }
 
-// Normaliza número de local en caso necesario
-foreach ($localesDetails as &$loc) {
-    if (empty($loc['numero_local'])) {
-        $loc['numero_local'] = preg_replace('/\D+/', '', (string)($loc['codigo_local'] ?? ''));
-    }
-}
-unset($loc);
-
-// Si no hay datos
 if (empty($campaignData) && empty($localesDetails) && empty($encuestaPivot)) {
-    die("No se encontraron datos para la campaña.");
+    fail('No se encontraron datos para la campaña.');
 }
 
-// Nombre archivo
-$nombreCampaña = preg_replace('/[^A-Za-z0-9_\-]/', '_', (string)$nombreForm);
-$archivo = "Reporte_{$nombreCampaña}_" . date('Y-m-d_His') . ".xls";
+$nombreCampana = limpiarNombreArchivo($nombreForm);
+$archivo = 'Reporte_' . $nombreCampana . '_' . date('Y-m-d_His') . '.xlsx';
 
-// Render / descarga
-if ($inline) {
-    echo generarExcel($campaignData, $localesDetails, $encuestaPivot, null, true, $fotosLocales, $maxFotosLocales, $modalidad);
-    exit();
-}
-
-generarExcel($campaignData, $localesDetails, $encuestaPivot, $archivo, false, $fotosLocales, $maxFotosLocales, $modalidad);
-?>
+generarExcelPhpSpreadsheet(
+    $campaignData,
+    $localesDetails,
+    $encuestaPivot,
+    $archivo,
+    $fotosLocales,
+    $maxFotosLocales,
+    $modalidad,
+    true,
+    false
+);

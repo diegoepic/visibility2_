@@ -11,8 +11,8 @@
   const USER_DIV  = window.PEConfig.USER_DIV;
   const isRedBull = (USER_DIV === 14);
 
-  const ABS_BASE = (window.location.origin || (location.protocol + '//' + location.host));
-  const DEFAULT_RANGE_DAYS = 7;
+  const ABS_BASE = window.PEConfig.ABS_BASE || (window.location.origin || (location.protocol + '//' + location.host));
+  const DEFAULT_RANGE_DAYS = window.PEConfig.DEFAULT_RANGE_DAYS || 7;
   const EXPORT_LIMITS = { csv: 50000, fotosPdf: 250, fotosHtml: 4000 };
 
   // Expose config for other modules
@@ -31,9 +31,10 @@
     );
   };
 
-  PE.showError = function(title, msg){
+  PE.showError = function(title, msg, isHtml){
     $('#errorModal .modal-title').text(title||'Error');
-    $('#errorModalMsg').html(msg||'Ha ocurrido un error.');
+    if (isHtml) { $('#errorModalMsg').html(msg||'Ha ocurrido un error.'); }
+    else         { $('#errorModalMsg').text(msg||'Ha ocurrido un error.'); }
     $('#errorModal').modal('show');
   };
 
@@ -203,6 +204,10 @@
   // ========= Core data =========
   let page = 1;
   let currentXhr = null;
+  let dirtyFilters = false; // B9: track unsaved filter changes
+  PE.currentView = 'responses'; // C3: view mode
+  PE.lastTotal = 0; // C6: last total for export warnings
+  PE.chartMap = new Map(); // C1: chart instances (defined here for cross-module access)
 
   function buildParams(){
     const formId = $('#f_form').val();
@@ -360,7 +365,10 @@
     const groups = new Map();
     rows.forEach(r => {
       if (r.tipo === 7){
-        const key = (r.visita_id||'0') + '|' + (r.pregunta_id||'0') + '|' + (r.local_id||'0');
+        // A3: null visita_id → each row is unique, don't collapse under a shared "0" key
+        const key = r.visita_id
+          ? (r.visita_id + '|' + (r.pregunta_id||'0') + '|' + (r.local_id||'0'))
+          : ('nv:' + r.id);
         let item = groups.get(key);
         if (!item){
           item = {...r, fotos: []};
@@ -402,10 +410,24 @@
   }
 
   function populateSelect($sel, options, keepValue=true){
+    const isUsuario = $sel.is('#f_usuario');
+    // B8: destroy Select2 before modifying options
+    if (isUsuario && $sel.data('select2')) { $sel.select2('destroy'); }
+
     const current = keepValue ? $sel.val() : null;
     $sel.empty().append('<option value="0">-- Todos --</option>');
     options.forEach(([id, name]) => $sel.append(`<option value="${id}">${PE.escapeHtml(name)}</option>`));
     if (keepValue && current && $sel.find(`option[value="${current}"]`).length) $sel.val(current);
+
+    // B2: indicate when list was truncated at 1000 entries
+    if (options.length >= 1000) {
+      $sel.append('<option disabled>… (lista recortada a 1000)</option>');
+    }
+
+    // B8: reinitialize Select2 for user filter
+    if (isUsuario) {
+      $sel.select2({ placeholder: '-- Todos --', allowClear: true, width: '200px' });
+    }
   }
 
   function buildPager(cur, per, total){
@@ -416,10 +438,33 @@
                 <a class="page-link" href="#" data-p="${n}">${label}</a>
               </li>`;
     }
-    $p.append(li(Math.max(1,cur-1),'Anterior', cur<=1, false));
+    // B1: first/last + window of pages + "go to" input
+    $p.append(li(1, '«', cur<=1, false));
+    $p.append(li(Math.max(1,cur-1), '‹', cur<=1, false));
+    if (cur > 3) $p.append(`<li class="page-item disabled"><span class="page-link">…</span></li>`);
     const start = Math.max(1, cur-2), end = Math.min(pages, cur+2);
     for(let i=start;i<=end;i++) $p.append(li(i, i, false, i===cur));
-    $p.append(li(Math.min(pages,cur+1),'Siguiente', cur>=pages, false));
+    if (cur < pages-2) $p.append(`<li class="page-item disabled"><span class="page-link">…</span></li>`);
+    if (pages > 1 && end < pages) $p.append(li(pages, pages, false, false));
+    $p.append(li(Math.min(pages,cur+1), '›', cur>=pages, false));
+    $p.append(li(pages, '»', cur>=pages, false));
+
+    // "Go to page" input — remove old one first, then inject fresh
+    $('#pager-goto').remove();
+    if (pages > 5) {
+      const $goto = $(`<div id="pager-goto" class="d-inline-flex align-items-center ml-2">
+        <input type="number" min="1" max="${pages}" class="form-control form-control-sm" style="width:60px" placeholder="Ir…" id="pagerGoInput">
+        <button class="btn btn-sm btn-outline-secondary ml-1" id="pagerGoBtn">Ir</button>
+      </div>`);
+      $p.after($goto);
+      $('#pagerGoBtn').on('click', function(){
+        const v = parseInt($('#pagerGoInput').val(), 10);
+        if (!isNaN(v) && v >= 1 && v <= pages){ page = v; loadData(); }
+      });
+      $('#pagerGoInput').on('keydown', function(e){
+        if (e.key === 'Enter') { $('#pagerGoBtn').trigger('click'); }
+      });
+    }
   }
 
   function validateDates(){
@@ -432,7 +477,115 @@
     return true;
   }
 
+  // C3: view toggle
+  $(document).on('click', '#view-toggle button', function(){
+    PE.currentView = $(this).data('view');
+    $('#view-toggle button').removeClass('active');
+    $(this).addClass('active');
+  });
+
+  // Render rows in default "per respuesta" mode (B4: data-* for lightbox context)
+  function renderTable(rows, tb){
+    if (rows.length === 0) {
+      tb.html('<tr><td colspan="12" class="text-center text-muted">Sin resultados</td></tr>');
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    rows.forEach(r => {
+      const isFoto = r.tipo === 7;
+      const respCell = isFoto
+        ? (r.fotos && r.fotos.length ? renderThumbs(r.fotos) : (r.respuesta ? renderThumbs([r.respuesta]) : ''))
+        : `<span class="resp-text" title="${PE.escapeHtml(r.respuesta||'')}">${PE.escapeHtml(r.respuesta||'')}</span>`;
+      const tr = document.createElement('tr');
+      // B4: data-* for lightbox caption
+      tr.dataset.localCodigo = r.local_codigo || '';
+      tr.dataset.usuario     = r.usuario || '';
+      tr.dataset.fecha       = r.fecha || '';
+      tr.dataset.pregunta    = r.pregunta || '';
+      // A1: escape r.fecha and r.tipo_texto
+      tr.innerHTML = `
+        <td>${PE.escapeHtml(r.fecha)}</td>
+        <td>${PE.escapeHtml(r.campana)}</td>
+        <td>${PE.escapeHtml(r.pregunta)}</td>
+        <td>${PE.escapeHtml(r.tipo_texto)}</td>
+        <td class="resp-cell">${respCell}</td>
+        <td>${r.valor!==null ? PE.escapeHtml(String(r.valor)) : ''}</td>
+        <td>${PE.escapeHtml(r.local_codigo||'')}</td>
+        <td><a href="#" class="local-detalle-link" data-local-id="${r.local_id||0}" data-form-id="${r.form_id||0}" title="Ver detalle del local">${PE.escapeHtml(r.local_nombre||'')}</a></td>
+        <td>${PE.escapeHtml(r.direccion||'')}</td>
+        <td>${PE.escapeHtml(r.cadena||'')}</td>
+        <td>${PE.escapeHtml(r.jefe_venta||'')}</td>
+        <td>${PE.escapeHtml(r.usuario||'')}</td>
+      `;
+      frag.appendChild(tr);
+    });
+    tb[0].appendChild(frag);
+    noteThumbFallbacks();
+    $('#resultsTable img.thumb').each(function(){
+      if(lazyObserver) lazyObserver.observe(this);
+      else { this.src = this.getAttribute('data-src'); this.removeAttribute('data-src'); }
+    });
+  }
+
+  // C3: render rows grouped by local
+  function renderTableGrouped(rows, tb){
+    if (rows.length === 0) {
+      tb.html('<tr><td colspan="12" class="text-center text-muted">Sin resultados</td></tr>');
+      return;
+    }
+    const byLocal = new Map();
+    rows.forEach(r => {
+      const lid = r.local_id || 0;
+      if (!byLocal.has(lid)) {
+        byLocal.set(lid, {
+          local_id: lid,
+          local_codigo: r.local_codigo || '',
+          local_nombre: r.local_nombre || '',
+          form_id: r.form_id || 0,
+          cadena: r.cadena || '',
+          direccion: r.direccion || '',
+          jefe_venta: r.jefe_venta || '',
+          ultima_fecha: r.fecha || '',
+          count: 0
+        });
+      }
+      const g = byLocal.get(lid);
+      g.count++;
+      if ((r.fecha || '') > g.ultima_fecha) { g.ultima_fecha = r.fecha; }
+    });
+    const frag = document.createDocumentFragment();
+    byLocal.forEach(g => {
+      const tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
+      tr.innerHTML = `
+        <td>${PE.escapeHtml(g.local_codigo)}</td>
+        <td colspan="2"><a href="#" class="local-detalle-link" data-local-id="${g.local_id}" data-form-id="${g.form_id}">${PE.escapeHtml(g.local_nombre)}</a></td>
+        <td colspan="2">${PE.escapeHtml(g.cadena)}</td>
+        <td colspan="2">${PE.escapeHtml(g.direccion)}</td>
+        <td colspan="2">${PE.escapeHtml(g.jefe_venta)}</td>
+        <td>${PE.escapeHtml(g.ultima_fecha)}</td>
+        <td colspan="2"><span class="badge badge-secondary">${g.count} respuestas</span></td>
+      `;
+      frag.appendChild(tr);
+    });
+    tb[0].appendChild(frag);
+  }
+  PE.renderTable = renderTable;
+  PE.renderTableGrouped = renderTableGrouped;
+
+  // B9: mark filters dirty when user changes any filter (warn before search)
+  function markDirty(){
+    dirtyFilters = true;
+    $('#btnBuscar').removeClass('btn-primary').addClass('btn-warning').html('<i class="fa fa-exclamation-triangle"></i> Buscar');
+  }
+  function markClean(){
+    dirtyFilters = false;
+    $('#btnBuscar').removeClass('btn-warning').addClass('btn-primary').html('<i class="fa fa-search"></i> Buscar');
+  }
+  PE.markDirty = markDirty;
+
   function loadData(){
+    markClean();
     const p = buildParams();
     renderActiveFilters();
     $('#resultsTable tbody').html('<tr><td colspan="12" class="text-center text-muted">Cargando…</td></tr>');
@@ -454,46 +607,16 @@
           hideLoading();
           return;
         }
+        PE.lastTotal = resp.total || 0; // C6 + export warnings
+
         const tb = $('#resultsTable tbody').empty();
         let rows = resp && resp.data ? resp.data : [];
         rows = groupPhotoRows(rows);
 
-        if(rows.length===0){
-          tb.html('<tr><td colspan="12" class="text-center text-muted">Sin resultados</td></tr>');
+        if (PE.currentView === 'locals') {
+          renderTableGrouped(rows, tb);
         } else {
-          const frag = document.createDocumentFragment();
-          rows.forEach(r => {
-            const isFoto = r.tipo === 7;
-            const respCell = isFoto
-              ? (r.fotos && r.fotos.length ? renderThumbs(r.fotos) : (r.respuesta ? renderThumbs([r.respuesta]) : ''))
-              : PE.escapeHtml(r.respuesta || '');
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-              <td>${r.fecha}</td>
-              <td>${PE.escapeHtml(r.campana)}</td>
-              <td>${PE.escapeHtml(r.pregunta)}</td>
-              <td>${r.tipo_texto}</td>
-              <td>${respCell}</td>
-              <td>${r.valor!==null ? r.valor : ''}</td>
-              <td>${PE.escapeHtml(r.local_codigo||'')}</td>
-              <td><a href="#" class="local-detalle-link" data-local-id="${r.local_id||0}" data-form-id="${r.form_id||0}" title="Ver detalle del local">${PE.escapeHtml(r.local_nombre||'')}</a></td>
-              <td>${PE.escapeHtml(r.direccion||'')}</td>
-              <td>${PE.escapeHtml(r.cadena||'')}</td>
-              <td>${PE.escapeHtml(r.jefe_venta||'')}</td>
-              <td>${PE.escapeHtml(r.usuario||'')}</td>
-            `;
-            frag.appendChild(tr);
-          });
-          tb[0].appendChild(frag);
-
-          noteThumbFallbacks();
-          $('#resultsTable img.thumb').each(function(){
-            if(lazyObserver) lazyObserver.observe(this);
-            else {
-              this.src = this.getAttribute('data-src');
-              this.removeAttribute('data-src');
-            }
-          });
+          renderTable(rows, tb);
         }
 
         if (resp.facets) {
@@ -531,12 +654,21 @@
           extras.push(`CSV limitado a ${EXPORT_LIMITS.csv.toLocaleString('es-CL')} filas`);
         }
 
-        const infoBase = `Total: ${Number(resp.total).toLocaleString('es-CL')} registros`;
+        // B11: include unique visitas/locales from meta.uniq
+        const uniq = (meta && meta.uniq) ? meta.uniq : null;
+        let infoBase = `Total: ${Number(resp.total).toLocaleString('es-CL')} registros`;
+        if (uniq && (uniq.visitas || uniq.locales)) {
+          const parts = [];
+          if (uniq.visitas) parts.push(`${Number(uniq.visitas).toLocaleString('es-CL')} visitas`);
+          if (uniq.locales) parts.push(`${Number(uniq.locales).toLocaleString('es-CL')} locales`);
+          infoBase += ' · ' + parts.join(' · ');
+        }
         const info = extras.length ? infoBase + ' · ' + extras.join(' · ') : infoBase;
         $('#infoTotal').text(info);
 
         const qAll = toQuery(p);
         history.replaceState(null, '', location.pathname + '?' + qAll);
+        $(document).trigger('pe:data-loaded'); // C5: mapa puede actualizarse
       },
       error: function(xhr, textStatus){
         let msg;
@@ -593,6 +725,15 @@
     });
   }
 
+  // B9: dirty filter listeners — any change outside a preset apply marks dirty
+  const dirtySelectors = '#f_division,#f_subdivision,#f_tipo,#f_form,#f_desde,#f_hasta,#f_distrito,#f_jv,#f_usuario,#f_codigo,#f_qfilters_match';
+  $(document).on('change', dirtySelectors, function(){
+    if (!PE._applyingPreset) markDirty();
+  });
+  $('#f_codigo').on('input', function(){ if (!PE._applyingPreset) markDirty(); });
+  // Also mark dirty when q-filters change
+  $(document).on('pe:qfilters-changed', function(){ if (!PE._applyingPreset) markDirty(); });
+
   $('#panel-encuesta-filtros').on('submit', function(e){
     e.preventDefault();
     if (!validateDates()) return;
@@ -624,7 +765,10 @@
     img.attr('src', item.primary || '');
     img.attr('data-fallbacks', JSON.stringify(item.fallbacks || []));
     img.attr('data-fallback-idx', '0');
-    $('#photoModalCaption').text((LB.idx+1)+' / '+LB.list.length);
+    // B4: show context caption (index + metadata if available)
+    let caption = (LB.idx+1)+' / '+LB.list.length;
+    if (item.caption) { caption += ' · ' + item.caption; }
+    $('#photoModalCaption').text(caption);
     $('#photoModalOpen')
       .attr('href', item.primary || '')
       .toggleClass('d-none', !item.primary);
@@ -639,12 +783,37 @@
 
   $(document).on('click', '.thumb', function(){
     const $wrap = $(this).closest('.thumb-wrap');
+    // B4: build caption from parent tr data-*
+    const $tr = $(this).closest('tr');
+    const captionParts = [];
+    if ($tr.data('localCodigo') || $tr.attr('data-local-codigo')) captionParts.push($tr.attr('data-local-codigo') || $tr.data('localCodigo'));
+    if ($tr.attr('data-usuario')) captionParts.push($tr.attr('data-usuario'));
+    if ($tr.attr('data-fecha')) captionParts.push($tr.attr('data-fecha'));
+    if ($tr.attr('data-pregunta')) captionParts.push($tr.attr('data-pregunta'));
+    const caption = captionParts.filter(Boolean).join(' · ');
+
     const items = $wrap.find('.thumb').map((i,el) => {
       const fallbacks = parseFallbacks(el);
-      return { primary: $(el).data('full'), fallbacks };
+      return { primary: $(el).data('full'), fallbacks, caption };
     }).get();
     const idx = $wrap.find('.thumb').index(this);
     openLightbox(items, idx);
+  });
+
+  // B10: download current lightbox image
+  $('#lbDownload').on('click', function(){
+    const url = LB.list[LB.idx] && LB.list[LB.idx].primary;
+    if (!url) return;
+    fetch(url)
+      .then(r => r.blob())
+      .then(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = url.split('/').pop() || 'foto.jpg';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      })
+      .catch(() => window.open(url, '_blank'));
   });
   $('#lbPrev').on('click', lbPrev);
   $('#lbNext').on('click', lbNext);
@@ -654,5 +823,23 @@
     if (e.key === 'ArrowRight') lbNext();
     if (e.key === 'Escape') $('#photoModal').modal('hide');
   });
+
+  // C6: restore state from ?state= URL param (after other modules loaded)
+  $(document).on('preguntas-ready', function(){
+    if (typeof PE.restoreStateFromURL === 'function') {
+      PE.restoreStateFromURL().then(restored => {
+        if (restored) { page = 1; loadData(); }
+        else {
+          if (typeof PE.runRedBullAutofill === 'function') {
+            PE.runRedBullAutofill().then(applied => { if (applied) { page=1; loadData(); } });
+          }
+        }
+      });
+    }
+  });
+
+  // PE.initPreguntaSelect2 se llama desde $(function(){}) en panel.php
+  // DESPUÉS de cargar todos los módulos, para que 'preguntas-ready' encuentre
+  // PE.restoreStateFromURL (presets.js) ya definido.
 
 })(jQuery);

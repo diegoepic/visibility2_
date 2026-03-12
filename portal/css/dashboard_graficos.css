@@ -7,6 +7,7 @@
     background: #ffffff;
 }
 
+
 .grafico {
     padding: 35px 40px;
     position: relative;
@@ -24,6 +25,14 @@
 .grafico:nth-child(1),
 .grafico:nth-child(2) {
     border-bottom: 1px solid #dcdcdc;
+}
+
+.grafico-subtitulo {
+    font-size: 12px;          /* más pequeño que el título */
+    color: #808080;  /* más opaco */
+    font-style: italic;       /* cursiva */
+    margin-top: 4px;
+    font-weight: normal;
 }
 
 .grafico-titulo {

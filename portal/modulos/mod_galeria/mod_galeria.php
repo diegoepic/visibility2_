@@ -1,15 +1,6 @@
 <?php
 session_start();
 
-/**
- * mod_galeria.php
- * Galería por campaña con:
- * - Implementación: modo gv/legacy/hybrid
- * - Encuesta
- * - Locales no visitados (No gestionados): unión GV+FQ, deduplicación por día+usuario+local,
- *   parser robusto de rutas de imagen en 'observacion' y uso de 'gestion_visita.foto_url'
- */
-
 // -------------------------------------------------------------
 // 1) Funciones auxiliares
 // -------------------------------------------------------------

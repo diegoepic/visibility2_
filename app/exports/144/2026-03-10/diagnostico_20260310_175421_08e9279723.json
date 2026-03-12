@@ -1,0 +1,73 @@
+{
+    "exported_at": "2026-03-10T20:54:03.907Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 16; SM-A166M Build/BP2A.250605.031.A3; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/145.0.7632.120 Mobile Safari/537.36 VisibilityWrapper/1.0",
+    "sw_version": "v6.0.0",
+    "stats": {
+        "today": {
+            "ymd": "2026-03-10",
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        },
+        "overall": {
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        }
+    },
+    "queue": {
+        "total_records": 0,
+        "last_created_at": null,
+        "last_updated_at": null
+    },
+    "recent_events": [],
+    "storage_estimate": {
+        "usage": 4592681,
+        "quota": 68172958924,
+        "percent_used": 0
+    },
+    "connection_info": {
+        "effectiveType": "4g",
+        "downlink": 9.0999999999999996447286321199499070644378662109375,
+        "rtt": null,
+        "saveData": false
+    },
+    "service_worker": {
+        "active": "active",
+        "installing": null,
+        "waiting": null,
+        "scope": "https://visibility.cl/visibility2/app/"
+    },
+    "idb_databases": [
+        {
+            "name": "v2_journal",
+            "version": 9
+        },
+        {
+            "name": "v2_mappings",
+            "version": 1
+        },
+        {
+            "name": "v2_offline",
+            "version": 9
+        },
+        {
+            "name": "visibility2-v2",
+            "version": 9
+        }
+    ],
+    "recent_errors": [],
+    "client_time": {
+        "local": "Tue Mar 10 2026 17:54:04 GMT-0300 (hora de verano de Chile)",
+        "timezone": "America/Santiago",
+        "offset_minutes": 180
+    },
+    "csrf_token": "d8494236874ffc8c11b3f34d20feb13ac14a0d2d0b92826f6949cb335fad0ca1"
+}

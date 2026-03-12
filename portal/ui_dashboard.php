@@ -392,10 +392,6 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
   <link rel="stylesheet" href="dist/css/adminlte.min.css">
   <link rel="stylesheet" href="dist/css/stylesUI.css">
   <style>
-      /* ============================================
-   DASHBOARD CARDS - NORMALIZACIÓN Y RESPONSIVE
-   Soluciona problemas de descuadre en cards
-   ============================================ */
 
 /* ---- CONTENEDOR DE CAMPAÑAS ---- */
 .card-body .row {
@@ -429,7 +425,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
-    overflow: hidden;
+    overflow: visible;
 }
 
 /* ---- TÍTULO DE CAMPAÑA (nombre) ---- */
@@ -438,7 +434,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
     width: calc(100% - 60px); /* Dejar espacio para botón descarga */
     margin: 20px;
     padding-right: 10px;
-    font-size: 14px;
+    font-size: 80%;
     font-weight: 700;
     line-height: 1.3;
     max-height: 36px; /* Máximo 2 líneas */
@@ -454,7 +450,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
 /* ---- DESCRIPCIÓN (estado y fechas) ---- */
 .widget-user .widget-user-desc {
     margin-top: 4px;
-    font-size: 12px;
+    font-size: 80%;
     line-height: 1.3;
     white-space: nowrap;
     overflow: hidden;
@@ -508,7 +504,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
 }
 
 .widget-user .description-header {
-    font-size: 1.1rem;
+    font-size: 80%;
     font-weight: 700;
     margin: 0;
 }
@@ -562,26 +558,50 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
 }
 
 /* ---- BOTÓN DESCARGA EXCEL ---- */
+/* Contenedor del botón excel */
+/* Solo el contenedor del botón arriba a la derecha */
 .widget-user-header .dropdown.dl-compact,
-.widget-user-header .download-link,
-.widget-user-header .download-excel-trigger {
+.widget-user-header .download-link {
     position: absolute !important;
     top: 8px !important;
     right: 10px !important;
-    z-index: 15;
+    z-index: 20;
 }
 
-.widget-user-header .download-link img {
-    width: 35px !important;
-    height: auto;
+/* Los items del menú deben quedar normales */
+.widget-user-header .download-excel-trigger,
+.widget-user-header .download-distribucion-trigger {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    display: block;
 }
 
-/* ---- BARRA DE PROGRESO DESCARGA ---- */
-.widget-user-header .progress {
-    position: absolute !important;
-    top: 50px !important;
-    right: 10px !important;
-    width: 100px !important;
+/* Ícono excel */
+.widget-user-header .dropdown.dl-compact img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+}
+
+/* Menú */
+.widget-user-header .dropdown-menu {
+    min-width: 180px;
+    margin-top: 6px;
+    z-index: 1050;
+}
+
+/* Items del menú */
+.widget-user-header .dropdown-menu .dropdown-item {
+    white-space: nowrap;
+    font-size: 80%;
+    padding: 0px 12px;
+}
+
+/* Este link no debe heredar posicionamiento raro */
+.widget-user-header .download-excel-trigger {
+    position: static !important;
+    display: block;
 }
 
 /* ============================================
@@ -641,7 +661,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
     }
     
     .widget-user .widget-user-desc {
-        font-size: 11px;
+        font-size: 80%;
     }
     
     .widget-user .widget-user-image {
@@ -754,6 +774,75 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
 .widget-user .widget-user-image { pointer-events: none; }
 .widget-user .widget-user-image img { pointer-events: auto; }
 
+.mr-2{
+    font-size:80%;
+}
+.t2{
+    height:10%;
+}
+.t1{
+    font-size:80%
+}
+.font-weight-bold {
+    font-size: 80%;
+}
+.custom-control-label{
+    font-size: 80%;    
+}
+
+.download-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.download-overlay.d-none{
+  display: none !important;
+}
+
+.download-overlay__box{
+  width: 100%;
+  max-width: 380px;
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 28px 24px;
+  box-shadow: 0 18px 45px rgba(0,0,0,.18);
+  text-align: center;
+}
+
+.download-overlay__spinner{
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 16px auto;
+  border: 4px solid #dbeafe;
+  border-top: 4px solid #16a34a;
+  border-radius: 50%;
+  animation: giroOverlay 0.9s linear infinite;
+}
+
+.download-overlay__title{
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 8px;
+}
+
+.download-overlay__text{
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.45;
+}
+
+@keyframes giroOverlay{
+  0%{ transform: rotate(0deg); }
+  100%{ transform: rotate(360deg); }
+}
   </style>
 </head>
 <body>
@@ -764,7 +853,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
     <?php if ($division_id === 1): // Usuarios “corporativo” (división 1) ?>
       <!-- Mostrar filtro de división -->
       <label class="mr-2" for="division_filter">División:</label>
-      <select name="division" id="division_filter" class="form-control mr-2">
+      <select name="division" id="division_filter" class="form-control mr-2 t2">
         <option value="0" <?= $division_seleccionada===0 ? 'selected':'' ?>>-- Todas las Divisiones --</option>
         <?php foreach ($divisiones as $d): ?>
           <option value="<?= $d['id'] ?>" <?= $division_seleccionada===$d['id'
@@ -777,7 +866,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
 
       <!-- Mostrar filtro de estado: En curso (1) o Finalizadas (3) -->
       <label class="mr-2" for="estado_filter">Estado:</label>
-      <select name="estado" id="estado_filter" class="form-control mr-2">
+      <select name="estado" id="estado_filter" class="form-control mr-2 t2">
         <option value="1" <?= $estado_seleccionado===1?'selected':'' ?>>En curso</option>
         <option value="3" <?= $estado_seleccionado===3?'selected':'' ?>>Finalizadas</option>
       </select>
@@ -799,8 +888,8 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
   <div class="card-header">
     <div class="user-block">
       <img class="img-circle" src="dist/img/mentecreativa.png" alt="User Image">
-      <span class="username"><a href="#">CAMPAÑAS PLANIFICADAS</a></span>
-      <span class="description">Última actividad cargada</span>
+      <span class="username"><a href="#" class="t1">CAMPAÑAS PLANIFICADAS</a></span>
+      <span class="description t1">Última actividad cargada</span>
     </div>
 <div class="card-tools">
   <div class="d-flex justify-content-between align-items-start w-100 py-2 px-3"style="gap:1rem;">
@@ -812,7 +901,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
         <input
           type="text"
           id="searchInput"
-          class="form-control border-start-0"
+          class="form-control border-start-0 t2"
           placeholder="Buscar campaña…"
         >
       </div>
@@ -824,7 +913,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
           type="checkbox"
           id="selectAllCheckbox"
         >
-        <label class="form-check-label ms-2" for="selectAllCheckbox">
+        <label class="form-check-label ms-2 t1" for="selectAllCheckbox">
           Seleccionar todos
         </label>
       </div>
@@ -834,7 +923,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
         id="bulkDownloadBtn"
         class="btn btn-sm btn-primary"
       >
-        <i class="fas fa-download me-1"></i> Descarga masiva
+        <i class="fas fa-download me-1 t1"></i> Descarga masiva
       </button>
     </div>
     <button
@@ -879,22 +968,31 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
             <div class="col-12 col-sm-6 col-md-4 align-items-stretch campaign-item">
               <div class="card card-widget widget-user shadow w-100">
                 <div class="widget-user-header bg-info position-relative">
-                    <div class="dropdown dl-compact" style="position:absolute; top:10px; right:10px; z-index:5;">
+                    <div class="dropdown dl-compact" style="position:absolute; top:10px; right:10px; z-index:1050;">
                       <button class="btn btn-sm btn-success dropdown-toggle px-2 py-1" type="button" data-toggle="dropdown" aria-expanded="false" title="Descargar Excel">
                         <i class="fas fa-file-excel"></i>
                       </button>
-                      <div class="dropdown-menu dropdown-menu-right">
-                       <a class="dropdown-item download-excel-trigger"
-                           href="#"
-                           data-id="<?= (int)$rowP['id_campana']; ?>"
-                           data-modalidad="<?= htmlspecialchars($rowP['modalidad'], ENT_QUOTES, 'UTF-8'); ?>">
-                           DESCARGAR DATA
-                        </a>
-                        <!--a class="dropdown-item"
-                           href="/visibility2/portal/informes/descargar_excel_historico.php?id=<?= (int)$rowP['id_campana']; ?>"
-                           target="_blank" rel="noopener">
-                           Excel de gestiones históricas por local
-                        </a-->
+                      <div class="dropdown-menu dropdown-menu-right" style="z-index:1060;">
+                          <a class="dropdown-item download-excel-trigger"
+                             href="#"
+                             data-id="<?= (int)$rowP['id_campana']; ?>"
+                             data-modalidad="<?= htmlspecialchars($rowP['modalidad'], ENT_QUOTES, 'UTF-8'); ?>">
+                             DESCARGAR DATA
+                          </a>
+                          <div class="dropdown-divider"></div>
+                          <a class="dropdown-item download-distribucion-trigger"
+                             href="#"
+                             data-id="<?= (int)$rowP['id_campana']; ?>"
+                             data-modalidad="<?= htmlspecialchars($rowP['modalidad'], ENT_QUOTES, 'UTF-8'); ?>">
+                             DESCARGAR DISTRIBUCIÓN
+                          </a>
+                          <!--div class="dropdown-divider"></div>                          
+                          <a class="dropdown-item download-distribucion-trigger"
+                             href="#"
+                             data-id="<?= (int)$rowP['id_campana']; ?>"
+                             data-modalidad="<?= htmlspecialchars($rowP['modalidad'], ENT_QUOTES, 'UTF-8'); ?>">
+                             DESCARGA LEGACY
+                          </a-->                          
                       </div>
                     </div>
                   <div class="progress"
@@ -905,11 +1003,12 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                          aria-valuemin="0" aria-valuemax="100">0%
                     </div>
                   </div>
-                      <input type="checkbox"
-                             id="chk-prog<?php echo $rowP['id_campana']; ?>"
-                             class="mr-2" style="position: absolute;margin-top: -4%;margin-left: -48%;"
-                             value="<?php echo $rowP['id_campana']; ?>"
-                             data-modalidad="<?php echo htmlspecialchars($rowP['modalidad'], ENT_QUOTES, 'UTF-8'); ?>">
+                    <input type="checkbox"
+                           id="chk-prog<?php echo $rowP['id_campana']; ?>"
+                           class="mr-2 campaign-bulk-checkbox"
+                           style="position: absolute;margin-top: -4%;margin-left: -48%;"
+                           value="<?php echo $rowP['id_campana']; ?>"
+                           data-modalidad="<?php echo htmlspecialchars($rowP['modalidad'], ENT_QUOTES, 'UTF-8'); ?>">
                     <div class="d-flex align-items-center">
                       <h3 class="widget-user-username text-truncate campaign-name mb-0">
                         <?php echo $campana_upper; ?>
@@ -981,7 +1080,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                     <div class="col-sm-6 border-right">
                       <div class="inner">
                         <h3 class="description-header">
-                          <b style="color:yellowgreen;font-size:20px;"><?php echo $porc_visitados; ?>%</b>
+                          <b style="color:yellowgreen;font-size:100%;"><?php echo $porc_visitados; ?>%</b>
                         </h3>
                         <p style="font-size:13px;font-weight:bold;">SALAS VISITADAS</p>
                       </div>
@@ -989,7 +1088,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                     <div class="col-sm-6">
                       <div class="inner">
                         <h3 class="description-header">
-                          <b style="color:yellowgreen;font-size:20px;"><?php echo $porc_completados; ?>%</b>
+                          <b style="color:yellowgreen;font-size:100%;"><?php echo $porc_completados; ?>%</b>
                         </h3>
                         <p style="font-size:13px;font-weight:bold;">SALAS EJECUTADAS</p>
                       </div>
@@ -1365,8 +1464,6 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
   </div>
 </div>
 
-
-
 <div class="modal fade" id="modalRefImage" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
     <div class="modal-content">
@@ -1384,6 +1481,62 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
           <button type="submit" class="btn btn-success">Guardar</button>
         </form>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: selección de descarga Excel -->
+<div class="modal fade" id="modalDescargaExcel" tabindex="-1" aria-labelledby="modalDescargaExcelLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="modalDescargaExcelLabel">Opciones de descarga</h6>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="excelFotosImplementacionGroup" class="mb-3">
+          <p class="mb-2 font-weight-bold" id="excelFotosImplementacionTitle">Fotos de implementación</p>
+          <div class="custom-control custom-radio mb-2">
+            <input type="radio" id="excelPhotosMaterialCon" name="excelPhotosMaterialOption" value="1" class="custom-control-input" checked>
+            <label class="custom-control-label" for="excelPhotosMaterialCon" id="excelFotosImplementacionLabelCon">Con fotos de implementación</label>
+          </div>
+          <div class="custom-control custom-radio">
+            <input type="radio" id="excelPhotosMaterialSin" name="excelPhotosMaterialOption" value="0" class="custom-control-input">
+            <label class="custom-control-label" for="excelPhotosMaterialSin" id="excelFotosImplementacionLabelSin">Sin fotos de implementación</label>
+          </div>
+        </div>
+
+        <div id="excelFotosEncuestaGroup">
+          <p class="mb-2 font-weight-bold" id="excelFotosEncuestaTitle">Fotos de encuesta</p>
+          <div class="custom-control custom-radio mb-2">
+            <input type="radio" id="excelPhotosEncuestaCon" name="excelPhotosEncuestaOption" value="1" class="custom-control-input" checked>
+            <label class="custom-control-label" for="excelPhotosEncuestaCon" id="excelFotosEncuestaLabelCon">Con fotos de encuesta</label>
+          </div>
+          <div class="custom-control custom-radio">
+            <input type="radio" id="excelPhotosEncuestaSin" name="excelPhotosEncuestaOption" value="0" class="custom-control-input">
+            <label class="custom-control-label" for="excelPhotosEncuestaSin" id="excelFotosEncuestaLabelSin">Sin fotos de encuesta</label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success btn-sm" id="btnDescargarExcelConfirm">
+          <i class="fas fa-download mr-1"></i> Descargar archivos
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Overlay de descarga -->
+<div id="downloadOverlay" class="download-overlay d-none">
+  <div class="download-overlay__box">
+    <div class="download-overlay__spinner"></div>
+    <div class="download-overlay__title">Preparando archivos</div>
+    <div class="download-overlay__text">
+      Estamos generando la descarga. Esto puede tardar unos segundos.
     </div>
   </div>
 </div>
@@ -1522,60 +1675,121 @@ $('#formChangeRef').submit(function(e){
 
 </script>
 
+<script>
+function generarTokenDescarga() {
+  return 'dl_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+}
 
-<!-- Modal: selección de descarga Excel -->
-<div class="modal fade" id="modalDescargaExcel" tabindex="-1" aria-labelledby="modalDescargaExcelLabel" aria-hidden="true">
-  <div class="modal-dialog modal-sm modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header py-2">
-        <h6 class="modal-title" id="modalDescargaExcelLabel">Descarga de Excel</h6>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-          <span aria-hidden="true">&times;</span>
-        </button>
-      </div>
-      <div class="modal-body">
-        <div id="excelFotosImplementacionGroup" class="mb-3">
-          <p class="mb-2 font-weight-bold" id="excelFotosImplementacionTitle">Fotos de implementación</p>
-          <div class="custom-control custom-radio mb-2">
-            <input type="radio" id="excelPhotosMaterialCon" name="excelPhotosMaterialOption" value="1" class="custom-control-input" checked>
-            <label class="custom-control-label" for="excelPhotosMaterialCon" id="excelFotosImplementacionLabelCon">Con fotos de implementación</label>
-          </div>
-          <div class="custom-control custom-radio">
-            <input type="radio" id="excelPhotosMaterialSin" name="excelPhotosMaterialOption" value="0" class="custom-control-input">
-            <label class="custom-control-label" for="excelPhotosMaterialSin" id="excelFotosImplementacionLabelSin">Sin fotos de implementación</label>
-          </div>
-        </div>
+function obtenerCookie(nombre) {
+  const valor = `; ${document.cookie}`;
+  const partes = valor.split(`; ${nombre}=`);
+  if (partes.length === 2) {
+    return partes.pop().split(';').shift();
+  }
+  return null;
+}
 
-        <div id="excelFotosEncuestaGroup">
-          <p class="mb-2 font-weight-bold" id="excelFotosEncuestaTitle">Fotos de encuesta</p>
-          <div class="custom-control custom-radio mb-2">
-            <input type="radio" id="excelPhotosEncuestaCon" name="excelPhotosEncuestaOption" value="1" class="custom-control-input" checked>
-            <label class="custom-control-label" for="excelPhotosEncuestaCon" id="excelFotosEncuestaLabelCon">Con fotos de encuesta</label>
-          </div>
-          <div class="custom-control custom-radio">
-            <input type="radio" id="excelPhotosEncuestaSin" name="excelPhotosEncuestaOption" value="0" class="custom-control-input">
-            <label class="custom-control-label" for="excelPhotosEncuestaSin" id="excelFotosEncuestaLabelSin">Sin fotos de encuesta</label>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer py-2">
-        <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-success btn-sm" id="btnDescargarExcelConfirm">
-          <i class="fas fa-file-excel mr-1"></i> Descargar
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
+function limpiarCookie(nombre) {
+  document.cookie = `${nombre}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+}
+
+function esperarDescargaReal(token, onComplete, timeoutMs = 120000) {
+  const cookieName = 'fileDownloadToken';
+  const start = Date.now();
+
+  const timer = setInterval(() => {
+    const valor = obtenerCookie(cookieName);
+
+    if (valor === token) {
+      clearInterval(timer);
+      limpiarCookie(cookieName);
+      if (typeof onComplete === 'function') {
+        onComplete();
+      }
+      return;
+    }
+
+    if (Date.now() - start > timeoutMs) {
+      clearInterval(timer);
+      if (typeof onComplete === 'function') {
+        onComplete();
+      }
+    }
+  }, 500);
+}
+</script>
 
 <script>
-// Modal para descargar Excel con opciones de fotos (individual y masivo)
+function descargarEnIframe(url, iframeId) {
+  let iframe = document.getElementById(iframeId);
+
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = iframeId;
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+  }
+
+  iframe.src = url;
+}
+</script>
+
+<script>
 let campanaDescargaExcel = null;
 let campanaModalidadExcel = '';
 let modoDescargaExcel = 'single';
 let campanasSeleccionadasExcel = [];
+let descargaEnCurso = false;
+let overlayTimerMinimo = null;
+let overlayVisibleDesde = 0;
 
-const normalizarModalidad = (modalidad = '') => (modalidad || '').toLowerCase();
+const normalizarModalidad = (modalidad = '') => (modalidad || '').toLowerCase().trim();
+
+const mostrarOverlayDescarga = () => {
+  descargaEnCurso = true;
+  overlayVisibleDesde = Date.now();
+  $('#downloadOverlay').removeClass('d-none');
+
+  // respaldo máximo
+  setTimeout(() => {
+    if (descargaEnCurso) {
+      ocultarOverlayDescarga();
+    }
+  }, 10000);
+};
+
+const ocultarOverlayDescarga = () => {
+  descargaEnCurso = false;
+  $('#downloadOverlay').addClass('d-none');
+
+  if (overlayTimerMinimo) {
+    clearTimeout(overlayTimerMinimo);
+    overlayTimerMinimo = null;
+  }
+};
+
+const ocultarOverlayConMinimo = (minMs = 900) => {
+  const transcurrido = Date.now() - overlayVisibleDesde;
+  const restante = Math.max(0, minMs - transcurrido);
+
+  if (overlayTimerMinimo) {
+    clearTimeout(overlayTimerMinimo);
+  }
+
+  overlayTimerMinimo = setTimeout(() => {
+    ocultarOverlayDescarga();
+  }, restante);
+};
+
+const modalidadTieneDetalle = (modalidad) => {
+  const m = normalizarModalidad(modalidad);
+  return ['solo_implementacion', 'implementacion_auditoria', 'retiro', 'entrega'].includes(m);
+};
+
+const modalidadTieneEncuesta = (modalidad) => {
+  const m = normalizarModalidad(modalidad);
+  return ['solo_auditoria', 'implementacion_auditoria'].includes(m);
+};
 
 const actualizarModalDescargaExcel = (modalidades) => {
   const modosEntrada = Array.isArray(modalidades) ? modalidades : [modalidades];
@@ -1597,8 +1811,8 @@ const actualizarModalDescargaExcel = (modalidades) => {
     $('#excelFotosEncuestaLabelSin').text('Sin fotos de encuesta');
   };
 
-  const hasImpl = modos.length === 0 || modos.some(m => ['solo_implementacion', 'implementacion_auditoria', 'retiro'].includes(m));
-  const hasEncuesta = modos.some(m => ['solo_auditoria', 'implementacion_auditoria'].includes(m));
+  const hasImpl = modos.length === 0 || modos.some(m => modalidadTieneDetalle(m));
+  const hasEncuesta = modos.some(m => modalidadTieneEncuesta(m));
   const soloRetiro = modos.length > 0 && modos.every(m => m === 'retiro');
 
   $grupoImpl.toggle(hasImpl);
@@ -1613,6 +1827,7 @@ const actualizarModalDescargaExcel = (modalidades) => {
 
 $(document).on('click', '.download-excel-trigger', function (e) {
   e.preventDefault();
+
   campanaDescargaExcel = $(this).data('id') || null;
   campanaModalidadExcel = $(this).data('modalidad') || '';
   modoDescargaExcel = 'single';
@@ -1624,6 +1839,7 @@ $(document).on('click', '.download-excel-trigger', function (e) {
 
 const prepararDescargaMasiva = (checkboxSelector) => {
   const seleccionados = Array.from(document.querySelectorAll(checkboxSelector));
+
   if (seleccionados.length === 0) {
     alert('Por favor, selecciona al menos una campaña.');
     return;
@@ -1633,11 +1849,29 @@ const prepararDescargaMasiva = (checkboxSelector) => {
   campanaModalidadExcel = '';
   modoDescargaExcel = 'bulk';
   campanasSeleccionadasExcel = seleccionados.map(cb => cb.value);
-  const modalidades = seleccionados.map(cb => cb.dataset.modalidad || '');
 
+  const modalidades = seleccionados.map(cb => cb.dataset.modalidad || '');
   actualizarModalDescargaExcel(modalidades);
+
   $('#modalDescargaExcel').modal('show');
 };
+
+$('#bulkDownloadBtn').on('click', function (e) {
+  e.preventDefault();
+  prepararDescargaMasiva('.campaign-bulk-checkbox:checked');
+});
+
+$('#selectAllCheckbox').on('change', function () {
+  const checked = $(this).is(':checked');
+  $('.campaign-bulk-checkbox').prop('checked', checked);
+});
+
+$(document).on('change', '.campaign-bulk-checkbox', function () {
+  const total = $('.campaign-bulk-checkbox').length;
+  const checked = $('.campaign-bulk-checkbox:checked').length;
+
+  $('#selectAllCheckbox').prop('checked', total > 0 && total === checked);
+});
 
 $('#btnDescargarExcelConfirm').on('click', function () {
   const params = new URLSearchParams();
@@ -1650,45 +1884,110 @@ $('#btnDescargarExcelConfirm').on('click', function () {
     params.set('id', campanaDescargaExcel);
   }
 
+  let fotosMaterial = '0';
+  let fotosEncuesta = '0';
+
   if ($('#excelFotosImplementacionGroup').is(':visible')) {
-    const fotosMaterial = $("input[name='excelPhotosMaterialOption']:checked").val() || '1';
+    fotosMaterial = $("input[name='excelPhotosMaterialOption']:checked").val() || '1';
     params.set('fotos', fotosMaterial);
-  } else if (modoDescargaExcel === 'bulk') {
-    params.set('fotos', '0');
   }
 
   if ($('#excelFotosEncuestaGroup').is(':visible')) {
-    const fotosEncuesta = $("input[name='excelPhotosEncuestaOption']:checked").val() || '1';
+    fotosEncuesta = $("input[name='excelPhotosEncuestaOption']:checked").val() || '1';
     params.set('fotos_encuesta', fotosEncuesta);
-  } else if (modoDescargaExcel === 'bulk') {
-    params.set('fotos_encuesta', '0');
   }
 
-  const url = (modoDescargaExcel === 'bulk')
-    ? `informes/descarga_excel_masivo.php?${params.toString()}`
-    : `/visibility2/portal/informes/descargar_excel.php?${params.toString()}`;
-
   $('#modalDescargaExcel').modal('hide');
-  window.open(url, '_blank');
+  mostrarOverlayDescarga();
+
+  if (modoDescargaExcel === 'bulk') {
+    const token = generarTokenDescarga();
+    params.set('download_token', token);
+
+    const urlBulk = `/visibility2/portal/informes/descarga_excel_masivo.php?${params.toString()}`;
+
+    esperarDescargaReal(token, function () {
+      ocultarOverlayDescarga();
+    });
+
+    descargarEnIframe(urlBulk, 'downloadFrameBulk');
+    return;
+  }
+
+  const modalidad = normalizarModalidad(campanaModalidadExcel);
+  const descargarDetalle = modalidadTieneDetalle(modalidad);
+  const descargarEncuesta = modalidadTieneEncuesta(modalidad);
+
+  // Si solo hay detalle
+  if (descargarDetalle && !descargarEncuesta) {
+    const paramsDetalle = new URLSearchParams(params.toString());
+    const tokenDetalle = generarTokenDescarga();
+
+    paramsDetalle.set('fotos', fotosMaterial);
+    paramsDetalle.set('download_token', tokenDetalle);
+
+    const urlDetalle = `/visibility2/portal/informes/descargar_excel_detalle.php?${paramsDetalle.toString()}`;
+
+    esperarDescargaReal(tokenDetalle, function () {
+      ocultarOverlayDescarga();
+    });
+
+    descargarEnIframe(urlDetalle, 'downloadFrameDetalle');
+    return;
+  }
+
+  // Si solo hay encuesta
+  if (!descargarDetalle && descargarEncuesta) {
+    const paramsEncuesta = new URLSearchParams(params.toString());
+    const tokenEncuesta = generarTokenDescarga();
+
+    paramsEncuesta.set('fotos_encuesta', fotosEncuesta);
+    paramsEncuesta.set('download_token', tokenEncuesta);
+
+    const urlEncuesta = `/visibility2/portal/informes/descargar_encuesta_csv.php?${paramsEncuesta.toString()}`;
+
+    esperarDescargaReal(tokenEncuesta, function () {
+      ocultarOverlayDescarga();
+    });
+
+    descargarEnIframe(urlEncuesta, 'downloadFrameEncuesta');
+    return;
+  }
+
+  // Si hay detalle + encuesta (implementacion_auditoria)
+  if (descargarDetalle && descargarEncuesta) {
+    const paramsDetalle = new URLSearchParams(params.toString());
+    const tokenDetalle = generarTokenDescarga();
+
+    paramsDetalle.set('fotos', fotosMaterial);
+    paramsDetalle.set('download_token', tokenDetalle);
+
+    const urlDetalle = `/visibility2/portal/informes/descargar_excel_detalle.php?${paramsDetalle.toString()}`;
+
+    esperarDescargaReal(tokenDetalle, function () {
+      const paramsEncuesta = new URLSearchParams(params.toString());
+      const tokenEncuesta = generarTokenDescarga();
+
+      paramsEncuesta.set('fotos_encuesta', fotosEncuesta);
+      paramsEncuesta.set('download_token', tokenEncuesta);
+
+      const urlEncuesta = `/visibility2/portal/informes/descargar_encuesta_csv.php?${paramsEncuesta.toString()}`;
+
+      esperarDescargaReal(tokenEncuesta, function () {
+        ocultarOverlayDescarga();
+      });
+
+      descargarEnIframe(urlEncuesta, 'downloadFrameEncuesta');
+    });
+
+    descargarEnIframe(urlDetalle, 'downloadFrameDetalle');
+    return;
+  }
+
+  ocultarOverlayDescarga();
 });
 </script>
 
-<script>
-  const btnMasivo = document.getElementById('bulkDownloadBtn');
-  if (btnMasivo) {
-    btnMasivo.addEventListener('click', function() {
-      prepararDescargaMasiva("input[id^='chk-prog']:checked");
-    });
-  }
-
-  const btnMasivoIPT = document.getElementById('bulkDownloadBtnIPT');
-  if (btnMasivoIPT) {
-    btnMasivoIPT.addEventListener('click', function() {
-      prepararDescargaMasiva("input[id^='chk-ipt']:checked");
-    });
-  }
-
-</script>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -1724,6 +2023,94 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+</script>
+<script>
+function descargarEnIframe(url) {
+  let iframe = document.getElementById('downloadFrame');
+
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'downloadFrame';
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+  }
+
+  iframe.src = url;
+}
+
+function generarTokenDescarga() {
+  return 'dl_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+}
+
+function obtenerCookie(nombre) {
+  const valor = `; ${document.cookie}`;
+  const partes = valor.split(`; ${nombre}=`);
+  if (partes.length === 2) {
+    return partes.pop().split(';').shift();
+  }
+  return null;
+}
+
+function limpiarCookie(nombre) {
+  document.cookie = `${nombre}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+}
+
+function esperarDescargaReal(token, onComplete, timeoutMs = 120000) {
+  const cookieName = 'fileDownloadToken';
+  const start = Date.now();
+
+  const timer = setInterval(() => {
+    const valor = obtenerCookie(cookieName);
+
+    if (valor === token) {
+      clearInterval(timer);
+      limpiarCookie(cookieName);
+      if (typeof onComplete === 'function') {
+        onComplete();
+      }
+      return;
+    }
+
+    if (Date.now() - start > timeoutMs) {
+      clearInterval(timer);
+      if (typeof onComplete === 'function') {
+        onComplete();
+      }
+    }
+  }, 500);
+}
+
+$(document).on('click', '.download-distribucion-trigger, .download-legacy-trigger', function(e) {
+  e.preventDefault();
+
+  const id = $(this).data('id');
+  const modalidad = $(this).data('modalidad') || '';
+  const token = generarTokenDescarga();
+
+  let url = '';
+
+  if ($(this).hasClass('download-distribucion-trigger')) {
+    url = '/visibility2/portal/informes/descargar_distribucion.php?id='
+      + encodeURIComponent(id)
+      + '&modalidad=' + encodeURIComponent(modalidad)
+      + '&download_token=' + encodeURIComponent(token);
+  } else if ($(this).hasClass('download-legacy-trigger')) {
+    url = '/visibility2/portal/informes/descargar_excel_legacy.php?id='
+      + encodeURIComponent(id)
+      + '&modalidad=' + encodeURIComponent(modalidad)
+      + '&download_token=' + encodeURIComponent(token);
+  }
+
+  if (!url) return;
+
+  mostrarOverlayDescarga();
+
+  esperarDescargaReal(token, function () {
+    ocultarOverlayDescarga();
+  });
+
+  descargarEnIframe(url);
+});
 </script>
 
 </body>

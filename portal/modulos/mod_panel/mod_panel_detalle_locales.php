@@ -78,13 +78,16 @@ SELECT
         WHEN fq.pregunta = 'cancelado' THEN 'CANCELADO'
         WHEN fq.pregunta = 'completado' THEN 'COMPLETADO'
     
-        WHEN fq.pregunta IN ('solo_implementado','solo_auditoria','solo_retirado','implementado_auditado') THEN
+        -- 🔹 Caso especial: solo_auditoria siempre debe ser AUDITADO
+        WHEN fq.pregunta = 'solo_auditoria' THEN 'AUDITADO'
+    
+        -- 🔹 Otros tipos que sí dependen de valor
+        WHEN fq.pregunta IN ('solo_implementado','solo_retirado','implementado_auditado') THEN
             CASE
                 WHEN IFNULL(fq.valor,0) = 0 THEN 'NO IMPLEMENTADO'
                 ELSE
                     CASE
                         WHEN fq.pregunta = 'solo_implementado' THEN 'IMPLEMENTADO'
-                        WHEN fq.pregunta = 'solo_auditoria' THEN 'AUDITADO'
                         WHEN fq.pregunta = 'solo_retirado' THEN 'RETIRADO'
                         WHEN fq.pregunta = 'implementado_auditado' THEN 'IMPLE/AUDI'
                         ELSE 'EN PROCESO'

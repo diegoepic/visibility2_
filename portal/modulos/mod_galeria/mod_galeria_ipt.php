@@ -9,11 +9,19 @@ error_reporting(E_ALL);
 // -----------------------------------------------------------------------------
 
 function fixUrl(string $url, string $base_url): string {
+    $url = trim($url);
+
+    if ($url === '') {
+        return '';
+    }
+
     if (preg_match('#^https?://#i', $url)) {
         return $url;
     }
+
     $url = ltrim($url, '/');
     $url = preg_replace('#^(visibility2/app/|app/)#i', '', $url);
+
     return rtrim($base_url, '/') . '/' . ltrim($url, '/');
 }
 
@@ -32,21 +40,22 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/session_da
 // 3) Parámetros
 // -----------------------------------------------------------------------------
 
-$division_id = intval($_SESSION['division_id'] ?? 0);
-$division    = isset($_GET['division']) ? intval($_GET['division']) : $division_id;
+$division_id      = (int)($_SESSION['division_id'] ?? 0);
+$divisionLogin    = $division_id;
 
-$divisionLogin = (int)$_SESSION['division_id'];
+$division         = isset($_GET['division']) ? (int)$_GET['division'] : $division_id;
+$subdivision      = (int)($_GET['subdivision'] ?? 0);
+$region           = (int)($_GET['region'] ?? 0);
+$zona             = (int)($_GET['zona'] ?? 0);
+$distrito         = (int)($_GET['distrito'] ?? 0);
+$comuna           = (int)($_GET['comuna'] ?? 0);
+$usuarioFiltro    = (int)($_GET['usuario'] ?? 0);
+$jefeVentaFiltro  = (int)($_GET['jefe_venta'] ?? 0);
+$codigoLocalFiltro = trim($_GET['codigo_local'] ?? '');
 
-$subdivision = intval($_GET['subdivision'] ?? 0);
-$region   = intval($_GET['region']   ?? 0);
-$zona     = intval($_GET['zona']     ?? 0);
-$distrito = intval($_GET['distrito'] ?? 0);
-$comuna   = intval($_GET['comuna']   ?? 0);
+$view = trim($_GET['view'] ?? 'implementacion');
+$view = in_array($view, ['implementacion', 'encuesta'], true) ? $view : 'implementacion';
 
-$usuarioFiltro    = intval($_GET['usuario'] ?? 0);
-$jefeVentaFiltro  = intval($_GET['jefe_venta'] ?? 0);
-
-$view       = $_GET['view'] ?? 'implementacion';
 $start_date = trim($_GET['start_date'] ?? '');
 $end_date   = trim($_GET['end_date'] ?? '');
 
@@ -60,15 +69,23 @@ if ($start_date === '' && $end_date === '') {
 }
 
 // -----------------------------------------------------------------------------
-// 4) Cargar divisiones (solo para el selector)
+// 4) Cargar divisiones
 // -----------------------------------------------------------------------------
 
 $divisiones = [];
-$resDiv = $conn->query("SELECT id,nombre FROM division_empresa WHERE estado=1 ORDER BY nombre");
+$resDiv = $conn->query("
+    SELECT id, nombre
+    FROM division_empresa
+    WHERE estado = 1
+    ORDER BY nombre
+");
 while ($r = $resDiv->fetch_assoc()) {
     $divisiones[] = $r;
 }
 
+// -----------------------------------------------------------------------------
+// 4.1) Validar subdivisión
+// -----------------------------------------------------------------------------
 
 if ($subdivision > 0 && $division > 0) {
     $stmtCheck = $conn->prepare("
@@ -83,24 +100,25 @@ if ($subdivision > 0 && $division > 0) {
     $stmtCheck->store_result();
 
     if ($stmtCheck->num_rows === 0) {
-        // Subdivisión inválida → la ignoramos
         $subdivision = 0;
     }
 
     $stmtCheck->close();
 }
 
+// -----------------------------------------------------------------------------
+// 4.2) Jefes de venta
+// -----------------------------------------------------------------------------
 
-// --------------------------------------
-// Jefes de venta
-// --------------------------------------
 $jefesVenta = [];
-$sqlJV = "SELECT id, nombre FROM jefe_venta ORDER BY nombre ASC";
-$resJV = $conn->query($sqlJV);
+$resJV = $conn->query("
+    SELECT id, nombre
+    FROM jefe_venta
+    ORDER BY nombre ASC
+");
 while ($jv = $resJV->fetch_assoc()) {
     $jefesVenta[] = $jv;
 }
-
 
 // -----------------------------------------------------------------------------
 // 5) Construcción de filtros BASE
@@ -112,93 +130,84 @@ $types  = "";
 
 // División
 if ($division > 0) {
-    $where  .= " AND f.id_division = ?";
-    $types  .= "i";
+    $where   .= " AND f.id_division = ?";
+    $types   .= "i";
     $params[] = $division;
 }
 
+// Subdivisión
 if ($subdivision > 0) {
-    $where  .= " AND f.id_subdivision = ?";
-    $types  .= "i";
+    $where   .= " AND f.id_subdivision = ?";
+    $types   .= "i";
     $params[] = $subdivision;
 }
 
-// Región (vía comuna)
+// Región
 if ($region > 0) {
-    $where  .= " AND r.id = ?";
-    $types  .= "i";
+    $where   .= " AND r.id = ?";
+    $types   .= "i";
     $params[] = $region;
 }
 
-// Zona (vía distrito)
+// Zona
 if ($zona > 0) {
-    $where  .= " AND z.id = ?";
-    $types  .= "i";
+    $where   .= " AND z.id = ?";
+    $types   .= "i";
     $params[] = $zona;
 }
 
 // Distrito
 if ($distrito > 0) {
-    $where  .= " AND d.id = ?";
-    $types  .= "i";
+    $where   .= " AND d.id = ?";
+    $types   .= "i";
     $params[] = $distrito;
 }
 
 // Comuna
 if ($comuna > 0) {
-    $where  .= " AND co.id = ?";
-    $types  .= "i";
+    $where   .= " AND co.id = ?";
+    $types   .= "i";
     $params[] = $comuna;
 }
 
+// Usuario
 if ($usuarioFiltro > 0) {
     if ($view === 'implementacion') {
         $where .= " AND fv.id_usuario = ?";
     } else {
         $where .= " AND fqr.id_usuario = ?";
     }
-    $types .= "i";
+    $types   .= "i";
     $params[] = $usuarioFiltro;
 }
 
 // Jefe de venta
 if ($jefeVentaFiltro > 0) {
-    $where .= " AND l.id_jefe_venta = ?";
-    $types .= "i";
+    $where   .= " AND l.id_jefe_venta = ?";
+    $types   .= "i";
     $params[] = $jefeVentaFiltro;
 }
 
-if (!empty($_GET['comuna'])) {
-  $where .= " AND l.id_comuna = ?";
-  $params[] = $_GET['comuna'];
-  $types .= "i";
-}
-
-if (!empty($_GET['zona'])) {
-  $where .= " AND l.id_zona = ?";
-  $params[] = $_GET['zona'];
-  $types .= "i";
-}
-
-if (!empty($_GET['distrito'])) {
-  $where .= " AND l.id_distrito = ?";
-  $params[] = $_GET['distrito'];
-  $types .= "i";
+// Código local
+if ($codigoLocalFiltro !== '') {
+    $where   .= " AND l.codigo LIKE ?";
+    $types   .= "s";
+    $params[] = '%' . $codigoLocalFiltro . '%';
 }
 
 // Fechas
 $fieldFecha = ($view === 'implementacion') ? 'fq.fechaVisita' : 'fqr.created_at';
 
 if ($start_date !== '') {
-    $where  .= " AND {$fieldFecha} >= ?";
-    $types  .= "s";
-    $params[] = $start_date . " 00:00:00";
+    $where   .= " AND {$fieldFecha} >= ?";
+    $types   .= "s";
+    $params[] = $start_date . ' 00:00:00';
 }
 
 if ($end_date !== '') {
-    $where  .= " AND {$fieldFecha} <= ?";
-    $types  .= "s";
-    $params[] = $end_date . " 23:59:59";
+    $where   .= " AND {$fieldFecha} <= ?";
+    $types   .= "s";
+    $params[] = $end_date . ' 23:59:59';
 }
 
 // -----------------------------------------------------------------------------
@@ -214,6 +223,7 @@ if ($view === 'implementacion') {
             fq.material,
             fq.fechaVisita,
             f.nombre AS campaña_nombre,
+            l.codigo AS local_codigo_completo,
             TRIM(SUBSTRING_INDEX(l.codigo, '-', -1)) AS local_codigo,
             l.nombre AS local_nombre,
             l.direccion AS local_direccion,
@@ -225,17 +235,17 @@ if ($view === 'implementacion') {
             ct.nombre AS cuenta_nombre,
             u.usuario
         FROM formularioQuestion fq
-        JOIN formulario f        ON f.id = fq.id_formulario
-        JOIN fotoVisita fv       ON fv.id_formularioQuestion = fq.id
-        JOIN local l             ON l.id = fq.id_local
-        LEFT JOIN comuna co      ON co.id = l.id_comuna
-        LEFT JOIN region r       ON r.id = co.id_region
-        LEFT JOIN distrito d     ON d.id = l.id_distrito
-        LEFT JOIN zona z         ON z.id = d.id_zona
-        LEFT JOIN jefe_venta jv ON jv.id = l.id_jefe_venta
-        JOIN cadena c            ON c.id = l.id_cadena
-        JOIN cuenta ct           ON ct.id = l.id_cuenta
-        JOIN usuario u           ON u.id = fv.id_usuario
+        INNER JOIN formulario f   ON f.id = fq.id_formulario
+        INNER JOIN fotoVisita fv  ON fv.id_formularioQuestion = fq.id
+        INNER JOIN local l        ON l.id = fq.id_local
+        LEFT JOIN comuna co       ON co.id = l.id_comuna
+        LEFT JOIN region r        ON r.id = co.id_region
+        LEFT JOIN distrito d      ON d.id = l.id_distrito
+        LEFT JOIN zona z          ON z.id = d.id_zona
+        LEFT JOIN jefe_venta jv   ON jv.id = l.id_jefe_venta
+        INNER JOIN cadena c       ON c.id = l.id_cadena
+        INNER JOIN cuenta ct      ON ct.id = l.id_cuenta
+        INNER JOIN usuario u      ON u.id = fv.id_usuario
         WHERE {$where}
           AND fq.fechaVisita IS NOT NULL
         GROUP BY u.id, l.id, fq.material, fq.fechaVisita
@@ -251,6 +261,7 @@ if ($view === 'implementacion') {
             fqr.created_at AS fechaSubida,
             UPPER(fq.question_text) AS pregunta,
             f.nombre AS campaña_nombre,
+            l.codigo AS local_codigo_completo,
             TRIM(SUBSTRING_INDEX(l.codigo, '-', -1)) AS local_codigo,
             l.nombre AS local_nombre,
             l.direccion AS local_direccion,
@@ -262,17 +273,17 @@ if ($view === 'implementacion') {
             ct.nombre AS cuenta_nombre,
             u.usuario
         FROM form_question_responses fqr
-        JOIN form_questions fq    ON fq.id = fqr.id_form_question
-        JOIN formulario f         ON f.id = fq.id_formulario
-        JOIN local l              ON l.id = fqr.id_local
-        LEFT JOIN comuna co       ON co.id = l.id_comuna
-        LEFT JOIN region r        ON r.id = co.id_region
-        LEFT JOIN distrito d      ON d.id = l.id_distrito
-        LEFT JOIN zona z          ON z.id = d.id_zona
-        LEFT JOIN jefe_venta jv   ON jv.id = l.id_jefe_venta
-        JOIN cadena c             ON c.id = l.id_cadena
-        JOIN cuenta ct            ON ct.id = l.id_cuenta
-        JOIN usuario u            ON u.id = fqr.id_usuario
+        INNER JOIN form_questions fq ON fq.id = fqr.id_form_question
+        INNER JOIN formulario f      ON f.id = fq.id_formulario
+        INNER JOIN local l           ON l.id = fqr.id_local
+        LEFT JOIN comuna co          ON co.id = l.id_comuna
+        LEFT JOIN region r           ON r.id = co.id_region
+        LEFT JOIN distrito d         ON d.id = l.id_distrito
+        LEFT JOIN zona z             ON z.id = d.id_zona
+        LEFT JOIN jefe_venta jv      ON jv.id = l.id_jefe_venta
+        INNER JOIN cadena c          ON c.id = l.id_cadena
+        INNER JOIN cuenta ct         ON ct.id = l.id_cuenta
+        INNER JOIN usuario u         ON u.id = fqr.id_usuario
         WHERE {$where}
           AND fq.id_question_type = 7
           AND fqr.id_local <> 0
@@ -286,17 +297,28 @@ if ($view === 'implementacion') {
 // -----------------------------------------------------------------------------
 
 $stmt = $conn->prepare($sql);
+if (!$stmt) {
+    die("Error al preparar la consulta: " . $conn->error);
+}
+
 if ($types !== '') {
     $stmt->bind_param($types, ...$params);
 }
-$stmt->execute();
 
+$stmt->execute();
 $res = $stmt->get_result();
 
 $data = [];
 while ($row = $res->fetch_assoc()) {
-    $rawUrls = explode('||', $row['urls']);
-    $fixed = array_map(fn($u) => fixUrl($u, $base_url), $rawUrls);
+    $rawUrls = array_filter(explode('||', (string)$row['urls']));
+    $fixed   = [];
+
+    foreach ($rawUrls as $u) {
+        $fixedUrl = fixUrl($u, $base_url);
+        if ($fixedUrl !== '') {
+            $fixed[] = $fixedUrl;
+        }
+    }
 
     $row['photos']       = $fixed;
     $row['photos_count'] = count($fixed);
@@ -304,8 +326,8 @@ while ($row = $res->fetch_assoc()) {
 
     $data[] = $row;
 }
-$stmt->close();
 
+$stmt->close();
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -333,121 +355,298 @@ $stmt->close();
         .select2-selection__rendered {
           line-height: 28px !important;
         }
-        
+  #formFiltrosGaleria {
+    border-radius: 12px;
+    border: 1px solid #e9ecef;
+    background: #fff;
+  }
+
+  #formFiltrosGaleria label {
+    font-size: 13px;
+    color: #495057;
+  }
+
+  #formFiltrosGaleria .form-control {
+    height: 40px;
+    border-radius: 8px;
+  }
+
+  #formFiltrosGaleria .btn {
+    height: 40px;
+    border-radius: 8px;
+  }
+
+  .nav-tabs .nav-link {
+    border-radius: 10px 10px 0 0;
+    font-weight: 600;
+  }
+
+  .nav-tabs .nav-link.active {
+    background-color: #fff;
+    border-color: #dee2e6 #dee2e6 #fff;
+  }
+
+  /* Overlay de carga */
+  #loadingOverlayGaleria {
+    position: fixed;
+    inset: 0;
+    background: rgba(255,255,255,0.75);
+    z-index: 9999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    backdrop-filter: blur(2px);
+  }
+
+  #loadingOverlayGaleria .spinner-border {
+    width: 3rem;
+    height: 3rem;
+  }
+
+  #loadingOverlayGaleria .loading-text {
+    margin-top: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #343a40;
+  }
+
+  @media (max-width: 768px) {
+    #formFiltrosGaleria .btn-block {
+      width: 100%;
+    }
+  }
+    
+  .custom-img-cell {
+    position: relative;
+    text-align: center;
+  }
+
+  .thumbnail {
+    max-width: 110px;
+    max-height: 85px;
+    object-fit: cover;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform .2s ease, box-shadow .2s ease;
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  }
+
+  .thumbnail:hover {
+    transform: scale(1.04);
+    box-shadow: 0 4px 14px rgba(0,0,0,.22);
+  }
+
+  .badge-count {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    z-index: 2;
+    background: #007bff;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 20px;
+    padding: 3px 8px;
+  }
+
+  #fullSizeModal .modal-content {
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  #fullSizeModal .modal-body {
+    background: #111;
+    min-height: 70vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #fullSizeModal .carousel-item {
+    height: 70vh;
+    text-align: center;
+    background: #111;
+  }
+
+  #fullSizeModal .carousel-item img {
+    max-width: 100%;
+    max-height: 70vh;
+    object-fit: contain;
+    margin: 0 auto;
+  }
+
+  #fullSizeModal .carousel-control-prev,
+  #fullSizeModal .carousel-control-next {
+    width: 8%;
+  }
+
+  #fullSizeModal .carousel-control-prev-icon,
+  #fullSizeModal .carousel-control-next-icon {
+    background-size: 65% 65%;
+    background-color: rgba(0,0,0,0.45);
+    border-radius: 50%;
+    width: 52px;
+    height: 52px;
+  }
+
+  #fullSizeModal .carousel-indicators li {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  @media (max-width: 768px) {
+    #fullSizeModal .carousel-item,
+    #fullSizeModal .modal-body,
+    #fullSizeModal .carousel-item img {
+      height: 55vh;
+      max-height: 55vh;
+    }
+  }
+
+  @media (max-width: 768px) {
+    #fullSizeModal .carousel-item,
+    #fullSizeModal .modal-body,
+    #fullSizeModal .carousel-item img {
+      height: 55vh;
+      max-height: 55vh;
+    }
+  }    
     </style>
 </head>
 <body class="bg-light">
 <div class="container mt-4">
     
-  <!-- Nav tabs -->
-  <ul class="nav nav-tabs mb-3">
-    <li class="nav-item">
-      <a class="nav-link <?= $view==='implementacion'?'active':'' ?>"
-         href="?<?= http_build_query(array_merge($_GET,['view'=>'implementacion','page'=>1])) ?>">
-        Fotos Implementación
-      </a>
-    </li>
-    <li class="nav-item">
-      <a class="nav-link <?= $view==='encuesta'?'active':'' ?>"
-         href="?<?= http_build_query(array_merge($_GET,['view'=>'encuesta','page'=>1])) ?>">
-        Fotos Encuesta
-      </a>
-    </li>
-  </ul>
+<!-- Nav tabs -->
+<ul class="nav nav-tabs mb-3" id="tabsGaleria">
+  <li class="nav-item">
+    <a class="nav-link <?= $view==='implementacion'?'active':'' ?>"
+       href="?<?= http_build_query(array_merge($_GET,['view'=>'implementacion','page'=>1])) ?>">
+      Fotos Implementación
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link <?= $view==='encuesta'?'active':'' ?>"
+       href="?<?= http_build_query(array_merge($_GET,['view'=>'encuesta','page'=>1])) ?>">
+      Fotos Encuesta
+    </a>
+  </li>
+</ul>
 
-<!-- 🧭 Filtros -->
-<form method="GET" class="form-inline flex-wrap mb-3 align-items-end">
+<!-- Filtros -->
+<form method="GET" id="formFiltrosGaleria" class="card card-body shadow-sm mb-4">
   <input type="hidden" name="view" value="<?= htmlspecialchars($view) ?>">
 
-  <?php if ($division_id === 1): ?>
-    <div class="form-group mr-3 mb-2">
-      <label for="divisionSelect" class="mr-2 mb-0">División:</label>
-      <select id="divisionSelect" name="division" class="form-control">
-        <option value="0">-- Todas --</option>
-        <?php foreach($divisiones as $d): ?>
-          <option value="<?=$d['id']?>" <?=$d['id']==$division?'selected':''?>>
-            <?=htmlspecialchars($d['nombre'])?>
-          </option>
-        <?php endforeach; ?>
-      </select>
-    </div>
-  <?php else: ?>
-    <input type="hidden" name="division" value="<?=$division_id?>">
-  <?php endif; ?>
-  
-    <div class="form-group mr-3 mb-2">
-      <label for="subdivisionSelect" class="mr-2 mb-0">Subdivisión:</label>
+  <div class="row">
+    
+    <?php if ($division_id === 1): ?>
+      <div class="col-md-3 col-sm-6 mb-3">
+        <label for="divisionSelect" class="font-weight-bold mb-1">División</label>
+        <select id="divisionSelect" name="division" class="form-control">
+          <option value="0">-- Todas --</option>
+          <?php foreach($divisiones as $d): ?>
+            <option value="<?= $d['id'] ?>" <?= $d['id']==$division?'selected':'' ?>>
+              <?= htmlspecialchars($d['nombre']) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+    <?php else: ?>
+      <input type="hidden" name="division" value="<?= $division_id ?>">
+    <?php endif; ?>
+
+    <div class="col-md-3 col-sm-6 mb-3">
+      <label for="subdivisionSelect" class="font-weight-bold mb-1">Subdivisión</label>
       <select id="subdivisionSelect" name="subdivision" class="form-control">
         <option value="0">-- Todas --</option>
       </select>
-    </div>   
+    </div>
 
     <?php if ($divisionLogin != 14): ?>
-    
-      <div class="form-group mr-3 mb-2">
-        <label class="mr-2 mb-0">Región:</label>
+      <div class="col-md-3 col-sm-6 mb-3">
+        <label for="regionSelect" class="font-weight-bold mb-1">Región</label>
         <select id="regionSelect" name="region" class="form-control">
           <option value="0">-- Todas --</option>
         </select>
       </div>
-      
-      <div class="form-group mr-3 mb-2">
-        <label class="mr-2 mb-0">Comuna:</label>
+
+      <div class="col-md-3 col-sm-6 mb-3">
+        <label for="comunaSelect" class="font-weight-bold mb-1">Comuna</label>
         <select id="comunaSelect" name="comuna" class="form-control">
           <option value="0">-- Todas --</option>
         </select>
       </div>
-    
     <?php endif; ?>
-    
-    <div class="form-group mr-3 mb-2">
-      <label class="mr-2 mb-0">Zona:</label>
+
+    <div class="col-md-3 col-sm-6 mb-3">
+      <label for="zonaSelect" class="font-weight-bold mb-1">Zona</label>
       <select id="zonaSelect" name="zona" class="form-control">
         <option value="0">-- Todas --</option>
       </select>
     </div>
-    
-    <div class="form-group mr-3 mb-2">
-      <label class="mr-2 mb-0">Distrito:</label>
+
+    <div class="col-md-3 col-sm-6 mb-3">
+      <label for="distritoSelect" class="font-weight-bold mb-1">Distrito</label>
       <select id="distritoSelect" name="distrito" class="form-control">
         <option value="0">-- Todos --</option>
       </select>
     </div>
 
-    <div class="form-group mr-3 mb-2">
-      <label class="mr-2 mb-0">Usuario:</label>
+    <div class="col-md-3 col-sm-6 mb-3">
+      <label class="font-weight-bold mb-1">Desde</label>
+      <input type="date" name="start_date" class="form-control" value="<?= htmlspecialchars($start_date) ?>">
+    </div>
+
+    <div class="col-md-3 col-sm-6 mb-3">
+      <label class="font-weight-bold mb-1">Hasta</label>
+      <input type="date" name="end_date" class="form-control" value="<?= htmlspecialchars($end_date) ?>">
+    </div>
+
+    <div class="col-md-3 col-sm-6 mb-3">
+      <label for="codigoLocalInput" class="font-weight-bold mb-1">Código local</label>
+      <input 
+        type="text" 
+        name="codigo_local" 
+        id="codigoLocalInput" 
+        class="form-control"
+        placeholder="Ej: 12345"
+        value="<?= htmlspecialchars($codigoLocalFiltro ?? '') ?>"
+      >
+    </div>
+
+    <div class="col-md-3 col-sm-6 mb-3">
+      <label for="usuarioSelect" class="font-weight-bold mb-1">Usuario</label>
       <select id="usuarioSelect" name="usuario" class="form-control">
         <option value="0">-- Todos --</option>
       </select>
     </div>
-    
-    <div class="form-group mr-3 mb-2">
-      <label class="mr-2 mb-0">Jefe de Venta:</label>
+
+    <div class="col-md-3 col-sm-6 mb-3">
+      <label for="jefe_ventaSelect" class="font-weight-bold mb-1">Jefe de Venta</label>
       <select name="jefe_venta" id="jefe_ventaSelect" class="form-control">
         <option value="0">-- Todos --</option>
         <?php foreach ($jefesVenta as $jv): ?>
-          <option value="<?= $jv['id'] ?>"
-            <?= $jefeVentaFiltro == $jv['id'] ? 'selected' : '' ?>>
+          <option value="<?= $jv['id'] ?>" <?= $jefeVentaFiltro == $jv['id'] ? 'selected' : '' ?>>
             <?= htmlspecialchars($jv['nombre']) ?>
           </option>
         <?php endforeach; ?>
       </select>
     </div>
-    
-  <div class="form-group mr-3 mb-2">
-    <label class="mr-2 mb-0">Desde:</label>
-    <input type="date" name="start_date" class="form-control" value="<?=htmlspecialchars($start_date)?>">
-  </div>
 
-  <div class="form-group mr-3 mb-2">
-    <label class="mr-2 mb-0">Hasta:</label>
-    <input type="date" name="end_date" class="form-control" value="<?=htmlspecialchars($end_date)?>">
-  </div>
 
-  <div class="form-group mb-2">
-    <button type="button" id="btnFiltrar" class="btn btn-primary">
-      <i class="fas fa-filter"></i> Filtrar
-    </button>
+    <div class="col-md-3 col-sm-6 mb-3 d-flex align-items-end">
+      <button type="submit" id="btnFiltrar" class="btn btn-primary btn-block">
+        <i class="fas fa-filter"></i> Aplicar filtros
+      </button>
+    </div>
+
+    <div class="col-md-3 col-sm-6 mb-3 d-flex align-items-end">
+      <a href="?view=<?= urlencode($view) ?>" class="btn btn-outline-secondary btn-block">
+        Limpiar filtros
+      </a>
+    </div>
+
   </div>
 </form>
 
@@ -523,7 +722,10 @@ $stmt->close();
               <span class="badge-count"><?= $r['photos_count'] ?></span>
               <img src="<?= htmlspecialchars($r['thumbnail'], ENT_QUOTES) ?>"
                    class="thumbnail img-click"
-                   data-urls="<?= htmlspecialchars(implode('||',$r['photos']), ENT_QUOTES) ?>">
+                   alt="Vista previa"
+                   title="Clic para ver fotos"
+                   data-local="<?= htmlspecialchars($r['local_nombre'] ?? 'Fotos del local', ENT_QUOTES) ?>"
+                   data-urls="<?= htmlspecialchars(implode('||', $r['photos']), ENT_QUOTES) ?>">
             </td>
             <td><?= htmlspecialchars($r['campaña_nombre'], ENT_QUOTES) ?></td>  
             <td><?= htmlspecialchars($r['local_codigo'], ENT_QUOTES) ?></td>
@@ -620,16 +822,50 @@ $stmt->close();
 
 </div>
 
-<!-- Modal de visualización -->
-<div class="modal fade" id="fullSizeModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-body p-0 text-center" id="modalBodyImgs"></div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+<!-- Modal visor de fotos -->
+<div class="modal fade" id="fullSizeModal" tabindex="-1" aria-labelledby="fullSizeModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content bg-dark border-0">
+
+      <div class="modal-header border-0">
+        <h5 class="modal-title text-white" id="fullSizeModalLabel">Vista de fotos</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Cerrar">
+          <span aria-hidden="true">&times;</span>
+        </button>
       </div>
+
+      <div class="modal-body p-0">
+        <div id="carouselFotosModal" class="carousel slide" data-interval="false">
+          <div class="carousel-inner" id="modalBodyImgs"></div>
+
+          <a class="carousel-control-prev" href="#carouselFotosModal" role="button" data-slide="prev">
+            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+            <span class="sr-only">Anterior</span>
+          </a>
+
+          <a class="carousel-control-next" href="#carouselFotosModal" role="button" data-slide="next">
+            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+            <span class="sr-only">Siguiente</span>
+          </a>
+
+          <ol class="carousel-indicators mb-2" id="carouselIndicatorsFotos"></ol>
+        </div>
+      </div>
+
+      <div class="modal-footer border-0 justify-content-between">
+        <small class="text-white-50" id="contadorFotosModal"></small>
+        <button type="button" class="btn btn-light" data-dismiss="modal">Cerrar</button>
+      </div>
+
     </div>
   </div>
+</div>
+
+<div id="loadingOverlayGaleria">
+  <div class="spinner-border text-primary" role="status">
+    <span class="sr-only">Cargando...</span>
+  </div>
+  <div class="loading-text">Cargando filtros, por favor espera...</div>
 </div>
 
 <!-- Scripts -->
@@ -791,7 +1027,7 @@ $(function () {
 <script>
 window.GALERIA_FILTROS = {
   division: <?= (int)$division ?>,
-  usuario: <?= (int)$usuarioFiltro ?>
+  usuario: <?= (int)$usuarioFiltro ?>,
   subdivision: <?= (int)$subdivision ?>,
   region: <?= (int)($_GET['region'] ?? 0) ?>,
   comuna: <?= (int)($_GET['comuna'] ?? 0) ?>,
@@ -992,7 +1228,130 @@ $(function () {
 });
 </script>
 
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const form = document.getElementById('formFiltrosGaleria');
+  const btnFiltrar = document.getElementById('btnFiltrar');
+  const overlay = document.getElementById('loadingOverlayGaleria');
+  const tabs = document.querySelectorAll('#tabsGaleria a.nav-link');
 
+  function mostrarCarga() {
+    if (overlay) {
+      overlay.style.display = 'flex';
+    }
+
+    if (btnFiltrar) {
+      btnFiltrar.disabled = true;
+      btnFiltrar.innerHTML = '<span class="spinner-border spinner-border-sm mr-2" role="status" aria-hidden="true"></span> Cargando...';
+    }
+  }
+
+  if (form) {
+    form.addEventListener('submit', function () {
+      mostrarCarga();
+    });
+  }
+
+  if (tabs.length) {
+    tabs.forEach(function(tab) {
+      tab.addEventListener('click', function () {
+        if (overlay) {
+          overlay.style.display = 'flex';
+        }
+      });
+    });
+  }
+});
+</script>
+
+<script>
+$(document).ready(function () {
+  $(document).on('click', '.img-click', function () {
+    const urlsRaw = $(this).attr('data-urls') || '';
+    const local = $(this).attr('data-local') || 'Vista de fotos';
+
+    const fotos = urlsRaw
+      .split('||')
+      .map(u => u.trim())
+      .filter(u => u !== '');
+
+    abrirModalFotos(fotos, local);
+  });
+
+  function abrirModalFotos(fotos, titulo) {
+    const $contenedor = $('#modalBodyImgs');
+    const $indicadores = $('#carouselIndicatorsFotos');
+    const $contador = $('#contadorFotosModal');
+    const $titulo = $('#fullSizeModalLabel');
+    const $prev = $('#carouselFotosModal .carousel-control-prev');
+    const $next = $('#carouselFotosModal .carousel-control-next');
+
+    $contenedor.html('');
+    $indicadores.html('');
+    $titulo.text(titulo || 'Vista de fotos');
+
+    if (!Array.isArray(fotos) || fotos.length === 0) {
+      $contenedor.html(`
+        <div class="carousel-item active">
+          <div class="d-flex h-100 w-100 align-items-center justify-content-center text-white">
+            No hay fotos disponibles
+          </div>
+        </div>
+      `);
+      $contador.text('');
+      $prev.hide();
+      $next.hide();
+      $indicadores.hide();
+      $('#fullSizeModal').modal('show');
+      return;
+    }
+
+    fotos.forEach(function (foto, index) {
+      $contenedor.append(`
+        <div class="carousel-item ${index === 0 ? 'active' : ''}">
+          <img src="${foto}" class="d-block" alt="Foto ${index + 1}">
+        </div>
+      `);
+
+      $indicadores.append(`
+        <li data-target="#carouselFotosModal"
+            data-slide-to="${index}"
+            class="${index === 0 ? 'active' : ''}"></li>
+      `);
+    });
+
+    if (fotos.length > 1) {
+      $prev.show();
+      $next.show();
+      $indicadores.show();
+    } else {
+      $prev.hide();
+      $next.hide();
+      $indicadores.hide();
+    }
+
+    $contador.text(`1 de ${fotos.length}`);
+
+    $('#carouselFotosModal').carousel(0);
+
+    $('#carouselFotosModal')
+      .off('slid.bs.carousel')
+      .on('slid.bs.carousel', function () {
+        const index = $('#carouselFotosModal .carousel-item.active').index() + 1;
+        $contador.text(`${index} de ${fotos.length}`);
+      });
+
+    $('#fullSizeModal').modal('show');
+  }
+
+  $('#fullSizeModal').on('hidden.bs.modal', function () {
+    $('#modalBodyImgs').html('');
+    $('#carouselIndicatorsFotos').html('');
+    $('#contadorFotosModal').text('');
+    $('#fullSizeModalLabel').text('Vista de fotos');
+  });
+});
+</script>
 
 
 </body>

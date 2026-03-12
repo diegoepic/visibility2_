@@ -2,6 +2,12 @@
   const PE       = window.PE;
   const QFILTERS = PE.QFILTERS; // Map reference — mutations visible to all modules
 
+  // XHR activos por key de pregunta — para cancelar requests obsoletos (A2)
+  const statsXhrMap = new Map();
+
+  // Charts activos por key — para destruir antes de redibujar (C1)
+  PE.chartMap = PE.chartMap || new Map();
+
   // ========= QFILTERS UI =========
   function renderQFilterControl(key, entry){
     const { meta } = entry;
@@ -45,8 +51,8 @@
         </div>
       `);
     } else if (meta.tipo === 2) {
-      const selIds   = Array.isArray(vals.opts_ids)   ? vals.opts_ids.map(x => parseInt(x,10)) : [];
-      const selTexts = Array.isArray(vals.opts_texts)  ? vals.opts_texts : [];
+      const selIds   = Array.isArray(vals.opts_ids)  ? vals.opts_ids.map(x => parseInt(x,10)) : [];
+      const selTexts = Array.isArray(vals.opts_texts) ? vals.opts_texts : [];
       const opts = (meta.options||[]).map(o => {
         const v   = (o.id != null) ? String(o.id) : ('text:'+o.text);
         const sel = (o.id != null && selIds.includes(o.id)) || (o.id == null && selTexts.includes(o.text)) ? 'selected' : '';
@@ -59,8 +65,8 @@
         </div>
       `);
     } else if (meta.tipo === 3) {
-      const selIds   = Array.isArray(vals.opts_ids)   ? vals.opts_ids.map(x => parseInt(x,10)) : [];
-      const selTexts = Array.isArray(vals.opts_texts)  ? vals.opts_texts : [];
+      const selIds   = Array.isArray(vals.opts_ids)  ? vals.opts_ids.map(x => parseInt(x,10)) : [];
+      const selTexts = Array.isArray(vals.opts_texts) ? vals.opts_texts : [];
       const matchMode = vals.match || 'any';
       const opts = (meta.options||[]).map(o => {
         const v   = (o.id != null) ? String(o.id) : ('text:'+o.text);
@@ -114,14 +120,19 @@
 
   function syncQFiltersUI(){
     const $box = $('#qfilters');
-    // Destruir Select2 existentes antes de vaciar el contenedor
+    // Destruir Select2 y Charts existentes antes de vaciar el contenedor
     $box.find('.qf-opts').each(function(){
       if ($(this).data('select2')) { $(this).select2('destroy'); }
     });
+    PE.chartMap.forEach((chart) => { try { chart.destroy(); } catch(e){} });
+    PE.chartMap.clear();
     $box.empty();
 
     if (QFILTERS.size === 0){
       $box.html('<small class="text-muted">Añade una o más preguntas y configura el filtro de su respuesta aquí…</small>');
+      // Actualizar summary del details
+      const $summary = $('#qfilters-summary');
+      if ($summary.length) $summary.text('Filtros de preguntas (0)');
       PE.renderActiveFilters();
       return;
     }
@@ -129,7 +140,7 @@
       $box.append(renderQFilterControl(key, entry));
     });
 
-    // Inicializar Select2 en los selects de opciones para mejor UX
+    // Inicializar Select2 en los selects de opciones
     $box.find('.qf-opts').each(function(){
       $(this).select2({
         placeholder: 'Seleccionar opciones…',
@@ -139,14 +150,22 @@
       });
     });
 
+    // Actualizar summary del details
+    const $summary = $('#qfilters-summary');
+    if ($summary.length) $summary.text(`Filtros de preguntas (${QFILTERS.size})`);
+
     PE.renderActiveFilters();
     PE.updateZipFotosVisibility();
+    $(document).trigger('pe:qfilters-changed'); // B9: notify dirty-filter tracker
   }
   PE.syncQFiltersUI = syncQFiltersUI;
 
   $(document).on('click', '.qf-remove', function(){
     const key = $(this).data('key');
     QFILTERS.delete(key);
+    // Cancelar XHR de stats si estaba en vuelo
+    const xhr = statsXhrMap.get(key);
+    if (xhr) { xhr.abort(); statsXhrMap.delete(key); }
     const id = String(key).split(':')[1];
     const possibleIds = [''+id, 'v:'+id];
     possibleIds.forEach(pid => {
@@ -178,7 +197,12 @@
   }
   PE.fetchPreguntaMeta = fetchPreguntaMeta;
 
+  // ========= STATS con abort de requests anteriores (A2) =========
   function fetchQStats(key, meta){
+    // Cancelar request anterior para esta key si existe
+    const prevXhr = statsXhrMap.get(key);
+    if (prevXhr) { prevXhr.abort(); }
+
     const scope = {
       division:    $('#f_division').val(),
       subdivision: $('#f_subdivision').val(),
@@ -191,43 +215,133 @@
       usuario:     $('#f_usuario').val(),
       codigo:      $('#f_codigo').val()
     };
-    const $box = $(`.qf-stats[data-key="${key}"]`).html('<span class="text-muted">Cargando…</span>');
+    const $box = $(`.qf-stats[data-key="${key}"]`).html('<span class="text-muted"><i class="fa fa-circle-notch fa-spin"></i> Cargando…</span>');
 
-    $.getJSON('ajax_pregunta_stats.php', {
-      mode: meta.mode, id: meta.id, tipo: meta.tipo, csrf_token: $('#csrf_token').val(), ...scope
-    }, stat => {
-      const payload = stat && stat.data ? stat.data : stat;
-      if (!payload){ $box.html('<span class="text-danger">Sin datos</span>'); return; }
-      if (meta.tipo === 5 && payload.numeric){
-        $box.html(`
-          <div class="small">
-            <strong>Total:</strong> ${payload.numeric.count} ·
-            <strong>Min:</strong> ${payload.numeric.min ?? '-'} ·
-            <strong>Max:</strong> ${payload.numeric.max ?? '-'} ·
-            <strong>Prom:</strong> ${payload.numeric.avg ?? '-'}
+    const xhr = $.ajax({
+      url: 'ajax_pregunta_stats.php',
+      type: 'GET',
+      dataType: 'json',
+      data: { mode: meta.mode, id: meta.id, tipo: meta.tipo, csrf_token: $('#csrf_token').val(), ...scope },
+      success: function(stat){
+        statsXhrMap.delete(key);
+        const payload = stat && stat.data ? stat.data : stat;
+        if (!payload){ $box.html('<span class="text-danger">Sin datos</span>'); return; }
+
+        // Destruir chart anterior para esta key si existe
+        const prevChart = PE.chartMap.get(key);
+        if (prevChart) { try { prevChart.destroy(); } catch(e){} PE.chartMap.delete(key); }
+
+        if (meta.tipo === 5 && payload.numeric){
+          $box.html(`
+            <div class="d-flex flex-wrap gap-2 small">
+              <span class="badge badge-light border">Total: <strong>${(+payload.numeric.count).toLocaleString('es-CL')}</strong></span>
+              <span class="badge badge-light border">Mín: <strong>${payload.numeric.min ?? '–'}</strong></span>
+              <span class="badge badge-light border">Máx: <strong>${payload.numeric.max ?? '–'}</strong></span>
+              <span class="badge badge-light border">Prom: <strong>${payload.numeric.avg != null ? (+payload.numeric.avg).toFixed(2) : '–'}</strong></span>
+            </div>
+          `);
+          return;
+        }
+
+        const buckets = payload.buckets || [];
+        if (!buckets.length){ $box.html('<span class="text-muted">Sin buckets</span>'); return; }
+
+        // Renderizar filas clickeables (C2)
+        const rows = buckets.map(b => `
+          <div class="d-flex align-items-center mb-1 qf-bucket" data-key="${key}" data-val="${PE.escapeHtml(String(b.val ?? b.label))}" style="cursor:pointer" title="Click para filtrar por este valor">
+            <div class="flex-grow-1">${PE.escapeHtml(b.label)}</div>
+            <div class="text-monospace text-muted small mr-2">${(+b.count).toLocaleString('es-CL')}</div>
+            <i class="fa fa-filter small text-muted"></i>
           </div>
-        `);
-        return;
+        `).join('');
+        $box.html(`<div class="small">${rows}</div>`);
+
+        // Dibujar gráfico inline con Chart.js si disponible (C1)
+        if (typeof Chart !== 'undefined' && (meta.tipo === 1 || meta.tipo === 2 || meta.tipo === 3)) {
+          const canvasId = 'chart-' + key.replace(/[^a-z0-9]/gi, '_');
+          $box.append(`<canvas id="${canvasId}" style="max-height:160px;margin-top:8px"></canvas>`);
+          const labels  = buckets.map(b => b.label);
+          const data    = buckets.map(b => +b.count);
+          const colors  = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac'];
+
+          try {
+            const chart = new Chart(document.getElementById(canvasId), {
+              type: meta.tipo === 1 ? 'doughnut' : 'bar',
+              data: {
+                labels,
+                datasets: [{
+                  data,
+                  backgroundColor: meta.tipo === 1
+                    ? ['#4e79a7','#e15759']
+                    : colors.slice(0, data.length),
+                  borderWidth: 1,
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                indexAxis: meta.tipo !== 1 ? 'y' : undefined,
+                plugins: {
+                  legend: { display: meta.tipo === 1, position: 'bottom' }
+                },
+                scales: meta.tipo !== 1 ? {
+                  x: { beginAtZero: true, ticks: { precision: 0 } }
+                } : undefined,
+              }
+            });
+            PE.chartMap.set(key, chart);
+          } catch(e) { /* Chart.js no disponible */ }
+        }
+      },
+      error: function(xhr, status){
+        if (status === 'abort') return; // ignorar aborts
+        statsXhrMap.delete(key);
+        $box.html('<span class="text-danger">Error al cargar</span>');
+        PE.showError('No se pudo cargar stats', xhr.responseText||'Error inesperado');
       }
-      const buckets = (payload.buckets || []);
-      if (!buckets.length){ $box.html('<span class="text-muted">Sin buckets</span>'); return; }
-      const rows = buckets.map(b => `
-        <div class="d-flex align-items-center mb-1">
-          <div class="flex-grow-1">${PE.escapeHtml(b.label)}</div>
-          <div class="text-monospace">${b.count.toLocaleString('es-CL')}</div>
-        </div>
-      `).join('');
-      $box.html(`<div class="small">${rows}</div>`);
-    }).fail(xhr => {
-      $box.html('<span class="text-danger">Error al cargar</span>');
-      PE.showError('No se pudo cargar stats', xhr.responseText||'Error inesperado');
     });
+
+    statsXhrMap.set(key, xhr);
   }
 
   $(document).on('click', '.qf-stats-refresh', function(){
     const key   = $(this).data('key');
     const entry = QFILTERS.get(key); if (!entry) return;
     fetchQStats(key, entry.meta);
+  });
+
+  // ========= Drill-down: click en bucket aplica filtro (C2) =========
+  $(document).on('click', '.qf-bucket', function(){
+    const key = $(this).data('key');
+    const val = String($(this).data('val'));
+    const ent = QFILTERS.get(key);
+    if (!ent) return;
+
+    const tipo = ent.meta.tipo;
+
+    if (tipo === 1) {
+      // Bool: toggle el valor 0 o 1
+      const v = parseInt(val, 10);
+      const current = Array.isArray(ent.values.bool) ? ent.values.bool : [];
+      const idx = current.indexOf(v);
+      ent.values = { bool: idx >= 0 ? current.filter(x => x !== v) : [...current, v] };
+    } else if (tipo === 2 || tipo === 3) {
+      // Opciones: toggle el option_id o text:valor
+      const curIds   = Array.isArray(ent.values.opts_ids)   ? [...ent.values.opts_ids]   : [];
+      const curTexts = Array.isArray(ent.values.opts_texts) ? [...ent.values.opts_texts] : [];
+      if (val.startsWith('text:')) {
+        const t = val.slice(5);
+        const i = curTexts.indexOf(t);
+        ent.values = Object.assign({}, ent.values, { opts_texts: i >= 0 ? curTexts.filter(x=>x!==t) : [...curTexts, t] });
+      } else {
+        const id = parseInt(val, 10);
+        const i = curIds.indexOf(id);
+        ent.values = Object.assign({}, ent.values, { opts_ids: i >= 0 ? curIds.filter(x=>x!==id) : [...curIds, id] });
+      }
+    }
+
+    syncQFiltersUI();
+    PE.renderActiveFilters();
   });
 
   // Refrescar stats en vivo cuando cambia el ámbito

@@ -4,7 +4,6 @@
   const USER_ID  = window.PEConfig.USER_ID;
 
   // Factory presets: resueltos por PHP con metadata embebida.
-  // Cada item tiene _resolved:true → no necesitan AJAX de validación.
   const FACTORY_PRESETS = window.PEConfig.FACTORY_PRESETS || [];
 
   // ========= PRESETS de usuario (localStorage) =========
@@ -16,26 +15,39 @@
   }
 
   function savePresets(arr){
-    localStorage.setItem(PRESETS_KEY, JSON.stringify(arr));
+    try {
+      localStorage.setItem(PRESETS_KEY, JSON.stringify(arr));
+    } catch(e) {
+      alert('No se pudo guardar el preset: el almacenamiento local está lleno o no disponible.');
+    }
   }
 
+  // Captura todos los filtros actuales (preguntas + scope completo)
   function buildPresetFromState(){
     const items = [];
     QFILTERS.forEach(({meta, values}) => { items.push({ meta, values }); });
     return {
-      version: 1,
+      version: 2,
       created_at: new Date().toISOString(),
-      form_id: $('#f_form').val(),
+      name: null,
+      scope: {
+        division:    $('#f_division').val()    || '0',
+        subdivision: $('#f_subdivision').val() || '0',
+        tipo:        $('#f_tipo').val()        || '0',
+        form_id:     $('#f_form').val()        || '0',
+        desde:       $('#f_desde').val()       || '',
+        hasta:       $('#f_hasta').val()       || '',
+        distrito:    $('#f_distrito').val()    || '0',
+        jv:          $('#f_jv').val()          || '0',
+        usuario:     $('#f_usuario').val()     || '0',
+        codigo:      $('#f_codigo').val()      || '',
+      },
       items
     };
   }
+  PE.buildPresetFromState = buildPresetFromState;
 
   // ========= applyPreset =========
-  // Soporta dos rutas:
-  //   A) Factory preset (_resolved:true) → aplica metadata embebida directamente, sin AJAX.
-  //      Primero setea defaultScope en el formulario.
-  //   B) User preset (guardado en localStorage) → fetchPreguntaMeta() como antes.
-
   function applyPreset(preset){
     // 1. Limpiar selección actual
     PE._applyingPreset = true;
@@ -43,21 +55,31 @@
     QFILTERS.clear();
 
     const items = preset.items || [];
-    if (!items.length){ PE.syncQFiltersUI(); return Promise.resolve(); }
 
-    // 2. Si el preset tiene defaultScope, aplicarlo al formulario ANTES de popular QFILTERS
-    if (preset.defaultScope) {
-      const ds = preset.defaultScope;
-      if (ds.subdivision != null) $('#f_subdivision').val(String(ds.subdivision));
-      if (ds.tipo       != null) $('#f_tipo').val(String(ds.tipo));
-      if (ds.form_id    != null) $('#f_form').val(String(ds.form_id));
+    // 2. Aplicar scope completo (version 2) o defaultScope (factory / versión 1)
+    const scope = preset.scope || preset.defaultScope || null;
+    if (scope) {
+      if (scope.subdivision != null) $('#f_subdivision').val(String(scope.subdivision));
+      if (scope.tipo        != null) $('#f_tipo').val(String(scope.tipo));
+      if (scope.form_id     != null) $('#f_form').val(String(scope.form_id));
+      // Campos extra en version 2
+      if (scope.desde   != null && scope.desde   !== '') $('#f_desde').val(scope.desde);
+      if (scope.hasta   != null && scope.hasta   !== '') $('#f_hasta').val(scope.hasta);
+      if (scope.distrito != null && scope.distrito !== '0') $('#f_distrito').val(String(scope.distrito));
+      if (scope.jv       != null && scope.jv       !== '0') $('#f_jv').val(String(scope.jv));
+      if (scope.usuario  != null && scope.usuario  !== '0') $('#f_usuario').val(String(scope.usuario));
+      if (scope.codigo   != null && scope.codigo   !== '') $('#f_codigo').val(scope.codigo);
+      // MC: división
+      if (scope.division != null && scope.division !== '0' && $('#f_division').length) {
+        $('#f_division').val(String(scope.division)).trigger('change');
+      }
     }
 
-    // 3. Separar items resueltos (factory) de items sin resolver (user presets)
+    if (!items.length){ PE.syncQFiltersUI(); return Promise.resolve(); }
+
     const resolved   = items.filter(it => it._resolved === true);
     const unresolved = items.filter(it => it._resolved !== true);
 
-    // 3a. Aplicar items resueltos directamente (fast-apply, sin AJAX)
     resolved.forEach(item => {
       const key = 'set:' + item.id;
       const optId = String(item.id);
@@ -77,27 +99,15 @@
       });
     });
 
-    // 3b. Resolver items de user-presets vía AJAX (normalizar formato heredado)
     const normalized = unresolved.map(it => {
       if (it.meta && it.meta.id != null) {
-        return {
-          mode:   it.meta.mode  || 'set',
-          id:     it.meta.id,
-          label:  it.meta.label || ('Pregunta ' + it.meta.id),
-          values: it.values || {}
-        };
+        return { mode: it.meta.mode || 'set', id: it.meta.id, label: it.meta.label || ('Pregunta ' + it.meta.id), values: it.values || {} };
       } else if (it.qset_id != null) {
-        return {
-          mode:   it.mode  || 'set',
-          id:     it.qset_id,
-          label:  it.label || ('Pregunta ' + it.qset_id),
-          values: it.values || {}
-        };
+        return { mode: it.mode || 'set', id: it.qset_id, label: it.label || ('Pregunta ' + it.qset_id), values: it.values || {} };
       }
       return null;
     }).filter(Boolean);
 
-    // Si solo había items resueltos, actualizar UI y salir
     if (!normalized.length) {
       PE._applyingPreset = true;
       try { $('#f_preguntas').trigger('change'); } finally { PE._applyingPreset = false; }
@@ -105,7 +115,6 @@
       return Promise.resolve();
     }
 
-    // Fetch meta en paralelo para los items no resueltos
     return Promise.allSettled(
       normalized.map(n =>
         PE.fetchPreguntaMeta(n.mode, n.id, true)
@@ -149,18 +158,21 @@
       PE.syncQFiltersUI();
 
       if (skipped.length > 0 && loaded.length > 0) {
-        const msg = `Se cargaron <strong>${loaded.length}</strong> de ${normalized.length} preguntas.<br>` +
-                    `<strong>No disponibles en este ámbito:</strong><br>` +
-                    skipped.map(s => '&bull; ' + PE.escapeHtml(s)).join('<br>');
-        PE.showError('Preset parcial', msg);
+        PE.showError('Preset parcial',
+          `Se cargaron <strong>${loaded.length}</strong> de ${normalized.length} preguntas.<br>` +
+          `<strong>No disponibles en este ámbito:</strong><br>` +
+          skipped.map(s => '&bull; ' + PE.escapeHtml(s)).join('<br>'),
+          true);
       } else if (skipped.length > 0 && loaded.length === 0) {
-        const msg = `Ninguna de las ${normalized.length} preguntas del preset está disponible en el ámbito actual.<br><br>` +
-                    `<strong>Preguntas no encontradas:</strong><br>` +
-                    skipped.map(s => '&bull; ' + PE.escapeHtml(s)).join('<br>');
-        PE.showError('Preset no disponible', msg);
+        PE.showError('Preset no disponible',
+          `Ninguna de las ${normalized.length} preguntas del preset está disponible en el ámbito actual.<br><br>` +
+          `<strong>Preguntas no encontradas:</strong><br>` +
+          skipped.map(s => '&bull; ' + PE.escapeHtml(s)).join('<br>'),
+          true);
       }
     });
   }
+  PE.applyPreset = applyPreset;
 
   // ========= Menú de presets =========
   function refreshPresetsMenu(){
@@ -183,14 +195,14 @@
 
     items.forEach(item => {
       const $row  = $('<div class="d-flex align-items-center px-3 py-1"></div>');
-      const $link = $('<a href="#" class="mr-2 preset-load"></a>')
+      const $link = $('<a href="#" class="mr-2 preset-load text-truncate" style="max-width:200px"></a>')
         .text(item.name)
         .attr('data-kind', item.kind)
         .attr('data-idx',  item.idx);
       $row.append($link);
 
       if (item.kind === 'user') {
-        const $del = $('<a href="#" class="text-danger ml-auto preset-del" title="Eliminar"><i class="fa fa-times"></i></a>')
+        const $del = $('<a href="#" class="text-danger ml-auto preset-del flex-shrink-0" title="Eliminar"><i class="fa fa-times"></i></a>')
           .attr('data-idx', item.idx);
         $row.append($del);
       }
@@ -237,13 +249,32 @@
     PE.syncQFiltersUI();
   });
 
+  // ========= COMPARTIR: generar URL con estado completo =========
+  $('#btnShareLink').on('click', function(){
+    try {
+      const preset = buildPresetFromState();
+      const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(preset))));
+      const url = location.origin + location.pathname + '?state=' + encodeURIComponent(encoded);
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(url)
+          .then(() => alert('Enlace copiado al portapapeles.\nPégalo en el navegador para restaurar exactamente estos filtros.'))
+          .catch(() => prompt('Copia este enlace:', url));
+      } else {
+        prompt('Copia este enlace:', url);
+      }
+    } catch(e) {
+      alert('No se pudo generar el enlace.');
+    }
+  });
+
   // ========= AUTOFILL (por usuario) =========
   function hasURLOverrides(){
-    return (location.search && location.search.length > 1);
+    const params = new URLSearchParams(location.search);
+    params.delete('state');
+    return params.toString().length > 0;
   }
 
   function runRedBullAutofill(){
-    // Buscar preset que tenga autofillUser coincidiendo con el usuario actual
     const preset = FACTORY_PRESETS.find(p => p.autofillUser === USER_ID);
 
     if (!preset || hasURLOverrides() ||
@@ -252,9 +283,30 @@
       return Promise.resolve(false);
     }
 
-    // applyPreset setea el scope y popula QFILTERS con metadata embebida (sin AJAX)
     return applyPreset(preset).then(() => true);
   }
   PE.runRedBullAutofill = runRedBullAutofill;
+
+  // ========= RESTAURAR estado desde URL ?state= =========
+  PE.restoreStateFromURL = function(){
+    const stateParam = new URLSearchParams(location.search).get('state');
+    if (!stateParam) return Promise.resolve(false);
+
+    try {
+      const decoded = decodeURIComponent(escape(atob(decodeURIComponent(stateParam))));
+      const preset  = JSON.parse(decoded);
+      if (!preset || typeof preset !== 'object') return Promise.resolve(false);
+
+      // Limpiar el parámetro state de la URL sin recargar
+      const clean = new URLSearchParams(location.search);
+      clean.delete('state');
+      const newUrl = location.pathname + (clean.toString() ? '?' + clean.toString() : '');
+      history.replaceState(null, '', newUrl);
+
+      return applyPreset(preset).then(() => true);
+    } catch(e) {
+      return Promise.resolve(false);
+    }
+  };
 
 })(jQuery);

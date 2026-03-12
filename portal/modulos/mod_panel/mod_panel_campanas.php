@@ -341,17 +341,17 @@ $conn->close();
             <td class="text-center"><?= $visitados ?></td>
             <td class="text-center"><?= $gestionados ?></td>
     
-            <td class="text-center">
+            <td class="text-center" data-order="<?= $ratioV ?>">
               <span class="ratio-cell">
                 <?= iconRatio($ratioV) ?>
-                <span class="ratio-text"><?= $ratioV ?>%</span>
+                <span class="ratio-text"><?= number_format($ratioV, 1, ',', '.') ?>%</span>
               </span>
             </td>
-    
-            <td class="text-center">
+            
+            <td class="text-center" data-order="<?= $ratioG ?>">
               <span class="ratio-cell">
                 <?= iconRatio($ratioG) ?>
-                <span class="ratio-text"><?= $ratioG ?>%</span>
+                <span class="ratio-text"><?= number_format($ratioG, 1, ',', '.') ?>%</span>
               </span>
             </td>
     
@@ -361,11 +361,9 @@ $conn->close();
                 <i class="fas fa-chart-pie"></i> Ver
               </a>
             </td>
-          </tr>
-    
-        <?php endforeach; ?>
-    
-        </tbody>
+        </tr> 
+    <?php endforeach; ?>
+</tbody>            
       </table>
     </div>
     <?php else: ?>
@@ -407,16 +405,27 @@ $conn->close();
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 $(document).ready(function() {
+
+    // 🔹 Plugin para ordenar fechas formato dd-mm-yyyy
+    $.fn.dataTable.ext.type.order['date-eu-pre'] = function (d) {
+        if (!d) return 0;
+        var parts = d.split('-');
+        return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
+    };
+
     $('#tablaCampanas').DataTable({
-        order: [[0, "asc"]], // orden inicial por primera columna
+        order: [[0, "asc"]], // orden inicial por Campaña
         pageLength: 25,
         language: {
             url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json"
         },
         columnDefs: [
-            { orderable: false, targets: 7 } // bloquea orden columna 7
+            { type: 'date-eu', targets: [1,2] },  // columnas Inicio y Término
+            { type: 'num', targets: [6,7] },      // % Visitados y % Gestionados
+            { orderable: false, targets: 8 }      // bloquea Dashboard
         ]
     });
+
 });
 </script>
 
