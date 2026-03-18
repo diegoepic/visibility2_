@@ -236,69 +236,91 @@ function foto_already_linked(mysqli $conn, int $visita_id, int $idFQ, string $ur
 }
 
 /* ---------------- Utilidades de imagen ---------------- */
+/**
+ * Convierte cualquier imagen a WebP y la guarda.
+ * Devuelve true si fue exitosa la conversión.
+ */
 function convertirAWebP($sourcePath, $destPath, $quality = 80) {
-  // VALIDACIÓN: Tamaño máximo del archivo (25MB para soportar fotos de alta resolución)
-  $maxFileSize = 50 * 1024 * 1024; // 25MB
-  $fileSize = @filesize($sourcePath);
-  if ($fileSize === false || $fileSize > $maxFileSize) {
-    throw new Exception('Imagen muy grande (máx 25MB). Intente con una foto de menor resolución.');
-  }
+    $maxFileSize = 50 * 1024 * 1024; // 50MB
+    $fileSize = @filesize($sourcePath);
+    if ($fileSize === false || $fileSize > $maxFileSize) {
+        throw new Exception('Imagen muy grande (máx 50MB).');
+    }
 
-  // VALIDACIÓN: Obtener dimensiones y MIME type
-  $info = @getimagesize($sourcePath);
-  if (!$info) {
-    throw new Exception('Archivo no es una imagen válida');
-  }
+    $info = @getimagesize($sourcePath);
+    if (!$info) throw new Exception('Archivo no es una imagen válida.');
+    $maxWidth = 8000; $maxHeight = 8000;
+    if ($info[0] > $maxWidth || $info[1] > $maxHeight) {
+        throw new Exception('Dimensiones muy grandes (máx 8000x8000).');
+    }
 
-  // VALIDACIÓN: Dimensiones máximas (4000x4000)
-  $maxWidth = 8000;
-  $maxHeight = 8000;
-  if ($info[0] > $maxWidth || $info[1] > $maxHeight) {
-    throw new Exception('Dimensiones muy grandes (máx 8000x8000)');
-  }
+    $mime = $info['mime'] ?? '';
 
-  $mime = $info['mime'] ?? '';
+    if (class_exists('Imagick')) {
+        try {
+            $img = new Imagick($sourcePath);
+            if ($img->getNumberImages() > 1) { $img = $img->coalesceImages(); }
+            if (method_exists($img,'autoOrient')) { @$img->autoOrient(); }
+            $img->setImageFormat('webp'); 
+            $img->setImageCompressionQuality($quality);
+            $ok = @$img->writeImages($destPath, true);
+            $img->clear(); $img->destroy();
+            if ($ok) { @chmod($destPath, 0644); return true; }
+        } catch (Throwable $e) {}
+    }
 
-  if (class_exists('Imagick')) {
-    try {
-      $img = new Imagick($sourcePath);
-      if ($img->getNumberImages() > 1) { $img = $img->coalesceImages(); }
-      if (method_exists($img,'autoOrient')) { @$img->autoOrient(); }
-      $img->setImageFormat('webp'); $img->setImageCompressionQuality($quality);
-      $ok = @$img->writeImages($destPath, true);
-      $img->clear(); $img->destroy();
-      if ($ok) return true;
-    } catch (Throwable $e) {}
-  }
-  switch ($mime) {
-    case 'image/jpeg': $image=@imagecreatefromjpeg($sourcePath); break;
-    case 'image/png':  $image=@imagecreatefrompng($sourcePath); if ($image){@imagepalettetotruecolor($image);@imagealphablending($image,true);@imagesavealpha($image,true);} break;
-    case 'image/gif':  $image=@imagecreatefromgif($sourcePath); break;
-    case 'image/webp': return @copy($sourcePath,$destPath);
-    default: return false;
-  }
-  if (!$image) return false;
-  $ok=(function_exists('imagewebp') && @imagewebp($image,$destPath,$quality));
-  imagedestroy($image);
-  return (bool)$ok;
+    switch ($mime) {
+        case 'image/jpeg': $image=@imagecreatefromjpeg($sourcePath); break;
+        case 'image/png':  $image=@imagecreatefrompng($sourcePath);
+            if ($image){ @imagepalettetotruecolor($image); @imagealphablending($image,true); @imagesavealpha($image,true);} break;
+        case 'image/gif':  $image=@imagecreatefromgif($sourcePath); break;
+        case 'image/webp': return @copy($sourcePath,$destPath) && @chmod($destPath, 0644);
+        default: return false;
+    }
+
+    if (!$image) return false;
+    $ok = (function_exists('imagewebp') && @imagewebp($image, $destPath, $quality));
+    imagedestroy($image);
+    if ($ok) { @chmod($destPath, 0644); }
+    return (bool)$ok;
 }
+
+/**
+ * Guarda un archivo subido de forma segura.
+ * Crea carpetas nuevas con permisos 755 y archivos con permisos 644.
+ */
 function guardarFotoUnitaria(array $file, string $subdir, string $prefix, int $idLocal): array {
-  if (!isset($file['tmp_name']) || $file['error'] !== UPLOAD_ERR_OK) throw new Exception("Error de subida de imagen ($prefix).");
-  $baseDir = __DIR__ . "/uploads/" . trim($subdir, "/") . "/";
-  if (!is_dir($baseDir) && !mkdir($baseDir, 0755, true)) throw new Exception("No se pudo crear el directorio de imágenes ($subdir).");
-  $tmp = $file['tmp_name']; $origName=$file['name']; $mime=@mime_content_type($tmp);
-  if (in_array($mime, ['image/heic','image/heif'], true)) {
-    $ext = pathinfo($origName, PATHINFO_EXTENSION) ?: 'heic';
-    $filename = "{$prefix}{$idLocal}_".uniqid('',true).".{$ext}";
-    $destino  = $baseDir.$filename;
-    if (!move_uploaded_file($tmp,$destino)) throw new Exception("No se pudo guardar archivo HEIC/HEIF ($prefix).");
-  } else {
-    $filename = "{$prefix}{$idLocal}_".uniqid('',true).".webp";
-    $destino  = $baseDir.$filename;
-    if (!convertirAWebP($tmp,$destino,80)) throw new Exception("No se pudo convertir la imagen a WebP ($prefix).");
-  }
-  $url = "/visibility2/app/uploads/".trim($subdir,"/")."/".$filename;
-  return ['url'=>$url,'path'=>$destino];
+    if (!isset($file['tmp_name']) || $file['error'] !== UPLOAD_ERR_OK) throw new Exception("Error de subida de imagen ($prefix).");
+
+    $baseDir = __DIR__ . "/uploads/" . trim($subdir, "/") . "/";
+    if (!is_dir($baseDir)) {
+        if (!mkdir($baseDir, 0755, true)) throw new Exception("No se pudo crear el directorio de imágenes ($subdir).");
+        @chmod($baseDir, 0755); // asegurar permisos de carpeta
+    }
+
+    $tmp = $file['tmp_name']; 
+    $origName = $file['name']; 
+    $mime = @mime_content_type($tmp);
+
+    // Determinar nombre destino
+    $extOrig = strtolower(pathinfo($origName, PATHINFO_EXTENSION) ?: 'jpg');
+    $baseName = uniqid('foto_', true);
+    $destinoWebp = $baseDir . $baseName . '.webp';
+
+    // Convertir a WebP o fallback
+    if (!convertirAWebP($tmp, $destinoWebp, 80)) {
+        $destinoOrig = $baseDir . $baseName . '.' . $extOrig;
+        if (!@move_uploaded_file($tmp, $destinoOrig) && !@copy($tmp, $destinoOrig)) {
+            throw new Exception("No se pudo guardar archivo '$origName' ($prefix).");
+        }
+        @chmod($destinoOrig, 0644);
+        $rutaRel = "uploads/$subdir/" . basename($destinoOrig);
+    } else {
+        $rutaRel = "uploads/$subdir/" . basename($destinoWebp);
+        @chmod($destinoWebp, 0644);
+    }
+
+    return ['url' => $rutaRel, 'path' => $destinoWebp];
 }
 
 /* ---------------- Reestructurar fotos materiales (si vienen por este endpoint) ---------------- */

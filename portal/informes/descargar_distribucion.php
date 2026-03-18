@@ -115,6 +115,32 @@ $sql = "
         UPPER(re.region) AS region,
 
         CASE
+            WHEN UPPER(TRIM(cm.comuna)) IN ('CALDERA', 'HUASCO', 'COPIAPO', 'DIEGO DE ALMAGRO', 'CHAÑARAL' , 'CHANARAL' , 'VALLENAR') THEN 'PDQ COPIAPO'
+            WHEN UPPER(TRIM(cm.comuna)) IN (
+                'ANGOL',
+                'COLLIPULLI',
+                'CURACAUTIN',
+                'CURACAUTÍN',
+                'LA UNION',
+                'LA UNIÓN',
+                'LAUTARO',
+                'LONCOCHE',
+                'LOS ANGELES',
+                'LOS ÁNGELES',
+                'NUEVA IMPERIAL',
+                'PADRE LAS CASAS',
+                'PANGUIPULLI',
+                'PITRUFQUEN',
+                'PITRUFQUÉN',
+                'PUCON',
+                'PUCÓN',
+                'TEMUCO',
+                'TRAIGUEN',
+                'TRAIGUÉN',
+                'VALDIVIA',
+                'VICTORIA',
+                'VILLARRICA'
+            ) THEN 'PDQ TEMUCO'            
             WHEN UPPER(re.region) = '01 - TARAPACA' THEN 'PDQ IQUIQUE'
             WHEN UPPER(re.region) = '02 - ANTOFAGASTA' THEN 'PDQ ANTOFAGASTA'
             WHEN UPPER(re.region) = '03 - ATACAMA' THEN 'PDQ COQUIMBO'

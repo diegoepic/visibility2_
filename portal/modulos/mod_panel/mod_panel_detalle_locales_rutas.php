@@ -10,6 +10,43 @@
   <link rel="stylesheet" type="text/css" href="../../assets/css/style.css">
   <link rel="stylesheet" type="text/css" href="../../assets/css/dataTable.css">
   <link rel='stylesheet' href='https://cdn.datatables.net/v/dt/jq-3.3.1/jszip-2.5.0/dt-1.10.20/b-1.6.1/b-colvis-1.6.1/b-html5-1.6.1/r-2.2.3/datatables.min.css'>
+<style>
+    .form-row {
+        font-size:80%;
+    }
+    .form-control {
+        font-size:80%;
+    }
+    .btn{
+    background-color: #93C01F !important;
+    border-color: #93C01F !important;
+    }
+    .mb-3{
+        font-size:80%!important;
+    }
+    .dt-buttons{
+        font-size:80%!important;
+    }
+    .dt-button{
+        border-radius: 8px!important;
+    }
+    .sorting{
+        font-size:60%!important;
+    }
+    .sorting_asc{
+        font-size:60%!important;        
+    }
+    td{
+        font-size:60%!important;          
+    }
+    #example thead th {
+    background-color: #4b545c;
+    padding: 20px 15px;
+    text-align: left;
+    font-weight: 500;
+    color: #fff;
+    }
+</style>
 </head>
 
 <body>
@@ -39,97 +76,104 @@
 
     <!-- Filtros -->
     <div class="card mt-3">
-      <div class="card-body">
-        <form method="GET" action="">
-          <div class="form-row">
+  <div class="card-body">
+    <form method="GET" action="">
 
-            <?php if ($isMC): ?>
-              <div class="form-group col-md-3">
-                <label for="id_division">DIVISIÓN</label>
-                <select class="form-control" id="id_division" name="id_division"
-                        onchange="document.getElementById('id_subdivision').value = 0; document.getElementById('id_campana').value = 0; document.getElementById('id_ejecutor').value = 0;">
-                  <option value="0">SELECCIONE DIVISIÓN</option>
-                  <?php foreach($divisiones as $div): ?>
-                    <option value="<?= (int)$div['id'] ?>" <?= $div['id']==$filter_division?'selected':'' ?>>
-                      <?= htmlspecialchars($div['nombre']) ?>
-                    </option>
-                  <?php endforeach; ?>
-                </select>
-              </div>
-            <?php else: ?>
-              <input type="hidden" name="id_division" value="<?= (int)$filter_division ?>">
-            <?php endif; ?>
-
-            <div class="form-group col-md-3">
-              <label for="id_subdivision">SUB DIVISIÓN</label>
-              <select class="form-control" id="id_subdivision" name="id_subdivision" disabled>
-                <option value="0" selected>TODAS</option>
-                <option value="-1">SIN SUB DIVISION</option>
-              </select>
-              <small class="help">FILTRA CAMPAÑAS POR SUB DIVISIÓN (SI APLICA).</small>
-            </div>
-
-            <div class="form-group col-md-2">
-              <label for="tipo_gestion">TIPO DE GESTIÓN</label>
-              <select class="form-control" id="tipo_gestion" name="tipo_gestion">
-                <option value="0" <?= ($tipoCampana==0)?'selected':'' ?>>TODAS</option>
-                <option value="1" <?= ($tipoCampana==1)?'selected':'' ?>>CAMPAÑA</option>
-                <option value="3" <?= ($tipoCampana==3)?'selected':'' ?>>RUTA</option>
-              </select>
-              <small class="help">FILTRA POR TIPO DE GESTIÓN.</small>
-            </div>
-
-            <div class="form-group col-md-2">
-              <label for="estado">ESTADO</label>
-              <select class="form-control" id="estado" name="estado"
-                      onchange="document.getElementById('id_campana').value = 0; document.getElementById('id_ejecutor').value = 0; this.form.submit();">
-                <option value="1" <?= $filter_estado==1?'selected':'' ?>>EN CURSO</option>
-                <option value="3" <?= $filter_estado==3?'selected':'' ?>>FINALIZADAS</option>
-              </select>
-            </div>
-
-            <div class="form-group col-md-4" id="campo-campana" style="display:none">
-              <label for="id_campana">CAMPAÑA</label>
-              <select class="form-control" id="id_campana" name="id_campana" disabled>
-                <option value="0" selected>SELECCIONE CAMPAÑA</option>
-              </select>
-              <small class="help">PUEDES ESCOGER CAMPAÑA O IR DIRECTO AL EJECUTOR</small>
-            </div>
-
-            <div class="form-group col-md-3">
-              <label for="id_ejecutor">EJECUTOR</label>
-              <select class="form-control" id="id_ejecutor" name="id_ejecutor" disabled>
-                <option value="0" selected>SELECCIONE EJECUTOR</option>
-              </select>
-              <small class="help">SI NO ELIGES CAMPAÑA, VERÁS TODAS SUS RUTAS.</small>
-            </div>
-
-            <div class="form-group col-md-2" id="campo-desde" style="display:none">
-              <label for="desde">DESDE</label>
-              <input type="date" class="form-control" id="desde" name="desde" value="<?= htmlspecialchars($fecha_desde) ?>">
-            </div>
-
-            <div class="form-group col-md-2" id="campo-hasta" style="display:none">
-              <label for="hasta">HASTA</label>
-              <input type="date" class="form-control" id="hasta" name="hasta" value="<?= htmlspecialchars($fecha_hasta) ?>">
-            </div>
-
-            <div class="form-group col-md-3 align-self-end">
-              <input type="hidden" name="buscar" value="1">
-              <button type="submit" class="btn btn-primary btn-block">BUSCAR</button>
-            </div>
-
+      <!-- FILA 1 -->
+      <div class="form-row">
+        <?php if ($isMC): ?>
+          <div class="form-group col-md-3">
+            <label for="id_division">DIVISIÓN</label>
+            <select class="form-control" id="id_division" name="id_division"
+                    onchange="document.getElementById('id_subdivision').value = 0; document.getElementById('id_campana').value = 0; document.getElementById('id_ejecutor').value = 0;">
+              <option value="0">SELECCIONE DIVISIÓN</option>
+              <?php foreach($divisiones as $div): ?>
+                <option value="<?= (int)$div['id'] ?>" <?= $div['id']==$filter_division?'selected':'' ?>>
+                  <?= htmlspecialchars($div['nombre']) ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
           </div>
+        <?php else: ?>
+          <input type="hidden" name="id_division" value="<?= (int)$filter_division ?>">
+        <?php endif; ?>
 
-          <!--  Persistencia -->
-          <input type="hidden" id="val_division" value="<?= (int)$filter_division ?>">
-          <input type="hidden" id="val_subdivision" value="<?= (int)$filter_subdivision ?>">
-          <input type="hidden" id="val_campana" value="<?= (int)$filter_campana ?>">
-          <input type="hidden" id="val_ejecutor" value="<?= (int)$id_ejecutor ?>">
-          <input type="hidden" id="val_tipo" value="<?= (int)$tipoCampana ?>">
-        </form>
+        <div class="form-group col-md-3">
+          <label for="id_subdivision">SUB DIVISIÓN</label>
+          <select class="form-control" id="id_subdivision" name="id_subdivision" disabled>
+            <option value="0" selected>TODAS</option>
+            <option value="-1">SIN SUB DIVISION</option>
+          </select>
+          <small class="help">FILTRA CAMPAÑAS POR SUB DIVISIÓN (SI APLICA).</small>
+        </div>
+
+        <div class="form-group col-md-2">
+          <label for="tipo_gestion">TIPO DE GESTIÓN</label>
+          <select class="form-control" id="tipo_gestion" name="tipo_gestion">
+            <option value="0" <?= ($tipoCampana==0)?'selected':'' ?>>TODAS</option>
+            <option value="1" <?= ($tipoCampana==1)?'selected':'' ?>>CAMPAÑA</option>
+            <option value="3" <?= ($tipoCampana==3)?'selected':'' ?>>RUTA</option>
+          </select>
+          <small class="help">FILTRA POR TIPO DE GESTIÓN.</small>
+        </div>
+
+        <div class="form-group col-md-2">
+          <label for="estado">ESTADO</label>
+          <select class="form-control" id="estado" name="estado"
+                  onchange="document.getElementById('id_campana').value = 0; document.getElementById('id_ejecutor').value = 0; this.form.submit();">
+            <option value="1" <?= $filter_estado==1?'selected':'' ?>>EN CURSO</option>
+            <option value="3" <?= $filter_estado==3?'selected':'' ?>>FINALIZADAS</option>
+          </select>
+        </div>
       </div>
-    </div>
+
+      <!-- FILA 2 -->
+      <div class="form-row">
+        <div class="form-group col-md-4" id="campo-campana" style="display:none">
+          <label for="id_campana">CAMPAÑA</label>
+          <select class="form-control" id="id_campana" name="id_campana" disabled>
+            <option value="0" selected>SELECCIONE CAMPAÑA</option>
+          </select>
+          <small class="help">PUEDES ESCOGER CAMPAÑA O IR DIRECTO AL EJECUTOR</small>
+        </div>
+
+        <div class="form-group col-md-3">
+          <label for="id_ejecutor">EJECUTOR</label>
+          <select class="form-control" id="id_ejecutor" name="id_ejecutor" disabled>
+            <option value="0" selected>SELECCIONE EJECUTOR</option>
+          </select>
+          <small class="help">SI NO ELIGES CAMPAÑA, VERÁS TODAS SUS RUTAS.</small>
+        </div>
+
+        <div class="form-group col-md-2" id="campo-desde" style="display:none">
+          <label for="desde">DESDE</label>
+          <input type="date" class="form-control" id="desde" name="desde" value="<?= htmlspecialchars($fecha_desde) ?>">
+        </div>
+
+        <div class="form-group col-md-2" id="campo-hasta" style="display:none">
+          <label for="hasta">HASTA</label>
+          <input type="date" class="form-control" id="hasta" name="hasta" value="<?= htmlspecialchars($fecha_hasta) ?>">
+        </div>
+      </div>
+
+      <!-- FILA 3: BOTÓN -->
+      <div class="form-row">
+        <div class="form-group col-12 text-right mb-0">
+          <input type="hidden" name="buscar" value="1">
+          <button type="submit" class="btn btn-primary px-4">BUSCAR</button>
+        </div>
+      </div>
+
+      <!-- Persistencia -->
+      <input type="hidden" id="val_division" value="<?= (int)$filter_division ?>">
+      <input type="hidden" id="val_subdivision" value="<?= (int)$filter_subdivision ?>">
+      <input type="hidden" id="val_campana" value="<?= (int)$filter_campana ?>">
+      <input type="hidden" id="val_ejecutor" value="<?= (int)$id_ejecutor ?>">
+      <input type="hidden" id="val_tipo" value="<?= (int)$tipoCampana ?>">
+
+    </form>
+  </div>
+</div>
 
   </div> <!-- collapse -->
 </div><!-- container -->
@@ -137,7 +181,7 @@
   <!-- Tabla -->
   <hr>
   <h5 class="mb-3">
-    Listado de Locales <?= ($id_ejecutor>0 && $nombreEjec) ? 'para '.htmlspecialchars($nombreEjec) : '' ?>
+    Listado de Locales <?= ($id_ejecutor > 0 && !empty($nombreEjec)) ? 'para ' . htmlspecialchars($nombreEjec) : '' ?>
     <?php if (!empty($locales)): ?>
       <span class="badge badge-secondary ml-2"><?= count($locales) ?> resultado(s)</span>
     <?php endif; ?>
@@ -207,17 +251,6 @@
   </div>
 </div>
 
-<!-- Modal de detalle 
-<div id="modalDetalle" class="modal-overlay" style="display:none;">
-  <div class="modal-content" onclick="event.stopPropagation()">
-    <span class="modal-close" onclick="cerrarModalDetalle()">&times;</span>
-    <h3 id="modalTituloLocal" style="margin-top:0; color:#2c3e50;">Detalle del Local</h3>
-    <hr>
-    <div id="modalBodyDetalle" style="font-size:14px; color:#333;">
-    </div>
-  </div>
-</div> -->
-
 <!-- Modal Detalle Local -->
 <div class="modal fade" id="modalDetalle" tabindex="-1" role="dialog">
   <div class="modal-dialog modal-xl" role="document">
@@ -236,14 +269,9 @@
       <!-- BODY -->
       <div class="modal-body" id="modalBodyDetalle">
       </div>
-
-
-
-
     </div>
   </div>
 </div>
-
 
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="../../assets/js/datatables.min.js"></script>

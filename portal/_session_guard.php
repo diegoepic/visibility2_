@@ -132,7 +132,11 @@ if (!function_exists('assert_session_is_valid')) {
         $st->close();
 
         // Si no hay fila (sesión no registrada) o fue revocada → expulsar
-        if (!$row || !is_null($row['revoked_at'])) {
+        if (!$row) {
+          return;
+        }
+        
+        if (!is_null($row['revoked_at'])) {
           session_unset();
           session_destroy();
           expel_to_login_top('session_expired=1');

@@ -117,8 +117,8 @@ function getCampaignData(mysqli $conn, int $idForm): array
                     'implementado_auditado','solo_implementado','solo_auditoria',
                     'local_cerrado','no_permitieron'
                 )
-                AND fq.fechaVisita IS NOT NULL
-                AND fq.fechaVisita <> '0000-00-00 00:00:00'
+            AND fq.fechaVisita IS NOT NULL
+            AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
                 THEN l.id
             END) AS locales_visitados,
             COUNT(DISTINCT CASE
@@ -166,11 +166,40 @@ function getLocalesDetails(mysqli $conn, int $idForm): array
             SUBSTRING_INDEX(TRIM(l.nombre), ' ', 1) AS numero_local,
             f.modalidad AS modalidad,
             UPPER(f.nombre) AS nombre_campana,
-            DATE(f.fechaInicio) AS fecha_inicio,
-            DATE(f.fechaTermino) AS fecha_termino,
-            DATE(fq.fechaVisita) AS fecha_visita,
-            TIME(fq.fechaVisita) AS hora,
-            DATE(fq.fechaPropuesta) AS fecha_propuesta,
+            CASE
+                WHEN f.fechaInicio IS NULL
+                     OR CAST(f.fechaInicio AS CHAR(19)) = '0000-00-00 00:00:00'
+                THEN NULL
+                ELSE DATE(f.fechaInicio)
+            END AS fecha_inicio,
+
+            CASE
+                WHEN f.fechaTermino IS NULL
+                     OR CAST(f.fechaTermino AS CHAR(19)) = '0000-00-00 00:00:00'
+                THEN NULL
+                ELSE DATE(f.fechaTermino)
+            END AS fecha_termino,
+
+            CASE
+                WHEN fq.fechaVisita IS NULL
+                     OR CAST(fq.fechaVisita AS CHAR(19)) = '0000-00-00 00:00:00'
+                THEN NULL
+                ELSE DATE(fq.fechaVisita)
+            END AS fecha_visita,
+
+            CASE
+                WHEN fq.fechaVisita IS NULL
+                     OR CAST(fq.fechaVisita AS CHAR(19)) = '0000-00-00 00:00:00'
+                THEN NULL
+                ELSE TIME(fq.fechaVisita)
+            END AS hora,
+
+            CASE
+                WHEN fq.fechaPropuesta IS NULL
+                     OR CAST(fq.fechaPropuesta AS CHAR(10)) = '0000-00-00'
+                THEN NULL
+                ELSE DATE(fq.fechaPropuesta)
+            END AS fecha_propuesta,
             UPPER(l.nombre) AS nombre_local,
             UPPER(l.direccion) AS direccion_local,
             UPPER(cm.comuna) AS comuna,
@@ -186,7 +215,7 @@ function getLocalesDetails(mysqli $conn, int $idForm): array
             UPPER(COALESCE(fq.observacion, '')) AS observacion,
             CASE
                 WHEN fq.fechaVisita IS NOT NULL
-                     AND fq.fechaVisita <> '0000-00-00 00:00:00'
+                     AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
                     THEN 'VISITADO'
                 ELSE 'NO VISITADO'
             END AS estado_visita,

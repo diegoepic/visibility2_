@@ -7,21 +7,12 @@ error_reporting(E_ALL);
 // -----------------------------------------------------------------------------
 // 1) Funciones auxiliares
 // -----------------------------------------------------------------------------
-
 function fixUrl(string $url, string $base_url): string {
     $url = trim($url);
-
-    if ($url === '') {
-        return '';
-    }
-
-    if (preg_match('#^https?://#i', $url)) {
-        return $url;
-    }
-
+    if ($url === '') return '';
+    if (preg_match('#^https?://#i', $url)) return $url;
     $url = ltrim($url, '/');
     $url = preg_replace('#^(visibility2/app/|app/)#i', '', $url);
-
     return rtrim($base_url, '/') . '/' . ltrim($url, '/');
 }
 
@@ -32,36 +23,37 @@ function formatearFecha($f): string {
 // -----------------------------------------------------------------------------
 // 2) Includes
 // -----------------------------------------------------------------------------
-
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/session_data.php';
 
 // -----------------------------------------------------------------------------
 // 3) Parámetros
 // -----------------------------------------------------------------------------
-
-$division_id      = (int)($_SESSION['division_id'] ?? 0);
-$divisionLogin    = $division_id;
-
-$division         = isset($_GET['division']) ? (int)$_GET['division'] : $division_id;
-$subdivision      = (int)($_GET['subdivision'] ?? 0);
-$region           = (int)($_GET['region'] ?? 0);
-$zona             = (int)($_GET['zona'] ?? 0);
-$distrito         = (int)($_GET['distrito'] ?? 0);
-$comuna           = (int)($_GET['comuna'] ?? 0);
-$usuarioFiltro    = (int)($_GET['usuario'] ?? 0);
-$jefeVentaFiltro  = (int)($_GET['jefe_venta'] ?? 0);
+$division_id       = (int)($_SESSION['division_id'] ?? 0);
+$divisionLogin     = $division_id;
+$division          = (int)($_GET['division'] ?? $division_id);
+$subdivision       = (int)($_GET['subdivision'] ?? 0);
+$region            = (int)($_GET['region'] ?? 0);
+$zona              = (int)($_GET['zona'] ?? 0);
+$distrito          = (int)($_GET['distrito'] ?? 0);
+$comuna            = (int)($_GET['comuna'] ?? 0);
+$usuarioFiltro     = (int)($_GET['usuario'] ?? 0);
+$jefeVentaFiltro   = (int)($_GET['jefe_venta'] ?? 0);
 $codigoLocalFiltro = trim($_GET['codigo_local'] ?? '');
+$view              = in_array(trim($_GET['view'] ?? 'implementacion'), ['implementacion','encuesta'], true)
+    ? trim($_GET['view'] ?? 'implementacion')
+    : 'implementacion';
 
-$view = trim($_GET['view'] ?? 'implementacion');
-$view = in_array($view, ['implementacion', 'encuesta'], true) ? $view : 'implementacion';
+$preguntaFiltro = trim($_GET['pregunta'] ?? '');
+
+// Mantengo tu regla original, pero si quieres lo dejamos abierto para más divisiones
+$puedeVerFiltroPregunta = ($view === 'encuesta' && in_array($divisionLogin, [1, 14], true));
 
 $start_date = trim($_GET['start_date'] ?? '');
 $end_date   = trim($_GET['end_date'] ?? '');
+$base_url   = "https://visibility.cl/visibility2/app/";
 
-$base_url = "https://visibility.cl/visibility2/app/";
-
-// Fecha por defecto: HOY
+// Fecha por defecto
 if ($start_date === '' && $end_date === '') {
     $today = date('Y-m-d');
     $start_date = $today;
@@ -69,9 +61,8 @@ if ($start_date === '' && $end_date === '') {
 }
 
 // -----------------------------------------------------------------------------
-// 4) Cargar divisiones
+// 3.1) Cargar divisiones
 // -----------------------------------------------------------------------------
-
 $divisiones = [];
 $resDiv = $conn->query("
     SELECT id, nombre
@@ -79,161 +70,249 @@ $resDiv = $conn->query("
     WHERE estado = 1
     ORDER BY nombre
 ");
-while ($r = $resDiv->fetch_assoc()) {
-    $divisiones[] = $r;
-}
-
-// -----------------------------------------------------------------------------
-// 4.1) Validar subdivisión
-// -----------------------------------------------------------------------------
-
-if ($subdivision > 0 && $division > 0) {
-    $stmtCheck = $conn->prepare("
-        SELECT 1
-        FROM subdivision
-        WHERE id = ?
-          AND id_division = ?
-        LIMIT 1
-    ");
-    $stmtCheck->bind_param("ii", $subdivision, $division);
-    $stmtCheck->execute();
-    $stmtCheck->store_result();
-
-    if ($stmtCheck->num_rows === 0) {
-        $subdivision = 0;
+if ($resDiv) {
+    while ($r = $resDiv->fetch_assoc()) {
+        $divisiones[] = $r;
     }
-
-    $stmtCheck->close();
+    $resDiv->close();
 }
 
 // -----------------------------------------------------------------------------
-// 4.2) Jefes de venta
+// 3.2) Cargar jefes de venta
 // -----------------------------------------------------------------------------
-
 $jefesVenta = [];
 $resJV = $conn->query("
     SELECT id, nombre
     FROM jefe_venta
     ORDER BY nombre ASC
 ");
-while ($jv = $resJV->fetch_assoc()) {
-    $jefesVenta[] = $jv;
+if ($resJV) {
+    while ($rowJV = $resJV->fetch_assoc()) {
+        $jefesVenta[] = $rowJV;
+    }
+    $resJV->close();
 }
 
 // -----------------------------------------------------------------------------
-// 5) Construcción de filtros BASE
+// 4) Construcción de filtros base
 // -----------------------------------------------------------------------------
-
 $where  = "1=1";
 $params = [];
 $types  = "";
 
-// División
+// filtros comunes
 if ($division > 0) {
-    $where   .= " AND f.id_division = ?";
-    $types   .= "i";
+    $where .= " AND f.id_division = ?";
+    $types .= "i";
     $params[] = $division;
 }
 
-// Subdivisión
 if ($subdivision > 0) {
-    $where   .= " AND f.id_subdivision = ?";
-    $types   .= "i";
+    $where .= " AND f.id_subdivision = ?";
+    $types .= "i";
     $params[] = $subdivision;
 }
 
-// Región
 if ($region > 0) {
-    $where   .= " AND r.id = ?";
-    $types   .= "i";
+    $where .= " AND r.id = ?";
+    $types .= "i";
     $params[] = $region;
 }
 
-// Zona
 if ($zona > 0) {
-    $where   .= " AND z.id = ?";
-    $types   .= "i";
+    $where .= " AND z.id = ?";
+    $types .= "i";
     $params[] = $zona;
 }
 
-// Distrito
 if ($distrito > 0) {
-    $where   .= " AND d.id = ?";
-    $types   .= "i";
+    $where .= " AND d.id = ?";
+    $types .= "i";
     $params[] = $distrito;
 }
 
-// Comuna
 if ($comuna > 0) {
-    $where   .= " AND co.id = ?";
-    $types   .= "i";
+    $where .= " AND co.id = ?";
+    $types .= "i";
     $params[] = $comuna;
 }
 
-// Usuario
 if ($usuarioFiltro > 0) {
-    if ($view === 'implementacion') {
-        $where .= " AND fv.id_usuario = ?";
-    } else {
-        $where .= " AND fqr.id_usuario = ?";
-    }
-    $types   .= "i";
+    $where .= ($view === 'implementacion')
+        ? " AND fv.id_usuario = ?"
+        : " AND fqr.id_usuario = ?";
+    $types .= "i";
     $params[] = $usuarioFiltro;
 }
 
-// Jefe de venta
 if ($jefeVentaFiltro > 0) {
-    $where   .= " AND l.id_jefe_venta = ?";
-    $types   .= "i";
+    $where .= " AND l.id_jefe_venta = ?";
+    $types .= "i";
     $params[] = $jefeVentaFiltro;
 }
 
-// Código local
 if ($codigoLocalFiltro !== '') {
-    $where   .= " AND l.codigo LIKE ?";
-    $types   .= "s";
+    $where .= " AND l.codigo LIKE ?";
+    $types .= "s";
     $params[] = '%' . $codigoLocalFiltro . '%';
 }
 
-// Fechas
 $fieldFecha = ($view === 'implementacion') ? 'fq.fechaVisita' : 'fqr.created_at';
 
 if ($start_date !== '') {
-    $where   .= " AND {$fieldFecha} >= ?";
-    $types   .= "s";
+    $where .= " AND {$fieldFecha} >= ?";
+    $types .= "s";
     $params[] = $start_date . ' 00:00:00';
 }
 
 if ($end_date !== '') {
-    $where   .= " AND {$fieldFecha} <= ?";
-    $types   .= "s";
+    $where .= " AND {$fieldFecha} <= ?";
+    $types .= "s";
     $params[] = $end_date . ' 23:59:59';
 }
 
-// -----------------------------------------------------------------------------
-// 6) Query principal
-// -----------------------------------------------------------------------------
+// filtro pregunta solo en encuesta
+if ($view === 'encuesta' && $preguntaFiltro !== '') {
+    $where .= " AND UPPER(TRIM(fq.question_text)) = ?";
+    $types .= "s";
+    $params[] = mb_strtoupper(trim($preguntaFiltro), 'UTF-8');
+}
 
+// -----------------------------------------------------------------------------
+// 4.1) Cargar preguntas para el filtro
+// -----------------------------------------------------------------------------
+$preguntasEncuesta = [];
+
+if ($puedeVerFiltroPregunta) {
+    $sqlPreguntas = "
+        SELECT DISTINCT UPPER(TRIM(fq.question_text)) AS pregunta
+        FROM form_question_responses fqr
+        INNER JOIN form_questions fq ON fq.id = fqr.id_form_question
+        INNER JOIN formulario f      ON f.id = fq.id_formulario
+        INNER JOIN local l           ON l.id = fqr.id_local
+        LEFT JOIN comuna co          ON co.id = l.id_comuna
+        LEFT JOIN region r           ON r.id = co.id_region
+        LEFT JOIN distrito d         ON d.id = l.id_distrito
+        LEFT JOIN zona z             ON z.id = d.id_zona
+        LEFT JOIN jefe_venta jv      ON jv.id = l.id_jefe_venta
+        WHERE fq.id_question_type = 7
+          AND COALESCE(TRIM(fq.question_text), '') <> ''
+          AND COALESCE(TRIM(fqr.answer_text), '') <> ''
+    ";
+
+    $paramsPreg = [];
+    $typesPreg  = "";
+
+    if ($division > 0) {
+        $sqlPreguntas .= " AND f.id_division = ?";
+        $typesPreg .= "i";
+        $paramsPreg[] = $division;
+    }
+
+    if ($subdivision > 0) {
+        $sqlPreguntas .= " AND f.id_subdivision = ?";
+        $typesPreg .= "i";
+        $paramsPreg[] = $subdivision;
+    }
+
+    if ($region > 0) {
+        $sqlPreguntas .= " AND r.id = ?";
+        $typesPreg .= "i";
+        $paramsPreg[] = $region;
+    }
+
+    if ($zona > 0) {
+        $sqlPreguntas .= " AND z.id = ?";
+        $typesPreg .= "i";
+        $paramsPreg[] = $zona;
+    }
+
+    if ($distrito > 0) {
+        $sqlPreguntas .= " AND d.id = ?";
+        $typesPreg .= "i";
+        $paramsPreg[] = $distrito;
+    }
+
+    if ($comuna > 0) {
+        $sqlPreguntas .= " AND co.id = ?";
+        $typesPreg .= "i";
+        $paramsPreg[] = $comuna;
+    }
+
+    if ($usuarioFiltro > 0) {
+        $sqlPreguntas .= " AND fqr.id_usuario = ?";
+        $typesPreg .= "i";
+        $paramsPreg[] = $usuarioFiltro;
+    }
+
+    if ($jefeVentaFiltro > 0) {
+        $sqlPreguntas .= " AND l.id_jefe_venta = ?";
+        $typesPreg .= "i";
+        $paramsPreg[] = $jefeVentaFiltro;
+    }
+
+    if ($codigoLocalFiltro !== '') {
+        $sqlPreguntas .= " AND l.codigo LIKE ?";
+        $typesPreg .= "s";
+        $paramsPreg[] = '%' . $codigoLocalFiltro . '%';
+    }
+
+    if ($start_date !== '') {
+        $sqlPreguntas .= " AND fqr.created_at >= ?";
+        $typesPreg .= "s";
+        $paramsPreg[] = $start_date . ' 00:00:00';
+    }
+
+    if ($end_date !== '') {
+        $sqlPreguntas .= " AND fqr.created_at <= ?";
+        $typesPreg .= "s";
+        $paramsPreg[] = $end_date . ' 23:59:59';
+    }
+
+    $sqlPreguntas .= " ORDER BY pregunta ASC";
+
+    $stmtPreg = $conn->prepare($sqlPreguntas);
+    if ($stmtPreg) {
+        if ($typesPreg !== '') {
+            $stmtPreg->bind_param($typesPreg, ...$paramsPreg);
+        }
+        $stmtPreg->execute();
+        $resPreg = $stmtPreg->get_result();
+
+        while ($rowPreg = $resPreg->fetch_assoc()) {
+            if (!empty($rowPreg['pregunta'])) {
+                $preguntasEncuesta[] = $rowPreg['pregunta'];
+            }
+        }
+
+        $stmtPreg->close();
+    }
+}
+
+// -----------------------------------------------------------------------------
+// 5) Query principal
+// -----------------------------------------------------------------------------
 if ($view === 'implementacion') {
 
     $sql = "
         SELECT
             MIN(fv.id) AS foto_id,
-            GROUP_CONCAT(fv.url SEPARATOR '||') AS urls,
+            GROUP_CONCAT(COALESCE(fv.url,'') SEPARATOR '||') AS urls,
             fq.material,
             fq.fechaVisita,
-            f.nombre AS campaña_nombre,
-            l.codigo AS local_codigo_completo,
-            TRIM(SUBSTRING_INDEX(l.codigo, '-', -1)) AS local_codigo,
-            l.nombre AS local_nombre,
-            l.direccion AS local_direccion,
-            co.comuna AS comuna_nombre,
-            r.region AS region_nombre,
-            d.nombre_distrito AS distrito_nombre,
-            z.nombre_zona AS zona_nombre,
-            c.nombre AS cadena_nombre,
-            ct.nombre AS cuenta_nombre,
-            u.usuario
+            ANY_VALUE(f.nombre) AS campaña_nombre,
+            ANY_VALUE(l.codigo) AS local_codigo_completo,
+            TRIM(SUBSTRING_INDEX(ANY_VALUE(l.codigo), '-', -1)) AS local_codigo,
+            ANY_VALUE(l.nombre) AS local_nombre,
+            ANY_VALUE(l.direccion) AS local_direccion,
+            ANY_VALUE(co.comuna) AS comuna_nombre,
+            ANY_VALUE(r.region) AS region_nombre,
+            ANY_VALUE(d.nombre_distrito) AS distrito_nombre,
+            ANY_VALUE(z.nombre_zona) AS zona_nombre,
+            ANY_VALUE(c.nombre) AS cadena_nombre,
+            ANY_VALUE(ct.nombre) AS cuenta_nombre,
+            ANY_VALUE(jv.nombre) AS jefe_venta_nombre,
+            ANY_VALUE(u.usuario) AS usuario
         FROM formularioQuestion fq
         INNER JOIN formulario f   ON f.id = fq.id_formulario
         INNER JOIN fotoVisita fv  ON fv.id_formularioQuestion = fq.id
@@ -257,21 +336,22 @@ if ($view === 'implementacion') {
     $sql = "
         SELECT
             MIN(fqr.id) AS foto_id,
-            GROUP_CONCAT(fqr.answer_text SEPARATOR '||') AS urls,
-            fqr.created_at AS fechaSubida,
-            UPPER(fq.question_text) AS pregunta,
-            f.nombre AS campaña_nombre,
-            l.codigo AS local_codigo_completo,
-            TRIM(SUBSTRING_INDEX(l.codigo, '-', -1)) AS local_codigo,
-            l.nombre AS local_nombre,
-            l.direccion AS local_direccion,
-            co.comuna AS comuna_nombre,
-            r.region AS region_nombre,
-            d.nombre_distrito AS distrito_nombre,
-            z.nombre_zona AS zona_nombre,
-            c.nombre AS cadena_nombre,
-            ct.nombre AS cuenta_nombre,
-            u.usuario
+            GROUP_CONCAT(COALESCE(fqr.answer_text,'') SEPARATOR '||') AS urls,
+            ANY_VALUE(fqr.created_at) AS fechaSubida,
+            UPPER(TRIM(fq.question_text)) AS pregunta,
+            ANY_VALUE(f.nombre) AS campaña_nombre,
+            ANY_VALUE(l.codigo) AS local_codigo_completo,
+            TRIM(SUBSTRING_INDEX(ANY_VALUE(l.codigo), '-', -1)) AS local_codigo,
+            ANY_VALUE(l.nombre) AS local_nombre,
+            ANY_VALUE(l.direccion) AS local_direccion,
+            ANY_VALUE(co.comuna) AS comuna_nombre,
+            ANY_VALUE(r.region) AS region_nombre,
+            ANY_VALUE(d.nombre_distrito) AS distrito_nombre,
+            ANY_VALUE(z.nombre_zona) AS zona_nombre,
+            ANY_VALUE(c.nombre) AS cadena_nombre,
+            ANY_VALUE(ct.nombre) AS cuenta_nombre,
+            ANY_VALUE(jv.nombre) AS jefe_venta_nombre,
+            ANY_VALUE(u.usuario) AS usuario
         FROM form_question_responses fqr
         INNER JOIN form_questions fq ON fq.id = fqr.id_form_question
         INNER JOIN formulario f      ON f.id = fq.id_formulario
@@ -286,16 +366,15 @@ if ($view === 'implementacion') {
         INNER JOIN usuario u         ON u.id = fqr.id_usuario
         WHERE {$where}
           AND fq.id_question_type = 7
-          AND fqr.id_local <> 0
+          AND COALESCE(TRIM(fqr.answer_text), '') <> ''
         GROUP BY fqr.id_usuario, fqr.id_local, fqr.id_form_question
-        ORDER BY fqr.created_at DESC
+        ORDER BY ANY_VALUE(fqr.created_at) DESC
     ";
 }
 
 // -----------------------------------------------------------------------------
-// 7) Ejecutar
+// 6) Ejecutar
 // -----------------------------------------------------------------------------
-
 $stmt = $conn->prepare($sql);
 if (!$stmt) {
     die("Error al preparar la consulta: " . $conn->error);
@@ -308,22 +387,24 @@ if ($types !== '') {
 $stmt->execute();
 $res = $stmt->get_result();
 
+// -----------------------------------------------------------------------------
+// 7) Procesar resultados
+// -----------------------------------------------------------------------------
 $data = [];
 while ($row = $res->fetch_assoc()) {
     $rawUrls = array_filter(explode('||', (string)$row['urls']));
-    $fixed   = [];
+    $fixed = [];
 
     foreach ($rawUrls as $u) {
-        $fixedUrl = fixUrl($u, $base_url);
-        if ($fixedUrl !== '') {
-            $fixed[] = $fixedUrl;
+        $f = fixUrl($u, $base_url);
+        if ($f !== '') {
+            $fixed[] = $f;
         }
     }
 
-    $row['photos']       = $fixed;
+    $row['photos'] = $fixed;
     $row['photos_count'] = count($fixed);
-    $row['thumbnail']    = $fixed[0] ?? null;
-
+    $row['thumbnail'] = $fixed[0] ?? null;
     $data[] = $row;
 }
 
@@ -355,164 +436,193 @@ $stmt->close();
         .select2-selection__rendered {
           line-height: 28px !important;
         }
-  #formFiltrosGaleria {
-    border-radius: 12px;
-    border: 1px solid #e9ecef;
-    background: #fff;
-  }
+          #formFiltrosGaleria {
+            border-radius: 12px;
+            border: 1px solid #e9ecef;
+            background: #fff;
+          }
+        
+          #formFiltrosGaleria label {
+            font-size: 13px;
+            color: #495057;
+          }
+        
+          #formFiltrosGaleria .form-control {
+            height: 40px;
+            border-radius: 8px;
+          }
+        
+          #formFiltrosGaleria .btn {
+           /* height: 40px; */
+            border-radius: 8px;
+          }
+        
+          .nav-tabs .nav-link {
+            border-radius: 10px 10px 0 0;
+            font-weight: 600;
+          }
+        
+          .nav-tabs .nav-link.active {
+            background-color: #fff;
+            border-color: #dee2e6 #dee2e6 #fff;
+          }
+        
+          /* Overlay de carga */
+          #loadingOverlayGaleria {
+            position: fixed;
+            inset: 0;
+            background: rgba(255,255,255,0.75);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            backdrop-filter: blur(2px);
+          }
+        
+          #loadingOverlayGaleria .spinner-border {
+            width: 3rem;
+            height: 3rem;
+          }
+        
+          #loadingOverlayGaleria .loading-text {
+            margin-top: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #343a40;
+          }
+        
+          @media (max-width: 768px) {
+            #formFiltrosGaleria .btn-block {
+              width: 100%;
+            }
+          }
+            
+          .custom-img-cell {
+            position: relative;
+            text-align: center;
+          }
+        
+          .thumbnail {
+            max-width: 110px;
+            max-height: 85px;
+            object-fit: cover;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform .2s ease, box-shadow .2s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,.15);
+          }
+        
+          .thumbnail:hover {
+            transform: scale(1.04);
+            box-shadow: 0 4px 14px rgba(0,0,0,.22);
+          }
+        
+          .badge-count {
+            position: absolute;
+            top: 4px;
+            right: 6px;
+            z-index: 2;
+            background: #007bff;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            border-radius: 20px;
+            padding: 3px 8px;
+          }
+        
+          #fullSizeModal .modal-content {
+            border-radius: 14px;
+            overflow: hidden;
+          }
+        
+          #fullSizeModal .modal-body {
+            background: #111;
+            min-height: 70vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+        
+          #fullSizeModal .carousel-item {
+            height: 70vh;
+            text-align: center;
+            background: #111;
+          }
+        
+          #fullSizeModal .carousel-item img {
+            max-width: 100%;
+            max-height: 70vh;
+            object-fit: contain;
+            margin: 0 auto;
+          }
+        
+          #fullSizeModal .carousel-control-prev,
+          #fullSizeModal .carousel-control-next {
+            width: 8%;
+          }
+        
+          #fullSizeModal .carousel-control-prev-icon,
+          #fullSizeModal .carousel-control-next-icon {
+            background-size: 65% 65%;
+            background-color: rgba(0,0,0,0.45);
+            border-radius: 50%;
+            width: 52px;
+            height: 52px;
+          }
+        
+          #fullSizeModal .carousel-indicators li {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+          }
+        
+          @media (max-width: 768px) {
+            #fullSizeModal .carousel-item,
+            #fullSizeModal .modal-body,
+            #fullSizeModal .carousel-item img {
+              height: 55vh;
+              max-height: 55vh;
+            }
+          }
+        
+          @media (max-width: 768px) {
+            #fullSizeModal .carousel-item,
+            #fullSizeModal .modal-body,
+            #fullSizeModal .carousel-item img {
+              height: 55vh;
+              max-height: 55vh;
+            }
+          }
+.container{
+        font-size: 80% !important;    
+}
 
-  #formFiltrosGaleria label {
-    font-size: 13px;
-    color: #495057;
-  }
-
-  #formFiltrosGaleria .form-control {
-    height: 40px;
-    border-radius: 8px;
-  }
-
-  #formFiltrosGaleria .btn {
-    height: 40px;
-    border-radius: 8px;
-  }
-
-  .nav-tabs .nav-link {
-    border-radius: 10px 10px 0 0;
-    font-weight: 600;
-  }
-
-  .nav-tabs .nav-link.active {
-    background-color: #fff;
-    border-color: #dee2e6 #dee2e6 #fff;
-  }
-
-  /* Overlay de carga */
-  #loadingOverlayGaleria {
-    position: fixed;
-    inset: 0;
-    background: rgba(255,255,255,0.75);
-    z-index: 9999;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    backdrop-filter: blur(2px);
-  }
-
-  #loadingOverlayGaleria .spinner-border {
-    width: 3rem;
-    height: 3rem;
-  }
-
-  #loadingOverlayGaleria .loading-text {
-    margin-top: 12px;
-    font-size: 16px;
-    font-weight: 600;
-    color: #343a40;
-  }
-
-  @media (max-width: 768px) {
-    #formFiltrosGaleria .btn-block {
-      width: 100%;
-    }
-  }
-    
-  .custom-img-cell {
-    position: relative;
-    text-align: center;
-  }
-
-  .thumbnail {
-    max-width: 110px;
-    max-height: 85px;
-    object-fit: cover;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: transform .2s ease, box-shadow .2s ease;
-    box-shadow: 0 2px 8px rgba(0,0,0,.15);
-  }
-
-  .thumbnail:hover {
-    transform: scale(1.04);
-    box-shadow: 0 4px 14px rgba(0,0,0,.22);
-  }
-
-  .badge-count {
-    position: absolute;
-    top: 4px;
-    right: 6px;
-    z-index: 2;
-    background: #007bff;
-    color: #fff;
-    font-size: 11px;
-    font-weight: 700;
-    border-radius: 20px;
-    padding: 3px 8px;
-  }
-
-  #fullSizeModal .modal-content {
-    border-radius: 14px;
-    overflow: hidden;
-  }
-
-  #fullSizeModal .modal-body {
-    background: #111;
-    min-height: 70vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  #fullSizeModal .carousel-item {
-    height: 70vh;
-    text-align: center;
-    background: #111;
-  }
-
-  #fullSizeModal .carousel-item img {
-    max-width: 100%;
-    max-height: 70vh;
-    object-fit: contain;
-    margin: 0 auto;
-  }
-
-  #fullSizeModal .carousel-control-prev,
-  #fullSizeModal .carousel-control-next {
-    width: 8%;
-  }
-
-  #fullSizeModal .carousel-control-prev-icon,
-  #fullSizeModal .carousel-control-next-icon {
-    background-size: 65% 65%;
-    background-color: rgba(0,0,0,0.45);
-    border-radius: 50%;
-    width: 52px;
-    height: 52px;
-  }
-
-  #fullSizeModal .carousel-indicators li {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-  }
-
-  @media (max-width: 768px) {
-    #fullSizeModal .carousel-item,
-    #fullSizeModal .modal-body,
-    #fullSizeModal .carousel-item img {
-      height: 55vh;
-      max-height: 55vh;
-    }
-  }
-
-  @media (max-width: 768px) {
-    #fullSizeModal .carousel-item,
-    #fullSizeModal .modal-body,
-    #fullSizeModal .carousel-item img {
-      height: 55vh;
-      max-height: 55vh;
-    }
-  }    
+#formFiltrosGaleria .form-control {
+    height: 60% !important;    
+}
+.form-control {
+        font-size: 80% !important;    
+}
+.select2-results__option {
+    font-size: 80%;
+}
+#formFiltrosGaleria .btn {
+    font-size: 80%;
+    width:70%;
+}
+.btn-secondary {
+    font-size: 80%;
+}
+#example thead th {
+    font-size: 80%!important;    
+}
+.btn{
+    font-size: 80% !important;    
+}
+td{
+font-size: 80% !important;    
+}
     </style>
 </head>
 <body class="bg-light">
@@ -614,6 +724,21 @@ $stmt->close();
         value="<?= htmlspecialchars($codigoLocalFiltro ?? '') ?>"
       >
     </div>
+    
+    <?php if ($puedeVerFiltroPregunta): ?>
+      <div class="col-md-3 col-sm-6 mb-3">
+        <label for="preguntaSelect" class="font-weight-bold mb-1">Pregunta</label>
+        <select id="preguntaSelect" name="pregunta" class="form-control">
+          <option value="">-- Todas --</option>
+          <?php foreach ($preguntasEncuesta as $preg): ?>
+            <option value="<?= htmlspecialchars($preg, ENT_QUOTES) ?>"
+              <?= $preguntaFiltro === $preg ? 'selected' : '' ?>>
+              <?= htmlspecialchars($preg, ENT_QUOTES) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+    <?php endif; ?>    
 
     <div class="col-md-3 col-sm-6 mb-3">
       <label for="usuarioSelect" class="font-weight-bold mb-1">Usuario</label>
@@ -893,14 +1018,20 @@ $(function () {
   $('#usuarioSelect').select2({
     placeholder: "Buscar usuario...",
     allowClear: true,
-    width: '200px' // ajusta si quieres
+    width: '100%'
   });
   
   $('#jefe_ventaSelect').select2({
     placeholder: "Buscar jefe de venta...",
     allowClear: true,
-    width: '200px' // ajusta si quieres
-  });  
+    width: '100%'
+  });
+
+  $('#preguntaSelect').select2({
+    placeholder: "Buscar pregunta...",
+    allowClear: true,
+    width: '100%'
+  });
 
 });
     

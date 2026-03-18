@@ -145,6 +145,26 @@ body {
   padding: 20px;
 }
 
+.card-title-overlay {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 5;
+  background: #93C01F;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  line-height: 1.2;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+  pointer-events: none;
+}
+
 @media (max-width: 900px) {
   :root {
     --card-w: 12.5em;

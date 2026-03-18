@@ -800,7 +800,7 @@ if ($division_id > 0) {
           <?php endif; ?>
           <li class="nav-item">
             <a href="#" class="nav-link">
-              <i class="nav-icon fas fa-stream"></i>
+              <i class="nav-icon fas fa-building"></i>
               <p>
                 Locales
                 <i class="fas fa-angle-left right"></i>
@@ -810,7 +810,7 @@ if ($division_id > 0) {
               <?php if (strtolower($perfilUser) == 'editor' || strtolower($perfilUser) == 'coordinador'): ?>
               <li class="nav-item">
                 <a href="modulos/mod_local.php" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
+                  <i class="fas fa-plus-circle nav-icon"></i>
                   <p>Crear/Editar local</p>
                 </a>
               </li>
@@ -830,10 +830,16 @@ if ($division_id > 0) {
               </li> 
               <li class="nav-item">
                   <a href="#" class="nav-link" data-toggle="modal" data-target="#modalDataLocalesHistoricoGestion">
-                      <i class="far fa-circle nav-icon"></i>
+                      <i class="fas fa-database nav-icon"></i>
                       <p>Historico Gestiones</p>
                   </a>
-              </li>               
+              </li>
+              <li class="nav-item">
+                  <a href="modulos/mod_etl/mod_etl_locales.php" class="nav-link">
+                      <i class="fas fa-wrench nav-icon"></i>
+                      <p>Procesar ETL</p>
+                  </a>
+              </li>                
               <?php endif; ?>              
             </ul>
           </li>
@@ -902,7 +908,7 @@ if ($division_id > 0) {
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-route"></i>
               <p>
-                Mapa Rutas
+                Mapa
                 <i class="fas fa-angle-left right"></i>
               </p>
             </a>
@@ -912,12 +918,6 @@ if ($division_id > 0) {
                   <i class="far fa-circle nav-icon"></i>
                   <p>Panel Rutas</p>
                 </a>
-              </li>
-              <li class="nav-item">
-                   <a href="modulos/mod_panel/mod_panel_detalle_locales_campanas.php" class="nav-link">
-                      <i class="far fa-circle nav-icon"></i>
-                      <p>Ruta campañas</p>
-                  </a>
               </li>
             </ul>
           </li>           
@@ -1038,17 +1038,23 @@ if ($division_id > 0) {
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-map"></i>
               <p>
-                GENERAR RUTA
+                Generar rutas
                 <i class="fas fa-angle-left right"></i>
               </p>
             </a>
             <ul class="nav nav-treeview">
               <li class="nav-item">
-                <a href="modulos/mapa_rutas.php" class="nav-link">
+                <a href="modulos/mod_rutas/mapa_rutas.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
-                  <p>Generar Ruta</p>
+                  <p>Planificador de rutas</p>
                 </a>
               </li>
+              <li class="nav-item">
+                <a href="modulos/mod_rutas/mod_visualizar_rutas_planificadas.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Visor de rutas planificadas</p>
+                </a>
+              </li>              
             </ul>
           </li>
           <li class="nav-item">

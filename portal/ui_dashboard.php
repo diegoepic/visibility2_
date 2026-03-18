@@ -114,46 +114,54 @@ $sql_ipt = "
         f.id AS id_campana,
         f.nombre AS nombre_campana,
         f.modalidad AS modalidad,
-        f.reference_image    AS reference_image,
-        DATE(f.fechaInicio) AS fechaInicio,
-        DATE(f.fechaTermino) AS fechaTermino,
+        f.reference_image AS reference_image,
+
+        CASE
+            WHEN f.fechaInicio IS NULL OR CAST(f.fechaInicio AS CHAR(19)) = '0000-00-00 00:00:00' THEN NULL
+            ELSE DATE(f.fechaInicio)
+        END AS fechaInicio,
+
+        CASE
+            WHEN f.fechaTermino IS NULL OR CAST(f.fechaTermino AS CHAR(19)) = '0000-00-00 00:00:00' THEN NULL
+            ELSE DATE(f.fechaTermino)
+        END AS fechaTermino,
+
         e.nombre AS nombre_empresa,
         COUNT(DISTINCT fq.id_local) AS locales_programados,
-        /*COUNT(DISTINCT CASE 
-             WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','en proceso','solo_retirado','cancelado')
-             THEN CONCAT(l.codigo, fq.fechaVisita)
-             END
-        ) AS locales_visitados,*/
+
         COUNT(DISTINCT CASE 
-                     WHEN fq.fechaVisita <> '0000-00-00 00:00:00'
-                     THEN CONCAT(l.codigo, fq.fechaVisita)
-                     END
-                ) AS locales_visitados,        
+            WHEN fq.fechaVisita IS NOT NULL
+                 AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
+            THEN CONCAT(l.codigo, CAST(fq.fechaVisita AS CHAR(19)))
+        END) AS locales_visitados,
+
         COUNT(DISTINCT CASE
-             WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','solo_retirado')
-             THEN CONCAT(l.codigo, fq.fechaVisita)
-             END
-        ) AS locales_implementados,
+            WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','solo_retirado')
+            THEN CONCAT(l.codigo, CAST(fq.fechaVisita AS CHAR(19)))
+        END) AS locales_implementados,
+
         ROUND(
             (
-             COUNT(DISTINCT CASE
-                WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','en proceso','cancelado','solo_retirado')
-                THEN CONCAT(l.codigo, fq.fechaVisita)
-             END)
-             / 
-             COUNT(DISTINCT fq.id_local)
+                COUNT(DISTINCT CASE
+                    WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','en proceso','cancelado','solo_retirado')
+                    THEN CONCAT(l.codigo, CAST(fq.fechaVisita AS CHAR(19)))
+                END)
+                /
+                COUNT(DISTINCT fq.id_local)
             ) * 100
         ) AS porcentaje_visitado,
+
         ROUND(
             (
-             COUNT(DISTINCT CASE
-                WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','solo_retirado')
-                THEN CONCAT(l.codigo, fq.fechaVisita)
-             END)
-             /
-             COUNT(DISTINCT fq.id_local)
+                COUNT(DISTINCT CASE
+                    WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','solo_retirado')
+                    THEN CONCAT(l.codigo, CAST(fq.fechaVisita AS CHAR(19)))
+                END)
+                /
+                COUNT(DISTINCT fq.id_local)
             ) * 100
         ) AS porcentaje_completado,
+
         f.estado
     FROM formulario f
     INNER JOIN empresa e ON e.id = f.id_empresa
@@ -174,11 +182,19 @@ SELECT
     f.nombre AS nombre_campana,
     f.modalidad AS modalidad,
     f.reference_image AS reference_image,
-    DATE(f.fechaInicio) AS fechaInicio,
-    DATE(f.fechaTermino) AS fechaTermino,
+
+    CASE
+        WHEN f.fechaInicio IS NULL OR CAST(f.fechaInicio AS CHAR(19)) = '0000-00-00 00:00:00' THEN NULL
+        ELSE DATE(f.fechaInicio)
+    END AS fechaInicio,
+
+    CASE
+        WHEN f.fechaTermino IS NULL OR CAST(f.fechaTermino AS CHAR(19)) = '0000-00-00 00:00:00' THEN NULL
+        ELSE DATE(f.fechaTermino)
+    END AS fechaTermino,
+
     e.nombre AS nombre_empresa,
 
-    /* ---- PROGRAMADOS ---- */
     CASE
         WHEN f.modalidad = 'solo_auditoria'
             THEN COUNT(fq.id_local)
@@ -186,53 +202,24 @@ SELECT
             COUNT(DISTINCT fq.id_local)
     END AS locales_programados,
 
-    /* ---- VISITADOS ---- */
-    /*CASE 
+    CASE 
         WHEN f.modalidad = 'solo_auditoria'
             THEN COUNT(
                 CASE
-                    WHEN fq.pregunta IN (
-                        'solo_auditoria',
-                        'solo_retirado',
-                        'en proceso',
-                        'cancelado',
-                        'implementado_auditado'
-                    )
+                    WHEN fq.fechaVisita IS NOT NULL
+                         AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
                     THEN fq.id
                 END
             )
         ELSE COUNT(DISTINCT
                 CASE
-                    WHEN fq.pregunta IN (
-                        'implementado_auditado',
-                        'solo_implementado',
-                        'solo_auditoria',
-                        'solo_retirado',
-                        'en proceso',
-                        'cancelado'
-                    )
+                    WHEN fq.fechaVisita IS NOT NULL
+                         AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
                     THEN l.codigo
                 END
             )
-    END AS locales_visitados,*/
-    
-    CASE 
-            WHEN f.modalidad = 'solo_auditoria'
-                THEN COUNT(
-                    CASE
-                        WHEN fq.fechaVisita <> '0000-00-00 00:00:00'
-                        THEN fq.id
-                    END
-                )
-            ELSE COUNT(DISTINCT
-                    CASE
-                        WHEN fq.fechaVisita <> '0000-00-00 00:00:00'
-                        THEN l.codigo
-                    END
-                )
-        END AS locales_visitados,    
+    END AS locales_visitados,
 
-    /* ---- IMPLEMENTADOS ---- */
     CASE 
         WHEN f.modalidad = 'solo_auditoria'
             THEN COUNT(
@@ -249,7 +236,6 @@ SELECT
             )
     END AS locales_implementados,
 
-    /* --- % VISITADOS --- */
     CASE
         WHEN f.modalidad = 'solo_auditoria'
             THEN ROUND(
@@ -276,7 +262,6 @@ SELECT
         )
     END AS porcentaje_visitado,
 
-    /* --- % COMPLETADOS --- */
     CASE
         WHEN f.modalidad = 'solo_auditoria'
             THEN ROUND(
@@ -300,14 +285,14 @@ SELECT
     END AS porcentaje_completado,
 
     f.estado
-    FROM formulario f
-    INNER JOIN empresa e ON e.id = f.id_empresa
-    INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
-    INNER JOIN local l ON l.id = fq.id_local
-    WHERE f.tipo = 1
-      $filtros_sql
-    GROUP BY f.id, f.nombre, f.fechaInicio, f.fechaTermino, e.nombre, f.estado
-    ORDER BY f.fechaInicio DESC
+FROM formulario f
+INNER JOIN empresa e ON e.id = f.id_empresa
+INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
+INNER JOIN local l ON l.id = fq.id_local
+WHERE f.tipo = 1
+  $filtros_sql
+GROUP BY f.id, f.nombre, f.fechaInicio, f.fechaTermino, e.nombre, f.estado
+ORDER BY f.fechaInicio DESC
 ";
 // ----------------------------------------------------------------------------
 // 9) Consulta para campañas Complementarias (tipo=2)

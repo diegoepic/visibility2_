@@ -1,38 +1,57 @@
 <?php
 include $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 
-$conn->set_charset("utf8");
+$conn->set_charset("utf8mb4");
 
-$formato  = $_GET['formato']   ?? 'csv';
-$canal    = intval($_GET['canal']   ?? 0);
-$distrito = intval($_GET['distrito']?? 0);
-$division = intval($_GET['division']?? 0);
-$tipoGestion= intval($_GET['tipoGestion'] ?? 0);
+$formato      = $_GET['formato'] ?? 'csv';
+$canal        = intval($_GET['canal'] ?? 0);
+$distrito     = intval($_GET['distrito'] ?? 0);
+$division     = intval($_GET['division'] ?? 0);
+$tipoGestion  = intval($_GET['tipoGestion'] ?? 0);
 
-// Construir filtros din谩micos
-$filtros = '';
+// Opcional: aumentar límites si el archivo es muy grande
+ini_set('memory_limit', '512M');
+set_time_limit(0);
+
+// Construir filtros dinámicos
+$filtros = [];
+$tipos   = '';
+$valores = [];
+
 if ($canal) {
-    $filtros .= " AND l.id_canal = $canal";
+    $filtros[] = "l.id_canal = ?";
+    $tipos .= 'i';
+    $valores[] = $canal;
 }
 if ($distrito) {
-    $filtros .= " AND l.id_distrito = $distrito";
+    $filtros[] = "l.id_distrito = ?";
+    $tipos .= 'i';
+    $valores[] = $distrito;
 }
 if ($division) {
-    $filtros .= " AND f.id_division = $division";
+    $filtros[] = "f.id_division = ?";
+    $tipos .= 'i';
+    $valores[] = $division;
 }
 if ($tipoGestion) {
-    $filtros .= " AND f.tipo = $tipoGestion";
+    $filtros[] = "f.tipo = ?";
+    $tipos .= 'i';
+    $valores[] = $tipoGestion;
 }
 
-// Consulta SQL con filtros din谩micos
+$whereFiltros = '';
+if (!empty($filtros)) {
+    $whereFiltros = ' AND ' . implode(' AND ', $filtros);
+}
+
 $query = "
 SELECT
     l.id AS `ID LOCAL`,
     l.codigo AS `CODIGO LOCAL`,
     CASE
-      WHEN l.nombre REGEXP '^[0-9]+'
-        THEN SUBSTRING_INDEX(l.nombre, ' ', 1)
-      ELSE ''
+        WHEN l.nombre REGEXP '^[0-9]+'
+            THEN SUBSTRING_INDEX(l.nombre, ' ', 1)
+        ELSE ''
     END AS `NUMERO LOCAL`,
     UPPER(f.nombre) AS `CAMPANA`,
     UPPER(cu.nombre) AS `CUENTA`,
@@ -43,133 +62,114 @@ SELECT
     UPPER(re.region) AS `REGION`,
     UPPER(u.usuario) AS `USUARIO`,
     DATE(fq.fechaPropuesta) AS `FECHA PROPUESTA`,
-    DATE(fq.fechaVisita)    AS `FECHA VISITA`,
-    TIME(fq.fechaVisita)    AS `HORA`,
+    DATE(fq.fechaVisita) AS `FECHA VISITA`,
+    TIME(fq.fechaVisita) AS `HORA`,
     CASE
-      WHEN fq.fechaVisita IS NOT NULL
-           AND fq.fechaVisita <> '0000-00-00 00:00:00'
-        THEN 'VISITADO'
-      ELSE 'NO VISITADO'
+        WHEN fq.fechaVisita IS NOT NULL THEN 'VISITADO'
+        ELSE 'NO VISITADO'
     END AS `ESTADO VISTA`,
     CASE
-      WHEN LOWER(fq.pregunta) = 'solo_implementado'      THEN 'IMPLEMENTADO'
-      WHEN LOWER(fq.pregunta) = 'solo_auditado'         THEN 'AUDITORIA'
-      WHEN LOWER(fq.pregunta) = 'solo_auditoria'        THEN 'AUDITORIA'
-      WHEN LOWER(fq.pregunta) = 'retiro'                THEN 'RETIRO'
-      WHEN LOWER(fq.pregunta) = 'entrega'               THEN 'ENTREGA'
-      WHEN LOWER(fq.pregunta) = 'implementado_auditado' THEN 'IMPLEMENTADO/AUDITADO'
-      ELSE ''
+        WHEN LOWER(fq.pregunta) = 'solo_implementado' THEN 'IMPLEMENTADO'
+        WHEN LOWER(fq.pregunta) = 'solo_auditado' THEN 'AUDITORIA'
+        WHEN LOWER(fq.pregunta) = 'solo_auditoria' THEN 'AUDITORIA'
+        WHEN LOWER(fq.pregunta) = 'retiro' THEN 'RETIRO'
+        WHEN LOWER(fq.pregunta) = 'entrega' THEN 'ENTREGA'
+        WHEN LOWER(fq.pregunta) = 'implementado_auditado' THEN 'IMPLEMENTADO/AUDITADO'
+        ELSE ''
     END AS `ESTADO ACTIVIDAD`,
     UPPER(
-      REPLACE(
-        CASE
-          WHEN LOWER(fq.pregunta) IN ('en proceso','cancelado') THEN
-            TRIM(
-              SUBSTRING_INDEX(
-                REPLACE(fq.observacion, '|', '-'),
-                '-',
-                1
-              )
-            )
-          WHEN LOWER(fq.pregunta) IN ('solo_implementado','solo_auditoria') THEN
-            ''
-          ELSE
-            fq.pregunta
-        END
-      , '_', ' ')
+        REPLACE(
+            CASE
+                WHEN LOWER(fq.pregunta) IN ('en proceso', 'cancelado') THEN
+                    TRIM(
+                        SUBSTRING_INDEX(
+                            REPLACE(COALESCE(fq.observacion, ''), '|', '-'),
+                            '-',
+                            1
+                        )
+                    )
+                WHEN LOWER(fq.pregunta) IN ('solo_implementado', 'solo_auditoria', 'solo_auditado') THEN
+                    ''
+                ELSE fq.pregunta
+            END,
+            '_',
+            ' '
+        )
     ) AS `MOTIVO`,
-    UPPER(fq.observacion) AS `OBSERVACION`
+    UPPER(COALESCE(fq.observacion, '')) AS `OBSERVACION`
 FROM formularioQuestion fq
-INNER JOIN formulario   f  ON f.id  = fq.id_formulario
-INNER JOIN local        l  ON l.id  = fq.id_local
-INNER JOIN usuario      u  ON u.id  = fq.id_usuario
-INNER JOIN cuenta       cu ON cu.id = l.id_cuenta
-INNER JOIN cadena       ca ON ca.id = l.id_cadena
-INNER JOIN comuna       cm ON cm.id = l.id_comuna
-INNER JOIN region       re ON re.id = cm.id_region
+INNER JOIN formulario f ON f.id = fq.id_formulario
+INNER JOIN local l ON l.id = fq.id_local
+INNER JOIN usuario u ON u.id = fq.id_usuario
+INNER JOIN cuenta cu ON cu.id = l.id_cuenta
+INNER JOIN cadena ca ON ca.id = l.id_cadena
+INNER JOIN comuna cm ON cm.id = l.id_comuna
+INNER JOIN region re ON re.id = cm.id_region
 WHERE 1=1
-  $filtros
-GROUP BY
-    l.id,
-    l.codigo,
-    CASE
-      WHEN l.nombre REGEXP '^[0-9]+'
-        THEN SUBSTRING_INDEX(l.nombre, ' ', 1)
-      ELSE ''
-    END,
-    UPPER(f.nombre),
-    UPPER(cu.nombre),
-    UPPER(ca.nombre),
-    UPPER(l.nombre),
-    UPPER(l.direccion),
-    UPPER(cm.comuna),
-    UPPER(re.region),
-    UPPER(u.usuario),
-    DATE(fq.fechaPropuesta),
-    DATE(fq.fechaVisita),
-    TIME(fq.fechaVisita),
-    CASE
-      WHEN fq.fechaVisita IS NOT NULL
-           AND fq.fechaVisita <> '0000-00-00 00:00:00'
-        THEN 'VISITADO'
-      ELSE 'NO VISITADO'
-    END,
-    CASE
-      WHEN LOWER(fq.pregunta) = 'solo_implementado'      THEN 'IMPLEMENTADO'
-      WHEN LOWER(fq.pregunta) = 'solo_auditado'         THEN 'AUDITORIA'
-      WHEN LOWER(fq.pregunta) = 'solo_auditoria'        THEN 'AUDITORIA'
-      WHEN LOWER(fq.pregunta) = 'retiro'                THEN 'RETIRO'
-      WHEN LOWER(fq.pregunta) = 'entrega'               THEN 'ENTREGA'
-      WHEN LOWER(fq.pregunta) = 'implementado_auditado' THEN 'IMPLEMENTADO/AUDITADO'
-      ELSE ''
-    END,
-    UPPER(
-      REPLACE(
-        CASE
-          WHEN LOWER(fq.pregunta) IN ('en proceso','cancelado') THEN
-            TRIM(
-              SUBSTRING_INDEX(
-                REPLACE(fq.observacion, '|', '-'),
-                '-',
-                1
-              )
-            )
-          WHEN LOWER(fq.pregunta) IN ('solo_implementado','solo_auditoria') THEN
-            ''
-          ELSE
-            fq.pregunta
-        END
-      , '_', ' ')
-    ),
-    UPPER(fq.observacion)
-ORDER BY l.codigo, DATE(fq.fechaVisita), TIME(fq.fechaVisita); 
+$whereFiltros
+ORDER BY l.codigo, fq.fechaVisita
 ";
 
-$result = $conn->query($query);
+$stmt = $conn->prepare($query);
 
-if ($result->num_rows > 0) {
-    $data = array();
-    while ($row = $result->fetch_assoc()) {
-        $data[] = $row;
-    }
-
-    // Descargar en CSV (o Excel, si lo deseas)
-    header('Content-Type: text/csv; charset=UTF-8');
-    header('Content-Disposition: attachment; filename="data_historico_locales.csv"');
-    $output = fopen('php://output', 'w');
-    
-    // Agregar BOM para UTF-8
-    fwrite($output, "\xEF\xBB\xBF");
-    
-    // Escribir encabezados con el delimitador ;
-    fputcsv($output, array_keys($data[0]), ';');
-
-    // Escribir cada fila
-    foreach ($data as $row) {
-        fputcsv($output, $row, ';');
-    }
-    fclose($output);
-} else {
-    echo "No hay datos disponibles para exportar.";
+if (!$stmt) {
+    die("Error al preparar la consulta: " . $conn->error);
 }
+
+if (!empty($valores)) {
+    $stmt->bind_param($tipos, ...$valores);
+}
+
+if (!$stmt->execute()) {
+    die("Error al ejecutar la consulta: " . $stmt->error);
+}
+
+$result = $stmt->get_result();
+
+if (!$result) {
+    die("Error al obtener resultados: " . $stmt->error);
+}
+
+if ($result->num_rows === 0) {
+    echo "No hay datos disponibles para exportar.";
+    $stmt->close();
+    $conn->close();
+    exit;
+}
+
+// Salida CSV en streaming
+header('Content-Type: text/csv; charset=UTF-8');
+header('Content-Disposition: attachment; filename="data_historico_locales.csv"');
+header('Pragma: no-cache');
+header('Expires: 0');
+
+$output = fopen('php://output', 'w');
+
+// BOM UTF-8 para Excel
+fwrite($output, "\xEF\xBB\xBF");
+
+$headersWritten = false;
+$contador = 0;
+
+while ($row = $result->fetch_assoc()) {
+    if (!$headersWritten) {
+        fputcsv($output, array_keys($row), ';');
+        $headersWritten = true;
+    }
+
+    fputcsv($output, $row, ';');
+
+    $contador++;
+
+    // liberar buffer cada cierta cantidad
+    if ($contador % 1000 === 0) {
+        fflush($output);
+    }
+}
+
+fclose($output);
+
+$stmt->close();
+$conn->close();
+exit;
 ?>

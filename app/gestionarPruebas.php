@@ -4,11 +4,116 @@ if (!isset($_SESSION['usuario_id'])) {
     exit();
 }
 
+mysqli_report(MYSQLI_REPORT_OFF);
+
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
-//verificacon de campaña y local
 
+if (!$conn || !($conn instanceof mysqli)) {
+    die("No hay conexión válida a la base de datos.");
+}
+
+$conn->set_charset("utf8mb4");
+
+/* =========================
+   Helpers DB sin get_result()
+   ========================= */
+function dbFetchAllAssoc(mysqli $conn, string $sql, string $types = '', array $params = []): array {
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        die("Error al preparar consulta: " . htmlspecialchars($conn->error, ENT_QUOTES, 'UTF-8'));
+    }
+
+    if ($types !== '' && !empty($params)) {
+        $stmt->bind_param($types, ...$params);
+    }
+
+    if (!$stmt->execute()) {
+        $err = $stmt->error;
+        $stmt->close();
+        die("Error al ejecutar consulta: " . htmlspecialchars($err, ENT_QUOTES, 'UTF-8'));
+    }
+
+    $meta = $stmt->result_metadata();
+    if (!$meta) {
+        $stmt->close();
+        return [];
+    }
+
+    $row = [];
+    $binds = [];
+    $fields = [];
+
+    while ($field = $meta->fetch_field()) {
+        $fields[] = $field->name;
+        $row[$field->name] = null;
+        $binds[] = &$row[$field->name];
+    }
+
+    call_user_func_array([$stmt, 'bind_result'], $binds);
+
+    $results = [];
+    while ($stmt->fetch()) {
+        $tmp = [];
+        foreach ($fields as $f) {
+            $tmp[$f] = $row[$f];
+        }
+        $results[] = $tmp;
+    }
+
+    $stmt->close();
+    return $results;
+}
+
+function dbFetchOneAssoc(mysqli $conn, string $sql, string $types = '', array $params = []): ?array {
+    $rows = dbFetchAllAssoc($conn, $sql, $types, $params);
+    return $rows[0] ?? null;
+}
+
+function dbFetchValue(mysqli $conn, string $sql, string $types = '', array $params = [], string $field = '') {
+    $row = dbFetchOneAssoc($conn, $sql, $types, $params);
+    if (!$row) return null;
+    if ($field !== '') return $row[$field] ?? null;
+    return reset($row);
+}
+
+function getParentQuestionId($conn, $id_dependency_option) {
+    $row = dbFetchOneAssoc(
+        $conn,
+        "SELECT id_form_question FROM form_question_options WHERE id = ? LIMIT 1",
+        "i",
+        [(int)$id_dependency_option]
+    );
+    return $row ? (int)$row['id_form_question'] : null;
+}
+
+function obtenerOpciones($conn, $id_form_question) {
+    $rows = dbFetchAllAssoc(
+        $conn,
+        "SELECT id, option_text, reference_image
+         FROM form_question_options
+         WHERE id_form_question = ?
+         ORDER BY sort_order ASC",
+        "i",
+        [(int)$id_form_question]
+    );
+
+    $opciones = [];
+    foreach ($rows as $row_opc) {
+        $opciones[] = [
+            'id'              => $row_opc['id'],
+            'text'            => htmlspecialchars($row_opc['option_text'], ENT_QUOTES, 'UTF-8'),
+            'reference_image' => $row_opc['reference_image']
+        ];
+    }
+
+    return $opciones;
+}
+
+/* =========================
+   Verificación campaña y local
+   ========================= */
 if (isset($_GET['idCampana']) && isset($_GET['nombreCampana']) && isset($_GET['idLocal'])) {
     $idCampana      = intval($_GET['idCampana']);
     $nombreCampana  = htmlspecialchars($_GET['nombreCampana'], ENT_QUOTES, 'UTF-8');
@@ -16,11 +121,10 @@ if (isset($_GET['idCampana']) && isset($_GET['nombreCampana']) && isset($_GET['i
 } else {
     die("Parámetros inválidos.");
 }
-// Datos de sesión
+
 $usuario_id = intval($_SESSION['usuario_id']);
 $empresa_id = intval($_SESSION['empresa_id']);
 
-// Validar que la campaña y el local pertenezcan a ese usuario
 $sql_validar = "
     SELECT
         f.nombre AS nombreCampanaDB,
@@ -42,19 +146,18 @@ $sql_validar = "
       AND f.id_empresa = ?
     LIMIT 1
 ";
-$stmt_validar = $conn->prepare($sql_validar);
-if ($stmt_validar === false) {
-    die("Error preparando la consulta: " . htmlspecialchars($conn->error));
-}
-$stmt_validar->bind_param("iiii", $idCampana, $idLocal, $usuario_id, $empresa_id);
-$stmt_validar->execute();
-$result_validar = $stmt_validar->get_result();
 
-if ($result_validar->num_rows === 0) {
+$row = dbFetchOneAssoc(
+    $conn,
+    $sql_validar,
+    "iiii",
+    [$idCampana, $idLocal, $usuario_id, $empresa_id]
+);
+
+if (!$row) {
     die("No tienes permisos para gestionar esta campaña o la campaña no existe.");
 }
 
-$row = $result_validar->fetch_assoc();
 $modalidad = $row['modalidadCampana'];
 $isRetiro      = ($modalidad === 'retiro');
 $actionLabel   = $isRetiro ? 'Retirar'     : 'Implementar';
@@ -69,9 +172,10 @@ $latitud       = floatval($row['lat']);
 $longitud      = floatval($row['lng']);
 $codigoLocalDisplay = $codigoLocal !== '' ? $codigoLocal : 'No aplica';
 $nombreVendedorDisplay = $nombreVendedor !== '' ? $nombreVendedor : 'No aplica';
-$stmt_validar->close();
 
-// ¿Encuesta pendiente?
+/* =========================
+   ¿Encuesta pendiente?
+   ========================= */
 $sql_respuestas = "
     SELECT COUNT(*) as cnt
     FROM form_question_responses AS fqr
@@ -80,18 +184,20 @@ $sql_respuestas = "
       AND fqr.id_usuario = ?
       AND fq.id_formulario = ?
 ";
-$stmt_res = $conn->prepare($sql_respuestas);
-$stmt_res->bind_param("iii", $idLocal, $usuario_id, $idCampana);
-$stmt_res->execute();
-$result_res = $stmt_res->get_result();
-$row_res = $result_res->fetch_assoc();
-$respuestasCount = intval($row_res['cnt']);
-$stmt_res->close();
+
+$respuestasCount = (int) dbFetchValue(
+    $conn,
+    $sql_respuestas,
+    "iii",
+    [$idLocal, $usuario_id, $idCampana],
+    'cnt'
+);
 
 $encuestaPendiente = true;
 
-
-// Preguntas
+/* =========================
+   Preguntas
+   ========================= */
 $preguntas = [];
 if ($encuestaPendiente) {
     $sql_encuesta = "
@@ -106,14 +212,13 @@ if ($encuestaPendiente) {
       WHERE id_formulario = ?
       ORDER BY sort_order ASC
     ";
-    $stmt_encuesta = $conn->prepare($sql_encuesta);
-    $stmt_encuesta->bind_param("i", $idCampana);
-    $stmt_encuesta->execute();
-    $result_encuesta = $stmt_encuesta->get_result();
-    while ($rowE = $result_encuesta->fetch_assoc()) {
-        $preguntas[] = $rowE;
-    }
-    $stmt_encuesta->close();
+
+    $preguntas = dbFetchAllAssoc(
+        $conn,
+        $sql_encuesta,
+        "i",
+        [$idCampana]
+    );
 }
 
 $parentPreguntas = [];
@@ -128,11 +233,15 @@ foreach ($preguntas as $preg) {
     }
 }
 
-// Mensajes
+/* =========================
+   Mensajes
+   ========================= */
 $status  = isset($_GET['status']) ? $_GET['status'] : '';
 $mensaje = isset($_GET['mensaje']) ? htmlspecialchars($_GET['mensaje'], ENT_QUOTES, 'UTF-8') : '';
 
-// Materiales
+/* =========================
+   Materiales
+   ========================= */
 $sql_materiales = "
     SELECT 
       fq.id,
@@ -141,51 +250,36 @@ $sql_materiales = "
       MAX(fq.valor) AS valor, 
       MAX(fq.fechaVisita) AS fechaVisita,
       MAX(fq.observacion) AS observacion,
-      m.ref_image
+      MAX(m.ref_image) AS ref_image
     FROM formularioQuestion fq
     LEFT JOIN material m ON fq.material = m.nombre
-    WHERE fq.id_local = ? AND fq.id_formulario = ? AND fq.id_usuario = ?
+    WHERE fq.id_local = ? 
+      AND fq.id_formulario = ? 
+      AND fq.id_usuario = ?
     GROUP BY fq.id, fq.material, fq.valor_propuesto
 ";
-$stmt_materiales = $conn->prepare($sql_materiales);
-if ($stmt_materiales) {
-    $stmt_materiales->bind_param("iii", $idLocal, $idCampana, $usuario_id);
-    $stmt_materiales->execute();
-    $result_materiales = $stmt_materiales->get_result();
-    $materiales = [];
-    while ($mat = $result_materiales->fetch_assoc()) {
-        $materiales[] = [
-            'id'              => intval($mat['id']),
-            'material'        => htmlspecialchars($mat['material'] ?? '', ENT_QUOTES, 'UTF-8'),
-            'valor_propuesto' => htmlspecialchars($mat['valor_propuesto'] ?? '', ENT_QUOTES, 'UTF-8'),
-            'valor'           => htmlspecialchars($mat['valor'] ?? '', ENT_QUOTES, 'UTF-8'),
-            'fechaVisita'     => htmlspecialchars($mat['fechaVisita'] ?? '', ENT_QUOTES, 'UTF-8'),
-            'observacion'     => htmlspecialchars($mat['observacion'] ?? '', ENT_QUOTES, 'UTF-8'),
-            'ref_image'       => htmlspecialchars($mat['ref_image'] ?? '', ENT_QUOTES, 'UTF-8'),
-        ];
-    }
-    $stmt_materiales->close();
-} else {
-    die("Error al preparar la consulta de materiales: " . htmlspecialchars($conn->error));
+
+$rowsMateriales = dbFetchAllAssoc(
+    $conn,
+    $sql_materiales,
+    "iii",
+    [$idLocal, $idCampana, $usuario_id]
+);
+
+$materiales = [];
+foreach ($rowsMateriales as $mat) {
+    $materiales[] = [
+        'id'              => intval($mat['id']),
+        'material'        => htmlspecialchars($mat['material'] ?? '', ENT_QUOTES, 'UTF-8'),
+        'valor_propuesto' => htmlspecialchars($mat['valor_propuesto'] ?? '', ENT_QUOTES, 'UTF-8'),
+        'valor'           => htmlspecialchars($mat['valor'] ?? '', ENT_QUOTES, 'UTF-8'),
+        'fechaVisita'     => htmlspecialchars($mat['fechaVisita'] ?? '', ENT_QUOTES, 'UTF-8'),
+        'observacion'     => htmlspecialchars($mat['observacion'] ?? '', ENT_QUOTES, 'UTF-8'),
+        'ref_image'       => htmlspecialchars($mat['ref_image'] ?? '', ENT_QUOTES, 'UTF-8'),
+    ];
 }
 
 $totalSteps = $encuestaPendiente ? 3 : 2;
-
-function getParentQuestionId($conn, $id_dependency_option) {
-    $sql = "SELECT id_form_question FROM form_question_options WHERE id = ? LIMIT 1";
-    $stmt = $conn->prepare($sql);
-    if ($stmt) {
-        $stmt->bind_param("i", $id_dependency_option);
-        $stmt->execute();
-        $stmt->bind_result($parentId);
-        if ($stmt->fetch()) {
-            $stmt->close();
-            return $parentId;
-        }
-        $stmt->close();
-    }
-    return null;
-}
 ?>
 
 <!DOCTYPE html>
@@ -620,34 +714,6 @@ input[type=file][id^="fotoPregunta_"] {
                  <div class="wizard-step" id="step-3">
                     <h4>Paso 3: Responder la Encuesta</h4>
                     <?php if (!empty($preguntas)): ?>
-                        <?php
-                        function obtenerOpciones($conn, $id_form_question) {
-                            $sql_opciones = "
-                                SELECT 
-                                    id,
-                                    option_text,
-                                    reference_image
-                                FROM form_question_options
-                                WHERE id_form_question = ?
-                                ORDER BY sort_order ASC
-                            ";
-                            $stmt_opciones = $conn->prepare($sql_opciones);
-                            if ($stmt_opciones === false) { return []; }
-                            $stmt_opciones->bind_param("i", $id_form_question);
-                            $stmt_opciones->execute();
-                            $result_opciones = $stmt_opciones->get_result();
-                            $opciones = [];
-                            while ($row_opc = $result_opciones->fetch_assoc()) {
-                                $opciones[] = [
-                                    'id'             => $row_opc['id'],
-                                    'text'           => htmlspecialchars($row_opc['option_text'], ENT_QUOTES, 'UTF-8'),
-                                    'reference_image'=> $row_opc['reference_image']
-                                ];
-                            }
-                            $stmt_opciones->close();
-                            return $opciones;
-                        }
-                        ?>
                         <?php foreach ($preguntas as $preg): 
                             $q_id            = intval($preg['id_form_question']);
                             $questionText    = htmlspecialchars($preg['question_text'], ENT_QUOTES, 'UTF-8');
@@ -803,19 +869,20 @@ input[type=file][id^="fotoPregunta_"] {
                 <label for="nombreMaterial">Seleccione Material:</label>
                 <select class="form-control" id="nombreMaterial" name="nombreMaterial" required>
                   <option value="" disabled selected>-- Elegir --</option>
-                  <?php
-                  $sqlCat = "SELECT id, nombre, ref_image FROM material WHERE id_division = ? ORDER BY nombre";
-                  $stmtCat = $conn->prepare($sqlCat);
-                  $stmtCat->bind_param("i", $idDivision);
-                  $stmtCat->execute();
-                  $resCat = $stmtCat->get_result();
-                  while ($rowM = $resCat->fetch_assoc()) {
-                      $matName  = htmlspecialchars($rowM['nombre'], ENT_QUOTES, 'UTF-8');
-                      $refImage = htmlspecialchars($rowM['ref_image'], ENT_QUOTES, 'UTF-8');
-                      echo '<option value="'.$matName.'" data-ref="'.$refImage.'">'.$matName.'</option>';
-                  }
-                  $stmtCat->close();
-                  ?>
+                    <?php
+                    $materialesCatalogo = dbFetchAllAssoc(
+                        $conn,
+                        "SELECT id, nombre, ref_image FROM material WHERE id_division = ? ORDER BY nombre",
+                        "i",
+                        [$idDivision]
+                    );
+                    
+                    foreach ($materialesCatalogo as $rowM) {
+                        $matName  = htmlspecialchars($rowM['nombre'], ENT_QUOTES, 'UTF-8');
+                        $refImage = htmlspecialchars($rowM['ref_image'], ENT_QUOTES, 'UTF-8');
+                        echo '<option value="'.$matName.'" data-ref="'.$refImage.'">'.$matName.'</option>';
+                    }
+                    ?>
                 </select>
               </div>
               <div class="form-group" id="refImageContainer" style="display:none;">
@@ -1261,20 +1328,45 @@ const QUEUE_META_BASE = {
 async function queueCreateVisita(payload, idempKey) {
   const session = ensureVisitSession();
   const visitaLocal = session.visita_local_id || ('local-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now()));
-  updateVisitSession({ visita_local_id: visitaLocal, startPayload: { lat: payload.lat, lng: payload.lng } });
+
+  updateVisitSession({
+    visita_local_id: visitaLocal,
+    startPayload: {
+      lat: String(payload.lat || ''),
+      lng: String(payload.lng || '')
+    }
+  });
+
   document.getElementById('visita_id').value = visitaLocal;
 
-  return OfflineQueue.enqueueJSON('/visibility2/app/create_visita_pruebas.php', {
-    ...payload,
-    visita_local_id: visitaLocal,
-    csrf_token: getCSRF()
-  }, {
-    type: 'create_visita',
-    idempotencyKey: idempKey,
-    client_guid: payload.client_guid,
-    dedupeKey: payload.client_guid ? `create_visita:${payload.client_guid}` : undefined,
-    meta: QUEUE_META_BASE
-  });
+  const cleanPayload = {
+    id_formulario: Number(payload.id_formulario || 0),
+    id_local: Number(payload.id_local || 0),
+    lat: String(payload.lat || ''),
+    lng: String(payload.lng || ''),
+    client_guid: String(payload.client_guid || ''),
+    visita_local_id: String(visitaLocal),
+    csrf_token: String(getCSRF() || '')
+  };
+
+  const cleanMeta = {
+    local_name: String(QUEUE_META_BASE.local_name || ''),
+    local_direccion: String(QUEUE_META_BASE.local_direccion || ''),
+    campaign_name: String(QUEUE_META_BASE.campaign_name || ''),
+    local_id: Number(QUEUE_META_BASE.local_id || 0)
+  };
+
+  return OfflineQueue.enqueueJSON(
+    '/visibility2/app/create_visita_pruebas.php',
+    cleanPayload,
+    {
+      type: 'create_visita',
+      idempotencyKey: String(idempKey || ''),
+      client_guid: String(payload.client_guid || ''),
+      dedupeKey: payload.client_guid ? `create_visita:${payload.client_guid}` : undefined,
+      meta: cleanMeta
+    }
+  );
 }
 async function queueProcesarGestion(formEl, meta={}) {
   const cg = document.getElementById('client_guid').value || ensureClientGuid();
@@ -1967,67 +2059,66 @@ $(document).ready(function(){
   $('#btnNext1').prop('disabled', true).text('Siguiente »');
 
   // === Paso 1: iniciar visita con soporte OFFLINE ===
- $('#btnNext1').off('click').on('click', async function(){
-    const $btn = $(this);
-    $btn.prop('disabled', true).text('Obteniendo ubicación…');
+ $('#btnNext1').off('click').on('click', async function () {
+  const $btn = $(this);
+  $btn.prop('disabled', true).text('Obteniendo ubicación…');
 
-    const estado = $('#estadoGestion').val();
-    const motivo = $('#motivo').val();
-    if (!estado) {
-      alert('Selecciona el estado de la gestión.');
-      $btn.prop('disabled', false).text('Siguiente »');
-      return;
-    }
-    if ((estado === 'pendiente' || estado === 'cancelado') && !motivo) {
-      alert('Debes seleccionar un motivo antes de continuar.');
-      $btn.prop('disabled', false).text('Siguiente »');
-      return;
-    }
+  const estado = $('#estadoGestion').val();
+  const motivo = $('#motivo').val();
 
-    // 1) Siempre exigimos GPS fresco
+  if (!estado) {
+    alert('Selecciona el estado de la gestión.');
+    $btn.prop('disabled', false).text('Siguiente »');
+    return;
+  }
+
+  if ((estado === 'pendiente' || estado === 'cancelado') && !motivo) {
+    alert('Debes seleccionar un motivo antes de continuar.');
+    $btn.prop('disabled', false).text('Siguiente »');
+    return;
+  }
+
+  try {
+    await ensureFreshGeo();
+  } catch (err) {
+    console.error('Error GPS:', err);
+    showGeoError(err);
+    $btn.prop('disabled', false).text('Siguiente »');
+    return;
+  }
+
+  const session = ensureVisitSession();
+  const client_guid = session.client_guid;
+  const idempKey = makeIdempKey();
+  $('#idemp_create').val(idempKey);
+
+  const payload = {
+    id_formulario: <?php echo (int)$idCampana; ?>,
+    id_local: <?php echo (int)$idLocal; ?>,
+    lat: String($('#latGestion').val() || ''),
+    lng: String($('#lngGestion').val() || ''),
+    client_guid: String(client_guid || '')
+  };
+
+  updateVisitSession({ startPayload: { lat: payload.lat, lng: payload.lng } });
+
+  $btn.text('Iniciando visita…');
+
+  try {
+    const params = new URLSearchParams();
+    params.append('id_formulario', String(payload.id_formulario));
+    params.append('id_local', String(payload.id_local));
+    params.append('lat', String(payload.lat));
+    params.append('lng', String(payload.lng));
+    params.append('client_guid', String(payload.client_guid));
+    params.append('csrf_token', getCSRF());
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), START_VISITA_TIMEOUT_MS);
+
+    let r;
     try {
-      await ensureFreshGeo();
-    } catch (err) {
-      showGeoError(err);
-      $btn.prop('disabled', false).text('Siguiente »');
-      return;
-    }
-
-    // 2) Preparamos payload e idempotencia
-    const session = ensureVisitSession();
-    const client_guid = session.client_guid;
-    const idempKey    = makeIdempKey();
-    $('#idemp_create').val(idempKey);
-
-    const payload = {
-      id_formulario: <?php echo (int)$idCampana; ?>,
-      id_local:      <?php echo (int)$idLocal; ?>,
-      lat:           String($('#latGestion').val() || ''),
-      lng:           String($('#lngGestion').val() || ''),
-      client_guid:   String(client_guid || '')
-    };
-
-    updateVisitSession({ startPayload: { lat: payload.lat, lng: payload.lng } });
-
-    $btn.text('Iniciando visita…');
-
-    try {
-      const params = new URLSearchParams();
-      params.append('id_formulario', String(payload.id_formulario));
-      params.append('id_local',      String(payload.id_local));
-      params.append('lat',           String(payload.lat ?? ''));
-      params.append('lng',           String(payload.lng ?? ''));
-      params.append('client_guid',   String(payload.client_guid || ''));
-      params.append('csrf_token',    getCSRF());
-
-    // 3) Promesa de timeout
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('START_VISITA_TIMEOUT')), START_VISITA_TIMEOUT_MS);
-    });
-
-    // 4) Competimos: fetch vs timeout
-    const r = await Promise.race([
-      fetch('/visibility2/app/create_visita_pruebas.php', {
+      r = await fetch('/visibility2/app/create_visita_pruebas.php', {
         method: 'POST',
         credentials: 'same-origin',
         cache: 'no-store',
@@ -2037,48 +2128,66 @@ $(document).ready(function(){
           'X-CSRF-Token': getCSRF(),
           'X-Idempotency-Key': idempKey
         },
-        body: params.toString()
-      }),
-      timeoutPromise
-    ]);
+        body: params.toString(),
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
-    // Si llegó acá es porque ganó el fetch (no el timeout)
-    const js = await r.json().catch(() => ({}));
+    const rawText = await r.text();
+    console.log('create_visita_pruebas.php status:', r.status);
+    console.log('create_visita_pruebas.php response:', rawText);
+
+    let js = {};
+    try {
+      js = rawText ? JSON.parse(rawText) : {};
+    } catch (parseErr) {
+      throw new Error('La respuesta no es JSON válido: ' + rawText.substring(0, 300));
+    }
 
     if (r.ok && js && (js.status === 'success' || js.status === 'ok') && js.visita_id) {
-      // Online OK
       $('#visita_id').val(js.visita_id);
+
       if (window.Queue && window.Queue.CompletedDeps) {
         window.Queue.CompletedDeps.add(`create:${client_guid}`);
       }
       if (window.Queue && window.Queue.LocalByGuid) {
         window.Queue.LocalByGuid.set(client_guid, js.visita_id);
       }
+
       updateVisitSession({ visita_id: js.visita_id, client_guid });
       currentStep = 2;
       showStep(currentStep);
-    } else {
-      // Respuesta rara o error de negocio -> nos vamos a cola igualmente
-      await queueCreateVisita(payload, idempKey);
-      mcToast(
-        'warning',
-        'Servidor lento',
-        'No se pudo confirmar el inicio online. La visita quedó en cola y puedes continuar en modo offline.'
-      );
-      currentStep = 2;
-      showStep(currentStep);
+      return;
     }
 
+    throw new Error(js.message || ('Respuesta inválida del servidor: ' + rawText.substring(0, 300)));
+
   } catch (e) {
-    // 5) Timeout o error de red -> tratamos como offline
+      console.error('Error iniciando visita:', e);
+
+  const msg = String(e && e.message ? e.message : '');
+
+  // Si el backend respondió conflicto, no encolar otra vez
+  if (msg.includes('409') || msg.includes('GUID_REUSED') || msg.includes('Conflict')) {
+    alert('Ya existe una visita abierta o hubo conflicto de creación. Recarga la página e inténtalo nuevamente.');
+    return;
+  }
+
+  try {
     await queueCreateVisita(payload, idempKey);
-    const msg = (e && e.message === 'START_VISITA_TIMEOUT')
-      ? 'El servidor tardó demasiado en responder. Continuamos en modo offline; la visita se sincronizará después.'
+    const offlineMsg = (e.name === 'AbortError')
+      ? 'El servidor tardó demasiado. Continuamos en modo offline.'
       : 'No se pudo iniciar la visita online. Continuamos en modo offline.';
-    mcToast('danger', 'Modo offline', msg);
+    mcToast('warning', 'Modo offline', offlineMsg);
     currentStep = 2;
     showStep(currentStep);
-  } finally {
+  } catch (offlineErr) {
+    console.error('Error encolando visita:', offlineErr);
+    alert('No se pudo iniciar la visita ni online ni offline.');
+  }
+} finally {
     $btn.prop('disabled', false).text('Siguiente »');
   }
 });

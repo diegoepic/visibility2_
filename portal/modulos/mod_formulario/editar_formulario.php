@@ -1,34 +1,59 @@
 <?php
 // editar_formulario.php
 
-
-// Habilitar la visualización de errores para depuración (deshabilítalos en producción)
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-
-// Incluir el archivo de conexión a la base de datos
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
-
-// Incluir los datos de la sesión
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/session_data.php';
 
-// Verificar si el usuario ha iniciado sesión
 if (!isset($_SESSION['usuario_id'])) {
     header("Location: index.php");
     exit();
 }
 
-// Obtener el ID del formulario a editar
-if (isset($_GET['id'])) {
-    $formulario_id = intval($_GET['id']);
-} else {
-    echo "ID de formulario no proporcionado.";
-    exit();
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+$conn->set_charset('utf8mb4');
+
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+function h($v) {
+    return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
 
-// Obtener la pestaña activa (por defecto 'editar-formulario')
+function parseFechaPropuestaCsv(string $fecha): ?string {
+    $fecha = trim($fecha);
+    if ($fecha === '') {
+        return null;
+    }
+
+    $formatos = ['y/m/d', 'Y-m-d', 'd/m/Y', 'd-m-Y', 'Y/m/d'];
+
+    foreach ($formatos as $fmt) {
+        $dt = DateTime::createFromFormat($fmt, $fecha);
+        if ($dt instanceof DateTime) {
+            return $dt->format('Y-m-d');
+        }
+    }
+
+    $ts = strtotime($fecha);
+    if ($ts !== false) {
+        return date('Y-m-d', $ts);
+    }
+
+    return null;
+}
+
+// -----------------------------------------------------------------------------
+// Parámetros base
+// -----------------------------------------------------------------------------
+$formulario_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+if ($formulario_id <= 0) {
+    exit("ID de formulario no proporcionado.");
+}
+
 $active_tab = 'editar-formulario';
 if (isset($_GET['active_tab'])) {
     $active_tab = $_GET['active_tab'];
@@ -36,114 +61,183 @@ if (isset($_GET['active_tab'])) {
     $active_tab = $_POST['active_tab'];
 }
 
+// -----------------------------------------------------------------------------
+// Mapa de preguntas existentes importadas desde set
+// -----------------------------------------------------------------------------
+$qry_existing = "SELECT id, id_question_set_question FROM form_questions WHERE id_formulario = ?";
+$stmt_existing_map = $conn->prepare($qry_existing);
+$stmt_existing_map->bind_param("i", $formulario_id);
+$stmt_existing_map->execute();
+$res_existing = $stmt_existing_map->get_result();
 
-$qry_existing = "SELECT id, id_question_set_question FROM form_questions WHERE id_formulario = " . intval($formulario_id);
-$res_existing = $conn->query($qry_existing);
 $existing_questions = [];
 while ($row = $res_existing->fetch_assoc()) {
-    $existing_questions[$row['id_question_set_question']] = $row['id'];
+    if (!empty($row['id_question_set_question'])) {
+        $existing_questions[(int)$row['id_question_set_question']] = (int)$row['id'];
+    }
 }
+$stmt_existing_map->close();
 
-
+// -----------------------------------------------------------------------------
+// IMPORTAR / SINCRONIZAR SET DE PREGUNTAS
+// -----------------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'import_set') {
-    $set_id = intval($_POST['selected_set_id']);
+    $set_id = (int)($_POST['selected_set_id'] ?? 0);
+
     if ($set_id <= 0) {
         $error = "Selecciona un set de preguntas válido.";
     } else {
-        // Obtener preguntas del set
         $preguntas_set = getQuestionsFromSet($set_id);
+
         if (empty($preguntas_set)) {
             $error = "El set seleccionado no tiene preguntas.";
         } else {
-
             $conn->begin_transaction();
+
             try {
-                // 1) Preguntas ya importadas del set en este formulario: set_q_id -> form_q_id
                 $existingFormQuestions = [];
-                $sql = "SELECT id, id_question_set_question 
-                        FROM form_questions 
-                        WHERE id_formulario = ? AND id_question_set_question IS NOT NULL";
+                $sql = "
+                    SELECT id, id_question_set_question
+                    FROM form_questions
+                    WHERE id_formulario = ?
+                      AND id_question_set_question IS NOT NULL
+                ";
                 $stmt_existing = $conn->prepare($sql);
-                if (!$stmt_existing) { throw new Exception("Error preparando lectura de preguntas existentes: ".$conn->error); }
+                if (!$stmt_existing) {
+                    throw new Exception("Error preparando lectura de preguntas existentes: " . $conn->error);
+                }
+
                 $stmt_existing->bind_param("i", $formulario_id);
                 $stmt_existing->execute();
                 $result_existing = $stmt_existing->get_result();
+
                 while ($row = $result_existing->fetch_assoc()) {
                     $existingFormQuestions[(int)$row['id_question_set_question']] = (int)$row['id'];
                 }
                 $stmt_existing->close();
 
-                // Mapeos para sincronización
-                $map_questions = []; // set_q_id  => form_q_id
-                $map_options   = []; // set_q_id  => [ set_opt_id => form_opt_id ]
+                $map_questions = [];
+                $map_options   = [];
 
-                // Preparar sentencias
-                $sql_ins_q = "INSERT INTO form_questions
-                              (id_formulario, question_text, id_question_type, sort_order, is_required, id_question_set_question, id_dependency_option, is_valued)
-                              VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                $sql_ins_q = "
+                    INSERT INTO form_questions
+                    (
+                        id_formulario,
+                        question_text,
+                        id_question_type,
+                        sort_order,
+                        is_required,
+                        id_question_set_question,
+                        id_dependency_option,
+                        is_valued
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ";
                 $stmt_ins_q = $conn->prepare($sql_ins_q);
-                if (!$stmt_ins_q) { throw new Exception("Error preparando inserción de pregunta: ".$conn->error); }
+                if (!$stmt_ins_q) {
+                    throw new Exception("Error preparando inserción de pregunta: " . $conn->error);
+                }
 
-                $sql_upd_q = "UPDATE form_questions 
-                              SET question_text = ?, id_question_type = ?, sort_order = ?, is_required = ?, is_valued = ?
-                              WHERE id = ?";
+                $sql_upd_q = "
+                    UPDATE form_questions
+                    SET question_text = ?,
+                        id_question_type = ?,
+                        sort_order = ?,
+                        is_required = ?,
+                        is_valued = ?
+                    WHERE id = ?
+                ";
                 $stmt_upd_q = $conn->prepare($sql_upd_q);
-                if (!$stmt_upd_q) { throw new Exception("Error preparando actualización de pregunta: ".$conn->error); }
+                if (!$stmt_upd_q) {
+                    throw new Exception("Error preparando actualización de pregunta: " . $conn->error);
+                }
 
-                $sql_ins_opt = "INSERT INTO form_question_options
-                                (id_form_question, option_text, sort_order, reference_image, id_question_set_option)
-                                VALUES (?, ?, ?, ?, ?)";
+                $sql_ins_opt = "
+                    INSERT INTO form_question_options
+                    (
+                        id_form_question,
+                        option_text,
+                        sort_order,
+                        reference_image,
+                        id_question_set_option
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                ";
                 $stmt_ins_opt = $conn->prepare($sql_ins_opt);
-                if (!$stmt_ins_opt) { throw new Exception("Error preparando inserción de opción: ".$conn->error); }
+                if (!$stmt_ins_opt) {
+                    throw new Exception("Error preparando inserción de opción: " . $conn->error);
+                }
 
-                $sql_upd_opt = "UPDATE form_question_options 
-                                SET option_text = ?, sort_order = ?, reference_image = ?
-                                WHERE id = ?";
+                $sql_upd_opt = "
+                    UPDATE form_question_options
+                    SET option_text = ?,
+                        sort_order = ?,
+                        reference_image = ?
+                    WHERE id = ?
+                ";
                 $stmt_upd_opt = $conn->prepare($sql_upd_opt);
-                if (!$stmt_upd_opt) { throw new Exception("Error preparando actualización de opción: ".$conn->error); }
+                if (!$stmt_upd_opt) {
+                    throw new Exception("Error preparando actualización de opción: " . $conn->error);
+                }
 
-                // sort base actual (se usa el sort del set)
-                $res_so = $conn->query("SELECT COALESCE(MAX(sort_order), 0) AS max_so FROM form_questions WHERE id_formulario = ".intval($formulario_id));
-                $row_so = $res_so->fetch_assoc();
-                $current_sort = (int)$row_so['max_so']; // no se usa si tomamos el sort del set
-
-                // 2) Insertar/actualizar preguntas y opciones
                 foreach ($preguntas_set as $pset) {
-                    $original_q_id   = (int)$pset['id'];
-                    $question_text   = $pset['question_text'];
-                    $id_question_type= (int)$pset['id_question_type'];
-                    $is_required     = (int)$pset['is_required'];
-                    $is_valued       = isset($pset['is_valued']) ? (int)$pset['is_valued'] : 0;
-                    $id_dependency_option = null; // se ajusta luego
-                    $current_sort    = (int)$pset['sort_order'];
+                    $original_q_id    = (int)$pset['id'];
+                    $question_text    = $pset['question_text'];
+                    $id_question_type = (int)$pset['id_question_type'];
+                    $is_required      = (int)$pset['is_required'];
+                    $is_valued        = isset($pset['is_valued']) ? (int)$pset['is_valued'] : 0;
+                    $id_dependency_option = null;
+                    $current_sort     = (int)$pset['sort_order'];
 
                     if (isset($existingFormQuestions[$original_q_id])) {
-                        // Actualizar
                         $form_q_id = $existingFormQuestions[$original_q_id];
-                        $stmt_upd_q->bind_param("siiiii", $question_text, $id_question_type, $current_sort, $is_required, $is_valued, $form_q_id);
+                        $stmt_upd_q->bind_param(
+                            "siiiii",
+                            $question_text,
+                            $id_question_type,
+                            $current_sort,
+                            $is_required,
+                            $is_valued,
+                            $form_q_id
+                        );
                         $stmt_upd_q->execute();
                     } else {
-                        // Insertar
-                        $stmt_ins_q->bind_param("isiiiiii",
-                            $formulario_id, $question_text, $id_question_type, $current_sort,
-                            $is_required, $original_q_id, $id_dependency_option, $is_valued
+                        $stmt_ins_q->bind_param(
+                            "isiiiiii",
+                            $formulario_id,
+                            $question_text,
+                            $id_question_type,
+                            $current_sort,
+                            $is_required,
+                            $original_q_id,
+                            $id_dependency_option,
+                            $is_valued
                         );
                         $stmt_ins_q->execute();
                         $form_q_id = $conn->insert_id;
                     }
+
                     $map_questions[$original_q_id] = $form_q_id;
 
-                    // 2.a) Sincronizar opciones de esta pregunta
-                    // Opciones ya importadas: set_opt_id -> form_opt_id
                     $existingOpts = [];
-                    $sql_get_opts = "SELECT id, id_question_set_option FROM form_question_options WHERE id_form_question = ?";
+                    $sql_get_opts = "
+                        SELECT id, id_question_set_option
+                        FROM form_question_options
+                        WHERE id_form_question = ?
+                    ";
                     $stmt_get_opts = $conn->prepare($sql_get_opts);
-                    if (!$stmt_get_opts) { throw new Exception("Error preparando lectura de opciones existentes: ".$conn->error); }
+                    if (!$stmt_get_opts) {
+                        throw new Exception("Error preparando lectura de opciones existentes: " . $conn->error);
+                    }
+
                     $stmt_get_opts->bind_param("i", $form_q_id);
                     $stmt_get_opts->execute();
                     $result_opts = $stmt_get_opts->get_result();
+
                     while ($row = $result_opts->fetch_assoc()) {
-                        $existingOpts[(int)$row['id_question_set_option']] = (int)$row['id'];
+                        if (!empty($row['id_question_set_option'])) {
+                            $existingOpts[(int)$row['id_question_set_option']] = (int)$row['id'];
+                        }
                     }
                     $stmt_get_opts->close();
 
@@ -151,6 +245,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     $setOptionIds = [];
 
                     $opciones = getOptionsFromSetQuestion($original_q_id);
+
                     if (!empty($opciones)) {
                         foreach ($opciones as $opt) {
                             $original_opt_id = (int)$opt['id'];
@@ -160,19 +255,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             $reference_image = $opt['reference_image'];
 
                             if (isset($existingOpts[$original_opt_id])) {
-                                // update
                                 $form_opt_id = $existingOpts[$original_opt_id];
-                                $stmt_upd_opt->bind_param("sisi", $option_text, $sort_order, $reference_image, $form_opt_id);
+                                $stmt_upd_opt->bind_param(
+                                    "sisi",
+                                    $option_text,
+                                    $sort_order,
+                                    $reference_image,
+                                    $form_opt_id
+                                );
                                 $stmt_upd_opt->execute();
                             } else {
-                                // insert
-                                $stmt_ins_opt->bind_param("isisi", $form_q_id, $option_text, $sort_order, $reference_image, $original_opt_id);
+                                $stmt_ins_opt->bind_param(
+                                    "isisi",
+                                    $form_q_id,
+                                    $option_text,
+                                    $sort_order,
+                                    $reference_image,
+                                    $original_opt_id
+                                );
                                 $stmt_ins_opt->execute();
                                 $form_opt_id = $conn->insert_id;
                             }
+
                             $map_options[$original_q_id][$original_opt_id] = $form_opt_id;
                         }
-                        // Eliminar opciones que ya no están en el set
+
                         foreach ($existingOpts as $orig_opt_id => $form_opt_id) {
                             if (!in_array($orig_opt_id, $setOptionIds, true)) {
                                 $stmtDeleteOpt = $conn->prepare("DELETE FROM form_question_options WHERE id = ?");
@@ -182,108 +289,123 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             }
                         }
                     } else {
-                        // La pregunta del set ya no tiene opciones => borra todas las del form
                         if (!empty($existingOpts)) {
-                            $in_clause = implode(",", array_values($existingOpts));
-                            $conn->query("DELETE FROM form_question_options WHERE id IN ($in_clause) AND id_form_question = $form_q_id");
+                            $stmtDeleteAllOpts = $conn->prepare("DELETE FROM form_question_options WHERE id_form_question = ?");
+                            $stmtDeleteAllOpts->bind_param("i", $form_q_id);
+                            $stmtDeleteAllOpts->execute();
+                            $stmtDeleteAllOpts->close();
                         }
                     }
                 }
 
-                // Cerrar statements base
                 $stmt_ins_q->close();
                 $stmt_upd_q->close();
                 $stmt_ins_opt->close();
                 $stmt_upd_opt->close();
 
-                // 3) Borrar preguntas (y sus opciones) que ya no están en el set
-                $set_q_ids = array_map(function($pset){ return (int)$pset['id']; }, $preguntas_set);
+                $set_q_ids = array_map(function ($pset) {
+                    return (int)$pset['id'];
+                }, $preguntas_set);
+
                 if (!empty($set_q_ids)) {
                     $set_q_ids_str = implode(",", $set_q_ids);
 
-                    // 3.a) Eliminar opciones de preguntas que serán eliminadas
                     $delSql = "
-                      DELETE fqo FROM form_question_options fqo
-                      JOIN form_questions fq ON fq.id = fqo.id_form_question
-                      WHERE fq.id_formulario = ?
-                        AND fq.id_question_set_question IS NOT NULL
-                        AND fq.id_question_set_question NOT IN ($set_q_ids_str)
+                        DELETE fqo
+                        FROM form_question_options fqo
+                        INNER JOIN form_questions fq ON fq.id = fqo.id_form_question
+                        WHERE fq.id_formulario = ?
+                          AND fq.id_question_set_question IS NOT NULL
+                          AND fq.id_question_set_question NOT IN ($set_q_ids_str)
                     ";
                     $stDel = $conn->prepare($delSql);
-                    if (!$stDel) { throw new Exception("Error preparando borrado de opciones huérfanas: ".$conn->error); }
+                    if (!$stDel) {
+                        throw new Exception("Error preparando borrado de opciones huérfanas: " . $conn->error);
+                    }
                     $stDel->bind_param("i", $formulario_id);
                     $stDel->execute();
                     $stDel->close();
 
-                    // 3.b) Eliminar preguntas fuera del set
-                    $conn->query("
-                        DELETE FROM form_questions 
-                        WHERE id_formulario = $formulario_id
+                    $sqlDeleteQuestions = "
+                        DELETE FROM form_questions
+                        WHERE id_formulario = ?
                           AND id_question_set_question IS NOT NULL
                           AND id_question_set_question NOT IN ($set_q_ids_str)
-                    ");
+                    ";
+                    $stDelQuestions = $conn->prepare($sqlDeleteQuestions);
+                    if (!$stDelQuestions) {
+                        throw new Exception("Error preparando borrado de preguntas fuera del set: " . $conn->error);
+                    }
+                    $stDelQuestions->bind_param("i", $formulario_id);
+                    $stDelQuestions->execute();
+                    $stDelQuestions->close();
                 }
 
-                // 4) Actualizar TODAS las dependencias (incluye limpiar a NULL)
-                // Mapa set_opt_id -> set_parent_q_id (una sola query)
                 $optToParent = [];
                 $stmtOpt = $conn->prepare("
-                  SELECT o.id, o.id_question_set_question
-                  FROM question_set_options o
-                  JOIN question_set_questions q ON q.id = o.id_question_set_question
-                  WHERE q.id_question_set = ?
+                    SELECT o.id, o.id_question_set_question
+                    FROM question_set_options o
+                    INNER JOIN question_set_questions q ON q.id = o.id_question_set_question
+                    WHERE q.id_question_set = ?
                 ");
-                if (!$stmtOpt) { throw new Exception("Error preparando mapa opción->padre: ".$conn->error); }
+                if (!$stmtOpt) {
+                    throw new Exception("Error preparando mapa opción->padre: " . $conn->error);
+                }
+
                 $stmtOpt->bind_param("i", $set_id);
                 $stmtOpt->execute();
                 $resOpt = $stmtOpt->get_result();
+
                 while ($row = $resOpt->fetch_assoc()) {
                     $optToParent[(int)$row['id']] = (int)$row['id_question_set_question'];
                 }
                 $stmtOpt->close();
 
                 foreach ($preguntas_set as $pset) {
-                    $set_q_id  = (int)$pset['id'];
-                    $form_q_id = (int)$map_questions[$set_q_id];
-                    $dep_set_opt = $pset['id_dependency_option']; // puede venir null/''
+                    $set_q_id    = (int)$pset['id'];
+                    $form_q_id   = (int)$map_questions[$set_q_id];
+                    $dep_set_opt = $pset['id_dependency_option'];
 
                     if (empty($dep_set_opt)) {
-                        // Ahora es raíz => limpiar a NULL en el form
                         $st = $conn->prepare("UPDATE form_questions SET id_dependency_option = NULL WHERE id = ?");
-                        if (!$st) { throw new Exception("Error limpiando dependencia: ".$conn->error); }
+                        if (!$st) {
+                            throw new Exception("Error limpiando dependencia: " . $conn->error);
+                        }
                         $st->bind_param("i", $form_q_id);
                         $st->execute();
                         $st->close();
                         continue;
                     }
 
-                    $dep_set_opt  = (int)$dep_set_opt;
-                    $parent_set_q = $optToParent[$dep_set_opt] ?? null;
-
+                    $dep_set_opt   = (int)$dep_set_opt;
+                    $parent_set_q  = $optToParent[$dep_set_opt] ?? null;
                     $new_dep_form_opt = null;
+
                     if ($parent_set_q && isset($map_questions[$parent_set_q])) {
-                        // map_options[parent_set_q][dep_set_opt] -> id opción en form
                         $new_dep_form_opt = $map_options[$parent_set_q][$dep_set_opt] ?? null;
                     }
 
-                    if (is_null($new_dep_form_opt)) {
+                    if ($new_dep_form_opt === null) {
                         $st = $conn->prepare("UPDATE form_questions SET id_dependency_option = NULL WHERE id = ?");
-                        if (!$st) { throw new Exception("Error actualizando dependencia (NULL): ".$conn->error); }
+                        if (!$st) {
+                            throw new Exception("Error actualizando dependencia (NULL): " . $conn->error);
+                        }
                         $st->bind_param("i", $form_q_id);
                     } else {
                         $st = $conn->prepare("UPDATE form_questions SET id_dependency_option = ? WHERE id = ?");
-                        if (!$st) { throw new Exception("Error actualizando dependencia: ".$conn->error); }
+                        if (!$st) {
+                            throw new Exception("Error actualizando dependencia: " . $conn->error);
+                        }
                         $st->bind_param("ii", $new_dep_form_opt, $form_q_id);
                     }
+
                     $st->execute();
                     $st->close();
                 }
 
                 $conn->commit();
-                $success = "Set de preguntas importado y sincronizado correctamente.";
                 header("Location: editar_formulario.php?id=$formulario_id&active_tab=import-set");
                 exit();
-
             } catch (Throwable $e) {
                 $conn->rollback();
                 $error = "Error al importar el set: " . $e->getMessage();
@@ -291,34 +413,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
     }
 }
-// ------------------------------
-// Obtener datos del Formulario
-// ------------------------------
+
+// -----------------------------------------------------------------------------
+// Obtener formulario
+// -----------------------------------------------------------------------------
 $stmt = $conn->prepare("
-    SELECT id, nombre, fechaInicio, fechaTermino, estado, tipo, modalidad, id_division, id_empresa, url_bi, reference_image
+    SELECT
+        id,
+        nombre,
+        fechaInicio,
+        fechaTermino,
+        estado,
+        tipo,
+        modalidad,
+        id_division,
+        id_empresa,
+        url_bi,
+        reference_image
     FROM formulario
     WHERE id = ?
 ");
 if ($stmt === false) {
-    die("Error en la preparación de la consulta: " . htmlspecialchars($conn->error));
+    die("Error en la preparación de la consulta: " . h($conn->error));
 }
 $stmt->bind_param("i", $formulario_id);
 $stmt->execute();
 $result = $stmt->get_result();
 
 if ($result->num_rows === 0) {
-    echo "Formulario no encontrado.";
-    exit();
+    exit("Formulario no encontrado.");
 }
 
 $formulario = $result->fetch_assoc();
 $stmt->close();
 
-// Obtener el id_empresa del formulario
-$form_empresa_id = $formulario['id_empresa'];
+$form_empresa_id = (int)$formulario['id_empresa'];
 
-// Obtener el nombre de la empresa del usuario
-$empresa_id = $_SESSION['empresa_id'];
+// -----------------------------------------------------------------------------
+// Empresa del usuario
+// -----------------------------------------------------------------------------
+$empresa_id = (int)$_SESSION['empresa_id'];
 $stmt_empresa = $conn->prepare("SELECT nombre FROM empresa WHERE id = ?");
 $stmt_empresa->bind_param("i", $empresa_id);
 $stmt_empresa->execute();
@@ -326,190 +460,189 @@ $stmt_empresa->bind_result($nombre_empresa);
 $stmt_empresa->fetch();
 $stmt_empresa->close();
 
-// Determinar si el usuario pertenece a "Mentecreativa"
-$es_mentecreativa = false;
-$nombre_empresa_limpio = strtolower(trim($nombre_empresa));
-if ($nombre_empresa_limpio === 'mentecreativa') {
-    $es_mentecreativa = true;
-}
+$es_mentecreativa = strtolower(trim((string)$nombre_empresa)) === 'mentecreativa';
 
-// Obtener todas las divisiones disponibles para seleccionar
+// -----------------------------------------------------------------------------
+// Divisiones disponibles
+// -----------------------------------------------------------------------------
 if ($es_mentecreativa) {
     $stmt_divisiones = $conn->prepare("SELECT id, nombre FROM division_empresa ORDER BY nombre ASC");
-    $stmt_divisiones->execute();
-    $result_divisiones = $stmt_divisiones->get_result();
-    $divisiones = $result_divisiones->fetch_all(MYSQLI_ASSOC);
-    $stmt_divisiones->close();
 } else {
     $stmt_divisiones = $conn->prepare("SELECT id, nombre FROM division_empresa WHERE id_empresa = ? ORDER BY nombre ASC");
     $stmt_divisiones->bind_param("i", $empresa_id);
-    $stmt_divisiones->execute();
-    $result_divisiones = $stmt_divisiones->get_result();
-    $divisiones = $result_divisiones->fetch_all(MYSQLI_ASSOC);
-    $stmt_divisiones->close();
 }
+$stmt_divisiones->execute();
+$result_divisiones = $stmt_divisiones->get_result();
+$divisiones = $result_divisiones->fetch_all(MYSQLI_ASSOC);
+$stmt_divisiones->close();
 
-// ------------------------------
-// Procesar actualización del Formulario
-// ------------------------------
-$uploadDir = $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/uploads/reference_images/';
-
-// Asegúrate de que la carpeta existe
-if (!is_dir($uploadDir)) {
-    mkdir($uploadDir, 0755, true);
-}
-
-// Por defecto, mantenemos la anterior
-$reference_image = $formulario['reference_image'];
-
-// Si se subió una nueva
-if (isset($_FILES['reference_image']) && $_FILES['reference_image']['error'] === UPLOAD_ERR_OK) {
-    $allowed = [
-      "jpg"  => "image/jpeg",
-      "jpeg" => "image/jpeg",
-      "png"  => "image/png",
-      "gif"  => "image/gif"
-    ];
-    $fileTmp  = $_FILES['reference_image']['tmp_name'];
-    $fileName = $_FILES['reference_image']['name'];
-    $fileType = $_FILES['reference_image']['type'];
-    $fileExt  = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-
-    // Validar extensión y mime
-    if (isset($allowed[$fileExt]) && $allowed[$fileExt] === $fileType) {
-        // Generar nombre único
-        $newName = uniqid('refimg_') . '.' . $fileExt;
-        $dest    = $uploadDir . $newName;
-        if (move_uploaded_file($fileTmp, $dest)) {
-            // Ruta relativa para BD
-            $reference_image = '/visibility2/portal/uploads/reference_images/' . $newName;
-        } else {
-            $error = "No se pudo mover la imagen de referencia.";
-        }
-    } else {
-        $error = "Formato de imagen de referencia no permitido.";
-    }
-}
-
+// -----------------------------------------------------------------------------
+// ACTUALIZAR FORMULARIO
+// -----------------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_formulario') {
-    $nombre       = htmlspecialchars($_POST['nombre'], ENT_QUOTES, 'UTF-8');
-    $fechaInicio  = $_POST['fechaInicio'];
-    $fechaTermino = $_POST['fechaTermino'];
-    $estado       = $_POST['estado'];
-    $tipo         = $_POST['tipo'];
-    $id_division  = $_POST['id_division'];
-    $modalidad    = $_POST['modalidad'];
-    $url_bi       = $_POST['url_bi'];    
+    $nombre       = trim($_POST['nombre'] ?? '');
+    $fechaInicio  = $_POST['fechaInicio'] ?? '';
+    $fechaTermino = $_POST['fechaTermino'] ?? '';
+    $estado       = (int)($_POST['estado'] ?? 0);
+    $tipo         = (int)($_POST['tipo'] ?? 0);
+    $id_division  = (int)($_POST['id_division'] ?? 0);
+    $modalidad    = trim($_POST['modalidad'] ?? '');
+    $url_bi       = trim($_POST['url_bi'] ?? '');
 
-    if (empty($nombre) || empty($fechaInicio) || empty($fechaTermino) || empty($estado) || empty($tipo)) {
+    if ($nombre === '' || $fechaInicio === '' || $fechaTermino === '' || $estado <= 0 || $tipo <= 0) {
         $error = "Por favor, complete todos los campos obligatorios.";
     } else {
+        $uploadDir = $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/uploads/reference_images/';
+        if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
+            $error = "No se pudo crear el directorio de imágenes.";
+        } else {
+            $reference_image = $formulario['reference_image'];
+
+            if (isset($_FILES['reference_image']) && $_FILES['reference_image']['error'] === UPLOAD_ERR_OK) {
+                $allowed = [
+                    'jpg'  => 'image/jpeg',
+                    'jpeg' => 'image/jpeg',
+                    'png'  => 'image/png',
+                    'gif'  => 'image/gif'
+                ];
+
+                $fileTmp  = $_FILES['reference_image']['tmp_name'];
+                $fileName = $_FILES['reference_image']['name'];
+                $fileExt  = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+                $fileType = mime_content_type($fileTmp);
+
+                if (isset($allowed[$fileExt]) && $allowed[$fileExt] === $fileType) {
+                    $newName = uniqid('refimg_', true) . '.' . $fileExt;
+                    $dest    = $uploadDir . $newName;
+
+                    if (move_uploaded_file($fileTmp, $dest)) {
+                        @chmod($dest, 0644);
+                        $reference_image = '/visibility2/portal/uploads/reference_images/' . $newName;
+                    } else {
+                        $error = "No se pudo mover la imagen de referencia.";
+                    }
+                } else {
+                    $error = "Formato de imagen de referencia no permitido.";
+                }
+            }
+        }
+    }
+
+    if (!isset($error)) {
         $stmt_update = $conn->prepare("
             UPDATE formulario
-            SET nombre       = ?,
-                fechaInicio  = ?,
+            SET nombre = ?,
+                fechaInicio = ?,
                 fechaTermino = ?,
-                estado       = ?,
-                tipo         = ?,
-                modalidad     = ?,
-                id_division  = ?,
-                url_bi       = ?,
-                reference_image  = ?                
+                estado = ?,
+                tipo = ?,
+                modalidad = ?,
+                id_division = ?,
+                url_bi = ?,
+                reference_image = ?
             WHERE id = ?
         ");
         if ($stmt_update === false) {
-            die("Error en la preparación de la consulta: " . htmlspecialchars($conn->error));
+            die("Error en la preparación de la consulta: " . h($conn->error));
         }
-            $stmt_update->bind_param(
-              "sssiisissi", 
-              $nombre,
-              $fechaInicio,
-              $fechaTermino,
-              $estado,
-              $tipo,
-              $modalidad,
-              $id_division,
-              $url_bi,
-              $reference_image,
-              $formulario_id
-            );
+
+        $stmt_update->bind_param(
+            "sssiisissi",
+            $nombre,
+            $fechaInicio,
+            $fechaTermino,
+            $estado,
+            $tipo,
+            $modalidad,
+            $id_division,
+            $url_bi,
+            $reference_image,
+            $formulario_id
+        );
+
         if ($stmt_update->execute()) {
             $success = "Formulario actualizado correctamente.";
-            $formulario['nombre']       = $nombre;
-            $formulario['fechaInicio']  = $fechaInicio;
+            $formulario['nombre'] = $nombre;
+            $formulario['fechaInicio'] = $fechaInicio;
             $formulario['fechaTermino'] = $fechaTermino;
-            $formulario['estado']       = $estado;
-            $formulario['tipo']         = $tipo;
-            $formulario['id_division']  = $id_division;
-            $formulario['url_bi']       = $url_bi;            
+            $formulario['estado'] = $estado;
+            $formulario['tipo'] = $tipo;
+            $formulario['modalidad'] = $modalidad;
+            $formulario['id_division'] = $id_division;
+            $formulario['url_bi'] = $url_bi;
+            $formulario['reference_image'] = $reference_image;
         } else {
-            $error = "Error al actualizar el formulario: " . htmlspecialchars($stmt_update->error);
+            $error = "Error al actualizar el formulario: " . h($stmt_update->error);
         }
         $stmt_update->close();
     }
 }
 
-// ------------------------------
-// Procesar adición de nuevas entradas (formularioQuestion)
-// (Código para CSV y entrada individual se mantiene sin cambios)
-// ------------------------------
+// -----------------------------------------------------------------------------
+// CARGA MASIVA CSV A formularioQuestion
+// -----------------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_fq_csv') {
-    $fileTmpPath = $_FILES['csvFile']['tmp_name'];
-    $fileName    = $_FILES['csvFile']['name'];
-    $fileSize    = $_FILES['csvFile']['size'];
-    $fileType    = $_FILES['csvFile']['type'];
+    $fileTmpPath = $_FILES['csvFile']['tmp_name'] ?? '';
+    $fileName    = $_FILES['csvFile']['name'] ?? '';
     $fileExt     = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+
     if ($fileExt !== 'csv') {
         $_SESSION['error_formulario'] = "Solo se permiten archivos CSV.";
         header("Location: editar_formulario.php?id=$formulario_id&active_tab=agregar-entradas");
         exit();
     }
-    $uploadDir = '../uploads/csv/';
-    if (!is_dir($uploadDir)) {
-        if (!mkdir($uploadDir, 0755, true)) {
-            $_SESSION['error_formulario'] = "No se pudo crear directorio de subida.";
-            header("Location: editar_formulario.php?id=$formulario_id&active_tab=agregar-entradas");
-            exit();
-        }
+
+    $uploadDirCsv = '../uploads/csv/';
+    if (!is_dir($uploadDirCsv) && !mkdir($uploadDirCsv, 0755, true)) {
+        $_SESSION['error_formulario'] = "No se pudo crear directorio de subida.";
+        header("Location: editar_formulario.php?id=$formulario_id&active_tab=agregar-entradas");
+        exit();
     }
+
     $newFileName = 'formulario_' . $formulario_id . '_' . time() . '.' . $fileExt;
-    $dest_path   = $uploadDir . $newFileName;
+    $dest_path   = $uploadDirCsv . $newFileName;
+
     if (!move_uploaded_file($fileTmpPath, $dest_path)) {
         $_SESSION['error_formulario'] = "Error al subir archivo CSV.";
         header("Location: editar_formulario.php?id=$formulario_id&active_tab=agregar-entradas");
         exit();
     }
+
     $handle = fopen($dest_path, 'r');
     if ($handle === false) {
         $_SESSION['error_formulario'] = "No se pudo abrir el CSV.";
         header("Location: editar_formulario.php?id=$formulario_id&active_tab=agregar-entradas");
         exit();
     }
+
     $header = fgetcsv($handle, 1000, ";");
     if (!$header) {
+        fclose($handle);
         $_SESSION['error_formulario'] = "El CSV está vacío.";
         header("Location: editar_formulario.php?id=$formulario_id&active_tab=agregar-entradas");
         exit();
     }
-    $req_cols = ['codigo','usuario','material','valor_propuesto','fechapropuesta'];
-    
-    
-    $header_norm = array_map(function($c){ return strtolower(trim($c)); }, $header);
+
+    $req_cols = ['codigo', 'usuario', 'material', 'valor_propuesto', 'fechapropuesta'];
+    $header_norm = array_map(fn($c) => strtolower(trim($c)), $header);
     $faltantes = array_diff($req_cols, $header_norm);
+
     if (!empty($faltantes)) {
+        fclose($handle);
         $_SESSION['error_formulario'] = "Faltan columnas requeridas: " . implode(", ", $faltantes);
         header("Location: editar_formulario.php?id=$formulario_id&active_tab=agregar-entradas");
         exit();
     }
-    $idx_codigo          = array_search('codigo', $header_norm);
-    $idx_usuario         = array_search('usuario', $header_norm);
-    $idx_material        = array_search('material', $header_norm);
-    $idx_valor_propuesto = array_search('valor_propuesto', $header_norm);
-    $idx_fechaPropuesta  = array_search('fechapropuesta', $header_norm);
-    
-    
-    $empresa_form = $formulario['id_empresa'];
+
+    $idx_codigo          = array_search('codigo', $header_norm, true);
+    $idx_usuario         = array_search('usuario', $header_norm, true);
+    $idx_material        = array_search('material', $header_norm, true);
+    $idx_valor_propuesto = array_search('valor_propuesto', $header_norm, true);
+    $idx_fechaPropuesta  = array_search('fechapropuesta', $header_norm, true);
+
+    $empresa_form = (int)$formulario['id_empresa'];
     $tiene_divisiones = (contarDivisionesPorEmpresa($empresa_form) > 0);
+
     if ($tiene_divisiones) {
         $stmt_local = $conn->prepare("SELECT id FROM local WHERE codigo = ? AND id_empresa = ?");
         $stmt_usuario = $conn->prepare("SELECT id FROM usuario WHERE usuario = ? AND id_empresa = ?");
@@ -517,118 +650,140 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $stmt_local = $conn->prepare("SELECT id FROM local WHERE codigo = ?");
         $stmt_usuario = $conn->prepare("SELECT id FROM usuario WHERE usuario = ?");
     }
-    
+
     $stmt_insert_fq = $conn->prepare("
-    INSERT INTO formularioQuestion
-    (pregunta, motivo, material, valor, valor_propuesto, fechaPropuesta, countVisita, observacion, id_formulario, id_local, id_usuario, estado)
-    VALUES ('', '', ?, '', ?, ? ,0,'',?,?,?,0)
-");
-    
-    $fila = 1; 
-    $errores_csv = []; 
+        INSERT INTO formularioQuestion
+        (
+            pregunta,
+            motivo,
+            material,
+            valor,
+            valor_propuesto,
+            fechaPropuesta,
+            countVisita,
+            observacion,
+            id_formulario,
+            id_local,
+            id_usuario,
+            estado
+        )
+        VALUES ('', '', ?, '', ?, ?, 0, '', ?, ?, ?, 0)
+    ");
+
+    $fila = 1;
+    $errores_csv = [];
     $ok = 0;
-    while(($data = fgetcsv($handle, 1000, ";")) !== false) {
-    $fila++;
-    $cod_local       = trim($data[$idx_codigo]);
-    $usr_name        = trim($data[$idx_usuario]);
-    $material        = trim($data[$idx_material]);
-    $val_prop        = trim($data[$idx_valor_propuesto]);
-    $fechaPropuesta  = trim($data[$idx_fechaPropuesta]);
-    
-$dateObj = DateTime::createFromFormat('y/m/d', $fechaPropuesta);
-if ($dateObj) {
-    $fechaPropuesta = $dateObj->format('Y-m-d') . ' 00:00:00';
-} else {
-    // Manejar error en conversión si el formato es incorrecto
-}
-    // Validar que ninguno de los campos requeridos esté vacío
-    if ($cod_local == '' || $usr_name == '' || $material == '' || $val_prop == '' || $fechaPropuesta == '') {
-        $errores_csv[] = "Fila $fila: Hay campos vacíos (asegúrate de que 'fechaPropuesta' esté completado).";
-        continue;
-    }
-    if (!is_numeric($val_prop)) {
-        $errores_csv[] = "Fila $fila: valor_propuesto debe ser numérico.";
-        continue;
-    }
-    
-    // Convertir la fecha propuesta al formato MySQL (ajusta según el formato de entrada)
-    $fechaPropuesta = date("Y-m-d H:i:s", strtotime($fechaPropuesta));
-    
-    // Búsqueda del local y usuario (código existente)
-    if ($tiene_divisiones) {
-        $stmt_local->bind_param("si", $cod_local, $empresa_form);
-    } else {
-        $stmt_local->bind_param("s", $cod_local);
-    }
-    $stmt_local->execute();
-    $stmt_local->bind_result($id_local);
-    if (!$stmt_local->fetch()) {
-        $errores_csv[] = "Fila $fila: local '{$cod_local}' no encontrado.";
+
+    while (($data = fgetcsv($handle, 1000, ";")) !== false) {
+        $fila++;
+
+        $cod_local      = trim($data[$idx_codigo] ?? '');
+        $usr_name       = trim($data[$idx_usuario] ?? '');
+        $material       = trim($data[$idx_material] ?? '');
+        $val_prop       = trim($data[$idx_valor_propuesto] ?? '');
+        $fechaRaw       = trim($data[$idx_fechaPropuesta] ?? '');
+
+        if ($cod_local === '' || $usr_name === '' || $material === '' || $val_prop === '' || $fechaRaw === '') {
+            $errores_csv[] = "Fila $fila: Hay campos vacíos.";
+            continue;
+        }
+
+        if (!is_numeric($val_prop)) {
+            $errores_csv[] = "Fila $fila: valor_propuesto debe ser numérico.";
+            continue;
+        }
+
+        $fechaPropuesta = parseFechaPropuestaCsv($fechaRaw);
+        if ($fechaPropuesta === null) {
+            $errores_csv[] = "Fila $fila: fechaPropuesta inválida.";
+            continue;
+        }
+
+        if ($tiene_divisiones) {
+            $stmt_local->bind_param("si", $cod_local, $empresa_form);
+        } else {
+            $stmt_local->bind_param("s", $cod_local);
+        }
+        $stmt_local->execute();
+        $stmt_local->bind_result($id_local);
+
+        if (!$stmt_local->fetch()) {
+            $errores_csv[] = "Fila $fila: local '{$cod_local}' no encontrado.";
+            $stmt_local->reset();
+            continue;
+        }
         $stmt_local->reset();
-        continue;
-    }
-    $stmt_local->reset();
-    
-    if ($tiene_divisiones) {
-        $stmt_usuario->bind_param("si", $usr_name, $empresa_form);
-    } else {
-        $stmt_usuario->bind_param("s", $usr_name);
-    }
-    $stmt_usuario->execute();
-    $stmt_usuario->bind_result($id_usuario_csv);
-    if (!$stmt_usuario->fetch()) {
-        $errores_csv[] = "Fila $fila: usuario '{$usr_name}' no encontrado.";
+
+        if ($tiene_divisiones) {
+            $stmt_usuario->bind_param("si", $usr_name, $empresa_form);
+        } else {
+            $stmt_usuario->bind_param("s", $usr_name);
+        }
+        $stmt_usuario->execute();
+        $stmt_usuario->bind_result($id_usuario_csv);
+
+        if (!$stmt_usuario->fetch()) {
+            $errores_csv[] = "Fila $fila: usuario '{$usr_name}' no encontrado.";
+            $stmt_usuario->reset();
+            continue;
+        }
         $stmt_usuario->reset();
-        continue;
+
+        $stmt_insert_fq->bind_param(
+            "sssiii",
+            $material,
+            $val_prop,
+            $fechaPropuesta,
+            $formulario_id,
+            $id_local,
+            $id_usuario_csv
+        );
+        $stmt_insert_fq->execute();
+        $ok++;
     }
-    $stmt_usuario->reset();
-    
-    // Modificar el bind_param para incluir fechaPropuesta
-    $stmt_insert_fq->bind_param("sssiii", $material, $val_prop, $fechaPropuesta, $formulario_id, $id_local, $id_usuario_csv);
-    $stmt_insert_fq->execute();
-    $ok++;
-}
+
     fclose($handle);
     $stmt_local->close();
     $stmt_usuario->close();
     $stmt_insert_fq->close();
-    
+
     if (!empty($errores_csv)) {
         $_SESSION['error_formulario'] = "Errores en CSV:<br>" . implode("<br>", $errores_csv);
         header("Location: editar_formulario.php?id=$formulario_id&active_tab=agregar-entradas");
         exit();
     }
+
     $_SESSION['success_formulario'] = "Entradas agregadas desde CSV. Registros: $ok";
     header("Location: editar_formulario.php?id=$formulario_id&active_tab=agregar-entradas");
     exit();
 }
-// Procesar adición de entrada individual
+
+// -----------------------------------------------------------------------------
+// AGREGAR ENTRADA INDIVIDUAL A formularioQuestion
+// -----------------------------------------------------------------------------
 elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_fq') {
-    $id_usuario      = intval($_POST['id_usuario']);
-    $codigo_local    = htmlspecialchars($_POST['codigo_local'], ENT_QUOTES, 'UTF-8');
-    $material_ids    = $_POST['material_id'];
-    $valores_propuestos = $_POST['valor_propuesto'];
-    
-    $empresa_form = intval($formulario['id_empresa']);
+    $id_usuario         = (int)($_POST['id_usuario'] ?? 0);
+    $codigo_local       = trim($_POST['codigo_local'] ?? '');
+    $material_ids       = $_POST['material_id'] ?? [];
+    $valores_propuestos = $_POST['valor_propuesto'] ?? [];
+
+    $empresa_form = (int)$formulario['id_empresa'];
+
     $stmt_local = $conn->prepare("SELECT id FROM local WHERE codigo = ? AND id_empresa = ?");
     $stmt_local->bind_param("si", $codigo_local, $empresa_form);
     $stmt_local->execute();
     $stmt_local->bind_result($id_local);
     $found = $stmt_local->fetch();
     $stmt_local->close();
-    
-    
-    
-    
+
     if (!$found || !$id_local) {
         $error = "No se encontró el local con código '{$codigo_local}' en esta empresa.";
     } elseif ($id_usuario > 0 && !empty($material_ids) && is_array($material_ids)) {
-
         foreach ($material_ids as $index => $material_id) {
-            $material_id     = intval($material_id);
-            $valor_propuesto = isset($valores_propuestos[$index]) ? trim($valores_propuestos[$index]) : '';
+            $material_id = (int)$material_id;
+            $valor_propuesto = isset($valores_propuestos[$index]) ? trim((string)$valores_propuestos[$index]) : '';
+            $valor_propuesto = ($valor_propuesto === '') ? null : $valor_propuesto;
 
-            // nombre del material
             $stmt_mat = $conn->prepare("SELECT nombre FROM material WHERE id = ?");
             $stmt_mat->bind_param("i", $material_id);
             $stmt_mat->execute();
@@ -636,28 +791,36 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_PO
             $stmt_mat->fetch();
             $stmt_mat->close();
 
-            if ($material === null || $material === '') {
+            if (empty($material)) {
                 $error = "Material no encontrado.";
                 break;
             }
 
-            // ← FIX: ahora insertamos el ID numérico del local ($id_local), no el código
             $stmt_insert_fq = $conn->prepare("
                 INSERT INTO formularioQuestion
                     (id_formulario, id_usuario, id_local, material, valor_propuesto, estado)
                 VALUES (?, ?, ?, ?, ?, 0)
             ");
             if ($stmt_insert_fq === false) {
-                $error = "Error en la preparación de la consulta: " . htmlspecialchars($conn->error);
+                $error = "Error en la preparación de la consulta: " . h($conn->error);
                 break;
             }
-            $stmt_insert_fq->bind_param("iiiss", $formulario_id, $id_usuario, $id_local, $material, $valor_propuesto);
+
+            $stmt_insert_fq->bind_param(
+                "iiiss",
+                $formulario_id,
+                $id_usuario,
+                $id_local,
+                $material,
+                $valor_propuesto
+            );
 
             if (!$stmt_insert_fq->execute()) {
-                $error = "Error al agregar la entrada: " . htmlspecialchars($stmt_insert_fq->error);
+                $error = "Error al agregar la entrada: " . h($stmt_insert_fq->error);
                 $stmt_insert_fq->close();
                 break;
             }
+
             $stmt_insert_fq->close();
         }
 
@@ -671,26 +834,26 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_PO
     }
 }
 
-// ------------------------------
-// Procesar actualización de una entrada (formularioQuestion)
-// ------------------------------
+// -----------------------------------------------------------------------------
+// ACTUALIZAR ENTRADA formularioQuestion
+// -----------------------------------------------------------------------------
 if (isset($_POST['update_fq'])) {
-    $fq_id           = intval($_POST['fq_id']);
-    $id_usuario      = intval($_POST['id_usuario']);
-    $material_id     = intval($_POST['material_id']);
-    $valor_propuesto = htmlspecialchars($_POST['valor_propuesto'], ENT_QUOTES, 'UTF-8');
-    $fechaVisita     = $_POST['fechaVisita'];
-    $observacion     = htmlspecialchars($_POST['observacion'], ENT_QUOTES, 'UTF-8');
-    $estado          = intval($_POST['estado']);
-    $valor           = htmlspecialchars($_POST['valor'], ENT_QUOTES, 'UTF-8');
-    
+    $fq_id           = (int)($_POST['fq_id'] ?? 0);
+    $id_usuario      = (int)($_POST['id_usuario'] ?? 0);
+    $material_id     = (int)($_POST['material_id'] ?? 0);
+    $valor_propuesto = trim($_POST['valor_propuesto'] ?? '');
+    $fechaVisita     = $_POST['fechaVisita'] ?? null;
+    $observacion     = trim($_POST['observacion'] ?? '');
+    $estado          = (int)($_POST['estado'] ?? 0);
+    $valor           = trim($_POST['valor'] ?? '');
+
     $stmt_mat = $conn->prepare("SELECT nombre FROM material WHERE id = ?");
     $stmt_mat->bind_param("i", $material_id);
     $stmt_mat->execute();
     $stmt_mat->bind_result($material);
     $stmt_mat->fetch();
     $stmt_mat->close();
-    
+
     if ($fq_id > 0 && !empty($material)) {
         $pregunta_value = '';
         if ($estado === 0) {
@@ -700,57 +863,70 @@ if (isset($_POST['update_fq'])) {
         } elseif ($estado === 2) {
             $pregunta_value = 'cancelado';
         }
-    
+
         $stmt_update_fq = $conn->prepare("
             UPDATE formularioQuestion
-            SET id_usuario      = ?,
-                material        = ?,
-                valor           = ?,
+            SET id_usuario = ?,
+                material = ?,
+                valor = ?,
                 valor_propuesto = ?,
-                fechaVisita     = ?,
-                observacion     = ?,
-                estado          = ?,
-                pregunta        = ?
+                fechaVisita = ?,
+                observacion = ?,
+                estado = ?,
+                pregunta = ?
             WHERE id = ?
         ");
         if ($stmt_update_fq === false) {
-            die("Error en la preparación de la consulta: " . htmlspecialchars($conn->error));
+            die("Error en la preparación de la consulta: " . h($conn->error));
         }
-        $stmt_update_fq->bind_param("isssssisi", $id_usuario, $material, $valor, $valor_propuesto, $fechaVisita, $observacion, $estado, $pregunta_value, $fq_id);
-    
+
+        $stmt_update_fq->bind_param(
+            "isssssisi",
+            $id_usuario,
+            $material,
+            $valor,
+            $valor_propuesto,
+            $fechaVisita,
+            $observacion,
+            $estado,
+            $pregunta_value,
+            $fq_id
+        );
+
         if ($stmt_update_fq->execute()) {
             $success = "Entrada actualizada correctamente.";
             header("Location: editar_formulario.php?id=$formulario_id&active_tab=agregar-entradas");
             exit();
         } else {
-            $error = "Error al actualizar la entrada: " . htmlspecialchars($stmt_update_fq->error);
+            $error = "Error al actualizar la entrada: " . h($stmt_update_fq->error);
         }
         $stmt_update_fq->close();
     } else {
-        $error = "Por favor, complete todos los campos para actualizar la entrada (material o ID no válidos).";
+        $error = "Por favor, complete todos los campos para actualizar la entrada.";
     }
 }
 
-// ------------------------------
-// NUEVO: Agrupar y mostrar las gestiones existentes por LOCAL
-// Se unen las implementaciones (formularioQuestion) y las respuestas de encuesta (form_question_responses unidas con form_questions)
-// Se agrega el campo `pregunta` de formularioQuestion como estado de gestión.
-// Además se implementan filtros y paginación para este apartado.
-// ------------------------------
-
-// Leer filtros para la agrupación (ahora con selects)
+// -----------------------------------------------------------------------------
+// FILTROS Y DATOS AUXILIARES PARA GESTIONES AGRUPADAS
+// -----------------------------------------------------------------------------
 $filter_codigo  = isset($_GET['filter_codigo']) ? trim($_GET['filter_codigo']) : '';
 $filter_usuario = isset($_GET['filter_usuario']) ? trim($_GET['filter_usuario']) : '';
 $filter_estado  = isset($_GET['filter_estado']) ? trim($_GET['filter_estado']) : '';
 
-// Parámetros para paginación en la agrupación
-$limitGroup = isset($_GET['limit_group']) ? intval($_GET['limit_group']) : 10000;
-if ($limitGroup <= 0) { $limitGroup = 10000; }
-$pageGroup = isset($_GET['page_group']) ? intval($_GET['page_group']) : 1;
-if ($pageGroup < 1) { $pageGroup = 1; }
+$limitGroup = isset($_GET['limit_group']) ? (int)$_GET['limit_group'] : 10000;
+if ($limitGroup <= 0) {
+    $limitGroup = 10000;
+}
+
+$pageGroup = isset($_GET['page_group']) ? (int)$_GET['page_group'] : 1;
+if ($pageGroup < 1) {
+    $pageGroup = 1;
+}
 $offsetGroup = ($pageGroup - 1) * $limitGroup;
 
-// Obtener valores únicos para los filtros (Código, Usuario y Estado Gestión)
+// -----------------------------------------------------------------------------
+// DISTINCT Código
+// -----------------------------------------------------------------------------
 $distinct_codigo = [];
 $query_codigo = "
    SELECT codigo FROM (
@@ -771,11 +947,14 @@ $stmt_codigo = $conn->prepare($query_codigo);
 $stmt_codigo->bind_param("ii", $formulario_id, $formulario_id);
 $stmt_codigo->execute();
 $result_codigo = $stmt_codigo->get_result();
-while($row = $result_codigo->fetch_assoc()){
-   $distinct_codigo[] = $row['codigo'];
+while ($row = $result_codigo->fetch_assoc()) {
+    $distinct_codigo[] = $row['codigo'];
 }
 $stmt_codigo->close();
 
+// -----------------------------------------------------------------------------
+// DISTINCT Usuario
+// -----------------------------------------------------------------------------
 $distinct_usuario = [];
 $query_usuario = "
    SELECT usuario FROM (
@@ -796,16 +975,19 @@ $stmt_usuario = $conn->prepare($query_usuario);
 $stmt_usuario->bind_param("ii", $formulario_id, $formulario_id);
 $stmt_usuario->execute();
 $result_usuario = $stmt_usuario->get_result();
-while($row = $result_usuario->fetch_assoc()){
-   $distinct_usuario[] = $row['usuario'];
+while ($row = $result_usuario->fetch_assoc()) {
+    $distinct_usuario[] = $row['usuario'];
 }
 $stmt_usuario->close();
 
+// -----------------------------------------------------------------------------
+// DISTINCT Estado
+// -----------------------------------------------------------------------------
 $distinct_estado = [];
 $query_estado = "
-   SELECT DISTINCT 
-      CASE 
-        WHEN TRIM(pregunta) = '' THEN 'No gestionado'
+   SELECT DISTINCT
+      CASE
+        WHEN TRIM(COALESCE(pregunta, '')) = '' THEN 'No gestionado'
         ELSE pregunta
       END as estado
    FROM formularioQuestion
@@ -816,181 +998,133 @@ $stmt_estado = $conn->prepare($query_estado);
 $stmt_estado->bind_param("i", $formulario_id);
 $stmt_estado->execute();
 $result_estado = $stmt_estado->get_result();
-while($row = $result_estado->fetch_assoc()){
-   $distinct_estado[] = $row['estado'];
+while ($row = $result_estado->fetch_assoc()) {
+    $distinct_estado[] = $row['estado'];
 }
 $stmt_estado->close();
 
-// Construir la cláusula HAVING en base a los filtros
-$having = array();
-if (!empty($filter_codigo)) {
+// -----------------------------------------------------------------------------
+// HAVING dinámico
+// -----------------------------------------------------------------------------
+$having = [];
+if ($filter_codigo !== '') {
     $filter_codigo_esc = $conn->real_escape_string($filter_codigo);
-    $having[] = "codigo = '$filter_codigo_esc'";
+    $having[] = "codigo = '{$filter_codigo_esc}'";
 }
-if (!empty($filter_usuario)) {
+if ($filter_usuario !== '') {
     $filter_usuario_esc = $conn->real_escape_string($filter_usuario);
-    // Usamos FIND_IN_SET para buscar en la lista de usuarios concatenados
-    $having[] = "FIND_IN_SET('$filter_usuario_esc', usuarios) > 0";
+    $having[] = "FIND_IN_SET('{$filter_usuario_esc}', REPLACE(usuarios, ', ', ',')) > 0";
 }
-if (!empty($filter_estado)) {
+if ($filter_estado !== '') {
     if (strtolower($filter_estado) === 'no gestionado') {
         $having[] = "(estado_gestion = '' OR estado_gestion IS NULL)";
     } else {
         $filter_estado_esc = $conn->real_escape_string($filter_estado);
-        $having[] = "estado_gestion = '$filter_estado_esc'";
+        $having[] = "estado_gestion = '{$filter_estado_esc}'";
     }
 }
 
-// Armar la query de agrupación SIN LIMIT/OFFSET para el conteo total
+// -----------------------------------------------------------------------------
+// Conteo total agrupado
+// -----------------------------------------------------------------------------
 $sql_group_without_limit = "
-    SELECT 
-        id_local, 
-        codigo, 
-        nombre_local, 
-        direccion_local,
-        SUM(total_entries) AS total_entries,
-        GROUP_CONCAT(DISTINCT usuarios SEPARATOR ', ') AS usuarios,
-        MAX(estado_gestion) AS estado_gestion
+    SELECT
+        l.id AS id_local,
+        l.codigo,
+        l.nombre AS nombre_local,
+        l.direccion AS direccion_local,
+        COALESCE(q1.total_fq, 0) AS entradas_fq,
+        COALESCE(q1.completadas, 0) AS completadas,
+        COALESCE(q1.en_proceso, 0) AS en_proceso,
+        COALESCE(q1.canceladas, 0) AS canceladas,
+        COALESCE(q2.total_resps, 0) AS respuestas_encuesta,
+        TRIM(BOTH ', ' FROM CONCAT(
+            COALESCE(q1.usuarios, ''),
+            CASE
+                WHEN COALESCE(q1.usuarios, '') <> '' AND COALESCE(q2.usuarios, '') <> '' THEN ', '
+                ELSE ''
+            END,
+            COALESCE(q2.usuarios, '')
+        )) AS usuarios,
+        COALESCE(q1.estado_gestion, '') AS estado_gestion
     FROM (
-        SELECT 
-           fq.id_local,
-           l.codigo,
-           l.nombre AS nombre_local,
-           l.direccion AS direccion_local,
-           COUNT(*) AS total_entries,
-           SUM(CASE WHEN fq.estado = 1 THEN 1 ELSE 0 END) AS completadas,
-           SUM(CASE WHEN fq.estado = 0 THEN 1 ELSE 0 END) AS en_proceso,
-           SUM(CASE WHEN fq.estado = 2 THEN 1 ELSE 0 END) AS canceladas,
-           GROUP_CONCAT(DISTINCT u.usuario SEPARATOR ', ') AS usuarios,
-           MIN(fq.pregunta) AS estado_gestion
-        FROM formularioQuestion fq
-        LEFT JOIN local l ON l.id = fq.id_local
-        LEFT JOIN usuario u ON u.id = fq.id_usuario
-        WHERE fq.id_formulario = ?
-        GROUP BY fq.id_local, l.codigo, l.nombre, l.direccion
-
-        UNION ALL
-
-        SELECT 
-           fqr.id_local,
-           l.codigo,
-           l.nombre AS nombre_local,
-           l.direccion AS direccion_local,
-           COUNT(*) AS total_entries,
-           0 AS completadas,
-           0 AS en_proceso,
-           0 AS canceladas,
-           GROUP_CONCAT(DISTINCT u.usuario SEPARATOR ', ') AS usuarios,
-           '' AS estado_gestion
+        SELECT id_local
+        FROM formularioQuestion
+        WHERE id_formulario = ?
+        UNION
+        SELECT fqr.id_local
         FROM form_question_responses fqr
         INNER JOIN form_questions fq2 ON fq2.id = fqr.id_form_question
-        LEFT JOIN local l ON l.id = fqr.id_local
+        WHERE fq2.id_formulario = ?
+    ) AS all_locals
+    INNER JOIN local l ON l.id = all_locals.id_local
+    LEFT JOIN (
+        SELECT
+          fq.id_local,
+          COUNT(*) AS total_fq,
+          SUM(fq.estado = 1) AS completadas,
+          SUM(fq.estado = 0) AS en_proceso,
+          SUM(fq.estado = 2) AS canceladas,
+          GROUP_CONCAT(DISTINCT u.usuario ORDER BY u.usuario SEPARATOR ', ') AS usuarios,
+          MIN(fq.pregunta) AS estado_gestion
+        FROM formularioQuestion fq
+        LEFT JOIN usuario u ON u.id = fq.id_usuario
+        WHERE fq.id_formulario = ?
+        GROUP BY fq.id_local
+    ) AS q1 ON q1.id_local = all_locals.id_local
+    LEFT JOIN (
+        SELECT
+          fqr.id_local,
+          COUNT(*) AS total_resps,
+          GROUP_CONCAT(DISTINCT u.usuario ORDER BY u.usuario SEPARATOR ', ') AS usuarios
+        FROM form_question_responses fqr
+        INNER JOIN form_questions fq2 ON fq2.id = fqr.id_form_question
         LEFT JOIN usuario u ON u.id = fqr.id_usuario
         WHERE fq2.id_formulario = ?
-        GROUP BY fqr.id_local, l.codigo, l.nombre, l.direccion
-    ) AS union_table
-    GROUP BY id_local, codigo, nombre_local, direccion_local
+        GROUP BY fqr.id_local
+    ) AS q2 ON q2.id_local = all_locals.id_local
 ";
+
 if (!empty($having)) {
     $sql_group_without_limit .= " HAVING " . implode(" AND ", $having);
 }
 
-// Obtener el total de registros agrupados para la paginación
-$stmt_count = $conn->prepare("SELECT COUNT(*) as total FROM ($sql_group_without_limit) as t");
+$stmt_count = $conn->prepare("SELECT COUNT(*) AS total FROM ($sql_group_without_limit) AS t");
 if (!$stmt_count) {
-    die("Error en la preparación de la consulta de conteo: " . htmlspecialchars($conn->error));
+    die("Error en la preparación de la consulta de conteo: " . h($conn->error));
 }
-$stmt_count->bind_param("ii", $formulario_id, $formulario_id);
+$stmt_count->bind_param("iiii", $formulario_id, $formulario_id, $formulario_id, $formulario_id);
 $stmt_count->execute();
 $result_count = $stmt_count->get_result();
 $row_count = $result_count->fetch_assoc();
-$totalRows = intval($row_count['total']);
+$totalRows = (int)$row_count['total'];
 $stmt_count->close();
-$totalPages = ceil($totalRows / $limitGroup);
 
-// Armar la query de agrupación CON LIMIT y OFFSET
-// Reemplaza tu SQL actual (con UNION ALL) por algo así:
+$totalPages = ($limitGroup > 0) ? (int)ceil($totalRows / $limitGroup) : 1;
 
-$sql_group = "
-SELECT
-    l.id                      AS id_local,
-    l.codigo,
-    l.nombre                  AS nombre_local,
-    l.direccion               AS direccion_local,
-    COALESCE(q1.total_fq, 0)  AS entradas_fq,
-    COALESCE(q1.completadas, 0) AS completadas,
-    COALESCE(q1.en_proceso, 0)  AS en_proceso,
-    COALESCE(q1.canceladas, 0)  AS canceladas,
-    COALESCE(q2.total_resps, 0) AS respuestas_encuesta,
-    CONCAT_WS(', ',
-        COALESCE(q1.usuarios, ''), 
-        COALESCE(q2.usuarios, '')
-    ) AS usuarios,
-    COALESCE(q1.estado_gestion, '') AS estado_gestion
-FROM (
-    -- 1) obtenemos los locales únicos que aparecen en implementaciones o encuestas
-    SELECT id_local FROM formularioQuestion WHERE id_formulario = ?
-    UNION
-    SELECT id_local
-    FROM form_question_responses fqr
-    INNER JOIN form_questions fq2 ON fq2.id = fqr.id_form_question
-    WHERE fq2.id_formulario = ?
-) AS all_locals
-
-JOIN local l ON l.id = all_locals.id_local
-
--- 2) agregación de datos de implementaciones (formularioQuestion) por local
-LEFT JOIN (
-    SELECT
-      fq.id_local,
-      COUNT(*) AS total_fq,
-      SUM(fq.estado = 1) AS completadas,
-      SUM(fq.estado = 0) AS en_proceso,
-      SUM(fq.estado = 2) AS canceladas,
-      GROUP_CONCAT(DISTINCT u.usuario SEPARATOR ', ') AS usuarios,
-      MIN(fq.pregunta) AS estado_gestion
-    FROM formularioQuestion fq
-    LEFT JOIN usuario u ON u.id = fq.id_usuario
-    WHERE fq.id_formulario = ?
-    GROUP BY fq.id_local
-) AS q1 ON q1.id_local = all_locals.id_local
-
--- 3) agregación de datos de encuesta (form_question_responses) por local
-LEFT JOIN (
-    SELECT
-      fqr.id_local,
-      COUNT(*) AS total_resps,
-      GROUP_CONCAT(DISTINCT u.usuario SEPARATOR ', ') AS usuarios
-    FROM form_question_responses fqr
-    INNER JOIN form_questions fq2 ON fq2.id = fqr.id_form_question
-    LEFT JOIN usuario u ON u.id = fqr.id_usuario
-    WHERE fq2.id_formulario = ?
-    GROUP BY fqr.id_local
-) AS q2 ON q2.id_local = all_locals.id_local
-
--- 4) Paginación (limit / offset)
-LIMIT ? OFFSET ?
-";
+// -----------------------------------------------------------------------------
+// Query agrupada con limit y offset
+// -----------------------------------------------------------------------------
+$sql_group = $sql_group_without_limit . " LIMIT ? OFFSET ?";
 
 $stmt_group = $conn->prepare($sql_group);
 $stmt_group->bind_param(
-  "iiiiii", 
-   $formulario_id,  // for UNION-part 1
-   $formulario_id,  // for UNION-part 2
-   $formulario_id,  // for q1
-   $formulario_id,  // for q2
-   $limitGroup,
-   $offsetGroup
+    "iiiiii",
+    $formulario_id,
+    $formulario_id,
+    $formulario_id,
+    $formulario_id,
+    $limitGroup,
+    $offsetGroup
 );
 $stmt_group->execute();
 $result_group = $stmt_group->get_result();
-
 $gestiones_por_local = $result_group->fetch_all(MYSQLI_ASSOC);
 $stmt_group->close();
 
-// ---------------------------------------------------------------
-// OBTENER Listado de Sets de Preguntas disponibles
-// ---------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Sets de preguntas
+// -----------------------------------------------------------------------------
 $sets = getQuestionSets();
 ?>
 <!DOCTYPE html>
@@ -1505,217 +1639,262 @@ $sets = getQuestionSets();
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <script src="/visibility2/portal/dist/js/jquery.dataTables.min.js"></script>
-<script src='https://cdn.datatables.net/buttons/1.2.2/js/dataTables.buttons.min.js'></script>
-<script src='https://cdn.datatables.net/buttons/1.2.2/js/buttons.colVis.min.js'></script>
-<script src='https://cdn.datatables.net/buttons/1.2.2/js/buttons.html5.min.js'></script>
-<script src='https://cdn.datatables.net/buttons/1.2.2/js/buttons.print.min.js'></script>
-<script src='https://cdn.datatables.net/1.10.12/js/dataTables.bootstrap.min.js'></script>
-<script src='https://cdn.datatables.net/buttons/1.2.2/js/buttons.bootstrap.min.js'></script>
-<script src='https://cdnjs.cloudflare.com/ajax/libs/jszip/2.5.0/jszip.min.js'></script>
-<script src='https://cdn.rawgit.com/bpampuch/pdfmake/0.1.18/build/vfs_fonts.js'></script>
-<script src='https://cdn.rawgit.com/bpampuch/pdfmake/0.1.18/build/pdfmake.min.js'></script>
+<script src="https://cdn.datatables.net/buttons/1.2.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/1.2.2/js/buttons.colVis.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/1.2.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/1.2.2/js/buttons.print.min.js"></script>
+<script src="https://cdn.datatables.net/1.10.12/js/dataTables.bootstrap.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/1.2.2/js/buttons.bootstrap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/2.5.0/jszip.min.js"></script>
+<script src="https://cdn.rawgit.com/bpampuch/pdfmake/0.1.18/build/vfs_fonts.js"></script>
+<script src="https://cdn.rawgit.com/bpampuch/pdfmake/0.1.18/build/pdfmake.min.js"></script>
 
 <script>
-    $(document).ready(function () {
-	//Only needed for the filename of export files.
-	//Normally set in the title tag of your page.
-	document.title = "Simple DataTable";
-	// Create search inputs in footer
-	$("#example tfoot th").each(function () {
-		var title = $(this).text();
-		$(this).html('<input type="text" placeholder="Buscar ' + title + '" />');
-	});
-	// DataTable initialisation
-	var table = $("#example").DataTable({
-		dom: '<"dt-buttons"Bf><"clear">lirtp',
-		paging: true,
-		autoWidth: true,
-		buttons: [
-			"colvis",
-			"copyHtml5",
-			"csvHtml5",
-			"excelHtml5",
-			"pdfHtml5",
-			"print"
-		],
-		initComplete: function (settings, json) {
-			var footer = $("#example tfoot tr");
-			$("#example thead").append(footer);
-		}
-	});
+const formularioId = <?= json_encode((int)$formulario_id) ?>;
 
-	// Apply the search
-	$("#example thead").on("keyup", "input", function () {
-		table.column($(this).parent().index())
-		.search(this.value)
-		.draw();
-	});
-});
-</script>
+$(document).ready(function () {
+    // ---------------------------------------------------------
+    // DataTable principal
+    // ---------------------------------------------------------
+    document.title = "Simple DataTable";
 
-<script>
-$(document).ready(function(){
-  // Cargar modal de edición de entrada
-  $('.btn-editar').on('click', function(){
-    var fqId = $(this).data('fq-id');
-    $.ajax({
-      url: 'ajax_editar_fq.php',
-      method: 'GET',
-      data: { id: fqId, formulario_id: <?php echo $formulario_id; ?> },
-      success: function(data) {
-        $('#editarFQModalContent').html(data);
-        $('#editarFQModal').modal('show');
-      },
-      error: function() {
-        alert('Error al cargar el formulario de edición.');
-      }
-    });
-  });
-
-
-
-$(function(){
-  const params = new URLSearchParams(window.location.search);
-
-  if (params.get('open_modal') === 'gestiones' && params.get('local_id')) {
-    const localId   = params.get('local_id');
-    const userId    = params.get('user_id') || '';
-    const tab       = params.get('tab') || 'impl';
-    const pageImpl  = parseInt(params.get('page_impl')||'1',10);
-    const pageResp  = parseInt(params.get('page_resp')||'1',10);
-
-    // abrir el modal nuevamente
-    $.get('ajax_ver_gestiones.php', {
-      formulario_id: <?= json_encode($formulario_id) ?>,
-      local_id:      localId,
-      user_id:       userId,
-      page_impl:     pageImpl,
-      page_resp:     pageResp,
-      tab:           tab
-    })
-    .done(html => {
-      $('#gestionesModalContent').html(html);
-      $('#gestionesModal').modal('show');
+    $("#example tfoot th").each(function () {
+        var title = $(this).text();
+        $(this).html('<input type="text" placeholder="Buscar ' + title + '" />');
     });
 
-    // limpiar parámetros para no reabrir en futuros reloads manuales
-    params.delete('open_modal');
-    params.delete('local_id');
-    params.delete('user_id');
-    params.delete('tab');
-    params.delete('page_impl');
-    params.delete('page_resp');
-    history.replaceState({}, '', location.pathname + '?' + params.toString());
-  }
-});
-
-const formularioId = <?= json_encode($formulario_id) ?>;
-
-$(document).on('click', '.ver-gestiones', function() {
-  const localId = $(this).data('local-id');
-  $.get('ajax_ver_gestiones.php', { formulario_id: formularioId, local_id: localId })
-    .done(html => {
-      $('#gestionesModalContent').html(html);
-      $('#gestionesModal').modal('show');
-    })
-    .fail((xhr, status, err) => {
-      console.error('AJAX Error:', status, err);
-      alert('Error al cargar las gestiones.');
+    var table = $("#example").DataTable({
+        dom: '<"dt-buttons"Bf><"clear">lirtp',
+        paging: true,
+        autoWidth: true,
+        buttons: [
+            "colvis",
+            "copyHtml5",
+            "csvHtml5",
+            "excelHtml5",
+            "pdfHtml5",
+            "print"
+        ],
+        initComplete: function () {
+            var footer = $("#example tfoot tr");
+            if (footer.length) {
+                $("#example thead").append(footer);
+            }
+        }
     });
-});
 
-$(document).on('click', '.editar-gestion', function() {
-  const localId = $(this).data('local-id');
-  $.get('ajax_editar_gestion.php', { formulario_id: formularioId, local_id: localId })
-    .done(html => {
-      $('#editarGestionModalContent').html(html);
-      $('#editarGestionModal').modal('show');
-    })
-    .fail(() => {
-      alert('Error al cargar el formulario de edición de gestión.');
+    $("#example thead").on("keyup", "input", function () {
+        table
+            .column($(this).parent().index())
+            .search(this.value)
+            .draw();
     });
-});
-  
-  // Interceptar el submit del formulario de edición de gestión para enviarlo por AJAX
-$(document).on('submit', '#editarGestionForm', function(e) {
-  e.preventDefault();
-  const $form = $(this);
-  const url = 'ajax_editar_gestion.php'
+
+    // ---------------------------------------------------------
+    // Botón editar entrada individual
+    // ---------------------------------------------------------
+    $('.btn-editar').on('click', function () {
+        var fqId = $(this).data('fq-id');
+
+        $.ajax({
+            url: 'ajax_editar_fq.php',
+            method: 'GET',
+            data: {
+                id: fqId,
+                formulario_id: formularioId
+            },
+            success: function (data) {
+                $('#editarFQModalContent').html(data);
+                $('#editarFQModal').modal('show');
+            },
+            error: function () {
+                alert('Error al cargar el formulario de edición.');
+            }
+        });
+    });
+
+    // ---------------------------------------------------------
+    // Reabrir modal de gestiones si viene en querystring
+    // ---------------------------------------------------------
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.get('open_modal') === 'gestiones' && params.get('local_id')) {
+        const localId  = params.get('local_id');
+        const userId   = params.get('user_id') || '';
+        const tab      = params.get('tab') || 'impl';
+        const pageImpl = parseInt(params.get('page_impl') || '1', 10);
+        const pageResp = parseInt(params.get('page_resp') || '1', 10);
+
+        $.get('ajax_ver_gestiones.php', {
+            formulario_id: formularioId,
+            local_id: localId,
+            user_id: userId,
+            page_impl: pageImpl,
+            page_resp: pageResp,
+            tab: tab
+        })
+        .done(function (html) {
+            $('#gestionesModalContent').html(html);
+            $('#gestionesModal').modal('show');
+        })
+        .fail(function () {
+            alert('Error al reabrir el detalle de gestiones.');
+        });
+
+        params.delete('open_modal');
+        params.delete('local_id');
+        params.delete('user_id');
+        params.delete('tab');
+        params.delete('page_impl');
+        params.delete('page_resp');
+
+        const newQuery = params.toString();
+        history.replaceState({}, '', location.pathname + (newQuery ? '?' + newQuery : ''));
+    }
+
+    // ---------------------------------------------------------
+    // Ver gestiones
+    // ---------------------------------------------------------
+    $(document).on('click', '.ver-gestiones', function () {
+        const localId = $(this).data('local-id');
+
+        $.get('ajax_ver_gestiones.php', {
+            formulario_id: formularioId,
+            local_id: localId
+        })
+        .done(function (html) {
+            $('#gestionesModalContent').html(html);
+            $('#gestionesModal').modal('show');
+        })
+        .fail(function (xhr, status, err) {
+            console.error('AJAX Error:', status, err);
+            alert('Error al cargar las gestiones.');
+        });
+    });
+
+    // ---------------------------------------------------------
+    // Editar gestión agrupada
+    // ---------------------------------------------------------
+    $(document).on('click', '.editar-gestion', function () {
+        const localId = $(this).data('local-id');
+
+        $.get('ajax_editar_gestion.php', {
+            formulario_id: formularioId,
+            local_id: localId
+        })
+        .done(function (html) {
+            $('#editarGestionModalContent').html(html);
+            $('#editarGestionModal').modal('show');
+        })
+        .fail(function () {
+            alert('Error al cargar el formulario de edición de gestión.');
+        });
+    });
+
+    // ---------------------------------------------------------
+    // Guardar edición de gestión vía AJAX
+    // ---------------------------------------------------------
+    $(document).on('submit', '#editarGestionForm', function (e) {
+        e.preventDefault();
+
+        const $form = $(this);
+        const url = 'ajax_editar_gestion.php'
             + '?formulario_id=' + encodeURIComponent($form.find('input[name="formulario_id"]').val())
-            + '&local_id='      + encodeURIComponent($form.find('input[name="local_id"]').val());
+            + '&local_id=' + encodeURIComponent($form.find('input[name="local_id"]').val());
 
-  $.post(url, $form.serialize(), function(response) {
-    const $resp  = $('<div>').html(response);
-    const $alert = $resp.find('.alert').first();
+        $.post(url, $form.serialize(), function (response) {
+            const $resp = $('<div>').html(response);
+            const $alert = $resp.find('.alert').first();
 
-    if ($alert.length) {
-      const $modalBody = $('#editarGestionModal .modal-body');
-      $modalBody.find('.alert').remove();
-      $modalBody.prepend($alert.hide().fadeIn(150));
+            if ($alert.length) {
+                const $modalBody = $('#editarGestionModal .modal-body');
+                $modalBody.find('.alert').remove();
+                $modalBody.prepend($alert.hide().fadeIn(150));
 
-      // : si fue éxito, recarga la página quedando en la pestaña "agregar-entradas"
-      if ($resp.find('.alert-success').length) {
-        setTimeout(() => {
-          const url = new URL(window.location.href);
-          url.searchParams.set('active_tab', 'agregar-entradas');
-          window.location.href = url.toString();
-        }, 600);
-      }
-    }
+                if ($resp.find('.alert-success').length) {
+                    setTimeout(function () {
+                        const urlReload = new URL(window.location.href);
+                        urlReload.searchParams.set('active_tab', 'agregar-entradas');
+                        window.location.href = urlReload.toString();
+                    }, 600);
+                }
+            }
 
-    const $newTable = $resp.find('table');
-    if ($newTable.length) {
-      $('#editarGestionModal .modal-body table').replaceWith($newTable);
-    }
-  })
-  .fail(function() {
-    alert('Error al guardar la actualización de gestión.');
-  });
+            const $newTable = $resp.find('table');
+            if ($newTable.length) {
+                $('#editarGestionModal .modal-body table').replaceWith($newTable);
+            }
+        }).fail(function () {
+            alert('Error al guardar la actualización de gestión.');
+        });
+    });
+
+    // ---------------------------------------------------------
+    // Reasignar local vía AJAX
+    // ---------------------------------------------------------
+    $(document).on('submit', '#reasignarLocalForm', function (e) {
+        e.preventDefault();
+
+        const $form = $(this);
+        const localId = $form.find('input[name="local_id"]').val();
+
+        $.ajax({
+            url: 'ajax_editar_gestion.php?formulario_id=' + encodeURIComponent(formularioId) + '&local_id=' + encodeURIComponent(localId),
+            method: 'POST',
+            data: $form.serialize(),
+            success: function (response) {
+                $('#editarGestionModalContent').html(response);
+
+                if (response.indexOf('alert-success') !== -1) {
+                    setTimeout(function () {
+                        const urlReload = new URL(window.location.href);
+                        urlReload.searchParams.set('active_tab', 'agregar-entradas');
+                        window.location.href = urlReload.toString();
+                    }, 600);
+                }
+            },
+            error: function () {
+                alert('Error al reasignar el local.');
+            }
+        });
+    });
+
+    // ---------------------------------------------------------
+    // Ver historial de visitas
+    // ---------------------------------------------------------
+    $(document).on('click', '.ver-visitas', function () {
+        const localId = $(this).data('local-id');
+
+        $.get('ajax_ver_visitas.php', {
+            formulario_id: formularioId,
+            local_id: localId
+        })
+        .done(function (html) {
+            $('#visitasModalContent').html(html);
+            $('#visitasModal').modal('show');
+        })
+        .fail(function (xhr, status, err) {
+            console.error('AJAX Error:', status, err);
+            alert('Error al cargar el histórico de visitas.');
+        });
+    });
 });
-  // Interceptar el submit del formulario de reasignación de local para enviarlo por AJAX
-$(document).on('submit', '#reasignarLocalForm', function(e) {
-  e.preventDefault();
-  var $form = $(this);
-  var url = 'ajax_editar_gestion.php?formulario_id=<?php echo $formulario_id; ?>&local_id=' + $('input[name="local_id"]').val();
 
-  $.ajax({
-    url: url,
-    method: 'POST',
-    data: $form.serialize(),
-    success: function(response) {
-      $('#editarGestionModalContent').html(response);
-
-      // si hay éxito, recarga manteniendo la pestaña
-      if (response.indexOf('alert-success') !== -1) {
-        setTimeout(() => {
-          const url = new URL(window.location.href);
-          url.searchParams.set('active_tab', 'agregar-entradas');
-          window.location.href = url.toString();
-        }, 600);
-      }
-    },
-    error: function() {
-      alert('Error al reasignar el local.');
-    }
-  });
-});
-})
-
-
-
-// Función para la pestaña "Agregar Pregunta" (formulario individual)
+// ---------------------------------------------------------
+// Funciones globales de preguntas
+// ---------------------------------------------------------
 function toggleQuestionTypeSingle() {
     const tipoSelect = document.getElementById('id_question_type');
     const selectedTipo = parseInt(tipoSelect.value, 10);
     const optionsContainer = document.getElementById('questionOptionsContainer');
     const valuedContainer = document.getElementById('valuedContainer');
-    
+
     if ([1, 2, 3].includes(selectedTipo)) {
         optionsContainer.style.display = 'block';
     } else {
         optionsContainer.style.display = 'none';
     }
-    
+
     if ([2, 3].includes(selectedTipo)) {
         valuedContainer.style.display = 'block';
     } else {
@@ -1723,24 +1902,26 @@ function toggleQuestionTypeSingle() {
     }
 }
 
-// Funciones para agregar opciones en el formulario individual
 function addOptionRow() {
     const optionsRows = document.getElementById('questionOptionsRows');
     const optIndex = optionsRows.children.length;
     const newRow = document.createElement('div');
     newRow.className = 'option-block mb-2';
     const previewId = 'preview_' + optIndex;
-    newRow.innerHTML = '<div class="input-group">' +
-      '<input type="text" class="form-control" name="options[' + optIndex + ']" placeholder="Texto de la opción">' +
-      '<div class="input-group-append">' +
-      '<button type="button" class="btn btn-danger" onclick="removeOptionBlock(this)">Eliminar</button>' +
-      '</div>' +
-      '<div class="custom-file">' +
-      '<input type="file" class="custom-file-input" name="option_images[' + optIndex + ']" accept="image/*" onchange="previewOptionImage(event, \'' + previewId + '\')">' +
-      '<label class="custom-file-label">Imagen (opcional)</label>' +
-      '</div>' +
-      '</div>' +
-      '<img id="' + previewId + '" style="display:none; max-width:100px; margin-top:5px;">';
+
+    newRow.innerHTML =
+        '<div class="input-group">' +
+            '<input type="text" class="form-control" name="options[' + optIndex + ']" placeholder="Texto de la opción">' +
+            '<div class="input-group-append">' +
+                '<button type="button" class="btn btn-danger" onclick="removeOptionBlock(this)">Eliminar</button>' +
+            '</div>' +
+            '<div class="custom-file">' +
+                '<input type="file" class="custom-file-input" name="option_images[' + optIndex + ']" accept="image/*" onchange="previewOptionImage(event, \'' + previewId + '\')">' +
+                '<label class="custom-file-label">Imagen (opcional)</label>' +
+            '</div>' +
+        '</div>' +
+        '<img id="' + previewId + '" style="display:none; max-width:100px; margin-top:5px;">';
+
     optionsRows.appendChild(newRow);
 }
 
@@ -1754,13 +1935,15 @@ function removeOptionBlock(btn) {
 function previewOptionImage(evt, previewId) {
     const file = evt.target.files[0];
     if (!file) return;
+
     if (!file.type.startsWith('image/')) {
         alert("Solo se permiten archivos de imagen.");
         evt.target.value = '';
         return;
     }
+
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = function (e) {
         const img = document.getElementById(previewId);
         if (img) {
             img.src = e.target.result;
@@ -1770,38 +1953,39 @@ function previewOptionImage(evt, previewId) {
     reader.readAsDataURL(file);
 }
 
-// Funciones para agregar material en la pestaña "Agregar Entradas"
+// ---------------------------------------------------------
+// Funciones globales de materiales
+// ---------------------------------------------------------
 function addMaterialRow() {
     const materialesContainer = document.getElementById('materiales-container');
     const materialRow = document.createElement('div');
     materialRow.className = 'material-row';
-    materialRow.innerHTML = '<div class="form-row">' +
-        '<div class="col">' +
-            '<label>Material:</label>' +
-            '<div class="input-group">' +
-                '<select name="material_id[]" class="form-control" required>' +
-                    '<option value="">Seleccione un material</option>' +
-                    '<?php foreach ($materiales as $material): ?>' +
-                        '<option value="<?php echo htmlspecialchars($material["id"], ENT_QUOTES, "UTF-8"); ?>">' +
-                            '<?php echo htmlspecialchars($material["nombre"], ENT_QUOTES, "UTF-8"); ?>' +
-                        '</option>' +
-                    '<?php endforeach; ?>' +
-                '</select>' +
-                '<div class="input-group-append">' +
-                    '<button type="button" class="btn btn-secondary" data-toggle="modal" data-target="#agregarMaterialModal">' +
-                        'Agregar Material' +
-                    '</button>' +
+
+    materialRow.innerHTML =
+        '<div class="form-row">' +
+            '<div class="col">' +
+                '<label>Material:</label>' +
+                '<div class="input-group">' +
+                    '<select name="material_id[]" class="form-control" required>' +
+                        '<option value="">Seleccione un material</option>' +
+                        '<?php foreach ($materiales as $material): ?>' +
+                            '<option value="<?= htmlspecialchars($material["id"], ENT_QUOTES, "UTF-8") ?>"><?= htmlspecialchars($material["nombre"], ENT_QUOTES, "UTF-8") ?></option>' +
+                        '<?php endforeach; ?>' +
+                    '</select>' +
+                    '<div class="input-group-append">' +
+                        '<button type="button" class="btn btn-secondary" data-toggle="modal" data-target="#agregarMaterialModal">Agregar Material</button>' +
+                    '</div>' +
                 '</div>' +
             '</div>' +
-        '</div>' +
-        '<div class="col">' +
-            '<label>Valor Propuesto:</label>' +
-            '<input type="text" name="valor_propuesto[]" class="form-control">' +
-        '</div>' +
-        '<div class="col-auto">' +
-            '<button type="button" class="btn btn-danger remove-material-btn" onclick="removeMaterialRow(this)">Eliminar</button>' +
-        '</div>' +
-    '</div>';
+            '<div class="col">' +
+                '<label>Valor Propuesto:</label>' +
+                '<input type="text" name="valor_propuesto[]" class="form-control">' +
+            '</div>' +
+            '<div class="col-auto">' +
+                '<button type="button" class="btn btn-danger remove-material-btn" onclick="removeMaterialRow(this)">Eliminar</button>' +
+            '</div>' +
+        '</div>';
+
     materialesContainer.appendChild(materialRow);
 }
 
@@ -1811,27 +1995,6 @@ function removeMaterialRow(button) {
         materialRow.remove();
     }
 }
-
-
-const formularioId = <?= json_encode($formulario_id) ?>;
-
-$(document).on('click', '.ver-visitas', function() {
-  const localId = $(this).data('local-id');
-  // Llamamos a un nuevo endpoint que devolverá el HTML del histórico de visitas
-  $.get('ajax_ver_visitas.php', {
-    formulario_id: formularioId,
-    local_id:      localId
-  })
-  .done(html => {
-    $('#visitasModalContent').html(html);
-    $('#visitasModal').modal('show');
-  })
-  .fail((xhr, status, err) => {
-    console.error('AJAX Error:', status, err);
-    alert('Error al cargar el histórico de visitas.');
-  });
-});
-
 </script>
 
 <!-- Modal único para edición de entrada -->

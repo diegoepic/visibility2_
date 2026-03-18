@@ -4,8 +4,8 @@
 
 
     $servername = "localhost";
-    $username   = "visibility";
-    $password   = "xyPz8e/rgaC2";
+    $username   = "visibility_mgomez";
+    $password   = "Yzv2b9rn211421";
     $dbname     = "visibility_visibility2";
 
 

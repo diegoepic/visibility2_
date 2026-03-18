@@ -1,130 +1,240 @@
 <?php
 // ajax_editar_fq.php
 
-include $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
+declare(strict_types=1);
 
-// Cargar listas de usuarios y materiales (ajusta las consultas si es necesario)
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+error_reporting(E_ALL);
+
+require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/session_data.php';
+
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+
+if (!isset($_SESSION['usuario_id'])) {
+    http_response_code(401);
+    echo "<div class='modal-body'><p>Sesi®Æn expirada.</p></div>";
+    exit;
+}
+
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+$conn->set_charset('utf8mb4');
+
+function h($value): string
+{
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
+
+$fq_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$formulario_id = isset($_GET['formulario_id']) ? (int)$_GET['formulario_id'] : 0;
+
+if ($fq_id <= 0 || $formulario_id <= 0) {
+    http_response_code(400);
+    echo "<div class='modal-body'><p>Error: Par®¢metros inv®¢lidos.</p></div>";
+    exit;
+}
+
+// -----------------------------------------------------------------------------
+// Obtener datos del formularioQuestion validando que pertenezca al formulario
+// -----------------------------------------------------------------------------
+$stmt = $conn->prepare("
+    SELECT
+        fq.id,
+        fq.id_usuario,
+        u.usuario AS nombre_usuario,
+        fq.id_local,
+        l.nombre AS nombre_local,
+        fq.material,
+        fq.valor_propuesto,
+        fq.valor,
+        fq.fechaVisita,
+        fq.observacion,
+        fq.estado,
+        fq.pregunta,
+        f.id_division,
+        f.id_empresa
+    FROM formularioQuestion fq
+    INNER JOIN formulario f ON f.id = fq.id_formulario
+    LEFT JOIN usuario u ON fq.id_usuario = u.id
+    LEFT JOIN local l ON fq.id_local = l.id
+    WHERE fq.id = ?
+      AND fq.id_formulario = ?
+    LIMIT 1
+");
+$stmt->bind_param("ii", $fq_id, $formulario_id);
+$stmt->execute();
+$result = $stmt->get_result();
+$row = $result->fetch_assoc();
+$stmt->close();
+
+if (!$row) {
+    http_response_code(404);
+    echo "<div class='modal-body'><p>Error: Entrada no encontrada.</p></div>";
+    exit;
+}
+
+$id_division_form = (int)($row['id_division'] ?? 0);
+$id_empresa_form  = (int)($row['id_empresa'] ?? 0);
+$empresa_sesion   = (int)($_SESSION['empresa_id'] ?? 0);
+
+// -----------------------------------------------------------------------------
+// Usuarios
+// Puedes dejarlo abierto a todos o limitar por empresa
+// -----------------------------------------------------------------------------
 $usuarios = [];
-$sqlUsuarios = "SELECT id, usuario FROM usuario ORDER BY usuario ASC";
-$resUsuarios = $conn->query($sqlUsuarios);
-if($resUsuarios){
-    while($rowUsuario = $resUsuarios->fetch_assoc()){
-        $usuarios[] = $rowUsuario;
-    }
-}
+$stmtUsuarios = $conn->prepare("
+    SELECT id, usuario
+    FROM usuario
+    WHERE activo = 1
+      AND id_empresa = ?
+    ORDER BY usuario ASC
+");
+$stmtUsuarios->bind_param("i", $empresa_sesion);
+$stmtUsuarios->execute();
+$resUsuarios = $stmtUsuarios->get_result();
 
+while ($rowUsuario = $resUsuarios->fetch_assoc()) {
+    $usuarios[] = $rowUsuario;
+}
+$stmtUsuarios->close();
+
+// -----------------------------------------------------------------------------
+// Materiales
+// Idealmente filtrar por divisi®Æn si aplica
+// -----------------------------------------------------------------------------
 $materiales = [];
-$sqlMateriales = "SELECT id, nombre FROM material ORDER BY nombre ASC";
-$resMateriales = $conn->query($sqlMateriales);
-if($resMateriales){
-    while($rowMaterial = $resMateriales->fetch_assoc()){
-        $materiales[] = $rowMaterial;
-    }
+
+if ($id_division_form > 0) {
+    $stmtMateriales = $conn->prepare("
+        SELECT id, nombre
+        FROM material
+        WHERE id_division = ?
+        ORDER BY nombre ASC
+    ");
+    $stmtMateriales->bind_param("i", $id_division_form);
+} else {
+    $stmtMateriales = $conn->prepare("
+        SELECT id, nombre
+        FROM material
+        ORDER BY nombre ASC
+    ");
 }
 
-if (isset($_GET['id'], $_GET['formulario_id']) && is_numeric($_GET['id'])) {
-    $fq_id = intval($_GET['id']);
-    $formulario_id = intval($_GET['formulario_id']);
-    
-    // Consulta para obtener la entrada
-    $stmt = $conn->prepare("SELECT fq.id, fq.id_usuario, u.usuario AS nombre_usuario, fq.id_local, l.nombre AS nombre_local, fq.material, fq.valor_propuesto, fq.valor, fq.fechaVisita, fq.observacion, fq.estado, fq.pregunta
-                            FROM formularioQuestion fq
-                            LEFT JOIN usuario u ON fq.id_usuario = u.id
-                            LEFT JOIN local l ON fq.id_local = l.id
-                            WHERE fq.id = ?");
-    $stmt->bind_param("i", $fq_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    if ($row = $result->fetch_assoc()) {
-        // Genera el contenido del modal (sin etiquetas <html> ni <body>)
-        ?>
-        <div class="modal-header">
-          <h5 class="modal-title" id="editarFQModalLabel">Editar Entrada</h5>
-          <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
-            <span aria-hidden="true">&times;</span>
-          </button>
-        </div>
-        <div class="modal-body">
-          <form action="editar_formulario.php?id=<?php echo $formulario_id; ?>" method="post">
-            <input type="hidden" name="update_fq" value="1">
-            <input type="hidden" name="fq_id" value="<?php echo $row['id']; ?>">
-            <input type="hidden" name="active_tab" value="agregar-entradas">
-            
-            <!-- Campo: Usuario Asignado -->
-            <div class="form-group">
-              <label for="id_usuario">Usuario Asignado:</label>
-              <select id="id_usuario" name="id_usuario" class="form-control" required>
+$stmtMateriales->execute();
+$resMateriales = $stmtMateriales->get_result();
+
+while ($rowMaterial = $resMateriales->fetch_assoc()) {
+    $materiales[] = $rowMaterial;
+}
+$stmtMateriales->close();
+
+// -----------------------------------------------------------------------------
+// Render modal
+// -----------------------------------------------------------------------------
+?>
+<div class="modal-header">
+    <h5 class="modal-title" id="editarFQModalLabel">Editar entrada</h5>
+    <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+        <span aria-hidden="true">&times;</span>
+    </button>
+</div>
+
+<div class="modal-body">
+    <form action="editar_formulario.php?id=<?= (int)$formulario_id ?>" method="post">
+        <input type="hidden" name="update_fq" value="1">
+        <input type="hidden" name="fq_id" value="<?= (int)$row['id'] ?>">
+        <input type="hidden" name="active_tab" value="agregar-entradas">
+
+        <div class="form-group">
+            <label for="id_usuario">Usuario asignado:</label>
+            <select id="id_usuario" name="id_usuario" class="form-control" required>
                 <option value="">Seleccione un usuario</option>
                 <?php foreach ($usuarios as $usuario): ?>
-                  <option value="<?php echo htmlspecialchars($usuario['id'], ENT_QUOTES, 'UTF-8'); ?>" <?php if ($row['id_usuario'] == $usuario['id']) echo 'selected'; ?>>
-                    <?php echo htmlspecialchars($usuario['usuario'], ENT_QUOTES, 'UTF-8'); ?>
-                  </option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-            
-            <!-- Campo: Material -->
-            <div class="form-group">
-              <label for="material_id">Material:</label>
-              <div class="input-group">
-                <select id="material_id" name="material_id" class="form-control" required>
-                  <option value="">Seleccione un material</option>
-                  <?php foreach ($materiales as $mat): ?>
-                    <option value="<?php echo htmlspecialchars($mat['id'], ENT_QUOTES, 'UTF-8'); ?>" <?php if ($row['material'] == $mat['nombre']) echo 'selected'; ?>>
-                      <?php echo htmlspecialchars($mat['nombre'], ENT_QUOTES, 'UTF-8'); ?>
+                    <option value="<?= (int)$usuario['id'] ?>" <?= ((int)$row['id_usuario'] === (int)$usuario['id']) ? 'selected' : '' ?>>
+                        <?= h($usuario['usuario']) ?>
                     </option>
-                  <?php endforeach; ?>
-                </select>
-                <div class="input-group-append">
-                  <button type="button" class="btn btn-secondary" data-toggle="modal" data-target="#agregarMaterialModal">Agregar Material</button>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Otros campos: Valor Propuesto, Valor, Fecha, Observaci√≥n, etc. -->
-            <div class="form-group">
-              <label for="valor_propuesto">Valor Propuesto:</label>
-              <input type="text" id="valor_propuesto" name="valor_propuesto" class="form-control" value="<?php echo htmlspecialchars($row['valor_propuesto'], ENT_QUOTES, 'UTF-8'); ?>">
-            </div>
-            
-            <div class="form-group">
-              <label for="valor">Valor:</label>
-              <input type="text" id="valor" name="valor" class="form-control" value="<?php echo htmlspecialchars($row['valor'], ENT_QUOTES, 'UTF-8'); ?>">
-            </div>
-            
-            <div class="form-group">
-              <label for="fechaVisita">Fecha de Visita:</label>
-              <input type="datetime-local" id="fechaVisita" name="fechaVisita" class="form-control" value="<?php echo !empty($row['fechaVisita']) ? date('Y-m-d\TH:i', strtotime($row['fechaVisita'])) : ''; ?>">
-            </div>
-            
-            <div class="form-group">
-              <label for="observacion">Observaci√≥n:</label>
-              <textarea id="observacion" name="observacion" class="form-control"><?php echo htmlspecialchars($row['observacion'], ENT_QUOTES, 'UTF-8'); ?></textarea>
-            </div>
-            
-            <div class="form-group">
-              <label for="estado">Estado:</label>
-              <select id="estado" name="estado" class="form-control" required>
-                <option value="0" <?php if ($row['estado'] == 0) echo 'selected'; ?>>En Proceso</option>
-                <option value="1" <?php if ($row['estado'] == 1) echo 'selected'; ?>>Completado</option>
-                <option value="2" <?php if ($row['estado'] == 2) echo 'selected'; ?>>Cancelado</option>
-              </select>
-            </div>
-            
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
-              <button type="submit" class="btn btn-primary">Guardar Cambios</button>
-            </div>
-          </form>
+                <?php endforeach; ?>
+            </select>
         </div>
-        <?php
-    } else {
-        echo "<div class='modal-body'><p>Error: Entrada no encontrada.</p></div>";
-    }
-    
-    $stmt->close();
-} else {
-    echo "<div class='modal-body'><p>Error: Par√°metros inv√°lidos.</p></div>";
-}
-?>
+
+        <div class="form-group">
+            <label for="material_id">Material:</label>
+            <div class="input-group">
+                <select id="material_id" name="material_id" class="form-control" required>
+                    <option value="">Seleccione un material</option>
+                    <?php foreach ($materiales as $mat): ?>
+                        <option value="<?= (int)$mat['id'] ?>" <?= ($row['material'] === $mat['nombre']) ? 'selected' : '' ?>>
+                            <?= h($mat['nombre']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+
+                <div class="input-group-append">
+                    <button type="button" class="btn btn-secondary" data-toggle="modal" data-target="#agregarMaterialModal">
+                        Agregar material
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="valor_propuesto">Valor propuesto:</label>
+            <input
+                type="text"
+                id="valor_propuesto"
+                name="valor_propuesto"
+                class="form-control"
+                value="<?= h($row['valor_propuesto']) ?>"
+            >
+        </div>
+
+        <div class="form-group">
+            <label for="valor">Valor:</label>
+            <input
+                type="text"
+                id="valor"
+                name="valor"
+                class="form-control"
+                value="<?= h($row['valor']) ?>"
+            >
+        </div>
+
+        <div class="form-group">
+            <label for="fechaVisita">Fecha de visita:</label>
+            <input
+                type="datetime-local"
+                id="fechaVisita"
+                name="fechaVisita"
+                class="form-control"
+                value="<?= !empty($row['fechaVisita']) ? h(date('Y-m-d\TH:i', strtotime((string)$row['fechaVisita']))) : '' ?>"
+            >
+        </div>
+
+        <div class="form-group">
+            <label for="observacion">Observaci®Æn:</label>
+            <textarea id="observacion" name="observacion" class="form-control"><?= h($row['observacion']) ?></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="estado">Estado:</label>
+            <select id="estado" name="estado" class="form-control" required>
+                <option value="0" <?= ((int)$row['estado'] === 0) ? 'selected' : '' ?>>En proceso</option>
+                <option value="1" <?= ((int)$row['estado'] === 1) ? 'selected' : '' ?>>Completado</option>
+                <option value="2" <?= ((int)$row['estado'] === 2) ? 'selected' : '' ?>>Cancelado</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Local:</label>
+            <input type="text" class="form-control" value="<?= h($row['nombre_local']) ?>" readonly>
+        </div>
+
+        <div class="modal-footer px-0 pb-0">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            <button type="submit" class="btn btn-primary">Guardar cambios</button>
+        </div>
+    </form>
+</div>

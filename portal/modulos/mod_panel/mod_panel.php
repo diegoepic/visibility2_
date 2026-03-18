@@ -7,17 +7,20 @@ if (!isset($_SESSION['usuario_id'])) {
     exit();
 }
 
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+$conn->set_charset('utf8mb4');
+
 $nombre      = $_SESSION['usuario_nombre'];
 $apellido    = $_SESSION['usuario_apellido'];
-$id_division = intval($_SESSION['division_id']);
-$id_empresa  = intval($_SESSION['empresa_id']);
+$id_division = (int)($_SESSION['division_id']);
+$id_empresa  = (int)($_SESSION['empresa_id']);
 
-$division_filtro = isset($_GET['division']) 
-    ? intval($_GET['division']) 
+$division_filtro = isset($_GET['division'])
+    ? (int)$_GET['division']
     : $id_division;
 
-$subdivision_filtro = isset($_GET['subdivision']) 
-    ? intval($_GET['subdivision']) 
+$subdivision_filtro = isset($_GET['subdivision'])
+    ? (int)$_GET['subdivision']
     : 0;
 
 $fecha_desde = $_GET['fecha_desde'] ?? date('Y-m-d');
@@ -25,7 +28,6 @@ $fecha_hasta = $_GET['fecha_hasta'] ?? date('Y-m-d');
 
 $inicio = $fecha_desde . " 00:00:00";
 $fin    = $fecha_hasta . " 23:59:59";
-
 
 /* ======================================================
    CARGAR DIVISIONES
@@ -51,54 +53,66 @@ while ($row = $resDiv->fetch_assoc()) {
 }
 $stmtDiv->close();
 
-
 /* ======================================================
    1️⃣ UNIVERSO ACTIVO (NO DEPENDE DE FECHA)
+   Ajustado para MySQL 8
 ====================================================== */
 $sqlUniverso = "
     SELECT
         u.id AS id_ejecutor,
-        UPPER(u.nombre) AS nombre,
-        UPPER(u.apellido) AS apellido,
-        UPPER(u.usuario) AS usuario,
+        ANY_VALUE(UPPER(u.nombre)) AS nombre,
+        ANY_VALUE(UPPER(u.apellido)) AS apellido,
+        ANY_VALUE(UPPER(u.usuario)) AS usuario,
 
         COUNT(DISTINCT CONCAT(fq.id_local,'-',fq.id_formulario)) AS locales_activos,
         COUNT(DISTINCT f.id) AS campanas_activas,
 
-        COUNT(DISTINCT CASE 
+        COUNT(DISTINCT CASE
             WHEN fq.countVisita > 0
             THEN CONCAT(fq.id_local,'-',fq.id_formulario)
         END) AS visitados_historico,
-        
-        COUNT(DISTINCT CASE 
+
+        COUNT(DISTINCT CASE
             WHEN fq.countVisita > 0
-            AND fq.pregunta in ('solo_auditoria', 'solo_implementado', 'implementado_auditado','completado')
+             AND fq.pregunta IN ('solo_auditoria', 'solo_implementado', 'implementado_auditado', 'completado')
             THEN CONCAT(fq.id_local,'-',fq.id_formulario)
         END) AS gestionados_historico
 
     FROM usuario u
-    LEFT JOIN formularioQuestion fq ON fq.id_usuario = u.id
-    LEFT JOIN formulario f ON f.id = fq.id_formulario
+    LEFT JOIN formularioQuestion fq
+        ON fq.id_usuario = u.id
+    LEFT JOIN formulario f
+        ON f.id = fq.id_formulario
+       AND f.estado = 1
+";
 
+$paramsU = [];
+$typesU  = "";
+
+/*
+   Importante:
+   Dejamos el filtro de usuario en WHERE,
+   y los filtros de formulario después.
+*/
+$sqlUniverso .= "
     WHERE u.id_perfil = 3
       AND u.activo = 1
       AND u.id_division = ?
       AND u.id_empresa = ?
-      AND f.estado = 1
 ";
-
-$paramsU = [$division_filtro, $id_empresa];
-$typesU  = "ii";
+$typesU .= "ii";
+$paramsU[] = $division_filtro;
+$paramsU[] = $id_empresa;
 
 if ($subdivision_filtro > 0) {
-    $sqlUniverso .= " AND f.id_subdivision = ? ";
+    $sqlUniverso .= " AND (f.id_subdivision = ?) ";
     $typesU .= "i";
     $paramsU[] = $subdivision_filtro;
 }
 
 $sqlUniverso .= "
     GROUP BY u.id
-    ORDER BY u.nombre ASC
+    ORDER BY ANY_VALUE(u.nombre) ASC
 ";
 
 $stmtU = $conn->prepare($sqlUniverso);
@@ -112,21 +126,21 @@ while ($row = $resU->fetch_assoc()) {
 }
 $stmtU->close();
 
-
 /* ======================================================
    2️⃣ PRODUCTIVIDAD DIARIA (TOTAL REAL DEL EJECUTOR)
+   Ajustado para MySQL 8 sin romper la lógica original
 ====================================================== */
-
 $sqlProd = "
     SELECT
         u.id AS id_ejecutor,
-        UPPER(u.nombre) AS nombre,
-        UPPER(u.apellido) AS apellido,
-        UPPER(u.usuario) AS usuario,
+        ANY_VALUE(UPPER(u.nombre)) AS nombre,
+        ANY_VALUE(UPPER(u.apellido)) AS apellido,
+        ANY_VALUE(UPPER(u.usuario)) AS usuario,
         DATE(v.fecha) AS fecha,
         COUNT(DISTINCT CONCAT(v.id_local,'-',v.id_formulario,'-',DATE(v.fecha))) AS total
     FROM vw_gestiones_unificadas v
-    JOIN usuario u ON u.id = v.id_usuario
+    INNER JOIN usuario u
+        ON u.id = v.id_usuario
     WHERE u.id_perfil = 3
       AND u.activo = 1
       AND u.id_division = ?
@@ -137,50 +151,96 @@ $sqlProd = "
 $paramsP = [$division_filtro, $id_empresa, $inicio, $fin];
 $typesP  = "iiss";
 
+if ($subdivision_filtro > 0) {
+    $sqlProd .= "
+      AND EXISTS (
+          SELECT 1
+          FROM formulario fsub
+          WHERE fsub.id = v.id_formulario
+            AND fsub.id_subdivision = ?
+      )
+    ";
+    $typesP .= "i";
+    $paramsP[] = $subdivision_filtro;
+}
+
 $sqlProd .= "
     GROUP BY u.id, DATE(v.fecha)
-    ORDER BY u.nombre, DATE(v.fecha)
+    ORDER BY ANY_VALUE(u.nombre), DATE(v.fecha)
 ";
 
 $stmtP = $conn->prepare($sqlProd);
 $stmtP->bind_param($typesP, ...$paramsP);
 $stmtP->execute();
 $resP = $stmtP->get_result();
+
 $fechas = [];
 $matriz = [];
 
+/* ======================================================
+   Construir rango completo de fechas
+====================================================== */
+try {
+    $fechaInicioObj = new DateTime($fecha_desde);
+    $fechaFinObj    = new DateTime($fecha_hasta);
+
+    if ($fechaInicioObj > $fechaFinObj) {
+        $tmp = $fechaInicioObj;
+        $fechaInicioObj = $fechaFinObj;
+        $fechaFinObj = $tmp;
+    }
+
+    $fechaFinInclusive = clone $fechaFinObj;
+    $fechaFinInclusive->modify('+1 day');
+
+    $periodo = new DatePeriod(
+        $fechaInicioObj,
+        new DateInterval('P1D'),
+        $fechaFinInclusive
+    );
+
+    foreach ($periodo as $dt) {
+        $key = $dt->format('Y-m-d');
+        $fechas[$key] = $key;
+    }
+} catch (Exception $e) {
+    $fechas = [];
+}
+
 /* Primero inicializamos matriz con universo */
 foreach ($universo as $u) {
-
-    $id = $u['id_ejecutor'];
+    $id = (int)$u['id_ejecutor'];
 
     $matriz[$id] = [
         'nombre'  => $u['nombre'] . ' ' . $u['apellido'],
         'usuario' => $u['usuario'],
         'datos'   => []
     ];
+
+    // Inicializar todos los días en 0
+    foreach ($fechas as $f) {
+        $matriz[$id]['datos'][$f] = 0;
+    }
 }
 
 /* Luego cargamos productividad diaria */
 while ($row = $resP->fetch_assoc()) {
-
-    $id = $row['id_ejecutor'];
+    $id    = (int)$row['id_ejecutor'];
     $fecha = $row['fecha'];
     $valor = (int)$row['total'];
-
-    $fechas[$fecha] = $fecha;
 
     if (!isset($matriz[$id])) {
         continue;
     }
 
-    $matriz[$id]['datos'][$fecha] = $valor;
+    if (isset($matriz[$id]['datos'][$fecha])) {
+        $matriz[$id]['datos'][$fecha] = $valor;
+    }
 }
 $stmtP->close();
 $conn->close();
 
 ksort($fechas);
-
 
 /* ======================================================
    CALCULO KPI
@@ -193,7 +253,7 @@ $totalLocalesGestionados = 0;
 foreach ($universo as $e) {
     $totalLocalesAsignados += (int)$e['locales_activos'];
     $totalLocalesVisitados += (int)$e['visitados_historico'];
-    $totalLocalesGestionados += (int)$e['gestionados_historico'];    
+    $totalLocalesGestionados += (int)$e['gestionados_historico'];
 }
 
 $ratioTotalVisitados = $totalLocalesAsignados > 0
@@ -221,8 +281,7 @@ function iconRatio($ratio) {
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css">
   <link rel="stylesheet" href="<?= '/visibility2/portal/css/mod_panel.css?v=' . time(); ?>">
-<!-- DataTables CSS -->
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">    
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
 </head>
 <body>
 
@@ -232,7 +291,7 @@ function iconRatio($ratio) {
       <i class="fas fa-user-cog"></i>
       Panel de Control - Merchandising
     </h1>
-    <p class="mb-0">Bienvenido, <?= htmlspecialchars($nombre.' '.$apellido); ?>.</p>
+    <p class="mb-0">Bienvenido, <?= htmlspecialchars($nombre . ' ' . $apellido); ?>.</p>
   </div>
 
   <div class="card mt-3">
@@ -240,7 +299,7 @@ function iconRatio($ratio) {
 
       <form method="GET" class="form-row align-items-end mb-3">
         <div class="col-md-4">
-          <label><strong>Division</strong></label>
+          <label><strong>División</strong></label>
           <select name="division" class="form-control">
             <?php foreach ($divisiones as $d): ?>
               <option value="<?= $d['id'] ?>" <?= ($d['id'] == $division_filtro ? 'selected' : '') ?>>
@@ -251,7 +310,7 @@ function iconRatio($ratio) {
         </div>
 
         <div class="col-md-3">
-          <label><strong>Subdivision</strong></label>
+          <label><strong>Subdivisión</strong></label>
           <select name="subdivision" id="subdivision" class="form-control">
             <option value="0">Todas</option>
           </select>
@@ -283,9 +342,9 @@ function iconRatio($ratio) {
         $totalLocalesGestionados = 0;
 
         foreach ($universo as $e) {
-            $totalLocalesAsignados  += (int)$e['locales_activos'];
-            $totalLocalesVisitados  += (int)$e['visitados_historico'];
-            $totalLocalesGestionados+= (int)$e['gestionados_historico'];
+            $totalLocalesAsignados   += (int)$e['locales_activos'];
+            $totalLocalesVisitados   += (int)$e['visitados_historico'];
+            $totalLocalesGestionados += (int)$e['gestionados_historico'];
         }
 
         $ratioVisitadosTotal = $totalLocalesAsignados > 0 ? round(($totalLocalesVisitados / $totalLocalesAsignados) * 100, 1) : 0;
@@ -364,13 +423,13 @@ function iconRatio($ratio) {
             </thead>
             <tbody>
               <?php foreach ($universo as $e):
-                $idEjec     = (int)$e['id_ejecutor'];
-                $nombreEjec = htmlspecialchars($e['nombre'].' '.$e['apellido']);
-                $usuario    = htmlspecialchars($e['usuario']);
-                $totalAsign = (int)$e['campanas_activas'];
-                $numLocales = (int)$e['locales_activos'];
+                $idEjec       = (int)$e['id_ejecutor'];
+                $nombreEjec   = htmlspecialchars($e['nombre'] . ' ' . $e['apellido']);
+                $usuario      = htmlspecialchars($e['usuario']);
+                $totalAsign   = (int)$e['campanas_activas'];
+                $numLocales   = (int)$e['locales_activos'];
                 $numVisitados = (int)$e['visitados_historico'];
-                $comp = (int)$e['gestionados_historico'];
+                $comp         = (int)$e['gestionados_historico'];
 
                 $ratioVisitados = $numLocales > 0 ? round(($numVisitados / $numLocales) * 100, 1) : 0;
                 $ratioGestionados = $numLocales > 0 ? round(($comp / $numLocales) * 100, 1) : 0;
@@ -410,10 +469,10 @@ function iconRatio($ratio) {
           </table>
         </div>
       <?php else: ?>
-        <p>No hay ejecutores asignados a tu division.</p>
+        <p>No hay ejecutores asignados a tu división.</p>
       <?php endif; ?>
 
-      <?php if (!empty($matriz) && !empty($fechas)): ?>
+      <?php if (!empty($matriz)): ?>
         <div class="card mt-4">
           <div class="card-body">
             <h5 class="mb-3">
@@ -453,15 +512,15 @@ function iconRatio($ratio) {
                         <td class="text-center"><?= $valor ?></td>
                       <?php endforeach; ?>
                       <td class="text-center font-weight-bold"><?= $totalFila ?></td>
-                            <td class="text-center">
-                              <a href="mod_panel_gestiones_diarias.php?id_ejecutor=<?= $idEjecutor ?>
-                                &division=<?= $division_filtro ?>
-                                &fecha_desde=<?= urlencode($fecha_desde) ?>
-                                &fecha_hasta=<?= urlencode($fecha_hasta) ?>"
-                                class="btn btn-info btn-sm">
-                                <i class="fas fa-search"></i> Ver Gestiones
-                              </a>
-                            </td>                       
+                      <td class="text-center">
+                        <a href="mod_panel_gestiones_diarias.php?id_ejecutor=<?= $idEjecutor ?>
+                          &division=<?= $division_filtro ?>
+                          &fecha_desde=<?= urlencode($fecha_desde) ?>
+                          &fecha_hasta=<?= urlencode($fecha_hasta) ?>"
+                          class="btn btn-info btn-sm">
+                          <i class="fas fa-search"></i> Ver Gestiones
+                        </a>
+                      </td>
                     </tr>
                   <?php endforeach; ?>
 
@@ -471,6 +530,7 @@ function iconRatio($ratio) {
                       <td class="text-center"><?= (int)($totalesColumnas[$f] ?? 0) ?></td>
                     <?php endforeach; ?>
                     <td class="text-center"><?= (int)$totalGeneral ?></td>
+                    <td></td>
                   </tr>
                 </tbody>
               </table>
@@ -487,20 +547,19 @@ function iconRatio($ratio) {
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 
-<!-- DataTables JS -->
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
 
 <script>
 $(document).ready(function() {
     $('#tablaTotal').DataTable({
-        order: [[0, "asc"]], // orden inicial por primera columna
+        order: [[0, "asc"]],
         pageLength: 25,
         language: {
             url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json"
         },
         columnDefs: [
-            { orderable: false, targets: 7 } // bloquea orden columna 7
+            { orderable: false, targets: 8 }
         ]
     });
 });
@@ -518,9 +577,9 @@ $(document).ready(function() {
         $.ajax({
             url: 'ajax_subdivisiones.php',
             type: 'GET',
+            dataType: 'json',
             data: { division: idDivision },
             success: function(response) {
-
                 let options = '<option value="0">Todas</option>';
 
                 response.forEach(function(sub) {
@@ -529,6 +588,9 @@ $(document).ready(function() {
                 });
 
                 $('#subdivision').html(options);
+            },
+            error: function() {
+                $('#subdivision').html('<option value="0">Todas</option>');
             }
         });
     }
@@ -539,7 +601,7 @@ $(document).ready(function() {
     });
 
     let divisionInicial = $('[name="division"]').val();
-    let subdivisionInicial = <?= intval($subdivision_filtro) ?>;
+    let subdivisionInicial = <?= (int)$subdivision_filtro ?>;
 
     if (divisionInicial) {
         cargarSubdivisiones(divisionInicial, subdivisionInicial);
@@ -547,6 +609,7 @@ $(document).ready(function() {
 
 });
 </script>
+
 <script>
 (function () {
   function ymd(date) {
@@ -562,26 +625,16 @@ $(document).ready(function() {
     if (!desde || !hasta) return;
 
     const hoy = new Date();
-
-    // Opción A: desde = hoy
     const defDesde = ymd(hoy);
-
-    // Opción B: desde = ayer (descomenta si quieres esta lógica)
-    // const ayer = new Date(hoy);
-    // ayer.setDate(hoy.getDate() - 1);
-    // const defDesde = ymd(ayer);
-
     const defHasta = ymd(hoy);
 
     if (!desde.value) desde.value = defDesde;
     if (!hasta.value) hasta.value = defHasta;
   }
 
-  // Se ejecuta normal
   document.addEventListener('DOMContentLoaded', fixFechas);
 
-  // 🔥 Se ejecuta también al volver con el botón "atrás" (bfcache)
-  window.addEventListener('pageshow', function (e) {
+  window.addEventListener('pageshow', function () {
     fixFechas();
   });
 })();

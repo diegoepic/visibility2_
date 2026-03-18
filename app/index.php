@@ -96,35 +96,70 @@ $stmt_comp->close();
 
 // 3) Locales Programados: aquellos con countVisita = 0 (no visitados)
 $sql = "
-    SELECT
-    IFNULL(DATE(fq.fechaPropuesta), CURDATE()) AS fechaPropuesta,
-    l.codigo    AS codigoLocal,
-    c.nombre    AS cadena,
+SELECT
+    CASE
+        WHEN fq.fechaPropuesta IS NULL
+             OR CAST(fq.fechaPropuesta AS CHAR(10)) = '0000-00-00'
+             OR CAST(fq.fechaPropuesta AS CHAR(19)) = '0000-00-00 00:00:00'
+        THEN CURDATE()
+        ELSE DATE(fq.fechaPropuesta)
+    END AS fechaPropuesta,
+
+    l.codigo AS codigoLocal,
+    c.nombre AS cadena,
     l.direccion AS direccionLocal,
-    l.nombre    AS nombreLocal,
+    l.nombre AS nombreLocal,
     IFNULL(v.nombre_vendedor, '') AS vendedor,
     IFNULL(co.comuna, '') AS comuna,
-    l.id        AS idLocal,
-    l.lat       AS latitud,
-    l.lng       AS lng,
-    COUNT(CASE WHEN fq.countVisita = 0 THEN 1 END)        AS totalCampanas,
-    GROUP_CONCAT(DISTINCT CASE WHEN fq.countVisita = 0 THEN f.id END) AS campanasIds,
-    MAX(fq.is_priority)         AS is_priority
+    l.id AS idLocal,
+    l.lat AS latitud,
+    l.lng AS lng,
+
+    COUNT(DISTINCT CASE
+        WHEN fq.countVisita = 0 THEN f.id
+    END) AS totalCampanas,
+
+    GROUP_CONCAT(DISTINCT CASE
+        WHEN fq.countVisita = 0 THEN f.id
+    END) AS campanasIds,
+
+    MAX(fq.is_priority) AS is_priority
+
 FROM formularioQuestion fq
-INNER JOIN formulario f ON f.id        = fq.id_formulario
-INNER JOIN local      l ON l.id        = fq.id_local
-INNER JOIN cadena     c ON c.id        = l.id_cadena
-LEFT JOIN vendedor   v ON v.id        = l.id_vendedor
-LEFT JOIN comuna     co ON co.id       = l.id_comuna
-WHERE fq.id_usuario    = ?
-  AND f.id_empresa      = ?
-  AND f.tipo           IN (3,1)
-  AND f.estado         = 1
+INNER JOIN formulario f ON f.id = fq.id_formulario
+INNER JOIN local l ON l.id = fq.id_local
+INNER JOIN cadena c ON c.id = l.id_cadena
+LEFT JOIN vendedor v ON v.id = l.id_vendedor
+LEFT JOIN comuna co ON co.id = l.id_comuna
+
+WHERE fq.id_usuario = ?
+  AND f.id_empresa = ?
+  AND f.tipo IN (3,1)
+  AND f.estado = 1
+  AND fq.estado = 0
+
 GROUP BY
-    IFNULL(DATE(fq.fechaPropuesta), CURDATE()),
-    l.codigo, c.nombre, l.direccion, l.nombre, co.comuna,
-    l.id, l.lat, l.lng, v.nombre_vendedor
-HAVING SUM(CASE WHEN fq.countVisita = 0 THEN 1 ELSE 0 END) > 0
+    CASE
+        WHEN fq.fechaPropuesta IS NULL
+             OR CAST(fq.fechaPropuesta AS CHAR(10)) = '0000-00-00'
+             OR CAST(fq.fechaPropuesta AS CHAR(19)) = '0000-00-00 00:00:00'
+        THEN CURDATE()
+        ELSE DATE(fq.fechaPropuesta)
+    END,
+    l.codigo,
+    c.nombre,
+    l.direccion,
+    l.nombre,
+    co.comuna,
+    l.id,
+    l.lat,
+    l.lng,
+    v.nombre_vendedor
+
+HAVING COUNT(DISTINCT CASE
+    WHEN fq.countVisita = 0 THEN f.id
+END) > 0
+
 ORDER BY fechaPropuesta ASC, c.nombre, l.direccion
 ";
 $stmt = $conn->prepare($sql);
@@ -134,7 +169,7 @@ $result = $stmt->get_result();
 
 $locales = [];
 while ($row = $result->fetch_assoc()) {
-    $row['campanasIds'] = explode(',', $row['campanasIds']);
+    $row['campanasIds'] = !empty($row['campanasIds']) ? explode(',', $row['campanasIds']) : [];
     $locales[] = [
         'fechaPropuesta' => $row['fechaPropuesta'],
         'codigoLocal'    => htmlspecialchars($row['codigoLocal'], ENT_QUOTES, 'UTF-8'),

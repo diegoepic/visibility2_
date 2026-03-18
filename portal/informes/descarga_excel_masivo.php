@@ -17,6 +17,19 @@ if (function_exists('mysqli_set_charset')) {
     mysqli_set_charset($conn, 'utf8mb4');
 }
 
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
+function fail(string $message): void
+{
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    header('Content-Type: text/plain; charset=UTF-8');
+    http_response_code(500);
+    exit($message);
+}
+
 /**
  * Helper seguro (igual al usado en la descarga individual)
  */
@@ -103,64 +116,136 @@ function renderValorConImagen(string $valor, bool $inline): string {
 
 function getFormularioMeta(int $idForm): array {
     global $conn;
+
     $stmt = $conn->prepare('SELECT nombre, modalidad FROM formulario WHERE id = ? LIMIT 1');
+    if (!$stmt) {
+        fail('Error preparando getFormularioMeta: ' . $conn->error);
+    }
+
     $stmt->bind_param('i', $idForm);
-    $stmt->execute();
+
+    if (!$stmt->execute()) {
+        $err = $stmt->error;
+        $stmt->close();
+        fail('Error ejecutando getFormularioMeta: ' . $err);
+    }
+
     $stmt->bind_result($nombre, $modalidad);
+
     if (!$stmt->fetch()) {
         $stmt->close();
         return [];
     }
+
     $stmt->close();
-    return ['nombre' => $nombre, 'modalidad' => $modalidad];
+
+    return [
+        'nombre'    => $nombre,
+        'modalidad' => $modalidad
+    ];
 }
 
-function getCampaignData($idForm) {
+function getCampaignData(int $idForm): array {
     global $conn;
+
     $sql = "
         SELECT
             f.id,
             f.nombre,
-            f.fechaInicio,
-            f.fechaTermino,
+
+            CASE
+                WHEN f.fechaInicio IS NULL
+                     OR CAST(f.fechaInicio AS CHAR(19)) = '0000-00-00 00:00:00'
+                THEN NULL
+                ELSE DATE(f.fechaInicio)
+            END AS fechaInicio,
+
+            CASE
+                WHEN f.fechaTermino IS NULL
+                     OR CAST(f.fechaTermino AS CHAR(19)) = '0000-00-00 00:00:00'
+                THEN NULL
+                ELSE DATE(f.fechaTermino)
+            END AS fechaTermino,
+
             f.modalidad AS modalidad,
             f.tipo,
             e.nombre AS nombre_empresa,
             de.nombre AS nombre_division,
+
             COUNT(DISTINCT l.codigo) AS locales_programados,
-            SUM(
-                CASE WHEN fq.pregunta IN (
+
+            COUNT(DISTINCT CASE
+                WHEN fq.pregunta IN (
                     'implementado_auditado','solo_implementado','solo_auditoria',
                     'local_cerrado','no_permitieron'
-                ) AND fq.fechaVisita <> '0000-00-00 00:00:00' THEN 1 ELSE 0 END
-            ) AS locales_visitados,
-            SUM(
-                CASE WHEN fq.pregunta IN (
+                )
+                AND fq.fechaVisita IS NOT NULL
+                AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
+                THEN l.id
+            END) AS locales_visitados,
+
+            COUNT(DISTINCT CASE
+                WHEN fq.pregunta IN (
                     'implementado_auditado','solo_implementado','solo_auditoria'
-                ) THEN 1 ELSE 0 END
-            ) AS locales_implementados
+                )
+                THEN l.id
+            END) AS locales_implementados
         FROM formulario f
         INNER JOIN empresa e             ON e.id = f.id_empresa
         LEFT JOIN division_empresa de    ON de.id = f.id_division
         INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
         INNER JOIN local l               ON l.id = fq.id_local
         WHERE f.id = ?
-        GROUP BY f.id, f.nombre, f.fechaInicio, f.fechaTermino, f.modalidad, f.tipo, e.nombre, de.nombre
+        GROUP BY
+            f.id, f.nombre, f.modalidad, f.tipo, e.nombre, de.nombre,
+            CASE
+                WHEN f.fechaInicio IS NULL
+                     OR CAST(f.fechaInicio AS CHAR(19)) = '0000-00-00 00:00:00'
+                THEN NULL
+                ELSE DATE(f.fechaInicio)
+            END,
+            CASE
+                WHEN f.fechaTermino IS NULL
+                     OR CAST(f.fechaTermino AS CHAR(19)) = '0000-00-00 00:00:00'
+                THEN NULL
+                ELSE DATE(f.fechaTermino)
+            END
     ";
+
     $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        fail('Error preparando getCampaignData: ' . $conn->error);
+    }
+
     $stmt->bind_param('i', $idForm);
-    $stmt->execute();
+
+    if (!$stmt->execute()) {
+        $err = $stmt->error;
+        $stmt->close();
+        fail('Error ejecutando getCampaignData: ' . $err);
+    }
+
     $res = $stmt->get_result();
-    return $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+    if ($res === false) {
+        $err = $stmt->error;
+        $stmt->close();
+        fail('Error obteniendo resultado getCampaignData: ' . $err);
+    }
+
+    $rows = $res->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    return $rows;
 }
 
-function getLocalesDetails($idForm) {
+function getLocalesDetails(int $idForm): array {
     global $conn;
+
     $sql = "
         SELECT
-            l.id                               AS idLocal,
-            fq.id                              AS id_formularioQuestion,
-            l.codigo                           AS codigo_local,
+            l.id AS idLocal,
+            fq.id AS id_formularioQuestion,
+            l.codigo AS codigo_local,
             CASE
               WHEN l.nombre REGEXP '^[0-9]+'
               THEN SUBSTRING_INDEX(l.nombre, ' ', 1)
@@ -168,28 +253,61 @@ function getLocalesDetails($idForm) {
             END AS numero_local,
             f.modalidad AS modalidad,
             UPPER(f.nombre) AS nombreCampaña,
-            DATE(f.fechaInicio) AS fechaInicio,
-            DATE(f.fechaTermino) AS fechaTermino,
-            DATE(fq.fechaVisita) AS fechaVisita,
-            TIME(fq.fechaVisita) AS hora,
-            DATE(fq.fechaPropuesta) AS fechaPropuesta,
+
+            CASE
+                WHEN f.fechaInicio IS NULL
+                     OR CAST(f.fechaInicio AS CHAR(19)) = '0000-00-00 00:00:00'
+                THEN NULL
+                ELSE DATE(f.fechaInicio)
+            END AS fechaInicio,
+
+            CASE
+                WHEN f.fechaTermino IS NULL
+                     OR CAST(f.fechaTermino AS CHAR(19)) = '0000-00-00 00:00:00'
+                THEN NULL
+                ELSE DATE(f.fechaTermino)
+            END AS fechaTermino,
+
+            CASE
+                WHEN fq.fechaVisita IS NULL
+                     OR CAST(fq.fechaVisita AS CHAR(19)) = '0000-00-00 00:00:00'
+                THEN NULL
+                ELSE DATE(fq.fechaVisita)
+            END AS fechaVisita,
+
+            CASE
+                WHEN fq.fechaVisita IS NULL
+                     OR CAST(fq.fechaVisita AS CHAR(19)) = '0000-00-00 00:00:00'
+                THEN NULL
+                ELSE TIME(fq.fechaVisita)
+            END AS hora,
+
+            CASE
+                WHEN fq.fechaPropuesta IS NULL
+                     OR CAST(fq.fechaPropuesta AS CHAR(10)) = '0000-00-00'
+                THEN NULL
+                ELSE DATE(fq.fechaPropuesta)
+            END AS fechaPropuesta,
+
             UPPER(l.nombre) AS nombre_local,
             UPPER(l.direccion) AS direccion_local,
             UPPER(cm.comuna) AS comuna,
             UPPER(re.region) AS region,
             UPPER(cu.nombre) AS cuenta,
             UPPER(ca.nombre) AS cadena,
-            UPPER(fq.material) AS material,
-            UPPER(jv.nombre) AS jefeVenta,
-            fq.valor_propuesto,
-            fq.valor,
-            UPPER(fq.observacion) AS observacion,
+            UPPER(COALESCE(fq.material, '')) AS material,
+            UPPER(COALESCE(jv.nombre, '')) AS jefeVenta,
+            COALESCE(fq.valor_propuesto, 0) AS valor_propuesto,
+            COALESCE(fq.valor, 0) AS valor,
+            UPPER(COALESCE(fq.observacion, '')) AS observacion,
+
             CASE
                 WHEN fq.fechaVisita IS NOT NULL
-                     AND fq.fechaVisita <> '0000-00-00 00:00:00'
+                     AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
                 THEN 'VISITADO'
                 ELSE 'NO VISITADO'
-            END                                AS ESTADO_VISTA,
+            END AS ESTADO_VISTA,
+
             CASE
                 WHEN f.modalidad = 'retiro' THEN
                     CASE
@@ -211,30 +329,30 @@ function getLocalesDetails($idForm) {
                     CASE
                         WHEN IFNULL(fq.valor, 0) >= 1 THEN 'IMPLEMENTADO'
                         WHEN IFNULL(fq.valor, 0) = 0 THEN 'NO IMPLEMENTADO'
-                        WHEN LOWER(fq.pregunta) = 'solo_implementado'      THEN 'IMPLEMENTADO'
-                        WHEN LOWER(fq.pregunta) = 'solo_auditado'          THEN 'AUDITORIA'
-                        WHEN LOWER(fq.pregunta) = 'solo_auditoria'         THEN 'AUDITORIA'
-                        WHEN LOWER(fq.pregunta) = 'retiro'                 THEN 'RETIRO'
-                        WHEN LOWER(fq.pregunta) = 'entrega'                THEN 'ENTREGA'
-                        WHEN LOWER(fq.pregunta) = 'implementado_auditado'  THEN 'IMPLEMENTADO/AUDITADO'
+                        WHEN LOWER(fq.pregunta) = 'solo_implementado' THEN 'IMPLEMENTADO'
+                        WHEN LOWER(fq.pregunta) IN ('solo_auditado', 'solo_auditoria') THEN 'AUDITORIA'
+                        WHEN LOWER(fq.pregunta) = 'retiro' THEN 'RETIRO'
+                        WHEN LOWER(fq.pregunta) = 'entrega' THEN 'ENTREGA'
+                        WHEN LOWER(fq.pregunta) = 'implementado_auditado' THEN 'IMPLEMENTADO/AUDITADO'
                         ELSE 'NO IMPLEMENTADO'
                     END
             END AS ESTADO_ACTIVIDAD,
+
             UPPER(
               REPLACE(
                 CASE
                   WHEN IFNULL(fq.valor,0) = 0 THEN
-                    TRIM(SUBSTRING_INDEX(REPLACE(fq.observacion,'|','-'),'-',1))
+                    TRIM(SUBSTRING_INDEX(REPLACE(COALESCE(fq.observacion,''),'|','-'),'-',1))
                   WHEN LOWER(fq.pregunta) IN ('en proceso','cancelado') THEN
-                    TRIM(SUBSTRING_INDEX(REPLACE(fq.observacion,'|','-'),'-',1))
+                    TRIM(SUBSTRING_INDEX(REPLACE(COALESCE(fq.observacion,''),'|','-'),'-',1))
                   WHEN LOWER(fq.pregunta) IN ('solo_implementado','solo_auditoria') THEN
                     ''
                   ELSE
-                    fq.pregunta
+                    COALESCE(fq.pregunta,'')
                 END
               , '_', ' ')
             ) AS MOTIVO,
-            UPPER(u.usuario)                    AS gestionado_por
+            UPPER(u.usuario) AS gestionado_por
         FROM formularioQuestion fq
         INNER JOIN formulario   f  ON f.id  = fq.id_formulario
         INNER JOIN local        l  ON l.id  = fq.id_local
@@ -247,14 +365,31 @@ function getLocalesDetails($idForm) {
         WHERE f.id = ?
         ORDER BY l.codigo, fq.fechaVisita ASC
     ";
+
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param('i', $idForm);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    if (!$res) {
-        die("Error en getLocalesDetails: " . $conn->error);
+    if (!$stmt) {
+        fail('Error preparando getLocalesDetails: ' . $conn->error);
     }
-    return $res->fetch_all(MYSQLI_ASSOC);
+
+    $stmt->bind_param('i', $idForm);
+
+    if (!$stmt->execute()) {
+        $err = $stmt->error;
+        $stmt->close();
+        fail('Error ejecutando getLocalesDetails: ' . $err);
+    }
+
+    $res = $stmt->get_result();
+    if ($res === false) {
+        $err = $stmt->error;
+        $stmt->close();
+        fail('Error obteniendo resultado getLocalesDetails: ' . $err);
+    }
+
+    $rows = $res->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    return $rows;
 }
 
 function getFotosImplementaciones($idForm, array $fqIds): array {
@@ -326,7 +461,7 @@ function getFotosImplementaciones($idForm, array $fqIds): array {
     return $out;
 }
 
-function getEncuestaPivot($idForm) {
+function getEncuestaPivot(int $idForm): array {
     global $conn;
 
     $allQuestions = [];
@@ -334,39 +469,60 @@ function getEncuestaPivot($idForm) {
         SELECT question_text
         FROM form_questions
         WHERE id_formulario = ?
-        ORDER BY sort_order
+        ORDER BY sort_order, id
     ";
+
     $stmtQ = $conn->prepare($qry);
+    if (!$stmtQ) {
+        fail('Error preparando preguntas encuesta: ' . $conn->error);
+    }
+
     $stmtQ->bind_param('i', $idForm);
-    $stmtQ->execute();
+
+    if (!$stmtQ->execute()) {
+        $err = $stmtQ->error;
+        $stmtQ->close();
+        fail('Error ejecutando preguntas encuesta: ' . $err);
+    }
+
     $resQ = $stmtQ->get_result();
-    if (!$resQ) die("Error al obtener preguntas: " . $conn->error);
+    if ($resQ === false) {
+        $err = $stmtQ->error;
+        $stmtQ->close();
+        fail('Error obteniendo preguntas encuesta: ' . $err);
+    }
+
     while ($rQ = $resQ->fetch_assoc()) {
-        $allQuestions[] = $rQ['question_text'];
+        $allQuestions[] = (string)$rQ['question_text'];
     }
     $stmtQ->close();
 
     $sql = "
         SELECT
-            f.id AS idCampana,
-            ANY_VALUE(UPPER(f.nombre))           AS nombreCampana,
-            l.codigo                             AS codigo_local,
+            ANY_VALUE(f.id) AS idCampana,
+            ANY_VALUE(UPPER(f.nombre)) AS nombreCampana,
+            l.codigo AS codigo_local,
             ANY_VALUE(
               CASE
                 WHEN l.nombre REGEXP '^[0-9]+'
                 THEN SUBSTRING_INDEX(l.nombre, ' ', 1)
                 ELSE ''
               END
-            )                                    AS numero_local,
-            ANY_VALUE(UPPER(l.nombre))           AS nombre_local,
-            ANY_VALUE(UPPER(l.direccion))        AS direccion_local,
-            ANY_VALUE(UPPER(cu.nombre))          AS cuenta,
-            ANY_VALUE(UPPER(ca.nombre))          AS cadena,
-            ANY_VALUE(UPPER(cm.comuna))          AS comuna,
-            ANY_VALUE(UPPER(re.region))          AS region,
-            ANY_VALUE(UPPER(u.usuario))          AS usuario,
-            DATE(fqr.created_at)                 AS fechaVisita,
-            UPPER(fp.question_text)              AS question_text,
+            ) AS numero_local,
+            ANY_VALUE(UPPER(l.nombre)) AS nombre_local,
+            ANY_VALUE(UPPER(l.direccion)) AS direccion_local,
+            ANY_VALUE(UPPER(cu.nombre)) AS cuenta,
+            ANY_VALUE(UPPER(ca.nombre)) AS cadena,
+            ANY_VALUE(UPPER(cm.comuna)) AS comuna,
+            ANY_VALUE(UPPER(re.region)) AS region,
+            ANY_VALUE(UPPER(u.usuario)) AS usuario,
+            CASE
+                WHEN fqr.created_at IS NULL
+                     OR CAST(fqr.created_at AS CHAR(19)) = '0000-00-00 00:00:00'
+                THEN NULL
+                ELSE DATE(fqr.created_at)
+            END AS fechaVisita,
+            fp.question_text AS question_text,
             UPPER(
               GROUP_CONCAT(
                 fqr.answer_text
@@ -375,7 +531,13 @@ function getEncuestaPivot($idForm) {
               )
             ) AS concat_answers,
             GROUP_CONCAT(
-              CASE WHEN fqr.valor <> '0.00' THEN fqr.valor END
+              CASE
+                WHEN fqr.valor IS NOT NULL
+                     AND TRIM(CAST(fqr.valor AS CHAR)) <> ''
+                     AND CAST(fqr.valor AS CHAR) <> '0.00'
+                     AND CAST(fqr.valor AS CHAR) <> '0'
+                THEN fqr.valor
+              END
               ORDER BY fqr.id
               SEPARATOR '; '
             ) AS concat_valores
@@ -391,21 +553,42 @@ function getEncuestaPivot($idForm) {
         WHERE f.id = ?
         GROUP BY
             l.codigo,
-            DATE(fqr.created_at),
+            CASE
+                WHEN fqr.created_at IS NULL
+                     OR CAST(fqr.created_at AS CHAR(19)) = '0000-00-00 00:00:00'
+                THEN NULL
+                ELSE DATE(fqr.created_at)
+            END,
             fp.question_text
         ORDER BY l.codigo, fp.question_text
     ";
+
     $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        fail('Error preparando getEncuestaPivot: ' . $conn->error);
+    }
+
     $stmt->bind_param('i', $idForm);
-    $stmt->execute();
+
+    if (!$stmt->execute()) {
+        $err = $stmt->error;
+        $stmt->close();
+        fail('Error ejecutando getEncuestaPivot: ' . $err);
+    }
+
     $res = $stmt->get_result();
-    if (!$res) die("Error en getEncuestaPivot: " . $conn->error);
+    if ($res === false) {
+        $err = $stmt->error;
+        $stmt->close();
+        fail('Error obteniendo resultado getEncuestaPivot: ' . $err);
+    }
 
     $grouped = [];
     while ($row = $res->fetch_assoc()) {
-        $key = $row['codigo_local'] . '_' . $row['fechaVisita'];
+        $fechaKey = $row['fechaVisita'] ?? 'SIN_FECHA';
+        $key = $row['codigo_local'] . '_' . $fechaKey;
+
         if (!isset($grouped[$key])) {
-            // HOMOLOGADO: orden base igual al individual
             $grouped[$key] = [
                 'ID CAMPAÑA'     => $row['idCampana'],
                 'NOMBRE CAMPAÑA' => $row['nombreCampana'],
@@ -422,16 +605,17 @@ function getEncuestaPivot($idForm) {
                 'questions'      => []
             ];
         }
-        $q = $row['question_text'];
+
+        $q = (string)$row['question_text'];
         $grouped[$key]['questions'][$q] = [
             'answer' => $row['concat_answers'] ?? '',
             'valor'  => $row['concat_valores'] ?? ''
         ];
     }
+    $stmt->close();
 
     $final = [];
     foreach ($grouped as $g) {
-        // HOMOLOGADO: orden base igual al individual
         $rowOut = [
             'ID CAMPAÑA'     => $g['ID CAMPAÑA'],
             'NOMBRE CAMPAÑA' => $g['NOMBRE CAMPAÑA'],
@@ -449,17 +633,17 @@ function getEncuestaPivot($idForm) {
 
         foreach ($allQuestions as $q) {
             if (isset($g['questions'][$q])) {
-                $rowOut[$q]            = $g['questions'][$q]['answer'];
+                $rowOut[$q] = $g['questions'][$q]['answer'];
                 $rowOut[$q . '_valor'] = $g['questions'][$q]['valor'];
             } else {
-                $rowOut[$q]            = '';
+                $rowOut[$q] = '';
                 $rowOut[$q . '_valor'] = '';
             }
         }
+
         $final[] = $rowOut;
     }
 
-    // Eliminar columnas *_valor vacías
     $valorCols = [];
     foreach ($final as $r) {
         foreach ($r as $c => $v) {
@@ -471,9 +655,12 @@ function getEncuestaPivot($idForm) {
             }
         }
     }
+
     foreach ($final as &$r) {
         foreach ($valorCols as $c => $has) {
-            if (!$has) unset($r[$c]);
+            if (!$has) {
+                unset($r[$c]);
+            }
         }
     }
     unset($r);

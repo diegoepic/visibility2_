@@ -1,8 +1,13 @@
 <?php
-session_start();
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';
 
-// --- Validar sesi贸n ---
+// --- Validar sesión ---
 if (!isset($_SESSION['usuario_id'])) {
   header("Location: ../index.php");
   exit();
@@ -23,8 +28,8 @@ $fecha_desde        = trim($_GET['desde'] ?? '');
 $fecha_hasta        = trim($_GET['hasta'] ?? '');
 $accionBuscar = isset($_GET['buscar']) ? intval($_GET['buscar']) : 0;
 
-// --- Tipo de gesti贸n din谩mico ---
-$tipoCampana = isset($_GET['tipo_gestion']) ? intval($_GET['tipo_gestion']) : 0; // 1=Campa帽a, 3=Ruta, 0=Todas
+// --- Tipo de gestión dinámico ---
+$tipoCampana = isset($_GET['tipo_gestion']) ? intval($_GET['tipo_gestion']) : 0; // 1=Campaña, 3=Ruta, 0=Todas
 
 // --- Divisiones (MC) ---
 $divisiones = [];
@@ -37,7 +42,6 @@ if ($isMC) {
   while ($r = $res->fetch_assoc()) $divisiones[] = $r;
   $stmt->close();
 }
-
 
 // --- Distritos ---
 $distritos = [];
@@ -55,131 +59,136 @@ $res = $stmt->get_result();
 while ($r = $res->fetch_assoc()) $distritos[] = $r;
 $stmt->close();
 
-
 // --- Locales ---
 $locales = [];
 if ($accionBuscar === 1) {
-// Construir base SQL
+  // Construir base SQL
 $sql = "
-  SELECT DISTINCT
-    f.nombre AS Actividad,
-    CASE
-        WHEN f.modalidad = 'solo_auditoria'
-            THEN 'AUDITORIA'
-        WHEN f.modalidad = 'solo_implementacion'
-            THEN 'IMPLEMENTACION'
-        WHEN f.modalidad = 'implementacion_auditoria'
-            THEN 'IMPL/AUD'
-        ELSE UPPER(f.modalidad)
-    END AS modalidad,            
-    l.id      AS id_local,
-    l.codigo  AS codigo,
-    UPPER(l.nombre) AS nombre_local,
-    UPPER(l.direccion) AS direccion_local,
-    UPPER(c.comuna) AS comuna_local,
-    UPPER(r.region) AS region_local,
-    UPPER(u.usuario) AS usuario_local,
-    l.lat AS latitud,
-    l.lng AS longitud,
-    DATE(fq.fechaVisita) AS fechaVisita,
-    TIME(fq.fechaVisita) AS horaVisita,
-    fq.fechaPropuesta AS fechaPropuesta,
-    CASE
-        WHEN fq.pregunta = 'solo_auditoria'
-            THEN 'AUDITORIA'
-        WHEN fq.pregunta IN ('solo_implementacion', 'solo_implementado')
-            THEN 'IMPLEMENTACION'
-        WHEN fq.pregunta = 'implementado_auditado'
-            THEN 'IMPL/AUD'
-        WHEN fq.pregunta = 'local_no_existe'
-            THEN 'LOCAL NO EXISTE'            
-        WHEN fq.pregunta IN ('en proceso','cancelado')
-            THEN TRIM(SUBSTRING_INDEX(REPLACE(fq.observacion,'|','-'), '-', 1))
-        ELSE UPPER(fq.pregunta)
-    END AS pregunta,
-    fq.countVisita,
-    f.nombre AS nombre_campana
-  FROM formularioQuestion fq
-  INNER JOIN usuario u ON u.id = fq.id_usuario
-  INNER JOIN local l ON l.id = fq.id_local
-  INNER JOIN comuna c ON c.id = l.id_comuna
-  INNER JOIN region r ON r.id = c.id_region
-  INNER JOIN formulario f ON f.id = fq.id_formulario
-  WHERE f.id_empresa = ?
+    SELECT
+      f.nombre AS Actividad,
+      CASE
+          WHEN f.modalidad = 'solo_auditoria'
+              THEN 'AUDITORIA'
+          WHEN f.modalidad = 'solo_implementacion'
+              THEN 'IMPLEMENTACION'
+          WHEN f.modalidad = 'implementacion_auditoria'
+              THEN 'IMPL/AUD'
+          ELSE UPPER(f.modalidad)
+      END AS modalidad,            
+      l.id AS id_local,
+      l.codigo AS codigo,
+      UPPER(l.nombre) AS nombre_local,
+      UPPER(l.direccion) AS direccion_local,
+      UPPER(c.comuna) AS comuna_local,
+      UPPER(r.region) AS region_local,
+      UPPER(u.usuario) AS usuario_local,
+      l.lat AS latitud,
+      l.lng AS longitud,
+      DATE(fq.fechaVisita) AS fechaVisita,
+      TIME(fq.fechaVisita) AS horaVisita,
+      fq.fechaPropuesta AS fechaPropuesta,
+      CASE
+          WHEN fq.pregunta = 'solo_auditoria'
+              THEN 'AUDITORIA'
+          WHEN fq.pregunta IN ('solo_implementacion', 'solo_implementado')
+              THEN 'IMPLEMENTACION'
+          WHEN fq.pregunta = 'implementado_auditado'
+              THEN 'IMPL/AUD'
+          WHEN fq.pregunta = 'local_no_existe'
+              THEN 'LOCAL NO EXISTE'
+          WHEN fq.pregunta IN ('en proceso','cancelado')
+              THEN TRIM(SUBSTRING_INDEX(REPLACE(fq.observacion,'|','-'), '-', 1))
+          ELSE UPPER(fq.pregunta)
+      END AS pregunta,
+      fq.countVisita,
+      f.nombre AS nombre_campana
+    FROM formularioQuestion fq
+    INNER JOIN usuario u ON u.id = fq.id_usuario
+    INNER JOIN local l ON l.id = fq.id_local
+    INNER JOIN comuna c ON c.id = l.id_comuna
+    INNER JOIN region r ON r.id = c.id_region
+    INNER JOIN formulario f ON f.id = fq.id_formulario
+    WHERE f.id_empresa = ?
 ";
 
-$params = [$id_empresa];
-$types  = "i";
+  $params = [$id_empresa];
+  $types  = "i";
 
-// 馃敼 Filtrar tipo de gesti贸n (1=Campa帽a, 3=Ruta)
-if (in_array($tipoCampana, [1, 3])) {
-  $sql .= " AND f.tipo = ? ";
-  $params[] = $tipoCampana;
-  $types .= "i";
-}
+  // Filtrar tipo de gestión (1=Campaña, 3=Ruta)
+  if (in_array($tipoCampana, [1, 3])) {
+    $sql .= " AND f.tipo = ? ";
+    $params[] = $tipoCampana;
+    $types .= "i";
+  }
 
-// 馃敼 Si se seleccion贸 campa帽a
-if ($filter_campana > 0) {
-  $sql .= " AND f.id = ? ";
-  $params[] = $filter_campana;
-  $types .= "i";
-}
+  // Si se seleccionó campaña
+  if ($filter_campana > 0) {
+    $sql .= " AND f.id = ? ";
+    $params[] = $filter_campana;
+    $types .= "i";
+  }
 
-// 馃敼 Filtrar ejecutor solo si hay uno seleccionado (>0)
-if ($id_ejecutor > 0) {
-  $sql .= " AND fq.id_usuario = ? ";
-  $params[] = $id_ejecutor;
-  $types .= "i";
-}
+  // Filtrar ejecutor solo si hay uno seleccionado (>0)
+  if ($id_ejecutor > 0) {
+    $sql .= " AND fq.id_usuario = ? ";
+    $params[] = $id_ejecutor;
+    $types .= "i";
+  }
 
-// 馃敼 Divisi贸n / Subdivisi贸n
-if ($filter_division > 0) {
-  $sql .= " AND f.id_division = ? ";
-  $params[] = $filter_division;
-  $types .= "i";
-}
-if ($filter_subdivision > 0) {
-  $sql .= " AND f.id_subdivision = ? ";
-  $params[] = $filter_subdivision;
-  $types .= "i";
-}
+  // División / Subdivisión
+  if ($filter_division > 0) {
+    $sql .= " AND f.id_division = ? ";
+    $params[] = $filter_division;
+    $types .= "i";
+  }
+  if ($filter_subdivision > 0) {
+    $sql .= " AND f.id_subdivision = ? ";
+    $params[] = $filter_subdivision;
+    $types .= "i";
+  }
 
-// 馃敼 Estado
-if (in_array($filter_estado, [1,3])) {
-  $sql .= " AND f.estado = ? ";
-  $params[] = $filter_estado;
-  $types .= "i";
-}
+  // Estado
+  if (in_array($filter_estado, [1,3])) {
+    $sql .= " AND f.estado = ? ";
+    $params[] = $filter_estado;
+    $types .= "i";
+  }
 
-// 馃敼 Distrito
-if ($filter_distrito > 0) {
-  $sql .= " AND l.id_distrito = ? ";
-  $params[] = $filter_distrito;
-  $types .= "i";
-}
+  // Distrito
+  if ($filter_distrito > 0) {
+    $sql .= " AND l.id_distrito = ? ";
+    $params[] = $filter_distrito;
+    $types .= "i";
+  }
 
-// 馃敼 Fechas (solo si aplica)
-if ($fecha_desde !== '') {
-  $sql .= " AND fq.fechaPropuesta >= ? ";
-  $params[] = $fecha_desde . " 00:00:00";
-  $types .= "s";
-}
-if ($fecha_hasta !== '') {
-  $sql .= " AND fq.fechaPropuesta <= ? ";
-  $params[] = $fecha_hasta . " 23:59:59";
-  $types .= "s";
-}
+  // Fechas (solo si aplica)
+  if ($fecha_desde !== '') {
+    $sql .= " AND fq.fechaPropuesta >= ? ";
+    $params[] = $fecha_desde . " 00:00:00";
+    $types .= "s";
+  }
+  if ($fecha_hasta !== '') {
+    $sql .= " AND fq.fechaPropuesta <= ? ";
+    $params[] = $fecha_hasta . " 23:59:59";
+    $types .= "s";
+  }
 
-$sql .= " ORDER BY fq.fechaPropuesta DESC, l.nombre ASC";
+  $sql .= " ORDER BY fq.fechaPropuesta DESC, l.nombre ASC";
 
-// Ejecutar
+  // Ejecutar
 $stmt = $conn->prepare($sql);
+
+if ($stmt === false) {
+    // Si la preparación falla, muestra el error y termina
+    die('Error en la preparación de la consulta: ' . $conn->error);
+}
+
+// Bind de los parámetros
 $stmt->bind_param($types, ...$params);
 $stmt->execute();
 $res = $stmt->get_result();
-while ($row = $res->fetch_assoc()) $locales[] = $row;
-$stmt->close();
-
+  while ($row = $res->fetch_assoc()) $locales[] = $row;
+  $stmt->close();
 }
 
 // --- Generar datos del mapa ---
@@ -190,7 +199,7 @@ foreach ($locales as $fila) {
     $infoLocales[$idLocal] = [
       'id_local'        => $idLocal,
       'nombre_campana'    => $fila['nombre_campana'],
-      'modalidad'       => $fila['modalidad'],       
+      'modalidad'       => $fila['modalidad'],
       'nombre_local'    => $fila['nombre_local'],
       'direccion_local' => $fila['direccion_local'],
       'comuna_local'    => $fila['comuna_local'],
@@ -198,7 +207,7 @@ foreach ($locales as $fila) {
       'usuario_local'   => $fila['usuario_local'],
       'fechaVisita'     => $fila['fechaVisita'],
       'horaVisita'      => $fila['horaVisita'],
-      'pregunta'        => $fila['pregunta'],      
+      'pregunta'        => $fila['pregunta'],
       'latitud'         => is_null($fila['latitud']) ? null : (float)$fila['latitud'],
       'longitud'        => is_null($fila['longitud']) ? null : (float)$fila['longitud'],
       'preguntas'       => []
@@ -210,48 +219,49 @@ foreach ($locales as $fila) {
 // --- Armar coordenadas finales ---
 $coordenadas_locales = [];
 if ($accionBuscar === 1) {
-foreach ($infoLocales as $loc) {
-  if ($loc['latitud'] === null || $loc['longitud'] === null) continue;
+  foreach ($infoLocales as $loc) {
+    if ($loc['latitud'] === null || $loc['longitud'] === null) continue;
 
-  $preguntas = $loc['preguntas'];
-  $complValues = ['AUDITORIA', 'IMPLEMENTACION', 'IMPL/AUD'];
+    $preguntas = $loc['preguntas'];
+    $complValues = ['AUDITORIA', 'IMPLEMENTACION', 'IMPL/AUD'];
 
-  if (count(array_intersect($preguntas, $complValues)) > 0) {
-    $markerColor = 'green';
-  } elseif (count(array_unique($preguntas)) === 1 && $preguntas[0] === '-') {
-    $markerColor = 'red';
-  } else {
-    $markerColor = 'orange';
+    if (count(array_intersect($preguntas, $complValues)) > 0) {
+      $markerColor = 'green';
+    } elseif (count(array_unique($preguntas)) === 1 && $preguntas[0] === '-') {
+      $markerColor = 'red';
+    } else {
+      $markerColor = 'orange';
+    }
+
+    $estadoRaw = $preguntas[0] ?? '-';
+    if (in_array($estadoRaw, $complValues)) {
+      $estadoLegible = 'GESTIONADO';
+    } elseif ($estadoRaw === '-' || trim($estadoRaw) === '') {
+      $estadoLegible = '-';
+    } else {
+      $estadoLegible = strtoupper(str_replace('_', ' ', $estadoRaw));
+    }
+
+    $coordenadas_locales[] = [
+      'idLocal'        => $loc['id_local'],
+      'nombre_campana'   => $loc['nombre_campana'],
+      'modalidad'      => $loc['modalidad'],
+      'nombre_local'   => $loc['nombre_local'],
+      'direccion_local'=> $loc['direccion_local'],
+      'comuna_local'   => $loc['comuna_local'],
+      'region_local'   => $loc['region_local'],
+      'usuario_local'  => $loc['usuario_local'],
+      'fechaVisita'    => $loc['fechaVisita'],
+      'horaVisita'     => $loc['horaVisita'],
+      'pregunta'       => $loc['pregunta'],
+      'latitud'        => $loc['latitud'],
+      'longitud'       => $loc['longitud'],
+      'markerColor'    => $markerColor,
+      'estado'         => $estadoLegible
+    ];
   }
-
-  $estadoRaw = $preguntas[0] ?? '-';
-  if (in_array($estadoRaw, $complValues)) {
-    $estadoLegible = 'GESTIONADO';
-  } elseif ($estadoRaw === '-' || trim($estadoRaw) === '') {
-    $estadoLegible = '-';
-  } else {
-    $estadoLegible = strtoupper(str_replace('_', ' ', $estadoRaw));
-  }
-
-  $coordenadas_locales[] = [
-    'idLocal'        => $loc['id_local'],
-    'nombre_campana'   => $loc['nombre_campana'],
-    'modalidad'      => $loc['modalidad'],     
-    'nombre_local'   => $loc['nombre_local'],
-    'direccion_local'=> $loc['direccion_local'],
-    'comuna_local'   => $loc['comuna_local'],
-    'region_local'   => $loc['region_local'],
-    'usuario_local'  => $loc['usuario_local'],
-    'fechaVisita'    => $loc['fechaVisita'],
-    'horaVisita'     => $loc['horaVisita'],
-    'pregunta'       => $loc['pregunta'],    
-    'latitud'        => $loc['latitud'],
-    'longitud'       => $loc['longitud'],
-    'markerColor'    => $markerColor,
-    'estado'         => $estadoLegible
-  ];
 }
-}
+
 
 $conn->close();
 ?>

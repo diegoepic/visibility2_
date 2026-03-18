@@ -1,5 +1,13 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
+require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';
+
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
+try {
 
 if (!isset($_SESSION['usuario_id'])) {
     header("Location: login.php");
@@ -129,18 +137,24 @@ $mensaje = isset($_GET['mensaje']) ? htmlspecialchars($_GET['mensaje'], ENT_QUOT
 
 // Obtener los materiales asociados a la campaña en este local
 $sql_materiales = "
-    SELECT 
-      fq.id,
+    SELECT
+      MIN(fq.id) AS id,
       CONCAT_WS(' - ', fq.material, fq.marca, fq.categoria) AS material,
-      fq.valor_propuesto,
-      MAX(fq.valor) AS valor, 
+      fq.material AS material_base,
+      fq.marca,
+      fq.categoria,
+      MAX(fq.valor_propuesto) AS valor_propuesto,
+      MAX(fq.valor) AS valor,
       MAX(fq.fechaVisita) AS fechaVisita,
       MAX(fq.observacion) AS observacion,
-      m.ref_image
+      ANY_VALUE(m.ref_image) AS ref_image
     FROM formularioQuestion fq
     LEFT JOIN material m ON fq.material = m.nombre
-    WHERE fq.id_local = ? AND fq.id_formulario = ? AND fq.id_usuario = ?
-    GROUP BY fq.id, fq.material, fq.valor_propuesto
+    WHERE fq.id_local = ?
+      AND fq.id_formulario = ?
+      AND fq.id_usuario = ?
+    GROUP BY fq.material, fq.marca, fq.categoria
+    ORDER BY material ASC
 ";
 
 $stmt_materiales = $conn->prepare($sql_materiales);
@@ -431,7 +445,9 @@ input[type=file][id^="fotoPregunta_"] {
                                 }
 
                                 if ($valorAct !== '0' && $valorAct !== null && $valorAct !== '') {
-                                    $fechaF = date('d-m-Y H:i', strtotime($fechaImp));
+                                $fechaF = (!empty($fechaImp) && $fechaImp !== '0000-00-00 00:00:00')
+                                    ? date('d-m-Y H:i', strtotime($fechaImp))
+                                    : '-';                                    
                                     echo "
                                     <div class='form-group'>
                                       <label>{$matName} {$imgTag} (Propuesto: {$valorProp})</label>
@@ -1953,4 +1969,18 @@ $('#nombreMaterial').on('change', function(){
 </html>
 <?php
 $conn->close();
+
+} catch (Throwable $e) {
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo "ERROR PHP\n";
+    echo $e->getMessage() . "\n\n";
+    echo $e->getFile() . ':' . $e->getLine();
+    exit;
+}
+
 ?>

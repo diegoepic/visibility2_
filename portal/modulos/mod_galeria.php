@@ -22,16 +22,45 @@ function refValues($arr) {
 
 // Construye la URL absoluta final de la imagen
 function fixUrl($url, $base_url) {
-    $prefix = "../app/";
-    if (substr($url, 0, strlen($prefix)) === $prefix) {
-        $url = substr($url, strlen($prefix));
+    $url = trim((string)$url);
+    if ($url === '') {
+        return '';
     }
+
+    if (preg_match('#^https?://#i', $url)) {
+        return $url;
+    }
+
+    $url = str_replace('\\', '/', $url);
+    $url = ltrim($url, '/');
+
+    if (preg_match('#^visibility2/#i', $url)) {
+        return 'https://visibility.cl/' . $url;
+    }
+
+    if (preg_match('#^app/#i', $url)) {
+        return 'https://visibility.cl/visibility2/' . $url;
+    }
+
+    if (preg_match('#^uploads/#i', $url)) {
+        return 'https://visibility.cl/visibility2/app/' . $url;
+    }
+
+    if (preg_match('#^\.\./app/#i', $url)) {
+        $url = preg_replace('#^\.\./app/#i', '', $url);
+        return $base_url . $url;
+    }
+
     return $base_url . $url;
 }
 
 // Función para formatear fecha
 function formatearFecha($f) {
-    return $f ? date('d/m/Y H:i:s', strtotime($f)) : '';
+    $f = trim((string)$f);
+    if ($f === '' || $f === '0000-00-00' || $f === '0000-00-00 00:00:00') {
+        return '';
+    }
+    return date('d/m/Y H:i:s', strtotime($f));
 }
 
 // -----------------------------------------------------------------------------
@@ -159,14 +188,15 @@ if ($tipoForm == 1 && $view === 'implementacion') {
       JOIN cadena c ON c.id = l.id_cadena
       WHERE fq.id_formulario = ?
         AND fq.fechaVisita IS NOT NULL
+        AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
     ";
     if ($start_date !== '') {
-        $sql .= " AND DATE(fq.fechaVisita) >= ? ";
+        $sql .= " AND fq.fechaVisita >= CONCAT(?, ' 00:00:00') ";
         $types .= "s";
         $params[] = $start_date;
     }
     if ($end_date !== '') {
-        $sql .= " AND DATE(fq.fechaVisita) <= ? ";
+        $sql .= " AND fq.fechaVisita <= CONCAT(?, ' 23:59:59') ";
         $types .= "s";
         $params[] = $end_date;
     }
@@ -236,13 +266,13 @@ if ($tipoForm == 1 && $view === 'implementacion') {
         AND fq.id_question_type = 7
         AND fqr.id_local = 0
     ";
-    if ($start_date !== '') {
-        $sql .= " AND DATE(fqr.created_at) >= ? ";
+if ($start_date !== '') {
+    $sql .= " AND fqr.created_at >= CONCAT(?, ' 00:00:00') ";
         $types .= "s";
         $params[] = $start_date;
     }
-    if ($end_date !== '') {
-        $sql .= " AND DATE(fqr.created_at) <= ? ";
+if ($end_date !== '') {
+    $sql .= " AND fqr.created_at <= CONCAT(?, ' 23:59:59') ";
         $types .= "s";
         $params[] = $end_date;
     }
@@ -279,41 +309,42 @@ $countParams= [$formulario_id];
 
 if ($tipoForm == 1 && $view === 'implementacion') {
     $countSql = "
-      SELECT COUNT(*) AS total
-      FROM formularioQuestion fq
-      JOIN fotoVisita fv ON fv.id_formularioQuestion = fq.id
-      WHERE fq.id_formulario = ?
-        AND fq.fechaVisita IS NOT NULL
-    ";
-    if ($start_date !== '') {
-        $countSql .= " AND DATE(fq.fechaVisita) >= ? ";
-        $countTypes .= 's';
-        $countParams[] = $start_date;
-    }
-    if ($end_date !== '') {
-        $countSql .= " AND DATE(fq.fechaVisita) <= ? ";
-        $countTypes .= 's';
-        $countParams[] = $end_date;
-    }
-    if ($user_id > 0) {
-        $countSql .= " AND fv.id_usuario = ? ";
-        $countTypes .= 'i';
-        $countParams[] = $user_id;
-    }
-    if ($material_id > 0) {
-        $countSql .= " AND fq.material = (SELECT nombre FROM material WHERE id = ?) ";
-        $countTypes .= 'i';
-        $countParams[] = $material_id;
-    }
+  SELECT COUNT(*) AS total
+  FROM formularioQuestion fq
+  JOIN fotoVisita fv ON fv.id_formularioQuestion = fq.id
+  WHERE fq.id_formulario = ?
+    AND fq.fechaVisita IS NOT NULL
+    AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
+";
+if ($start_date !== '') {
+    $countSql .= " AND fq.fechaVisita >= CONCAT(?, ' 00:00:00') ";
+    $countTypes .= 's';
+    $countParams[] = $start_date;
+}
+if ($end_date !== '') {
+    $countSql .= " AND fq.fechaVisita <= CONCAT(?, ' 23:59:59') ";
+    $countTypes .= 's';
+    $countParams[] = $end_date;
+}
+if ($user_id > 0) {
+    $countSql .= " AND fv.id_usuario = ? ";
+    $countTypes .= 'i';
+    $countParams[] = $user_id;
+}
+if ($material_id > 0) {
+    $countSql .= " AND fq.material = (SELECT nombre FROM material WHERE id = ?) ";
+    $countTypes .= 'i';
+    $countParams[] = $material_id;
+}
 } elseif ($tipoForm == 1 && $view === 'encuesta') {
-    $countSql = "
-      SELECT COUNT(*) AS total
-      FROM form_question_responses fqr
-      JOIN form_questions fq ON fq.id = fqr.id_form_question
-      WHERE fq.id_formulario = ?
-        AND fq.id_question_type = 7
-        AND fqr.id_local <> 0
-    ";
+$countSql = "
+  SELECT COUNT(*) AS total
+  FROM formularioQuestion fq
+  JOIN fotoVisita fv ON fv.id_formularioQuestion = fq.id
+  WHERE fq.id_formulario = ?
+    AND fq.fechaVisita IS NOT NULL
+    AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
+";
     if ($start_date !== '') {
         $countSql .= " AND DATE(fqr.created_at) >= ? ";
         $countTypes .= 's';

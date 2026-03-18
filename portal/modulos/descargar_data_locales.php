@@ -99,6 +99,7 @@ SELECT
     l.codigo AS CODIGO,
     SUBSTRING_INDEX(TRIM(l.nombre), ' ', 1) AS NUMERO_LOCAL,
     COALESCE(can.nombre_canal, 'SIN CANAL') AS CANAL,
+    COALESCE(sub.nombre_subcanal, 'SIN CANAL') AS SUBCANAL,    
     COALESCE(ca.nombre, 'SIN CADENA') AS CADENA,
     COALESCE(cu.nombre, 'SIN CUENTA') AS CUENTA,
     l.nombre AS LOCAL,
@@ -115,6 +116,7 @@ LEFT JOIN division_empresa d ON d.id = l.id_division
 LEFT JOIN cadena ca ON ca.id = l.id_cadena
 LEFT JOIN cuenta cu ON cu.id = l.id_cuenta
 LEFT JOIN canal can ON can.id = l.id_canal
+LEFT JOIN subcanal sub ON sub.id = l.id_subcanal
 LEFT JOIN comuna co ON co.id = l.id_comuna
 LEFT JOIN region re ON re.id = co.id_region
 LEFT JOIN distrito di ON di.id = l.id_distrito
@@ -297,8 +299,9 @@ if ($rowNum > 2) {
 
     $sheet->getStyle($dataRange)->applyFromArray([
         'alignment' => [
-            'vertical' => Alignment::VERTICAL_CENTER,
-            'wrapText' => true
+            'horizontal' => Alignment::HORIZONTAL_LEFT,
+            'vertical'   => Alignment::VERTICAL_CENTER,
+            'wrapText'   => true
         ],
         'borders' => [
             'allBorders' => [
@@ -309,6 +312,11 @@ if ($rowNum > 2) {
     ]);
 
     $sheet->setAutoFilter($dataRange);
+
+    // Fuerza alineación izquierda en todos los datos
+    $sheet->getStyle("A2:{$lastCol}" . ($rowNum - 1))
+          ->getAlignment()
+          ->setHorizontal(Alignment::HORIZONTAL_LEFT);
 }
 
 /* Auto ancho */

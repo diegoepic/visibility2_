@@ -5,8 +5,6 @@ if (!isset($_SESSION['usuario_id'])) {
     exit();
 }
 
-
-
 $nombre         = htmlspecialchars($_SESSION['usuario_nombre'], ENT_QUOTES, 'UTF-8');
 $apellido       = htmlspecialchars($_SESSION['usuario_apellido'], ENT_QUOTES, 'UTF-8');
 $empresa_id     = intval($_SESSION['empresa_id']);
@@ -150,7 +148,7 @@ $result_comp = $stmt_comp->get_result();
 $compCampanas = [];
 while ($row = $result_comp->fetch_assoc()) {
     $compCampanas[] = [
-        'id_campana'     => (int)$row['id_campana'],
+        'id_campana' => (int)$row['id_campana'],
         'nombre_campana' => htmlspecialchars($row['nombre_campana'], ENT_QUOTES, 'UTF-8'),
         'estado'         => htmlspecialchars($row['estado'], ENT_QUOTES, 'UTF-8')
     ];
