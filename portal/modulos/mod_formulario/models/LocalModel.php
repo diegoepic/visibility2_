@@ -132,10 +132,10 @@ public function getLocalesPage(array $filters): array
             MAX(fq.is_priority) AS is_priority,
             MAX(last.fecha_visita) AS last_fecha,
             CASE
-                WHEN agg.has_impl_aud = 1 THEN 'implementado_auditado'
-                WHEN agg.has_impl_any = 1 THEN 'solo_implementado'
-                WHEN agg.has_audit = 1 THEN 'solo_auditoria'
-                ELSE last.estado_gestion
+                WHEN MAX(agg.has_impl_aud) = 1 THEN 'implementado_auditado'
+                WHEN MAX(agg.has_impl_any) = 1 THEN 'solo_implementado'
+                WHEN MAX(agg.has_audit) = 1 THEN 'solo_auditoria'
+                ELSE MAX(last.estado_gestion)
             END AS estado_agg
         FROM formularioQuestion fq
         JOIN local l ON l.id = fq.id_local
@@ -213,9 +213,7 @@ public function getLocalesPage(array $filters): array
     }
 
     // 2) Conteo total
-   $countSql = "SELECT COUNT(DISTINCT idLocal) FROM formularioQuestion fq
-             JOIN local l ON l.id = fq.id_local
-             WHERE fq.id_formulario = ?";
+    $countSql = "SELECT COUNT(*) FROM ($baseSql) t";
     $stmt = $this->conn->prepare($countSql);
     if (!$stmt) throw new Exception("Prepare failed (COUNT): " . $this->conn->error);
     $stmt->bind_param($types, ...$params);
@@ -265,18 +263,71 @@ public function getLocalesPage(array $filters): array
         ];
     }
 
-    // 4) Obtener detalles de los locales
-    $place = implode(',', array_fill(0, count($ids), '?')); // placeholders para IN
+    // 4) Obtener detalles de los locales con estadísticas de gestión
+    $place = implode(',', array_fill(0, count($ids), '?'));
+
     $sql = "
-        SELECT *
+        SELECT
+            l.*,
+            l.id         AS idLocal,
+            l.codigo     AS codigoLocal,
+            l.nombre     AS nombreLocal,
+            DATE_FORMAT(gv_stats.last_fecha, '%d/%m/%Y %H:%i') AS fechaVisita,
+            gv_stats.estado_agg  AS estadoGestion,
+            gv_stats.visitas_count   AS visitasCount,
+            gv_stats.gestiones_count AS gestionesCount,
+            COALESCE(u.usuario, '—') AS usuarioGestion
         FROM local l
+        LEFT JOIN (
+            SELECT
+                id_local,
+                MAX(fecha_visita) AS last_fecha,
+                COUNT(DISTINCT visita_id) AS visitas_count,
+                COUNT(*) AS gestiones_count,
+                CASE
+                    WHEN MAX(estado_gestion = 'implementado_auditado') = 1 THEN 'implementado_auditado'
+                    WHEN MAX(estado_gestion IN ('solo_implementado','implementado_auditado')) = 1 THEN 'solo_implementado'
+                    WHEN MAX(estado_gestion IN ('solo_auditoria','implementado_auditado')) = 1 THEN 'solo_auditoria'
+                    ELSE SUBSTRING_INDEX(
+                        MAX(CONCAT(DATE_FORMAT(fecha_visita,'%Y%m%d%H%i%s'), LPAD(id,10,'0'), '|', COALESCE(estado_gestion,''))),
+                        '|', -1
+                    )
+                END AS estado_agg
+            FROM gestion_visita
+            WHERE id_formulario = ? AND id_local IN ($place)
+            GROUP BY id_local
+        ) gv_stats ON gv_stats.id_local = l.id
+        LEFT JOIN (
+            SELECT gv2.id_local, gv2.id_usuario
+            FROM gestion_visita gv2
+            JOIN (
+                SELECT id_local,
+                       MAX(CONCAT(DATE_FORMAT(fecha_visita,'%Y%m%d%H%i%s'), LPAD(id,10,'0'))) AS max_key
+                FROM gestion_visita
+                WHERE id_formulario = ? AND id_local IN ($place)
+                GROUP BY id_local
+            ) s ON s.id_local = gv2.id_local
+               AND CONCAT(DATE_FORMAT(gv2.fecha_visita,'%Y%m%d%H%i%s'), LPAD(gv2.id,10,'0')) = s.max_key
+            WHERE gv2.id_formulario = ? AND gv2.id_local IN ($place)
+        ) last_gv ON last_gv.id_local = l.id
+        LEFT JOIN usuario u ON u.id = last_gv.id_usuario
         WHERE l.id IN ($place)
         ORDER BY FIELD(l.id, $place)
     ";
 
-    // bind dinámico seguro: los ids repetidos para ORDER BY FIELD
-    $bindParams = array_merge($ids, $ids);
-    $bindTypes  = str_repeat('i', count($bindParams));
+    $n = count($ids);
+    $bindParams = array_merge(
+        [$idCampana], $ids,   // gv_stats WHERE id_formulario=? AND id_local IN(...)
+        [$idCampana], $ids,   // last_gv inner WHERE id_formulario=? AND id_local IN(...)
+        [$idCampana], $ids,   // last_gv outer WHERE gv2.id_formulario=? AND gv2.id_local IN(...)
+        $ids,                  // WHERE l.id IN(...)
+        $ids                   // ORDER BY FIELD(l.id,...)
+    );
+    $bindTypes = 'i' . str_repeat('i', $n)
+               . 'i' . str_repeat('i', $n)
+               . 'i' . str_repeat('i', $n)
+               . str_repeat('i', $n)
+               . str_repeat('i', $n);
 
     $stmt = $this->conn->prepare($sql);
     if (!$stmt) throw new Exception("Prepare failed (local details): " . $this->conn->error);
@@ -285,14 +336,18 @@ public function getLocalesPage(array $filters): array
     $locales = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $stmt->close();
 
-    // 5) Normalizar URLs de fotos y completar datos
+    // 5) Completar datos
     $baseURL = 'https://visibility.cl/visibility2/app/';
     $placeholder = $baseURL . 'assets/images/placeholder.png';
 
     foreach ($locales as &$loc) {
-        $loc['fotoRef'] = $placeholder;
+        $loc['fotoRef']    = $placeholder;
         $idL = (int)$loc['id'];
-        $loc['is_priority'] = $prioById[$idL] ?? 0;
+        $loc['is_priority']    = $prioById[$idL] ?? 0;
+        $loc['visitasCount']   = (int)($loc['visitasCount']   ?? 0);
+        $loc['gestionesCount'] = (int)($loc['gestionesCount'] ?? 0);
+        $loc['usuarioGestion'] = $loc['usuarioGestion'] ?? '—';
+        $loc['fechaVisita']    = $loc['fechaVisita']    ?? '—';
     }
     unset($loc);
 

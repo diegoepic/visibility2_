@@ -252,6 +252,7 @@ if (!convertToWebP($tmpName, $destino, 1280, 80)) {
     echo json_encode(['status'=>'error','message'=>$msg]);
     exit();
 }
+@chmod($destino, 0644);
 
 // 8) URL relativa (la que usas en la app)
 $urlFoto = "/visibility2/app/uploads/uploads_fotos_pregunta/{$unique}";

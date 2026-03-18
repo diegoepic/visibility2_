@@ -442,6 +442,7 @@ if (!empty($archivosReestructurados)) {
       if (!@move_uploaded_file($tmpName,$destinoOrig) && !@copy($tmpName,$destinoOrig)) {
         $erroresSubida[] = "Error al guardar imagen (fallback) '$name' (material=$idMaterial)."; continue;
       }
+      @chmod($destinoOrig, 0644);
       $rutaRel = "uploads/$fechaHoy/material_".$idMaterial."/".basename($destinoOrig);
     } else {
       $rutaRel = "uploads/$fechaHoy/material_".$idMaterial."/".basename($destinoWebp);

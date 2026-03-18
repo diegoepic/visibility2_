@@ -136,7 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 SET countVisita = 0,
                     valor        = NULL,
                     motivo       = NULL,
-                    observacion  = NULL,
+                    observacion  = '',
                     pregunta     = NULL,
                     fechaVisita  = NULL
                 WHERE id_formulario = ? AND id_local = ? AND id_usuario = ?
@@ -242,7 +242,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 SET countVisita = 0,
                     valor        = NULL,
                     motivo       = NULL,
-                    observacion  = NULL,
+                    observacion  = '',
                     pregunta     = NULL,
                     fechaVisita  = NULL
                 WHERE id = ? AND id_formulario = ? AND id_local = ?

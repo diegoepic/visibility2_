@@ -226,6 +226,7 @@ if (!convertirAWebP($tmp, $dstAbs, 80)) {
   http_response_code(500);
   echo json_encode(['status'=>'error','message'=>'Error al convertir a WebP']); exit;
 }
+@chmod($dstAbs, 0644);
 
 $urlRel = IW_UPLOAD_URL . "/{$dateDir}/{$uniq}";
 $now    = date('Y-m-d H:i:s');

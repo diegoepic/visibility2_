@@ -123,11 +123,9 @@ $stmt_ejec = $conn->prepare("
     FROM usuario
     WHERE id_perfil = ?
       AND activo = 1
-      AND id_empresa = ?
-      AND id_division = ?
     ORDER BY usuario ASC
 ");
-$stmt_ejec->bind_param("iii", $perfil_ejecutor_id, $id_empresa, $id_division);
+$stmt_ejec->bind_param("i", $perfil_ejecutor_id);
 $stmt_ejec->execute();
 $res_ejec = $stmt_ejec->get_result();
 $ejecutores = $res_ejec->fetch_all(MYSQLI_ASSOC);
@@ -150,17 +148,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'reass
         WHERE id = ?
           AND id_perfil = 3
           AND activo = 1
-          AND id_empresa = ?
-          AND id_division = ?
         LIMIT 1
     ");
-    $stmt_check_user->bind_param("iii", $nuevo_ejecutor_id, $id_empresa, $id_division);
+    $stmt_check_user->bind_param("i", $nuevo_ejecutor_id);
     $stmt_check_user->execute();
     $stmt_check_user->store_result();
 
     if ($stmt_check_user->num_rows === 0) {
         $stmt_check_user->close();
-        echo "<div class='alert alert-danger'>El ejecutor seleccionado no es válido para esta división.</div>";
+        echo "<div class='alert alert-danger'>El ejecutor seleccionado no es válido.</div>";
         exit;
     }
     $stmt_check_user->close();

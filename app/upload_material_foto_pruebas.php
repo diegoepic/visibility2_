@@ -359,6 +359,7 @@ if (!convertToWebP($tmp, $destWebp, 1280, 80)) {
   if (!@move_uploaded_file($tmp, $destOrig)) {
     if (!@copy($tmp, $destOrig)) { json_fail(500, 'No se pudo guardar la imagen (fallback)'); }
   }
+  @chmod($destOrig, 0644);
   $savedPath = $destOrig;
 } else {
   $savedPath = $destWebp;

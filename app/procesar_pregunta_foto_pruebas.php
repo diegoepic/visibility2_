@@ -336,6 +336,7 @@ if (!convertToWebP($tmp, $destAbs, 1280, 80)) {
     : 'No se pudo convertir la imagen a WebP.';
   json_out(500, ['status'=>'error','message'=>$msg]);
 }
+@chmod($destAbs, 0644);
 
 /* URL relativa (igual que otros endpoints: empieza por "uploads/") */
 $relUrl   = 'uploads/'.$hoy.'/pregunta_'.$id_form_question.'/'.$filename;

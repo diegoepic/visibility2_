@@ -188,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     SET countVisita = 0,
                         valor = NULL,
                         motivo = NULL,
-                        observacion = NULL,
+                        observacion = '',
                         pregunta = NULL,
                         fechaVisita = NULL
                     WHERE id_formulario = ?
@@ -301,7 +301,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     SET countVisita = 0,
                         valor = NULL,
                         motivo = NULL,
-                        observacion = NULL,
+                        observacion = '',
                         pregunta = NULL,
                         fechaVisita = NULL
                     WHERE id = ?
@@ -342,7 +342,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     SET countVisita = 0,
                         valor = NULL,
                         motivo = NULL,
-                        observacion = NULL,
+                        observacion = '',
                         pregunta = NULL,
                         fechaVisita = NULL
                     WHERE id = ?
@@ -411,7 +411,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     SET countVisita = 0,
                         valor = NULL,
                         motivo = NULL,
-                        observacion = NULL,
+                        observacion = '',
                         pregunta = NULL,
                         fechaVisita = NULL
                     WHERE id_formulario = ?
