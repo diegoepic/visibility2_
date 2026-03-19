@@ -798,8 +798,8 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_PO
 
             $stmt_insert_fq = $conn->prepare("
                 INSERT INTO formularioQuestion
-                    (id_formulario, id_usuario, id_local, material, valor_propuesto, estado)
-                VALUES (?, ?, ?, ?, ?, 0)
+                    (id_formulario, id_usuario, id_local, material, valor_propuesto, observacion, estado)
+                VALUES (?, ?, ?, ?, ?, '', 0)
             ");
             if ($stmt_insert_fq === false) {
                 $error = "Error en la preparación de la consulta: " . h($conn->error);
