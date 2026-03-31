@@ -55,3 +55,6 @@ portal/repositorio/encuestas_csv/
 portal/repositorio/encuestas_csv/
 *.csv
 portal/repositorio/encuestas_csv/
+
+portal2/RESTful/cache/*.json
+portal2/documentos/**/*.pptx
