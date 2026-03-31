@@ -58,3 +58,6 @@ portal/repositorio/encuestas_csv/
 
 portal2/RESTful/cache/*.json
 portal2/documentos/**/*.pptx
+
+fix_large_files.sh
+portal/modulos/mod_panel/cache_mod_panel/*.cache
