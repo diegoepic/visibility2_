@@ -1,0 +1,123 @@
+ /* Ajustes personalizados para el Modal de Edición */
+        #editarUsuarioModal .modal-header {
+            background-color: #007bff; /* Azul Bootstrap */
+            color: white;
+        }
+
+        #editarUsuarioModal .modal-title {
+            font-weight: bold;
+        }
+
+
+        /* Ajustar el tamaño de la imagen de perfil en el modal */
+        #actual_fotoPerfil {
+            border-radius: 50%;
+            border: 2px solid #ddd;
+            max-width: 150px;
+            height: auto;
+        }
+        
+        /* estilos para la tabla de usuaios */
+        .table-responsive {
+          margin-top: 2%;
+          border: 1px solid #dee2e6;
+          border-radius: 0.25rem;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+          overflow: hidden;
+        }
+        
+        .card-header.bg-success {
+          /*background-color: #0069d9 !important;
+          border-bottom: none;*/
+            background: #93C01F;
+            background-image: linear-gradient(to left, #E7F4CB 0%, #CBE47B 40%, #A7D13A 75%, #93C01F 100%);
+            color: #fff;
+            padding: 15px;
+            border-radius: 3px 3px 0 0;          
+        }
+        .card-header .card-title {
+          color: #fff;
+          font-weight: 500;
+        }
+        
+        #example thead th {
+          /*text-transform: uppercase;
+          font-size: 0.875rem;
+          border-bottom: 2px solid #dee2e6;
+          color: #495057;*/
+            background-color:#4b545c;
+            padding: 20px 15px;
+            text-align: left;
+            font-weight: 500;
+            font-size: 12px;
+            color: #fff;
+            text-transform: uppercase;          
+        }
+        
+        .badge {
+          font-size: 0.75rem;
+          padding: 0.4em 0.6em;
+        }
+                        
+
+        /* Clase personalizada para hacer el modal desplazable */
+        .modal-body-scrollable {
+            max-height: 70vh; /* Ajusta este valor según tus necesidades */
+            overflow-y: auto;
+        }
+        .material-row { margin-bottom: 10px; }
+        .remove-material-btn { margin-top: 32px; }
+        thead input {width: 100%;padding: 3px;box-sizing: border-box;}
+        .pagination>li>a, .pagination>li>span {
+        position: relative;
+        float: left;
+        padding: 6px 12px;
+        margin-left: -1px;
+        line-height: 1.42857143;
+        color: #337ab7;
+        text-decoration: none;
+        background-color: #fff;
+        border: 1px solid #ddd;
+    }        
+        .uppercase { text-transform: uppercase; }
+        .btn-default {
+            color: #333;
+            background-color: #fff;
+            border-color: #ccc;
+        }
+        
+        .dt-buttons { 
+          float: left; 
+          margin-right: 10px; 
+        }
+        .dataTables_filter { 
+          float: right; 
+        }
+        .btn-default{
+        background-color: #f8f9fa;
+        border-color: #ddd;
+        color: #444;
+        }
+        .table-responsive{
+            margin-top:2%;
+        }
+        .mb-2{
+            margin-top:1%;
+        }
+        
+        .bg-success-mc {
+            /* background-color: #28a745 !important; */
+            background: #93C01F;
+            background-image: linear-gradient(to left, #E7F4CB 0%, #CBE47B 40%, #A7D13A 75%, #93C01F 100%);
+            color: #fff;
+            padding: 15px;
+            border-radius: 3px 3px 0 0;
+        } 
+        div.dataTables_wrapper div.dataTables_length select {
+            margin-left: 5px;
+            margin-right: 5px;
+        }        
+        div.dataTables_wrapper div.dataTables_info {
+            padding-top: 0px!important;
+            margin-left: 1%;
+        }

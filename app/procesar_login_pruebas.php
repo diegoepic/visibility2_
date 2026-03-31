@@ -74,8 +74,24 @@ if ($usuario === '' || $clave === '') {
   fail_and_back();
 }
 
+$loginKey = 'login_submit_guard';
+$now = microtime(true);
+
+if (
+    isset($_SESSION[$loginKey]['usuario'], $_SESSION[$loginKey]['time']) &&
+    $_SESSION[$loginKey]['usuario'] === mb_strtolower($usuario) &&
+    ($now - (float)$_SESSION[$loginKey]['time']) < 3
+) {
+    fail_and_back();
+}
+
+$_SESSION[$loginKey] = [
+    'usuario' => mb_strtolower($usuario),
+    'time'    => $now,
+];
+
 // Rate limit básico por IP+usuario: 10 intentos / 15 min
-$ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+/*$ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 $conn->query("
   CREATE TABLE IF NOT EXISTS login_attempts (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -85,7 +101,7 @@ $conn->query("
     INDEX (usuario),
     INDEX (intento_at)
   ) ENGINE=InnoDB
-");
+"); */
 
 $stmt = $conn->prepare("SELECT COUNT(*) AS n
                         FROM login_attempts

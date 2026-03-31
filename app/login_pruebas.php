@@ -247,6 +247,14 @@ $session_expired = (isset($_GET['session_expired']) && $_GET['session_expired'] 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <script>
+    document.getElementById('loginForm').addEventListener('submit', function () {
+        const btn = document.getElementById('btnLogin');
+        btn.disabled = true;
+        btn.innerText = 'Ingresando...';
+    });
+    </script>
+
+    <script>
       jQuery(function(){ Login.init(); });
       function sendForgotPassword() {
         var email = document.getElementById('email').value;

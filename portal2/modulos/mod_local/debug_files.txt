@@ -1,0 +1,20 @@
+Array
+(
+    [csvFile] => Array
+        (
+            [name] => formato_creacion_locales1.csv
+            [full_path] => formato_creacion_locales1.csv
+            [type] => text/csv
+            [tmp_name] => /tmp/phpQPC2QD
+            [error] => 0
+            [size] => 4181
+        )
+
+)
+
+Array
+(
+    [csrf_token] => e6571447dc4e5c97b7d07ec35b0786fa1943c852fae91100b2ec3066eeef9d8d
+    [empresa_id] => 103
+    [division_id] => 1
+)

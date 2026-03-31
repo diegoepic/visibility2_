@@ -1,9 +1,43 @@
 <?php
 declare(strict_types=1);
 
-
-
 if (PHP_SAPI === 'cli') { return; }
+
+$script = str_replace('\\', '/', $_SERVER['SCRIPT_FILENAME'] ?? '');
+$uri    = $_SERVER['REQUEST_URI'] ?? '';
+$method = $_SERVER['REQUEST_METHOD'] ?? '';
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+
+/*
+|--------------------------------------------------------------------------
+| BYPASS PARA API MOBILE
+|--------------------------------------------------------------------------
+| Todo lo que cuelgue de /visibility2/app/api/mobile/ no debe pasar por la
+| validaciÃ³n de sesiÃ³n web del portal.
+*/
+if (
+    preg_match('#^/visibility2/app/api/mobile/#i', $uri) ||
+    preg_match('#/visibility2/app/api/mobile/#i', $script)
+) {
+    if (
+        preg_match('#^http://localhost:\d+$#', $origin) ||
+        preg_match('#^http://127\.0\.0\.1:\d+$#', $origin) ||
+        $origin === 'https://visibility.cl'
+    ) {
+        header("Access-Control-Allow-Origin: $origin");
+        header('Vary: Origin');
+    }
+
+    header('Access-Control-Allow-Headers: Content-Type, Authorization');
+    header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
+
+    if ($method === 'OPTIONS') {
+        http_response_code(204);
+        exit;
+    }
+
+    return;
+}
 
 $script = str_replace('\\', '/', $_SERVER['SCRIPT_FILENAME'] ?? '');
 $isPublic = false;
@@ -40,7 +74,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
   session_start();
 }
 
-// Conexi¨®n
+// Conexiè»Šn
 if (!isset($conn) || !($conn instanceof mysqli)) {
   require_once __DIR__ . '/con_.php';
   if (!isset($conn) || !($conn instanceof mysqli)) {

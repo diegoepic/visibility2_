@@ -114,10 +114,12 @@
     return 0;
   }
 
+  // Fix #7: usar replaceAll para maniobras con múltiples guiones
   function getManeuverIcon(maneuver) {
     if (!maneuver) return MANEUVER_ICONS.default;
+    const normalized = maneuver.toLowerCase();
     const key = Object.keys(MANEUVER_ICONS).find(k =>
-      maneuver.toLowerCase().includes(k.replace('-', ''))
+      normalized.includes(k.replace(/-/g, ''))
     );
     return MANEUVER_ICONS[key] || MANEUVER_ICONS.default;
   }
@@ -162,6 +164,18 @@
 
       // Listener de drag
       this._dragListener = null;
+
+      // Fix #11: Polyline cacheado para _isOnRoute (evita recrearlo en cada tick)
+      this._cachedRoutePoly = null;
+
+      // Fix #12: último índice conocido para búsqueda de punto más cercano
+      this._lastNearestIdx = 0;
+
+      // Fix #14: estado de anuncios preventivos para evitar repetición
+      this._lastAnnouncedThreshold = null;
+
+      // Fix #8: destino original para reroutes correctos
+      this.destination = null;
     }
 
     // ==================== INICIO/PARADA ====================
@@ -185,6 +199,11 @@
         this.path = decode(route.polyline?.encodedPolyline || '');
         this.waypoints = waypoints || [];
         this.waypointIdx = 0;
+        // Fix #8: guardar destino original para reroutes
+        this.destination = destination;
+        // Fix #11: invalidar Polyline cacheado
+        this._cachedRoutePoly = null;
+        this._lastNearestIdx = 0;
 
         this.active = true;
         this.paused = false;
@@ -437,6 +456,8 @@
 
       if (distToEnd < CONFIG.STEP_ADVANCE_DISTANCE) {
         this.stepIdx++;
+        // Fix #14: resetear umbral de anuncio al avanzar de paso
+        this._lastAnnouncedThreshold = null;
 
         const nextStep = this.steps[this.stepIdx];
         if (this.hooks.onStep) {
@@ -455,13 +476,29 @@
       }
     }
 
+    // Fix #14: anunciar solo al cruzar umbrales de distancia, no en cada tick GPS
     _announcePreventive(cur) {
       const step = this.steps[this.stepIdx];
-      if (!step) return;
+      if (!step || !window.VoiceController) return;
 
       const distToEnd = haversine(cur, step.end);
 
-      if (window.VoiceController) {
+      let threshold = null;
+      if (distToEnd <= CONFIG.PREVIEW_DISTANCE_NOW && this._lastAnnouncedThreshold !== 'now') {
+        threshold = 'now';
+      } else if (distToEnd <= CONFIG.PREVIEW_DISTANCE_NEAR
+        && this._lastAnnouncedThreshold !== 'near'
+        && this._lastAnnouncedThreshold !== 'now') {
+        threshold = 'near';
+      } else if (distToEnd <= CONFIG.PREVIEW_DISTANCE_FAR
+        && this._lastAnnouncedThreshold !== 'far'
+        && this._lastAnnouncedThreshold !== 'near'
+        && this._lastAnnouncedThreshold !== 'now') {
+        threshold = 'far';
+      }
+
+      if (threshold) {
+        this._lastAnnouncedThreshold = threshold;
         VoiceController.speakNavigation(step.text, distToEnd, step.maneuver);
       }
     }
@@ -501,6 +538,7 @@
 
     // ==================== RUTA ====================
 
+    // Fix #11: cachear el Polyline para no recrearlo en cada tick GPS
     _isOnRoute(point, speedKmh) {
       if (!this.path.length) return true;
 
@@ -508,31 +546,46 @@
         ? CONFIG.OFF_ROUTE_TOL_FAST
         : CONFIG.OFF_ROUTE_TOL_SLOW;
 
-      // Usar la función de RouteEngine si está disponible
       if (window.RouteEngine?.isOnRoutePath) {
         return window.RouteEngine.isOnRoutePath(point, this.path, tol);
       }
 
-      // Fallback: verificar con la API de Google
+      // Reusar Polyline cacheado en lugar de crear uno nuevo por tick
+      if (!this._cachedRoutePoly) {
+        this._cachedRoutePoly = new google.maps.Polyline({
+          path: this.path.map(p => new google.maps.LatLng(p.lat, p.lng))
+        });
+      }
       const gll = new google.maps.LatLng(point.lat, point.lng);
-      const poly = new google.maps.Polyline({
-        path: this.path.map(p => new google.maps.LatLng(p.lat, p.lng))
-      });
-      return google.maps.geometry.poly.isLocationOnEdge(gll, poly, tol / 6378137);
+      return google.maps.geometry.poly.isLocationOnEdge(gll, this._cachedRoutePoly, tol / 6378137);
     }
 
+    // Fix #12: búsqueda en ventana deslizante en lugar de O(n) completo
     _findNearestPathIndex(point) {
+      if (!this.path.length) return 0;
+
+      const WINDOW = 40;
+      const start = Math.max(0, this._lastNearestIdx - 5);
+      const end   = Math.min(this.path.length - 1, start + WINDOW);
+
       let minDist = Infinity;
-      let minIdx = 0;
+      let minIdx  = start;
 
-      this.path.forEach((p, i) => {
-        const d = haversine(point, p);
-        if (d < minDist) {
-          minDist = d;
-          minIdx = i;
+      for (let i = start; i <= end; i++) {
+        const d = haversine(point, this.path[i]);
+        if (d < minDist) { minDist = d; minIdx = i; }
+      }
+
+      // Si el mínimo quedó en el borde de la ventana, extender la búsqueda
+      if (minIdx >= end - 2 && end < this.path.length - 1) {
+        for (let i = end + 1; i < this.path.length; i++) {
+          const d = haversine(point, this.path[i]);
+          if (d < minDist) { minDist = d; minIdx = i; }
+          else if (d > minDist * 2) break; // se aleja, detener
         }
-      });
+      }
 
+      this._lastNearestIdx = minIdx;
       return minIdx;
     }
 
@@ -557,16 +610,15 @@
         VoiceController.speakReroute();
       }
 
-      // Calcular paradas restantes
-      const remainingSteps = this.steps.slice(this.stepIdx);
-      const destination = remainingSteps.length ? remainingSteps[remainingSteps.length - 1].end : cur;
-      const waypoints = remainingSteps.slice(0, -1).map(s => s.end);
+      // Fix #8: usar waypoints originales restantes en lugar de endpoints de pasos
+      const remainingWaypoints = this.waypoints.slice(this.waypointIdx);
+      const dest = this.destination || cur;
 
       try {
         const route = await window.RouteEngine.computeRouteUnified({
           origin: cur,
-          destination,
-          waypoints,
+          destination: dest,
+          waypoints: remainingWaypoints,
           optimize: false,
           mode: 'nav'
         });
@@ -575,6 +627,9 @@
         this.steps = this._buildSteps(route);
         this.stepIdx = 0;
         this.path = decode(route.polyline?.encodedPolyline || '');
+        // Fix #11: invalidar Polyline cacheado tras reroute
+        this._cachedRoutePoly = null;
+        this._lastNearestIdx = 0;
         this.offRouteSince = null;
 
         if (this.hooks.onRoute) {
@@ -622,9 +677,16 @@
       return new Date(Date.now() + remainingSec * 1000);
     }
 
+    // Fix #16: progreso basado en distancia recorrida, no en conteo de pasos
     getProgress() {
-      if (!this.steps.length) return 0;
-      return (this.stepIdx / this.steps.length) * 100;
+      if (!this.steps.length || !this.route) return 0;
+      const totalDist = this.route.distanceMeters || 0;
+      if (!totalDist) return (this.stepIdx / this.steps.length) * 100;
+      let coveredDist = 0;
+      for (let i = 0; i < this.stepIdx; i++) {
+        coveredDist += this.steps[i].distanceMeters || 0;
+      }
+      return Math.min(100, (coveredDist / totalDist) * 100);
     }
   }
 

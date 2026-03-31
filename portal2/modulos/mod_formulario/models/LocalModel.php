@@ -1,0 +1,720 @@
+<?php
+class LocalModel
+{
+    private mysqli $conn;
+
+    public function __construct(mysqli $conn)
+    {
+        $this->conn = $conn;
+    }
+
+    public function getCampanaNombre(int $idCampana, int $empresaId): string
+    {
+        $stmt = $this->conn->prepare(
+            "SELECT COALESCE(nombre, CONCAT('Campaña #', id)) FROM formulario WHERE id = ? AND id_empresa = ? LIMIT 1"
+        );
+        $stmt->bind_param('ii', $idCampana, $empresaId);
+        $stmt->execute();
+        $stmt->bind_result($nombre);
+        $stmt->fetch();
+        $stmt->close();
+
+        return $nombre ?: 'Campaña #' . $idCampana;
+    }
+
+    public function getCampanaInfo(int $idCampana, int $empresaId): array
+    {
+        $stmt = $this->conn->prepare(
+            "SELECT modalidad, iw_requiere_local
+             FROM formulario
+             WHERE id = ? AND id_empresa = ?
+             LIMIT 1"
+        );
+        $stmt->bind_param('ii', $idCampana, $empresaId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $row = $res->fetch_assoc() ?: [];
+        $stmt->close();
+
+        return [
+            'modalidad' => $row['modalidad'] ?? '',
+            'iw_requiere_local' => isset($row['iw_requiere_local']) ? (int)$row['iw_requiere_local'] : 0,
+        ];
+    }
+
+    public function getUsuariosByCampana(int $idCampana, int $empresaId): array
+    {
+        $usuarios = [];
+        $stmt = $this->conn->prepare(
+            "SELECT DISTINCT u.id, COALESCE(NULLIF(TRIM(u.usuario),''), CONCAT('user#',u.id)) AS usuario,
+                    TRIM(CONCAT(COALESCE(u.nombre,''), ' ', COALESCE(u.apellido,''))) AS nombre
+             FROM gestion_visita gv
+             JOIN usuario u ON u.id = gv.id_usuario
+             JOIN formulario f ON f.id = gv.id_formulario AND f.id_empresa = ?
+             WHERE gv.id_formulario = ?
+             ORDER BY usuario ASC"
+        );
+        $stmt->bind_param('ii', $empresaId, $idCampana);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($r = $res->fetch_assoc()) {
+            $usuarios[] = $r;
+        }
+        $stmt->close();
+
+        return $usuarios;
+    }
+
+    public function getUsuariosByCampanaComplementaria(int $idCampana, int $empresaId): array
+    {
+        $usuarios = [];
+        $stmt = $this->conn->prepare(
+            "SELECT DISTINCT u.id, COALESCE(NULLIF(TRIM(u.usuario),''), CONCAT('user#',u.id)) AS usuario,
+                    TRIM(CONCAT(COALESCE(u.nombre,''), ' ', COALESCE(u.apellido,''))) AS nombre
+             FROM visita v
+             JOIN usuario u ON u.id = v.id_usuario
+             JOIN formulario f ON f.id = v.id_formulario AND f.id_empresa = ?
+             WHERE v.id_formulario = ?
+             ORDER BY usuario ASC"
+        );
+        $stmt->bind_param('ii', $empresaId, $idCampana);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($r = $res->fetch_assoc()) {
+            $usuarios[] = $r;
+        }
+        $stmt->close();
+
+        return $usuarios;
+    }
+
+    public function getEstadosByCampana(int $idCampana, int $empresaId): array
+    {
+        $estados = [];
+        $stmt = $this->conn->prepare(
+            "SELECT DISTINCT gv.estado_gestion
+             FROM gestion_visita gv
+             JOIN formulario f ON f.id = gv.id_formulario AND f.id_empresa = ?
+             WHERE gv.id_formulario = ?
+               AND gv.estado_gestion IS NOT NULL
+               AND TRIM(gv.estado_gestion) <> ''
+             ORDER BY gv.estado_gestion ASC"
+        );
+        $stmt->bind_param('ii', $empresaId, $idCampana);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($r = $res->fetch_assoc()) {
+            $estados[] = $r['estado_gestion'];
+        }
+        $stmt->close();
+
+        return $estados;
+    }
+
+public function getLocalesPage(array $filters): array
+{
+    $idCampana    = (int)$filters['idCampana'];
+    $empresaId    = (int)($filters['empresaId'] ?? $filters['empresa_id'] ?? 0);
+    $filterCodigo = $filters['filterCodigo'] ?? '';
+    $filterEstado = $filters['filterEstado'] ?? '';
+    $filterUserId = (int)($filters['filterUserId'] ?? 0);
+    $filterDesde  = $filters['filterDesde'] ?? null;
+    $filterHasta  = $filters['filterHasta'] ?? null;
+    $perPage      = (int)($filters['perPage'] ?? 50);
+    $page         = max(1, (int)($filters['page'] ?? 1));
+    $offset       = ($page - 1) * $perPage;
+
+    // 1) SQL base para los locales con los filtros iniciales
+    $baseSql = "
+        SELECT
+            l.id AS idLocal,
+            MIN(l.codigo) AS cod_min,
+            MAX(fq.is_priority) AS is_priority,
+            MAX(last.fecha_visita) AS last_fecha,
+            CASE
+                WHEN MAX(agg.has_impl_aud) = 1 THEN 'implementado_auditado'
+                WHEN MAX(agg.has_impl_any) = 1 THEN 'solo_implementado'
+                WHEN MAX(agg.has_audit) = 1 THEN 'solo_auditoria'
+                ELSE MAX(last.estado_gestion)
+            END AS estado_agg
+        FROM formularioQuestion fq
+        JOIN local l ON l.id = fq.id_local
+        JOIN formulario f ON f.id = fq.id_formulario AND f.id_empresa = ?
+        LEFT JOIN (
+            SELECT gv2.*
+            FROM gestion_visita gv2
+            JOIN (
+                SELECT id_local,
+                       MAX(CONCAT(DATE_FORMAT(fecha_visita,'%Y%m%d%H%i%s'), LPAD(id,10,'0'))) AS max_key
+                FROM gestion_visita
+                WHERE id_formulario = ?
+                GROUP BY id_local
+            ) s ON s.id_local = gv2.id_local
+               AND CONCAT(DATE_FORMAT(gv2.fecha_visita,'%Y%m%d%H%i%s'), LPAD(gv2.id,10,'0')) = s.max_key
+            WHERE gv2.id_formulario = ?
+        ) last ON last.id_local = l.id
+        LEFT JOIN (
+            SELECT id_local,
+                   MAX(estado_gestion = 'implementado_auditado') AS has_impl_aud,
+                   MAX(estado_gestion IN ('solo_implementado','implementado_auditado')) AS has_impl_any,
+                   MAX(estado_gestion IN ('solo_auditoria','implementado_auditado')) AS has_audit
+            FROM gestion_visita
+            WHERE id_formulario = ?
+            GROUP BY id_local
+        ) agg ON agg.id_local = l.id
+        WHERE fq.id_formulario = ?
+    ";
+
+    $params = [$empresaId, $idCampana, $idCampana, $idCampana, $idCampana];
+    $types  = 'iiiii';
+
+    if ($filterCodigo !== '') {
+        $baseSql .= ' AND l.codigo LIKE ? ';
+        $params[] = "%{$filterCodigo}%";
+        $types .= 's';
+    }
+
+    if ($filterUserId > 0) {
+        $baseSql .= ' AND EXISTS (
+            SELECT 1 FROM gestion_visita gx
+            WHERE gx.id_formulario = ? AND gx.id_local = l.id AND gx.id_usuario = ?
+        )';
+        $params[] = $idCampana;
+        $params[] = $filterUserId;
+        $types .= 'ii';
+    }
+
+    $baseSql .= ' GROUP BY l.id ';
+
+    // Filtros HAVING para estado y fechas
+    $havingClauses = [];
+    if ($filterEstado !== '') {
+        if ($filterEstado === 'sin_datos') {
+            $havingClauses[] = 'last_fecha IS NULL';
+        } else {
+            $havingClauses[] = 'estado_agg = ?';
+            $params[] = $filterEstado;
+            $types .= 's';
+        }
+    }
+    if ($filterDesde) {
+        $havingClauses[] = 'last_fecha >= ?';
+        $params[] = $filterDesde;
+        $types .= 's';
+    }
+    if ($filterHasta) {
+        $havingClauses[] = 'last_fecha <= ?';
+        $params[] = $filterHasta;
+        $types .= 's';
+    }
+
+    if (!empty($havingClauses)) {
+        $baseSql .= ' HAVING ' . implode(' AND ', $havingClauses);
+    }
+
+    // 2) Conteo total
+    $countSql = "SELECT COUNT(*) FROM ($baseSql) t";
+    $stmt = $this->conn->prepare($countSql);
+    if (!$stmt) throw new Exception("Prepare failed (COUNT): " . $this->conn->error);
+    $stmt->bind_param($types, ...$params);
+    $stmt->execute();
+    $stmt->bind_result($totalRows);
+    $stmt->fetch();
+    $stmt->close();
+
+    $totalPages = max(1, ceil($totalRows / $perPage));
+
+    // 3) Obtener IDs para la página actual
+    $sqlIds = "
+        SELECT idLocal, MAX(is_priority) AS is_priority, MIN(cod_min) AS cod_min
+        FROM ($baseSql) t
+        GROUP BY idLocal
+        ORDER BY MAX(is_priority) DESC, MIN(cod_min) ASC
+        LIMIT ? OFFSET ?
+    ";
+    $paramsPage = $params;
+    $paramsPage[] = $perPage;
+    $paramsPage[] = $offset;
+    $typesPage = $types . 'ii';
+
+    $stmt = $this->conn->prepare($sqlIds);
+    if (!$stmt) throw new Exception("Prepare failed (ID page): " . $this->conn->error);
+    $stmt->bind_param($typesPage, ...$paramsPage);
+    $stmt->execute();
+    $resIds = $stmt->get_result();
+
+    $ids = [];
+    $prioById = [];
+    while ($row = $resIds->fetch_assoc()) {
+        $ids[] = (int)$row['idLocal'];
+        $prioById[(int)$row['idLocal']] = (int)$row['is_priority'];
+    }
+    $stmt->close();
+
+    if (empty($ids)) {
+        return [
+            'locales'     => [],
+            'totalRows'   => 0,
+            'totalPages'  => 1,
+            'currentPage' => $page,
+            'perPage'     => $perPage,
+            'ids'         => [],
+            'prioById'    => [],
+        ];
+    }
+
+    // 4) Obtener detalles de los locales con estadísticas de gestión
+    $place = implode(',', array_fill(0, count($ids), '?'));
+
+    $sql = "
+        SELECT
+            l.*,
+            l.id         AS idLocal,
+            l.codigo     AS codigoLocal,
+            l.nombre     AS nombreLocal,
+            DATE_FORMAT(gv_stats.last_fecha, '%d/%m/%Y %H:%i') AS fechaVisita,
+            gv_stats.estado_agg  AS estadoGestion,
+            gv_stats.visitas_count   AS visitasCount,
+            gv_stats.gestiones_count AS gestionesCount,
+            COALESCE(u.usuario, '—') AS usuarioGestion
+        FROM local l
+        LEFT JOIN (
+            SELECT
+                id_local,
+                MAX(fecha_visita) AS last_fecha,
+                COUNT(DISTINCT visita_id) AS visitas_count,
+                COUNT(*) AS gestiones_count,
+                CASE
+                    WHEN MAX(estado_gestion = 'implementado_auditado') = 1 THEN 'implementado_auditado'
+                    WHEN MAX(estado_gestion IN ('solo_implementado','implementado_auditado')) = 1 THEN 'solo_implementado'
+                    WHEN MAX(estado_gestion IN ('solo_auditoria','implementado_auditado')) = 1 THEN 'solo_auditoria'
+                    ELSE SUBSTRING_INDEX(
+                        MAX(CONCAT(DATE_FORMAT(fecha_visita,'%Y%m%d%H%i%s'), LPAD(id,10,'0'), '|', COALESCE(estado_gestion,''))),
+                        '|', -1
+                    )
+                END AS estado_agg
+            FROM gestion_visita
+            WHERE id_formulario = ? AND id_local IN ($place)
+            GROUP BY id_local
+        ) gv_stats ON gv_stats.id_local = l.id
+        LEFT JOIN (
+            SELECT gv2.id_local, gv2.id_usuario
+            FROM gestion_visita gv2
+            JOIN (
+                SELECT id_local,
+                       MAX(CONCAT(DATE_FORMAT(fecha_visita,'%Y%m%d%H%i%s'), LPAD(id,10,'0'))) AS max_key
+                FROM gestion_visita
+                WHERE id_formulario = ? AND id_local IN ($place)
+                GROUP BY id_local
+            ) s ON s.id_local = gv2.id_local
+               AND CONCAT(DATE_FORMAT(gv2.fecha_visita,'%Y%m%d%H%i%s'), LPAD(gv2.id,10,'0')) = s.max_key
+            WHERE gv2.id_formulario = ? AND gv2.id_local IN ($place)
+        ) last_gv ON last_gv.id_local = l.id
+        LEFT JOIN usuario u ON u.id = last_gv.id_usuario
+        WHERE l.id IN ($place)
+        ORDER BY FIELD(l.id, $place)
+    ";
+
+    $n = count($ids);
+    $bindParams = array_merge(
+        [$idCampana], $ids,   // gv_stats WHERE id_formulario=? AND id_local IN(...)
+        [$idCampana], $ids,   // last_gv inner WHERE id_formulario=? AND id_local IN(...)
+        [$idCampana], $ids,   // last_gv outer WHERE gv2.id_formulario=? AND gv2.id_local IN(...)
+        $ids,                  // WHERE l.id IN(...)
+        $ids                   // ORDER BY FIELD(l.id,...)
+    );
+    $bindTypes = 'i' . str_repeat('i', $n)
+               . 'i' . str_repeat('i', $n)
+               . 'i' . str_repeat('i', $n)
+               . str_repeat('i', $n)
+               . str_repeat('i', $n);
+
+    $stmt = $this->conn->prepare($sql);
+    if (!$stmt) throw new Exception("Prepare failed (local details): " . $this->conn->error);
+    $stmt->bind_param($bindTypes, ...$bindParams);
+    $stmt->execute();
+    $locales = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    // 5) Completar datos
+    $baseURL = 'https://visibility.cl/visibility2/app/';
+    $placeholder = $baseURL . 'assets/images/placeholder.png';
+
+    foreach ($locales as &$loc) {
+        $loc['fotoRef']    = $placeholder;
+        $idL = (int)$loc['id'];
+        $loc['is_priority']    = $prioById[$idL] ?? 0;
+        $loc['visitasCount']   = (int)($loc['visitasCount']   ?? 0);
+        $loc['gestionesCount'] = (int)($loc['gestionesCount'] ?? 0);
+        $loc['usuarioGestion'] = $loc['usuarioGestion'] ?? '—';
+        $loc['fechaVisita']    = $loc['fechaVisita']    ?? '—';
+    }
+    unset($loc);
+
+    return [
+        'locales'     => $locales,
+        'totalRows'   => (int)$totalRows,
+        'totalPages'  => (int)$totalPages,
+        'currentPage' => (int)$page,
+        'perPage'     => (int)$perPage,
+        'ids'         => $ids,
+        'prioById'    => $prioById,
+    ];
+}
+
+    public function getComplementariaLocalesPage(array $filters): array
+    {
+        $idCampana  = (int)$filters['idCampana'];
+        $empresaId  = (int)($filters['empresaId'] ?? $filters['empresa_id'] ?? 0);
+        $filterCodigo = $filters['filterCodigo'] ?? '';
+        $filterUserId = (int)($filters['filterUserId'] ?? 0);
+        $filterDesde  = $filters['filterDesde'] ?? null;
+        $filterHasta  = $filters['filterHasta'] ?? null;
+        $perPage      = (int)($filters['perPage'] ?? 50);
+        $page         = max(1, (int)($filters['page'] ?? 1));
+        $offset       = ($page - 1) * $perPage;
+
+        // OPTIMIZACIÓN: Aplicar filtros ANTES del GROUP BY
+        $baseSql = "
+          SELECT
+            l.id AS idLocal,
+            MIN(l.codigo) AS cod_min,
+            last.fecha_inicio AS last_fecha
+          FROM visita v
+          JOIN local l ON l.id = v.id_local
+          JOIN formulario f ON f.id = v.id_formulario AND f.id_empresa = ?
+          LEFT JOIN (
+            SELECT v2.*
+            FROM visita v2
+            JOIN (
+              SELECT id_local,
+                     MAX(CONCAT(DATE_FORMAT(fecha_inicio,'%Y%m%d%H%i%s'), LPAD(id,10,'0'))) AS max_key
+              FROM visita
+              WHERE id_formulario = ?
+              GROUP BY id_local
+            ) s ON s.id_local = v2.id_local
+               AND CONCAT(DATE_FORMAT(v2.fecha_inicio,'%Y%m%d%H%i%s'), LPAD(v2.id,10,'0')) = s.max_key
+            WHERE v2.id_formulario = ?
+          ) last ON last.id_local = l.id
+          WHERE v.id_formulario = ?
+        ";
+
+        $baseParams = [$empresaId, $idCampana, $idCampana, $idCampana];
+        $baseTypes  = 'iiii';
+
+        if ($filterCodigo !== '') {
+            $baseSql     .= ' AND l.codigo LIKE ? ';
+            $baseParams[] = "%{$filterCodigo}%";
+            $baseTypes   .= 's';
+        }
+
+        if ($filterUserId > 0) {
+            $baseSql     .= ' AND EXISTS (
+              SELECT 1 FROM visita vx
+              WHERE vx.id_formulario = ? AND vx.id_local = l.id AND vx.id_usuario = ?
+            )';
+            $baseParams[] = $idCampana; $baseTypes .= 'i';
+            $baseParams[] = $filterUserId; $baseTypes .= 'i';
+        }
+
+        $baseSql .= ' GROUP BY l.id ';
+
+        // OPTIMIZACIÓN: Aplicar filtros de fecha en HAVING
+        $havingClauses = [];
+        $havingParams = [];
+        $havingTypes = '';
+
+        if ($filterDesde) {
+            $havingClauses[] = 'last.fecha_inicio >= ?';
+            $havingParams[] = $filterDesde;
+            $havingTypes .= 's';
+        }
+        if ($filterHasta) {
+            $havingClauses[] = 'last.fecha_inicio <= ?';
+            $havingParams[] = $filterHasta;
+            $havingTypes .= 's';
+        }
+
+        if (!empty($havingClauses)) {
+            $baseSql .= ' HAVING ' . implode(' AND ', $havingClauses);
+            $baseParams = [...$baseParams, ...$havingParams];
+            $baseTypes .= $havingTypes;
+        }
+
+        // COUNT simplificado
+        $countSql = "SELECT COUNT(*) FROM ( $baseSql ) t";
+        $stCount = $this->conn->prepare($countSql);
+        $stCount->bind_param($baseTypes, ...$baseParams);
+        $stCount->execute();
+        $stCount->bind_result($totalRows);
+        $stCount->fetch();
+        $stCount->close();
+
+        $totalPages = max(1, (int)ceil($totalRows / $perPage));
+
+        // Obtener IDs con paginación
+        $sqlIds = "
+          SELECT idLocal, MIN(cod_min) AS cod_min
+          FROM ( $baseSql ) t
+          GROUP BY idLocal
+          ORDER BY MIN(cod_min) ASC
+          LIMIT ? OFFSET ?
+        ";
+        $paramsIds = $baseParams;
+        $paramsIds[] = $perPage;
+        $paramsIds[] = $offset;
+        $typesIds = $baseTypes . 'ii';
+
+        $stmtIds = $this->conn->prepare($sqlIds);
+        $stmtIds->bind_param($typesIds, ...$paramsIds);
+        $stmtIds->execute();
+        $resIds = $stmtIds->get_result();
+
+        $ids = [];
+        while ($row = $resIds->fetch_assoc()) {
+            $ids[] = (int)$row['idLocal'];
+        }
+        $stmtIds->close();
+
+        $locales = [];
+        if (!empty($ids)) {
+            $place = implode(',', array_fill(0, count($ids), '?'));
+            $sql = "
+              SELECT
+                l.id        AS idLocal,
+                l.codigo    AS codigoLocal,
+                l.nombre    AS nombreLocal,
+                l.direccion AS direccionLocal,
+                l.lat, l.lng,
+                u.usuario AS usuarioGestion,
+                DATE_FORMAT(last.fecha_inicio,'%d/%m/%Y %H:%i') AS fechaVisita,
+                last.latitud AS lastLat,
+                last.longitud AS lastLng,
+                fr.encuesta_foto AS encuestaFoto,
+                cnt.visitas_count AS visitasCount,
+                cnt.respuestas_count AS gestionesCount,
+                cnt.visitas_usuario_filtrado AS visitasUsuarioFiltrado
+              FROM local l
+              LEFT JOIN (
+                SELECT v1.id, v1.id_local, v1.id_usuario, v1.fecha_inicio, v1.latitud, v1.longitud
+                FROM visita v1
+                JOIN (
+                  SELECT id_local,
+                         MAX(CONCAT(DATE_FORMAT(fecha_inicio,'%Y%m%d%H%i%s'), LPAD(id,10,'0'))) AS max_key
+                  FROM visita
+                  WHERE id_formulario = ? AND id_local IN ($place)
+                  GROUP BY id_local
+                ) sel
+                  ON sel.id_local = v1.id_local
+                 AND CONCAT(DATE_FORMAT(v1.fecha_inicio,'%Y%m%d%H%i%s'), LPAD(v1.id,10,'0')) = sel.max_key
+                WHERE v1.id_formulario = ?
+              ) last ON last.id_local = l.id
+              LEFT JOIN usuario u ON u.id = last.id_usuario
+              LEFT JOIN (
+                SELECT r.visita_id,
+                       SUBSTRING_INDEX(
+                         MAX(CONCAT(DATE_FORMAT(r.created_at,'%Y%m%d%H%i%s'),'|', r.answer_text)),
+                         '|', -1
+                       ) AS encuesta_foto
+                FROM form_question_responses r
+                JOIN form_questions q ON q.id = r.id_form_question
+                JOIN formulario f     ON f.id = q.id_formulario AND f.id_empresa = ?
+                WHERE q.id_formulario = ?
+                  AND r.answer_text <> ''
+                  AND (
+                    LOWER(r.answer_text) LIKE '%.jpg%'  OR
+                    LOWER(r.answer_text) LIKE '%.jpeg%' OR
+                    LOWER(r.answer_text) LIKE '%.png%'  OR
+                    LOWER(r.answer_text) LIKE '%.gif%'  OR
+                    LOWER(r.answer_text) LIKE '%.webp%'
+                  )
+                GROUP BY r.visita_id
+              ) fr ON fr.visita_id = last.id
+              LEFT JOIN (
+                SELECT v.id_local,
+                       COUNT(DISTINCT v.id) AS visitas_count,
+                       COUNT(r.id) AS respuestas_count,
+                       SUM(CASE WHEN v.id_usuario = ? THEN 1 ELSE 0 END) AS visitas_usuario_filtrado
+                FROM visita v
+                LEFT JOIN form_question_responses r ON r.visita_id = v.id
+                LEFT JOIN form_questions q ON q.id = r.id_form_question
+                WHERE v.id_formulario = ? AND v.id_local IN ($place)
+                  AND (q.id_formulario = ? OR q.id_formulario IS NULL)
+                GROUP BY v.id_local
+              ) cnt ON cnt.id_local = l.id
+              WHERE l.id IN ($place)
+              ORDER BY FIELD(l.id, $place)
+            ";
+
+            $params = [];
+            $types  = '';
+            $params[] = $idCampana; $types .= 'i';
+            foreach ($ids as $v){ $params[] = $v; $types .= 'i'; }
+            $params[] = $idCampana; $types .= 'i';
+            $params[] = $empresaId; $types .= 'i';
+            $params[] = $idCampana; $types .= 'i';
+            // Parámetro para visitas_usuario_filtrado (usar filterUserId o 0 si no hay filtro)
+            $params[] = ($filterUserId > 0 ? $filterUserId : 0); $types .= 'i';
+            $params[] = $idCampana; $types .= 'i';
+            foreach ($ids as $v){ $params[] = $v; $types .= 'i'; }
+            $params[] = $idCampana; $types .= 'i';
+            foreach ($ids as $v){ $params[] = $v; $types .= 'i'; }
+            foreach ($ids as $v){ $params[] = $v; $types .= 'i'; }
+
+            $stmt = $this->conn->prepare($sql);
+            $stmt->bind_param($types, ...$params);
+            $stmt->execute();
+            $locales = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            $baseURL = 'https://visibility.cl/visibility2/app/';
+            foreach ($locales as &$loc) {
+                $raw = $loc['encuestaFoto'] ?? '';
+                if ($raw) {
+                    if (preg_match('#^https?://#i', $raw)) {
+                        $loc['fotoRef'] = $raw;
+                    } elseif (preg_match('#^/visibility2/app/#', $raw)) {
+                        $loc['fotoRef'] = 'https://visibility.cl' . $raw;
+                    } else {
+                        $loc['fotoRef'] = $baseURL . ltrim($raw,'./');
+                    }
+                } else {
+                    $loc['fotoRef'] = $baseURL . 'assets/images/placeholder.png';
+                }
+                $loc['is_priority']     = 0;
+                $loc['usuarioGestion']  = $loc['usuarioGestion'] ?: '—';
+                $loc['fechaVisita']     = $loc['fechaVisita']    ?: '—';
+                $loc['visitasCount']    = (int)($loc['visitasCount']    ?? 0);
+                $loc['gestionesCount']  = (int)($loc['gestionesCount']  ?? 0);
+                $loc['lastLat']         = isset($loc['lastLat']) ? (float)$loc['lastLat'] : null;
+                $loc['lastLng']         = isset($loc['lastLng']) ? (float)$loc['lastLng'] : null;
+            }
+            unset($loc);
+        }
+
+        return [
+            'locales'     => $locales,
+            'totalRows'   => (int)$totalRows,
+            'totalPages'  => (int)$totalPages,
+            'currentPage' => (int)$page,
+            'perPage'     => (int)$perPage,
+            'ids'         => $ids,
+            'prioById'    => [],
+        ];
+    }
+
+    public function getComplementariaVisitasPage(array $filters): array
+    {
+        $idCampana  = (int)$filters['idCampana'];
+        $empresaId  = (int)($filters['empresaId'] ?? $filters['empresa_id'] ?? 0);
+        $filterUserId = (int)($filters['filterUserId'] ?? 0);
+        $filterDesde  = $filters['filterDesde'] ?? null;
+        $filterHasta  = $filters['filterHasta'] ?? null;
+        $perPage      = (int)($filters['perPage'] ?? 50);
+        $page         = max(1, (int)($filters['page'] ?? 1));
+        $offset       = ($page - 1) * $perPage;
+
+        // OPTIMIZACIÓN: Query más simple para count
+        $baseSql = "
+          SELECT v.id AS visita_id
+          FROM visita v
+          JOIN formulario f ON f.id = v.id_formulario AND f.id_empresa = ?
+          WHERE v.id_formulario = ?
+        ";
+        $params = [$empresaId, $idCampana];
+        $types = 'ii';
+
+        if ($filterUserId > 0) {
+            $baseSql .= ' AND v.id_usuario = ? ';
+            $params[] = $filterUserId;
+            $types .= 'i';
+        }
+        if ($filterDesde) { $baseSql .= ' AND v.fecha_inicio >= ? '; $params[] = $filterDesde; $types .= 's'; }
+        if ($filterHasta) { $baseSql .= ' AND v.fecha_inicio <= ? '; $params[] = $filterHasta; $types .= 's'; }
+
+        $countSql = "SELECT COUNT(*) FROM ( $baseSql ) t";
+        $stCount = $this->conn->prepare($countSql);
+        $stCount->bind_param($types, ...$params);
+        $stCount->execute();
+        $stCount->bind_result($totalRows);
+        $stCount->fetch();
+        $stCount->close();
+
+        $totalPages = max(1, (int)ceil($totalRows / $perPage));
+
+        // FIX CRÍTICO: Usar visitaId en lugar de idLocal para evitar confusión
+        $sql = "
+          SELECT
+            v.id AS visitaId,
+            v.id AS idLocal,
+            NULL AS codigoLocal,
+            NULL AS nombreLocal,
+            NULL AS direccionLocal,
+            v.latitud AS markerLat,
+            v.longitud AS markerLng,
+            v.latitud AS lastLat,
+            v.longitud AS lastLng,
+            DATE_FORMAT(v.fecha_inicio,'%d/%m/%Y %H:%i') AS fechaVisita,
+            COALESCE(u.usuario,'—') AS usuarioGestion,
+            cnt.respuestas_count AS gestionesCount
+          FROM visita v
+          JOIN formulario f ON f.id = v.id_formulario AND f.id_empresa = ?
+          LEFT JOIN usuario u ON u.id = v.id_usuario
+          LEFT JOIN (
+            SELECT v2.id,
+                   COUNT(r.id) AS respuestas_count
+            FROM visita v2
+            LEFT JOIN form_question_responses r ON r.visita_id = v2.id
+            LEFT JOIN form_questions q ON q.id = r.id_form_question
+            WHERE v2.id_formulario = ?
+              AND (q.id_formulario = ? OR q.id_formulario IS NULL)
+            GROUP BY v2.id
+          ) cnt ON cnt.id = v.id
+          WHERE v.id_formulario = ?
+        ";
+        $paramsList = [$empresaId, $idCampana, $idCampana, $idCampana];
+        $typesList = 'iiii';
+
+        if ($filterUserId > 0) {
+            $sql .= ' AND v.id_usuario = ? ';
+            $paramsList[] = $filterUserId;
+            $typesList .= 'i';
+        }
+        if ($filterDesde) { $sql .= ' AND v.fecha_inicio >= ? '; $paramsList[] = $filterDesde; $typesList .= 's'; }
+        if ($filterHasta) { $sql .= ' AND v.fecha_inicio <= ? '; $paramsList[] = $filterHasta; $typesList .= 's'; }
+
+        $sql .= ' ORDER BY v.fecha_inicio DESC, v.id DESC LIMIT ? OFFSET ? ';
+        $paramsList[] = $perPage; $paramsList[] = $offset; $typesList .= 'ii';
+
+        $stmt = $this->conn->prepare($sql);
+        $stmt->bind_param($typesList, ...$paramsList);
+        $stmt->execute();
+        $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt->close();
+
+        $baseURL = 'https://visibility.cl/visibility2/app/';
+        $placeholder = "{$baseURL}assets/images/placeholder.png";
+
+        foreach ($rows as &$row) {
+            $row['fotoRef'] = $placeholder;
+            $row['is_priority'] = 0;
+            $row['visitasCount'] = 1;
+            $row['gestionesCount'] = (int)($row['gestionesCount'] ?? 0);
+            $row['fechaVisita'] = $row['fechaVisita'] ?: '—';
+            $row['usuarioGestion'] = $row['usuarioGestion'] ?: '—';
+            $row['lastLat'] = isset($row['lastLat']) ? (float)$row['lastLat'] : null;
+            $row['lastLng'] = isset($row['lastLng']) ? (float)$row['lastLng'] : null;
+        }
+        unset($row);
+
+        return [
+            'locales'     => $rows,
+            'totalRows'   => (int)$totalRows,
+            'totalPages'  => (int)$totalPages,
+            'currentPage' => (int)$page,
+            'perPage'     => (int)$perPage,
+            'ids'         => array_column($rows, 'visitaId'),
+            'prioById'    => [],
+        ];
+    }
+}

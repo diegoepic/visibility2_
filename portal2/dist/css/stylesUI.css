@@ -1,0 +1,459 @@
+.card-body .row {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.card-body > .container > .row {
+    align-items: stretch;
+}
+
+.card-body > .container > .row > [class*="col-"] {
+    display: flex;
+    flex-direction: column;
+}
+
+/* ---- COLUMNAS DE CARDS ---- */
+.campaign-item,
+.campaign-item-ipt,
+.col-12.col-sm-6.col-md-4.d-flex.align-items-stretch {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 20px;
+}
+
+/* ---- CARD PRINCIPAL ---- */
+.card.card-widget.widget-user {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 460px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card.card-widget.widget-user:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+/* ---- HEADER DE LA CARD ---- */
+.widget-user .widget-user-header {
+    position: relative;
+    padding: 15px 15px 55px 15px;
+    min-height: 170px; /* Aumentado para que quepan las fechas */
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center; /* Centrar contenido */
+    overflow: visible;
+    text-align: center; /* Centrar texto */
+}
+
+/* ---- TÍTULO DE CAMPAÑA (CENTRADO) ---- */
+.widget-user .widget-user-username {
+    display: block;
+    width: 100%;
+    margin: 25px 0 0 0; /* Margen superior para dejar espacio al checkbox/botón */
+    padding: 0 10px;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.3;
+    max-height: 38px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    text-align: center !important; /* CENTRADO */
+}
+
+/* ---- ESTADO Y FECHAS (VISIBLES COMPLETAS) ---- */
+.widget-user .widget-user-desc {
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: normal !important; /* Permitir wrap */
+    overflow: visible !important; /* NO cortar */
+    text-overflow: initial;
+    color: rgba(255,255,255,0.95);
+    text-align: center;
+    width: 100%;
+    padding: 0 10px;
+}
+
+/* ---- IMAGEN DE REFERENCIA ---- */
+.widget-user .widget-user-image {
+    position: absolute !important;
+    top: auto !important;
+    bottom: -40px !important;
+    left: 50% !important;
+    transform: translateX(-50%);
+    margin: 0 !important;
+    z-index: 10;
+    width: 90px;
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible !important;
+}
+
+.widget-user .widget-user-image img {
+    width: 80px !important;
+    height: 80px !important;
+    min-width: 80px !important;
+    min-height: 80px !important;
+    max-width: 80px !important;
+    max-height: 80px !important;
+    object-fit: cover;
+    object-position: center;
+    border-radius: 50%;
+    border: 3px solid #fff;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    background-color: #fff;
+}
+
+.widget-user-image img.zoom {
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.widget-user-image img.zoom:hover {
+    transform: scale(1.1);
+}
+
+/* ---- FOOTER ---- */
+.widget-user .card-footer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding-top: 55px !important;
+    padding-bottom: 15px;
+    background: #fff;
+}
+
+/* ---- INDICADORES ---- */
+.description-block {
+    margin: 5px 0;
+    padding: 5px 0;
+}
+
+.description-header {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0;
+    color: #333;
+}
+
+.description-text {
+    font-size: 10px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    color: #666;
+    text-transform: uppercase;
+}
+
+/* ---- BOTONES ---- */
+.btn-app {
+    margin: 3px auto;
+    min-width: 70px;
+    max-width: 90px;
+    padding: 10px 5px;
+    font-size: 11px;
+}
+
+.btn-app i {
+    font-size: 18px;
+    display: block;
+    margin-bottom: 3px;
+}
+
+/* ---- PORCENTAJES ---- */
+.widget-user .inner {
+    padding: 10px 5px;
+}
+
+.widget-user .inner h3 {
+    margin: 0;
+}
+
+.widget-user .inner p {
+    margin: 5px 0 0 0;
+    font-size: 11px !important;
+    font-weight: bold;
+    line-height: 1.2;
+    color: #555;
+}
+
+/* ---- CHECKBOX SELECCIÓN ---- */
+.widget-user-header input[type="checkbox"] {
+    position: absolute !important;
+    top: 10px !important;
+    left: 10px !important;
+    margin: 0 !important;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    z-index: 20;
+}
+
+/* ---- BOTÓN DESCARGA EXCEL ---- */
+.widget-user-header .dropdown.dl-compact,
+.widget-user-header .download-link,
+.widget-user-header .download-excel-trigger,
+.widget-user-header a.position-absolute.download-link,
+.widget-user-header a.position-absolute.download-link-cc {
+    position: absolute !important;
+    top: 8px !important;
+    right: 10px !important;
+    z-index: 20;
+}
+
+.widget-user-header .download-link img,
+.widget-user-header .download-link-cc img,
+.widget-user-header a.position-absolute img {
+    width: 38px !important;
+    height: auto;
+}
+
+/* Barra de progreso */
+.widget-user-header .progress {
+    position: absolute !important;
+    top: 55px !important;
+    right: 10px !important;
+    width: 110px !important;
+}
+
+/* ============================================
+   ACTIVIDADES COMPLEMENTARIAS (FIX IMAGEN)
+   ============================================ */
+
+/* Cards complementarias */
+.card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 20px;
+}
+
+.card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .card.card-widget.widget-user {
+    min-height: 340px;
+}
+
+/* Header complementarias - más espacio para imagen */
+.card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .widget-user-header {
+    min-height: 120px;
+    padding: 15px 15px 55px 15px;
+    overflow: visible !important; /* Permitir que la imagen sobresalga */
+}
+
+/* Imagen en complementarias - posición correcta */
+.card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .widget-user-image {
+    position: absolute !important;
+    top: auto !important;
+    bottom: -40px !important;
+    left: 50% !important;
+    transform: translateX(-50%);
+    z-index: 10;
+    width: 90px;
+    height: 90px;
+    overflow: visible !important;
+}
+
+/* Imagen circular en complementarias */
+.card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .widget-user-image img {
+    width: 80px !important;
+    height: 80px !important;
+    min-width: 80px !important;
+    min-height: 80px !important;
+    max-width: 80px !important;
+    max-height: 80px !important;
+    object-fit: cover;
+    border-radius: 50%;
+    border: 3px solid #fff;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+
+/* Footer complementarias */
+.card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .card-footer {
+    padding-top: 55px !important;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+/* Pantallas medianas */
+@media (max-width: 1199.98px) {
+    .widget-user .widget-user-header {
+        min-height: 165px;
+        padding: 15px 12px 55px 12px;
+    }
+    
+    .widget-user .widget-user-username {
+        font-size: 13px;
+        margin-top: 22px;
+    }
+    
+    .widget-user .widget-user-desc {
+        font-size: 11px;
+    }
+}
+
+/* Tablets */
+@media (max-width: 991.98px) {
+    .widget-user .widget-user-header {
+        min-height: 160px;
+        padding: 12px 10px 50px 10px;
+    }
+    
+    .widget-user .widget-user-username {
+        font-size: 12px;
+        max-height: 34px;
+        margin-top: 20px;
+    }
+    
+    .widget-user .widget-user-desc {
+        font-size: 10px;
+    }
+    
+    .widget-user .widget-user-image img {
+        width: 70px !important;
+        height: 70px !important;
+        min-width: 70px !important;
+        min-height: 70px !important;
+        max-width: 70px !important;
+        max-height: 70px !important;
+    }
+    
+    .widget-user .widget-user-image {
+        bottom: -35px !important;
+        width: 80px;
+        height: 80px;
+    }
+    
+    .widget-user .card-footer {
+        padding-top: 50px !important;
+    }
+    
+    .card.card-widget.widget-user {
+        min-height: 430px;
+    }
+    
+    /* Complementarias tablet */
+    .card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .card.card-widget.widget-user {
+        min-height: 320px;
+    }
+    
+    .card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .widget-user-image img {
+        width: 70px !important;
+        height: 70px !important;
+        min-width: 70px !important;
+        min-height: 70px !important;
+        max-width: 70px !important;
+        max-height: 70px !important;
+    }
+}
+
+/* Móviles */
+@media (max-width: 767.98px) {
+    .campaign-item,
+    .campaign-item-ipt,
+    .col-12.col-sm-6.col-md-4.d-flex.align-items-stretch,
+    .card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) {
+        max-width: 100%;
+        flex: 0 0 100%;
+    }
+    
+    .widget-user .widget-user-header {
+        min-height: 155px;
+        padding: 12px 10px 50px 10px;
+    }
+    
+    .widget-user .widget-user-username {
+        font-size: 14px;
+        max-height: 38px;
+        margin-top: 18px;
+    }
+    
+    .widget-user .widget-user-desc {
+        font-size: 11px;
+    }
+    
+    .widget-user .widget-user-image {
+        bottom: -32px !important;
+        width: 74px;
+        height: 74px;
+    }
+    
+    .widget-user .widget-user-image img {
+        width: 68px !important;
+        height: 68px !important;
+        min-width: 68px !important;
+        min-height: 68px !important;
+        max-width: 68px !important;
+        max-height: 68px !important;
+    }
+    
+    .widget-user .card-footer {
+        padding-top: 45px !important;
+    }
+    
+    .btn-app {
+        min-width: 65px;
+        padding: 8px 5px;
+        font-size: 10px;
+    }
+    
+    .btn-app i {
+        font-size: 16px;
+    }
+    
+    .card.card-widget.widget-user {
+        min-height: 410px;
+    }
+    
+    .widget-user-header input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+    }
+    
+    /* Complementarias móvil */
+    .card-body .row > .col-12.col-sm-6.col-md-4:not(.campaign-item):not(.campaign-item-ipt) .card.card-widget.widget-user {
+        min-height: 310px;
+    }
+}
+
+/* Móviles pequeños */
+@media (max-width: 575.98px) {
+    .widget-user .widget-user-header {
+        min-height: 150px;
+    }
+    
+    .description-header {
+        font-size: 1rem;
+    }
+    
+    .widget-user .inner p {
+        font-size: 10px !important;
+    }
+    
+    .widget-user .inner h3 b {
+        font-size: 16px !important;
+    }
+}
+
+/* ============================================
+   FLEXBOX HELPERS
+   ============================================ */
+.row.d-flex > [class*="col-"] {
+    display: flex;
+}
+
+.card-body > .container > .row > [class*="col-"] > .card {
+    flex: 1;
+}

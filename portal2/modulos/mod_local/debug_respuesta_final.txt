@@ -1,0 +1,30 @@
+{
+    "success": true,
+    "inserted": 21,
+    "failed": 0,
+    "reportUrl": "",
+    "successes": [
+        "L\u00ednea 2: Local 'SODIMAC CALAMA' (c\u00f3digo SOD0027) insertado.",
+        "L\u00ednea 3: Local 'SODIMAC LA SERENA' (c\u00f3digo SOD0039) insertado.",
+        "L\u00ednea 4: Local 'SODIMAC OVALLE' (c\u00f3digo SOD0729) insertado.",
+        "L\u00ednea 5: Local 'SODIMAC LA SERENA' (c\u00f3digo SOD0742) insertado.",
+        "L\u00ednea 6: Local 'SODIMAC VINA DEL MAR' (c\u00f3digo SOD0725) insertado.",
+        "L\u00ednea 7: Local 'SODIMAC QUILLOTA' (c\u00f3digo SOD0734) insertado.",
+        "L\u00ednea 8: Local 'SODIMAC QUILPUE' (c\u00f3digo SOD0090) insertado.",
+        "L\u00ednea 9: Local 'SODIMAC VINA DEL MAR' (c\u00f3digo SOD0097) insertado.",
+        "L\u00ednea 10: Local 'SODIMAC SAN MIGUEL' (c\u00f3digo SOD0012) insertado.",
+        "L\u00ednea 11: Local 'SODIMAC SAN BERNARDO' (c\u00f3digo SOD0023) insertado.",
+        "L\u00ednea 12: Local 'SODIMAC NUNOA' (c\u00f3digo SOD0033) insertado.",
+        "L\u00ednea 13: Local 'SODIMAC PENALOLEN' (c\u00f3digo SOD0054) insertado.",
+        "L\u00ednea 14: Local 'SODIMAC HUECHURABA' (c\u00f3digo SOD0063) insertado.",
+        "L\u00ednea 15: Local 'SODIMAC LA REINA' (c\u00f3digo SOD0067) insertado.",
+        "L\u00ednea 16: Local 'SODIMAC ESTACION CENTRAL' (c\u00f3digo SOD0070) insertado.",
+        "L\u00ednea 17: Local 'SODIMAC QUILICURA' (c\u00f3digo SOD0723) insertado.",
+        "L\u00ednea 18: Local 'SODIMAC PUENTE ALTO' (c\u00f3digo SOD0726) insertado.",
+        "L\u00ednea 19: Local 'SODIMAC SANTIAGO' (c\u00f3digo SOD0746) insertado.",
+        "L\u00ednea 20: Local 'SODIMAC PUENTE ALTO' (c\u00f3digo SOD0075) insertado.",
+        "L\u00ednea 21: Local 'SODIMAC LAS CONDES' (c\u00f3digo SOD0079) insertado.",
+        "L\u00ednea 22: Local 'SODIMAC CERRILLOS' (c\u00f3digo SOD0096) insertado."
+    ],
+    "failures": []
+}

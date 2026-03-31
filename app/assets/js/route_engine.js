@@ -84,12 +84,51 @@
     }catch(err){ /* silent */ }
   }
 
+  // Fix #17: eliminar entradas expiradas del IDB
+  async function idbDelete(key){
+    try{
+      const db = await openDb();
+      await new Promise((resolve, reject)=>{
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).delete(key);
+        tx.oncomplete = ()=>resolve();
+        tx.onerror = ()=>reject(tx.error);
+      });
+    }catch(err){}
+  }
+
+  async function idbCleanExpired(){
+    try{
+      const db = await openDb();
+      const now = Date.now();
+      const keys = await new Promise((resolve, reject)=>{
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const req = tx.objectStore(STORE_NAME).getAllKeys();
+        req.onsuccess = ()=>resolve(req.result || []);
+        req.onerror = ()=>reject(req.error);
+      });
+      for(const key of keys){
+        const item = await idbGet(key);
+        if(!item || (item.expires && item.expires < now)){
+          await idbDelete(key);
+        }
+      }
+    }catch(e){}
+  }
+
+  // Limpiar entradas expiradas una vez por sesión al arrancar
+  setTimeout(idbCleanExpired, 5000);
+
   function normalizeRoutesApiResponse(json){
     if(!json || !json.routes || !json.routes.length) throw new Error('Respuesta vacía');
     return json.routes[0];
   }
 
+  // Fix #6: null checks en el fallback
   function normalizeDirectionsFallback(res){
+    if(!res || !res.routes || !res.routes.length || !res.routes[0] || !res.routes[0].legs){
+      throw new Error('Respuesta vacía del fallback');
+    }
     const legs = res.routes[0].legs.map(l=>({
       distanceMeters: l.distance.value,
       duration: l.duration.value + 's',
@@ -113,18 +152,23 @@
     };
   }
 
+  // Fix #4: eliminar campos duplicados en modo traffic
   function fieldMaskForMode(mode, optimize){
     const base = ['routes.distanceMeters','routes.duration'];
     if(mode === 'nav'){
-      base.push('routes.polyline.encodedPolyline');
-      base.push('routes.legs.steps.navigationInstruction','routes.legs.steps.distanceMeters','routes.legs.steps.staticDuration');
+      base.push(
+        'routes.polyline.encodedPolyline',
+        'routes.legs.steps.navigationInstruction',
+        'routes.legs.steps.distanceMeters',
+        'routes.legs.steps.staticDuration',
+        'routes.legs.steps.startLocation',
+        'routes.legs.steps.endLocation',
+        'routes.legs.steps.polyline.encodedPolyline'
+      );
     } else if(mode === 'traffic'){
-      base.push('routes.duration','routes.polyline.encodedPolyline','routes.travelAdvisory.speedReadingIntervals');
+      base.push('routes.polyline.encodedPolyline', 'routes.travelAdvisory.speedReadingIntervals');
     } else {
       base.push('routes.polyline.encodedPolyline');
-    }
-    if(mode === 'traffic'){
-      base.push('routes.travelAdvisory.speedReadingIntervals');
     }
     if(optimize){
       base.push('routes.optimizedIntermediateWaypointIndex');
@@ -172,7 +216,8 @@
     return payload;
   }
 
-  async function computeRouteUnified({origin, destination, waypoints, optimize=false, mode='preview'}){
+  // Fix #15: acepta flag force para saltarse el rate limit
+  async function computeRouteUnified({origin, destination, waypoints, optimize=false, mode='preview', force=false}){
     if(!origin || !destination) throw new Error('Origen/destino inválido');
     if(!navigator.onLine){
       const offlineRoute = await readIdbFresh(buildCacheKey({origin:quantizePoint(origin), destination:quantizePoint(destination), waypoints:(waypoints||[]).map(quantizePoint), optimize, mode}));
@@ -182,12 +227,13 @@
     const key = buildCacheKey({origin:quantizePoint(origin), destination:quantizePoint(destination), waypoints:(waypoints||[]).map(quantizePoint), optimize, mode});
     const now = Date.now();
     const cached = memoryCache.get(key);
-    if(cached && cached.expires > now){ stats.cache_hits_memory++; notifyStats(); return cached.value; }
+    if(!force && cached && cached.expires > now){ stats.cache_hits_memory++; notifyStats(); return cached.value; }
 
     const idbCached = await readIdbFresh(key);
-    if(idbCached){ stats.cache_hits_idb++; notifyStats(); memoryCache.set(key,{expires:Date.now()+ROUTE_CACHE_TTL_MS, value:idbCached}); return idbCached; }
+    if(!force && idbCached){ stats.cache_hits_idb++; notifyStats(); memoryCache.set(key,{expires:Date.now()+ROUTE_CACHE_TTL_MS, value:idbCached}); return idbCached; }
 
-    if(lastRequestKey === key && (now - lastRequestTime) < MIN_ROUTE_RECALC_MS){
+    // Fix #15: omitir throttle cuando force=true
+    if(!force && lastRequestKey === key && (now - lastRequestTime) < MIN_ROUTE_RECALC_MS){
       if(cached) return cached.value;
     }
 
@@ -203,7 +249,10 @@
         await idbSet(key, { value: route, expires: Date.now() + ROUTE_CACHE_TTL_MS, mode });
         return route;
       }catch(err){
-        return fetchDirectionsFallback(req);
+        // Fix #5: también cachear el resultado del fallback en IDB
+        const fallback = await fetchDirectionsFallback(req);
+        await idbSet(key, { value: fallback, expires: Date.now() + ROUTE_CACHE_TTL_MS, mode });
+        return fallback;
       }
     })();
 
@@ -222,21 +271,29 @@
     return item.value || null;
   }
 
+  // Fix #9: limpiar segmentos previos antes del early return
+  // Fix #10: validar índices de intervalos de tráfico
   function buildTrafficPolylines(map, route){
-    if(!map || !route || !route.polyline) return [];
+    if(!map) return [];
+    (map.__trafficSegs||[]).forEach(s=>s.setMap(null));
+    map.__trafficSegs = [];
+    if(!route || !route.polyline) return [];
     const intervals = (route.travelAdvisory && route.travelAdvisory.speedReadingIntervals) || [];
     const decoded = google.maps.geometry.encoding.decodePath(route.polyline.encodedPolyline || '');
     const segs = [];
-    (map.__trafficSegs||[]).forEach(s=>s.setMap(null));
-    map.__trafficSegs = [];
     if(!intervals.length){
       const p=new google.maps.Polyline({ path: decoded, strokeColor:'#4285F4', strokeOpacity:0.85, strokeWeight:5, map });
       map.__trafficSegs=[p];
       return map.__trafficSegs;
     }
     intervals.forEach(int=>{
+      const startIdx = int.startPolylinePointIndex;
+      const endIdx   = int.endPolylinePointIndex;
+      if(typeof startIdx !== 'number' || typeof endIdx !== 'number' || startIdx > endIdx) return;
+      const segment = decoded.slice(startIdx, endIdx + 1);
+      if(segment.length < 2) return;
       const color = int.speed === 'SLOW' ? '#FBBC04' : int.speed === 'TRAFFIC_JAM' ? '#EA4335' : '#34A853';
-      const p=new google.maps.Polyline({ path: decoded.slice(int.startPolylinePointIndex, int.endPolylinePointIndex+1), strokeColor: color, strokeOpacity:0.9, strokeWeight:6, map });
+      const p=new google.maps.Polyline({ path: segment, strokeColor: color, strokeOpacity:0.9, strokeWeight:6, map });
       segs.push(p);
     });
     map.__trafficSegs = segs;

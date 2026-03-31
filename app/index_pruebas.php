@@ -5,6 +5,7 @@ if (!isset($_SESSION['usuario_id'])) {
     exit();
 }
 
+
 $nombre         = htmlspecialchars($_SESSION['usuario_nombre'], ENT_QUOTES, 'UTF-8');
 $apellido       = htmlspecialchars($_SESSION['usuario_apellido'], ENT_QUOTES, 'UTF-8');
 $empresa_id     = intval($_SESSION['empresa_id']);
@@ -113,34 +114,46 @@ $stmt_campaigns->close();
 
 
 if ($usuario_id === 2) {
-  $sql_comp = "
-      SELECT 
-        id AS id_campana,
-        nombre AS nombre_campana,
-        estado
-      FROM formulario
-      WHERE tipo = 2
-        AND (id_division = 1 OR id_division = ?)
-        AND estado = 1 
-      ORDER BY nombre ASC
-  ";
-  $stmt_comp = $conn->prepare($sql_comp);
-  $stmt_comp->bind_param('i', $division_id);
+    $sql_comp = "
+        SELECT 
+            f.id AS id_campana,
+            f.nombre AS nombre_campana,
+            f.estado
+        FROM formulario f
+        WHERE f.tipo = 2
+          AND f.estado = 1
+          AND f.deleted_at IS NULL
+          AND EXISTS (
+                SELECT 1
+                FROM formulario_division_habilitada fdh
+                WHERE fdh.id_formulario = f.id
+                  AND fdh.id_division = ?
+          )
+        ORDER BY f.nombre ASC
+    ";
+    $stmt_comp = $conn->prepare($sql_comp);
+    $stmt_comp->bind_param('i', $division_id);
 } else {
-  $sql_comp = "
-      SELECT 
-        id AS id_campana,
-        nombre AS nombre_campana,
-        estado
-      FROM formulario
-      WHERE tipo = 2
-        AND (id_division = 1 OR id_division = ?)
-        AND estado = 1
-        AND id <> 2037
-      ORDER BY nombre ASC
-  ";
-  $stmt_comp = $conn->prepare($sql_comp);
-  $stmt_comp->bind_param('i', $division_id);
+    $sql_comp = "
+        SELECT 
+            f.id AS id_campana,
+            f.nombre AS nombre_campana,
+            f.estado
+        FROM formulario f
+        WHERE f.tipo = 2
+          AND f.estado = 1
+          AND f.deleted_at IS NULL
+          AND f.id <> 2037
+          AND EXISTS (
+                SELECT 1
+                FROM formulario_division_habilitada fdh
+                WHERE fdh.id_formulario = f.id
+                  AND fdh.id_division = ?
+          )
+        ORDER BY f.nombre ASC
+    ";
+    $stmt_comp = $conn->prepare($sql_comp);
+    $stmt_comp->bind_param('i', $division_id);
 }
 
 $stmt_comp->execute();
@@ -338,230 +351,7 @@ foreach ($locales_reag as $local) {
     <link rel="stylesheet" href="assets/css/offline.css">
     <link rel="stylesheet" href="assets/css/nav_ar.css">
      <link rel="stylesheet" href="assets/css/journal.css">
-    <style>
-    @media (max-width: 480px) {
-      .table > thead > tr > th,
-      .table > tbody > tr > td {
-        padding: 4px 4px;
-        font-size: 0.9rem;
-      }
-    }
-    #filtroLocalesProg, #filtroLocalesReag { width: 100%; }
-    #success-alert {
-      position: fixed; top: 60px; left: 0; width: 100%; z-index: 9999; margin: 0; text-align: center; padding: 10px;
-    }
-    
-    @media (max-width: 768px) { #success-alert { font-size: 1em; } }
-    .completed .desc { text-decoration: line-through; color: gray; }
-    .circulo {
-      display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
-      background-color: #28a745; color: #fff; border-radius: 50%; font-weight: bold; font-size: 14px;
-    }
-    
-    #panelInstruccionesModal {
-      position: absolute; top: 60px; right: 10px; width: 300px; max-height: 80%; overflow-y: auto;
-      background-color: rgba(255, 255, 255, 0.95); padding: 15px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.1);
-      z-index: 1000; transition: all 0.3s ease; height: 40px;
-    }
-    
-    #panelInstruccionesModal.expanded { height: 500px; }
-    
-    #panelInstruccionesModal .panel-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
-    
-    #panelInstruccionesModal .toggle-button { background: none; border: none; font-size: 16px; cursor: pointer; }
-    @media (max-width: 768px) {
-      #panelInfoRuta { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; z-index: 1001; }
-      #panelInstruccionesModal { right: 50%; transform: translateX(50%); width: 90%; left: 5%; top: auto; bottom: 60px; }
-    }
-    .custom-map-control-button {
-      background-color: #fff; border: 2px solid #fff; border-radius: 3px; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-      cursor: pointer; margin: 10px; padding: 10px; font-size: 16px; font-family: 'Roboto, Arial, sans-serif';
-      display: flex; align-items: center; transition: background-color 0.3s;
-    }
-    .custom-map-control-button:hover { background-color: #e6e6e6; }
-    .precache-fab {
-      position: fixed;
-      right: 16px;
-      bottom: 82px;
-      z-index: 1050;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.2);
-    }
-    .precache-fab .badge {
-      background: #fff;
-      color: #c0392b;
-      margin-left: 6px;
-    }
-    #loadingIndicator {
-      position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background-color: rgba(255, 255, 255, 0.8);
-      padding: 5px 10px; border-radius: 3px; display: none; z-index: 1001;
-    }
-    .visitado { background-color: #d4edda !important; }
-    .priority-row { background-color: #fff3cd !important; }
-    .priority-icon { color: #ff9800; margin-right: 5px; }
-    .nav-hud{ pointer-events:none; position:absolute; inset:0; z-index:1003; }
-    .nav-hud .nav-banner{
-      pointer-events:auto; position:absolute; top:10px; left:10px; right:10px;
-      background:#ffffff; border:1px solid #d9dee6; border-radius:12px;
-      box-shadow:0 6px 24px rgba(0,0,0,.12); padding:10px 12px;
-      display:flex; align-items:center; gap:10px;
-    }
-    .nav-banner .nav-ic{ width:28px; height:28px; display:inline-grid; place-items:center;
-      border-radius:999px; background:#eef3f8; color:#2563eb; font-size:16px; }
-    .nav-banner .nav-main{ font-weight:700; color:#0f172a; }
-    .nav-banner .nav-sub{ color:#64748b; font-size:12px; margin-top:2px; }
-    .nav-hud .nav-nextnext{
-      position:absolute; top:64px; left:12px; background:rgba(0,0,0,.6); color:#fff;
-      padding:4px 8px; border-radius:8px; font-size:12px;
-    }
-    .nav-hud .nav-bottom{
-      pointer-events:auto; position:absolute; left:10px; right:10px; bottom:10px;
-      display:flex; gap:10px; align-items:center; justify-content:space-between;
-    }
-    .nav-stats{
-      flex:1; background:#ffffff; border:1px solid #d9dee6; border-radius:12px;
-      box-shadow:0 6px 24px rgba(0,0,0,.12); padding:8px 12px;
-      display:flex; gap:14px; align-items:center; justify-content:space-between;
-      font-weight:700; color:#0f172a;
-    }
-    .nav-stats small{ display:block; font-weight:600; color:#64748b; }
-    #btnRecenter, #btnExitNav{
-      pointer-events:auto; border-radius:12px; border:1px solid #d9dee6; background:#ffffff;
-      box-shadow:0 6px 24px rgba(0,0,0,.12); padding:8px 10px; font-weight:700;
-    }
-    #btnRecenter{ display:none; }
-    #btnRecenter.show{ display:inline-block; }
-
-    /* Segmentos por tráfico */
-    .poly-normal{ stroke-color:#4c8fbd; stroke-opacity:.95; stroke-weight:6; }
-    .poly-slow{   stroke-color:#ffa722; stroke-opacity:.95; stroke-weight:7; }
-    .poly-jam{    stroke-color:#d74d3a; stroke-opacity:.95; stroke-weight:7; }
-
-    /* Drawer de indicaciones */
-    .route-drawer{
-      position:absolute; top:60px; right:10px; width:320px; max-height:75%; overflow-y:auto;
-      background:#fff; border-radius:10px; box-shadow:0 6px 24px rgba(0,0,0,.15);
-      z-index:1002; display:none;
-    }
-    .route-drawer.open{ display:block; }
-    .route-drawer .drawer-header{ display:flex; align-items:center; justify-content:space-between;
-      padding:10px 12px; border-bottom:1px solid #eee; }
-    .route-drawer .drawer-title{ font-weight:600; font-size:14px; margin:0; }
-    .route-drawer .drawer-body{ padding:10px 12px; }
-    .steps-list{ counter-reset:step; margin:0; padding-left:0; list-style:none; }
-    .steps-list li{ margin:8px 0; padding-left:28px; position:relative; font-size:13px; line-height:1.35; }
-    .steps-list li::before{ counter-increment:step; content:counter(step) "."; position:absolute; left:0; top:0; font-weight:700; }
-    @media (max-width: 768px){
-      .route-drawer{ left:5%; right:5%; width:auto; top:auto; bottom:65px; max-height:50%; }
-    }
-    @media (prefers-color-scheme: dark){
-      .nav-banner{ background:#0f1216; border-color:#1e293b; }
-      .nav-stats{ background:#0f1216; border-color:#1e293b; color:#e2e8f0; }
-      .nav-banner .nav-main{ color:#e2e8f0; } .nav-banner .nav-sub{ color:#94a3b8; }
-    }
-
-    #journalPanel .panel-heading{
-      align-items:flex-start;
-      flex-wrap:wrap;
-      row-gap:6px;
-      padding-bottom:8px;
-    }
-  
-    #journalPanel .panel-heading .label{
-      display:inline-block;
-      white-space:nowrap;     
-      margin:0 6px 3px 0;
-    }
-    
-
-    #journalPanel .panel-heading > div:last-child{
-      margin-left:auto;
-      display:flex;
-      gap:6px;
-      flex-wrap:wrap;
-      flex-basis:100%;
-      justify-content:flex-end;
-    }
-
-    #journalPanel .panel-heading + .panel-body{
-      padding-top:85px;
-    }
-    
-    #journalPanel .nav { position: static !important; }
-    
-    #journalPanel .nav-tabs{
-      display:flex !important;
-      align-items:flex-end;
-      flex-wrap:nowrap;
-      gap:0;
-      border-bottom:1px solid #ddd !important;
-      margin:12px 0 8px 0;
-      padding-left:0;
-    }
-    
-    #journalPanel .nav-tabs > li{
-      float:none !important;
-      display:inline-block !important;
-      position:static !important;
-      margin:0;
-      margin-bottom:-1px;              
-      list-style:none;
-    }
-    
-    #journalPanel .nav-tabs > li > a{
-      display:block !important;
-      position:static !important;
-      white-space:nowrap;
-      padding:6px 10px;
-      text-decoration:none !important;
-      background:#fff !important;
-      border:1px solid #ddd !important;
-      border-bottom-color:transparent !important;
-      border-radius:4px 4px 0 0 !important;
-    }
-    
-    #journalPanel .nav-tabs > li > a:hover,
-    #journalPanel .nav-tabs > li > a:focus{
-      text-decoration:none !important;
-      background:#fafafa !important;
-    }
-    
-    #journalPanel .nav-tabs > li.active > a,
-    #journalPanel .nav-tabs > li.active > a:focus,
-    #journalPanel .nav-tabs > li.active > a:hover{
-      background:#f7f7f7 !important;
-      border-color:#ddd !important;
-      border-bottom-color:#f7f7f7 !important;
-    }
-    
-    #journalPanel .tab-content{
-      clear:both;
-      padding-top:8px;
-    }
-    
-    /* por si algún tema intenta convertirlos en dropdown */
-    #journalPanel .nav-tabs .dropdown-menu{ display:none !important; }
-
-    @media (max-width: 768px){
-      #journalPanel .panel-heading > div:last-child{
-        flex-basis:100%;
-        justify-content:flex-start;
-      }
-    }
-     @media (max-width: 480px){
-      #journalPanel .nav-tabs{ flex-wrap:wrap; }
-    } 
-   
-    
-.queue-panel{position:fixed;right:12px;bottom:12px;z-index:1050;background:#fff;border:1px solid rgba(0,0,0,.15);border-radius:8px;padding:10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.15);width:240px;font-size:12px;}
-.queue-panel__row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:8px;}
-.queue-panel__detail{color:#555;line-height:1.3;}
-.queue-panel__actions{display:flex;gap:6px;margin-top:8px;}
-.queue-panel__actions .btn{flex:1;padding:4px 6px;font-size:12px;}
-.net-badge{display:inline-block;padding:2px 6px;border-radius:999px;font-weight:700;font-size:11px;border:1px solid rgba(0,0,0,.12);}
-.net-badge.is-online{background:#e8f7ee;color:#198754;}
-.net-badge.is-offline{background:#fdecea;color:#b02a37;}
-.queue-muted{color:#888;}
-</style>
+     <link rel="stylesheet" href="css/index.css">     
 </head>
 <body>
 <?php
@@ -586,15 +376,16 @@ if (isset($_SESSION['success'])) {
 <div class="navbar navbar-inverse navbar-fixed-top">
    <div class="container">
       <div class="navbar-header" style="background-color: white;">
-         <button data-target=".navbar-collapse" data-toggle="collapse" class="navbar-toggle" type="button">
+         <button data-target=".navbar-collapse" data-toggle="collapse" class="navbar-toggle" type="button" style="display:none;">
             <span class="icon-bar"></span>
             <span class="icon-bar"></span>
             <span class="icon-bar"></span>
          </button>
-         <a class="navbar-brand" href="#">
-            VISIBILITY 2
-         </a>
-      </div>
+           <h1 class="navbar-brand2">
+              <img src="assets/imagenes/logo/logo-Visibility.png" alt="Logo Visibility" class="logo-visibility">
+              <span>VISIBILITY</span>
+           </h1>
+        </div>
       <div class="navbar-tools" style="background-color: white;">
          <div class="nickname"><?php echo $nombre . ' ' . $apellido; ?></div>
          <ul class="nav navbar-right">
@@ -619,7 +410,7 @@ if (isset($_SESSION['success'])) {
          <div class="row">
             <div class="col-sm-12">
                <div class="page-header">
-                  <h1>Gestor de Actividades <small>Campañas en curso &amp; campañas IW</small></h1>
+                  <h2>Gestor de Actividades <!--small>Campañas en curso &amp; campañas IW</small--></h1>
                </div>
             </div>
          </div>
@@ -666,7 +457,7 @@ if (isset($_SESSION['success'])) {
 
             <!-- Botón para ver el mapa y selector de fecha para programados -->
             <div class="col-sm-2">
-               <button class="btn btn-primary btn-block" style="margin-bottom: 10px;" data-toggle="modal" data-target="#modalMapa">
+               <button class="btn btn-primary_v btn-block" style="margin-bottom: 10px;" data-toggle="modal" data-target="#modalMapa">
                   <i class="fa fa-map-marker"></i> Ver Mapa
                </button>
                <button class="btn btn-info btn-block" style="margin-bottom: 10px;" data-toggle="modal" data-target="#modalAyudaFuncionamiento">
@@ -1073,42 +864,76 @@ if (isset($_SESSION['success'])) {
          <div class="modal-body" style="position: relative;">
             <div id="map" style="height: 500px; width: 100%;"></div>
 
-            <div id="panelInfoRuta" class="well well-sm"
-                 style="background: rgba(255,255,255,0.95); padding:10px; border-radius:8px; z-index:1001;">
-              <button id="btnCentrar" class="btn btn-default btn-sm">
-                <i class="fa fa-crosshairs"></i> Centrar
-              </button>
-              <button id="btnRecalcular" class="btn btn-primary btn-sm">
-                <i class="fa fa-refresh"></i> Recalcular
-              </button>
-              <button id="btnIndicaciones" class="btn btn-info btn-sm">
-                <i class="fa fa-list-ol"></i> Indicaciones
-              </button>
-              <div class="btn-group" role="group" style="margin-left:6px;">
-                <label class="btn btn-default btn-sm">
-                  <input type="checkbox" id="optimizeOrder" autocomplete="off" checked> Optimizar
-                </label>
-                <label class="btn btn-default btn-sm">
-                  <input type="checkbox" id="autoRecalc"  autocomplete="off" checked> Auto
-                </label>
-                <button id="btnTraffic" class="btn btn-default btn-sm" title="Tráfico">
-                  <i class="fa fa-car"></i> Tráfico
-                </button>
-                <button id="btnVoz" class="btn btn-default btn-sm" title="Leer instrucciones">
-                  <i class="fa fa-volume-up"></i> Voz
-                </button>
-                <button id="btnExportar" class="btn btn-success btn-sm" title="Abrir en Google Maps">
-                  <i class="fa fa-external-link"></i> Abrir en Google Maps
-                </button>
-                <button id="btnStartNav" class="btn btn-success btn-sm" title="Modo navegación 3D">
-                  <i class="fa fa-location-arrow"></i> Iniciar navegación
-                </button>
-            
-              </div>
-              <span class="label label-default" style="margin-left:8px;">Distancia: <span id="distanciaTotal">0 km</span></span>
-              <span class="label label-default" style="margin-left:6px;">Duración: <span id="duracionEstimada">0 min</span></span>
-              <div style="margin-top:4px; font-size:11px; color:#555;">"Instrumentation" <span id="apiCounters">API: Routes 0 | Fallback 0</span></div>
-            </div>
+<!-- Fix #18: aviso cuando se superan 24 locales en la ruta -->
+<div id="routeWarning" class="alert alert-warning" style="display:none;margin:6px 0 0;padding:6px 10px;font-size:13px;"></div>
+
+<div id="panelInfoRuta" class="panel-ruta-mobile">
+
+  <div class="ruta-stats-mobile">
+    <div class="stat-pill">
+      <span class="stat-label">Distancia</span>
+      <strong id="distanciaTotal">0 km</strong>
+    </div>
+    <div class="stat-pill">
+      <span class="stat-label">Duración</span>
+      <strong id="duracionEstimada">0 min</strong>
+    </div>
+  </div>
+
+  <div class="ruta-grid-mobile">
+    <button id="btnCentrar" class="btn-ruta-mobile btn-light">
+      <i class="fa fa-crosshairs"></i>
+      <span>Centrar</span>
+    </button>
+
+    <button id="btnRecalcular" class="btn-ruta-mobile btn-blue">
+      <i class="fa fa-refresh"></i>
+      <span>Recalcular</span>
+    </button>
+
+    <button id="btnIndicaciones" class="btn-ruta-mobile btn-lime">
+      <i class="fa fa-list-ol"></i>
+      <span>Indicaciones</span>
+    </button>
+
+    <!--button id="btnTraffic" class="btn-ruta-mobile btn-light">
+      <i class="fa fa-car"></i>
+      <span>Tráfico</span>
+    </button-->
+
+    <button id="btnVoz" class="btn-ruta-mobile btn-light">
+      <i class="fa fa-volume-up"></i>
+      <span>Voz</span>
+    </button>
+
+    <label class="btn-ruta-mobile btn-light btn-check-mobile">
+      <input type="checkbox" id="optimizeOrder" checked>
+      <span>Optimizar</span>
+    </label>
+
+    <label class="btn-ruta-mobile btn-light btn-check-mobile">
+      <input type="checkbox" id="autoRecalc" checked>
+      <span>Auto</span>
+    </label>
+  </div>
+
+  <div class="ruta-actions-mobile">
+    <button id="btnExportar" class="btn-ruta-mobile btn-green btn-full">
+      <i class="fa fa-external-link"></i>
+      <span>Abrir en Google Maps</span>
+    </button>
+
+    <button id="btnStartNav" class="btn-ruta-mobile btn-darkgreen btn-full">
+      <i class="fa fa-location-arrow"></i>
+      <span>Iniciar navegación</span>
+    </button>
+  </div>
+
+  <div class="ruta-api-mobile">
+    <span id="apiCounters">API: Routes 0 | Fallback 0</span>
+  </div>
+
+</div>
 
             <!-- HUD de Navegación 
             <div id="navHud" class="nav-hud" hidden style="display:none;">
@@ -1550,29 +1375,53 @@ function renderIndicacionesFromRoute(route){
 }
 
 // Motor unificado (Routes v2) con fallback a DirectionsService + caché en memoria
-async function computeRouteUnified({origin,destination,waypoints=[], optimize=true, mode}){
+// Fix #15: propaga el flag force para saltarse el rate limit cuando el usuario recalcula manualmente
+async function computeRouteUnified({origin,destination,waypoints=[], optimize=true, mode, force=false}){
   const chosenMode = mode || (window.trafficEnabled ? 'traffic' : 'preview');
-  return window.RouteEngine.computeRouteUnified({ origin, destination, waypoints, optimize, mode: chosenMode });
+  return window.RouteEngine.computeRouteUnified({ origin, destination, waypoints, optimize, mode: chosenMode, force });
 }
 
 // Toma puntos desde la tabla activa/visible
+// Fix #19: cuando hay búsqueda activa cross-date, recolectar de todas las fechas visibles
 function collectCurrentPoints(){
-  const cont  = (window.modoLocal === 'prog') ? '#localesProgCollapse' : '#localesReagCollapse';
-  const selId = (window.modoLocal==='prog')?'#filtroFechaProg':'#filtroFechaReag';
-  const fechaSel = $(selId).val(); const modo = window.modoLocal;
-  const filas = $(`${cont} table[data-fechaTabla="${fechaSel}"]:visible tbody tr:visible:not([data-done="1"])`);
-  const pts=[]; filas.each(function(){
-    const idLocal = parseInt($(this).data('idlocal'),10);
-    const lat = parseFloat($(this).data('lat')); const lng = parseFloat($(this).data('lng'));
+  const cont     = (window.modoLocal === 'prog') ? '#localesProgCollapse' : '#localesReagCollapse';
+  const selId    = (window.modoLocal==='prog')?'#filtroFechaProg':'#filtroFechaReag';
+  const searchId = (window.modoLocal==='prog')?'#filtroLocalesProg':'#filtroLocalesReag';
+  const fechaSel = $(selId).val();
+  const modo     = window.modoLocal;
+  const searchTerm = String($(searchId).val() || '').trim();
+
+  // Con búsqueda activa: recolectar de todas las tablas visibles (cross-date)
+  const tableFilter = searchTerm
+    ? `${cont} table[data-fechaTabla]:visible tbody tr:visible`
+    : `${cont} table[data-fechaTabla="${fechaSel}"]:visible tbody tr:visible`;
+
+  const pts = [];
+  $(tableFilter).each(function(){
+    const $tr   = $(this);
+    const idLocal = parseInt($tr.data('idlocal'), 10);
+    const lat     = parseFloat($tr.data('lat'));
+    const lng     = parseFloat($tr.data('lng'));
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    const hasCheck = $(this).find('.in-route').length > 0;
-    const include = hasCheck
-      ? $(this).find('.in-route').prop('checked')
-      : !window.excluded.has(`${modo}|${fechaSel}|${idLocal}`);
+    const fecha   = $tr.closest('table').data('fechatabla') || fechaSel;
+    const hasCheck = $tr.find('.in-route').length > 0;
+    const include  = hasCheck
+      ? $tr.find('.in-route').prop('checked')
+      : !window.excluded.has(`${modo}|${fecha}|${idLocal}`);
     if (!include) return;
     pts.push({ idLocal, lat, lng });
   });
-  if (pts.length>24){ pts.length=24; } // límite técnico (destino+23 paradas)
+
+  // Fix #18: avisar al usuario cuando se superan los 24 puntos
+  if (pts.length > 24) {
+    const dropped = pts.length - 24;
+    pts.length = 24;
+    const $w = $('#routeWarning');
+    if ($w.length) {
+      $w.text(`Ruta limitada a 24 locales. ${dropped} local(es) omitido(s) por límite de la API.`).stop(true).show();
+      setTimeout(() => $w.fadeOut(), 6000);
+    }
+  }
   return pts;
 }
 
@@ -1606,7 +1455,7 @@ window.planRouteFromSelection = async function (origen, opts={}){
   const waypoints   = puntos.slice(0, -1);
   const mode = window.trafficEnabled ? 'traffic' : 'preview';
   try{
-    const route = await computeRouteUnified({origin:origen, destination, waypoints, optimize:window.optimizeOrder, mode});
+    const route = await computeRouteUnified({origin:origen, destination, waypoints, optimize:window.optimizeOrder, mode, force});
     window.plannedRoute = route;
     buildTrafficPolylines(window.mapa, route);
     const km  = ((route.distanceMeters||0)/1000).toFixed(2);
@@ -1652,6 +1501,25 @@ function updateCounts(){
   let excl=0; Object.keys(markers).forEach(id=>{ if (window.excluded.has(`${mode}|${fechaSel}|${id}`)) excl++; }); $('#countEx').text(excl);
 }
 
+// Fix #3: shim de VoiceController que delega en speak() local
+// nav_engine.js usa VoiceController; este puente lo conecta con la función speak() de esta página
+if (!window.VoiceController) {
+  window.VoiceController = {
+    speak: function(text) { speak(text); },
+    speakNavigation: function(text) { speak(text); },
+    speakWaypointArrival: function(name, remaining) {
+      speak(remaining > 0 ? 'Parada alcanzada. Quedan ' + remaining + '.' : 'Última parada alcanzada.');
+    },
+    speakArrival: function() { speak('Has llegado a tu destino.'); },
+    speakReroute: function() { speak('Recalculando ruta.'); },
+    pause: function() { try { window.speechSynthesis.pause(); } catch(_) {} },
+    resume: function() { try { window.speechSynthesis.resume(); } catch(_) {} }
+  };
+}
+
+// Fix #13: estado para evitar reconstruir el <select> de fechas si no cambiaron
+const _fechasOkKeyByMode = { prog: null, reag: null };
+
 // applyFilters: respeta campañas tachadas + fecha + excluidos + checkboxes
 window.applyFilters = function(){
   const modo      = window.modoLocal || 'prog';
@@ -1675,21 +1543,50 @@ window.applyFilters = function(){
     fechasOk[fecha] = tiene;
   });
   
-  const $sel = $(selId), prev = $sel.val(); $sel.empty();
-  Object.keys(fechasOk).filter(f=>fechasOk[f]).sort().forEach(f=>{
-    const [y,m,d]=f.split('-'); $sel.append(`<option value="${f}">${d}-${m}-${y}</option>`);
-  });
+  // Fix #13: reconstruir el <select> solo si el conjunto de fechas cambió
+  const $sel = $(selId);
+  const prev = $sel.val();
+  const newFechasKey = Object.keys(fechasOk).filter(f=>fechasOk[f]).sort().join(',');
+  if (newFechasKey !== _fechasOkKeyByMode[modo]) {
+    _fechasOkKeyByMode[modo] = newFechasKey;
+    $sel.empty();
+    Object.keys(fechasOk).filter(f=>fechasOk[f]).sort().forEach(f=>{
+      const [y,m,d]=f.split('-'); $sel.append(`<option value="${f}">${d}-${m}-${y}</option>`);
+    });
+  }
   if (prev && fechasOk[prev]) $sel.val(prev);
   if (!$sel.val()) $sel.val($sel.find('option:first').val() || '');
   const fechaSel = $sel.val(); rememberDate(modo, fechaSel);
   $(`${container} h4[data-fechaencabezado], ${container} table[data-fechaTabla]`).hide();
- if (fechaSel){
+  if (searchTerm) {
+    // Con texto: buscar en todas las fechas
+    $(`${container} table[data-fechaTabla]`).each(function(){
+      const fecha = $(this).attr('data-fechaTabla');
+      let anyVisible = false;
+      $(this).find('tbody tr').each(function(){
+        const okCamp = !!$(this).data('okCamp');
+        const txt = String($(this).data('busqueda') || $(this).text() || '').toLowerCase();
+        const matches = txt.includes(searchTerm);
+        $(this).toggle(okCamp && matches);
+        if (okCamp && matches) anyVisible = true;
+        const id = parseInt($(this).data('idlocal'),10);
+        const $chk = $(this).find('input.in-route');
+        if ($chk.length){
+          const excluded = window.excluded.has(`${modo}|${fecha}|${id}`);
+          $chk.prop('checked', !excluded);
+        }
+      });
+      if (anyVisible){
+        $(`${container} h4[data-fechaencabezado="${fecha}"]`).show();
+        $(this).show();
+      }
+    });
+  } else if (fechaSel){
+    // Sin texto: mostrar solo la fecha seleccionada
     $(`${container} h4[data-fechaencabezado="${fechaSel}"], ${container} table[data-fechaTabla="${fechaSel}"]`).show();
     $(`${container} table[data-fechaTabla="${fechaSel}"] tbody tr`).each(function(){
       const okCamp = !!$(this).data('okCamp');
-      const txt = String($(this).data('busqueda') || $(this).text() || '').toLowerCase();
-      const matches = !searchTerm || txt.includes(searchTerm);
-      $(this).toggle( okCamp && matches );
+      $(this).toggle(okCamp);
       const id = parseInt($(this).data('idlocal'),10);
       const $chk = $(this).find('input.in-route');
       if ($chk.length){
@@ -1699,9 +1596,9 @@ window.applyFilters = function(){
     });
   }
   Object.entries(markers).forEach(([id,m])=>{
-    const sameDate = (m.fechaPropuesta === fechaSel);
-    const visibleRow = $(`${container} table[data-fechaTabla="${fechaSel}"] tbody tr[data-idlocal="${id}"]:visible:not([data-done="1"])`).length > 0;
-    m.marker.setMap( (sameDate && visibleRow) ? window.mapa : null );
+    const fecha = m.fechaPropuesta;
+    const visibleRow = $(`${container} table[data-fechaTabla="${fecha}"] tbody tr[data-idlocal="${id}"]:visible:not([data-done="1"])`).length > 0;
+    m.marker.setMap(visibleRow ? window.mapa : null);
   });
   const visibles = Object.values(markers).filter(m=>m.marker.getMap()!==null);
   if (visibles.length && window.google && window.google.maps){
@@ -1823,9 +1720,7 @@ window.initMap=function(){
     window.open(url, '_blank');
   });
 
-  // Modo inicial y filtros
-  $('#btnVerReagendados').on('click', function(){ $('#filtroLocalesReag').val(''); setMode('reag'); });
-  $('#btnVerProgramados').on('click', function(){ $('#filtroLocalesProg').val(''); setMode('prog'); });
+  // Modo inicial — fix #2: listeners de btnVer* movidos a document.ready (evita doble binding)
   $(document).on('change', 'table input.in-route', function(){
     const $tr=$(this).closest('tr'); const id=parseInt($tr.data('idlocal'),10); const modo=window.modoLocal;
     const fecha=(modo==='prog')?$('#filtroFechaProg').val():$('#filtroFechaReag').val(); const key=`${modo}|${fecha}|${id}`;
@@ -1839,23 +1734,8 @@ window.initMap=function(){
 
 // ======= Navegación 3D compacta =======
 (function(){
-  function bearing(a,b){
-    const φ1=a.lat*Math.PI/180, φ2=b.lat*Math.PI/180, Δλ=(b.lng-a.lng)*Math.PI/180;
-    const y=Math.sin(Δλ)*Math.cos(φ2), x=Math.cos(φ1)*Math.sin(φ2)-Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
-    const θ=Math.atan2(y,x)*180/Math.PI; return (θ+360)%360;
-  }
-  function dist(a,b){
-    const p1=new google.maps.LatLng(a.lat,a.lng), p2=new google.maps.LatLng(b.lat,b.lng);
-    return google.maps.geometry.spherical.computeDistanceBetween(p1,p2);
-  }
-  function speedToZoom(kmh){ if (kmh<=20) return 18; if (kmh<=60) return 17; return 16; }
-  const seconds=(d)=> (typeof d==='string' && d.endsWith('s')) ? Math.round(parseFloat(d)) : 0;
-  async function getArrivalLocalTime(_lat,_lng, epochSecs){
-    // "Timezone removal/minimization": usamos hora local del dispositivo (Chile) sin API externa
-    apiCounters.timezone_calls = apiCounters.timezone_calls || 0;
-    const d=new Date(epochSecs*1000);
-    return d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
-  }
+  // Fix #20: eliminadas funciones dead code (bearing, dist, getArrivalLocalTime)
+  //          — reemplazadas por las equivalentes en nav_engine.js
     function iconForText(t){
       const s=t||''; if(/derecha/i.test(s)) return 'fa-arrow-right';
       if(/izquierda/i.test(s)) return 'fa-arrow-left';
@@ -1877,7 +1757,12 @@ window.initMap=function(){
           },
           onPosition:(cur)=>{ if(window.ARViewLite) ARViewLite.updatePosition(cur); },
           onStep:(idx, step)=>{ if(step && window.voiceEnabled){ window.speechSynthesis.cancel(); speak(step.text||''); } },
-          onStop:()=>{ navTrack=true; $('#btnRecenter').removeClass('show'); if(window.ARViewLite) ARViewLite.stop(); },
+          onStop:()=>{
+            navTrack=true; $('#btnRecenter').removeClass('show');
+            if(window.ARViewLite) ARViewLite.stop();
+            // Fix #1: sincronizar window.navigator3D (active=false tras stop)
+            window.navigator3D = navigator3D;
+          },
           onCamera:(cur, speed)=>{
             if(!navTrack || !window.mapa) return;
             const zoom = speed>45 ? 16 : 17;
@@ -1885,6 +1770,8 @@ window.initMap=function(){
           }
         });
         if(window.mapa){ window.mapa.addListener('dragstart', ()=>{ navTrack=false; $('#btnRecenter').addClass('show'); }); }
+        // Fix #1: exponer navigator3D en window para que los guards externos funcionen
+        window.navigator3D = navigator3D;
       }
       return navigator3D;
     }
@@ -1908,9 +1795,9 @@ $(document).ready(function(){
   setTimeout(()=>$('#success-alert').fadeOut('slow'),3000);
   $('#filtroFechaProg, #filtroFechaReag').off('change').on('change', function(){ applyFilters(); });
   $(document).on('click', '.todo-actions', function(){ const $li=$(this).closest('li'), $i=$li.find('i'); $li.toggleClass('completed'); $i.toggleClass('fa-square-o fa-check-square-o'); applyFilters(); });
-  // modos
-  $('#btnVerReagendados').on('click', ()=> setMode('reag'));
-  $('#btnVerProgramados').on('click', ()=> setMode('prog'));
+  // Fix #2: listeners de modo solo aquí — eliminados los duplicados que estaban dentro de initMap()
+  $('#btnVerReagendados').on('click', function(){ $('#filtroLocalesReag').val(''); setMode('reag'); });
+  $('#btnVerProgramados').on('click', function(){ $('#filtroLocalesProg').val(''); setMode('prog'); });
   $('#modalMapa').on('show.bs.modal', function(){
     ensureMapReady().catch(()=>{
       alert('No se pudo cargar Google Maps. Reintentaremos cuando haya conexión.');

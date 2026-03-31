@@ -1,0 +1,18 @@
+SID: 9405e43fe0d20ab35c6e62ef99090f29
+SESSION: Array
+(
+    [usuario_id] => 2
+    [usuario_nombre] => Diego
+    [usuario_apellido] => Alarcon
+    [usuario_fotoPerfil] => /visibility2/portal/images/uploads/perfil/perfil_2.png
+    [usuario_perfil] => 1
+    [perfil_nombre] => editor
+    [empresa_nombre] => MENTECREATIVA
+    [empresa_id] => 103
+    [usuario_fechaCreacion] => 2024-11-12 13:54:35
+    [email] => diego.alarcon@mentecreativa.cl
+    [telefono] => 973738209
+    [division_id] => 1
+    [csrf_token] => 4c725585d424768384fbe3048675d2e1d00df67c77c2370e9ffae7f09cd0f31d
+)
+

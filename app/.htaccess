@@ -1,7 +1,15 @@
 <IfModule mod_rewrite.c>
 RewriteEngine On
-
 RewriteBase /visibility2/app/
+
+RewriteCond %{HTTP:Authorization} ^(.*)$
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%1]
+
+# ------------------------------
+# EXCLUIR API MOBILE DEL ROUTER
+# ------------------------------
+RewriteCond %{REQUEST_URI} ^/visibility2/app/api/mobile/ [NC]
+RewriteRule ^ - [END]
 
 # ------------------------------
 # SERVIR ARCHIVOS REALES

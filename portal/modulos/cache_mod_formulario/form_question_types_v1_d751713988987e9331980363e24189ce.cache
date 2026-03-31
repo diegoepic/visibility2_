@@ -1,0 +1,1 @@
+a:7:{i:0;a:2:{s:2:"id";i:1;s:4:"name";s:6:"yes_no";}i:1;a:2:{s:2:"id";i:2;s:4:"name";s:13:"single_choice";}i:2;a:2:{s:2:"id";i:3;s:4:"name";s:15:"multiple_choice";}i:3;a:2:{s:2:"id";i:4;s:4:"name";s:4:"text";}i:4;a:2:{s:2:"id";i:5;s:4:"name";s:7:"numeric";}i:5;a:2:{s:2:"id";i:6;s:4:"name";s:4:"date";}i:6;a:2:{s:2:"id";i:7;s:4:"name";s:5:"photo";}}

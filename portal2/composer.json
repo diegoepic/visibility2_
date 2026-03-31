@@ -1,0 +1,6 @@
+{
+    "name": "visibility/portal",
+    "require": {
+        "phpoffice/phpspreadsheet": "^5.4"
+    }
+}

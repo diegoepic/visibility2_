@@ -1,0 +1,369 @@
+:root {
+  --bg-dark: #2a3146;
+  --bg-dark-2: #252c40;
+  --bg-dark-3: #0a1330;
+  --cyan: #12cfff;
+  --cyan-soft: rgba(18, 207, 255, 0.12);
+  --cyan-border: rgba(18, 207, 255, 0.40);
+  --text: #e9f1fb;
+  --text-soft: #94a2bb;
+  --line: rgba(255,255,255,0.08);
+  --shadow: 0 18px 40px rgba(3, 10, 24, 0.35);
+  --radius: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  overflow-x: hidden;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #eef2f6;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.app-shell {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: transparent;
+  position: relative;
+  z-index: 3000;
+}
+
+/* TOPBAR */
+.topbar {
+  width: 100%;
+  background: linear-gradient(180deg, #30374d 0%, #2a3146 100%);
+  border-bottom: 1px solid rgba(18, 207, 255, 0.30);
+  box-shadow: inset 0 -1px 0 rgba(18, 207, 255, 0.18);
+  position: relative;
+  z-index: 3100;
+}
+
+
+.topbar-inner {
+  width: 100%;
+  min-height: 86px;
+  padding: 0 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.logo-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  height: 40px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #c4142e 0%, #0d63b8 100%);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.brand-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 12px;
+  color: #7ce4ff;
+  border: 1px solid rgba(18, 207, 255, 0.45);
+  background: rgba(18, 207, 255, 0.08);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.slash {
+  color: rgba(255,255,255,0.22);
+  font-size: 30px;
+  font-weight: 300;
+}
+
+.portal-title {
+  color: rgba(255,255,255,0.94);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.user-area {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-left: auto;
+}
+
+.user-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  padding-right: 18px;
+  border-right: 1px solid rgba(255,255,255,0.12);
+}
+
+.user-name {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.user-role {
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 170px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.94);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  transition: .2s ease;
+}
+
+.menu-button:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+/* NAV */
+.nav-wrap {
+  width: 100%;
+  background: linear-gradient(180deg, #2c344a 0%, #252d42 100%);
+  border-bottom: 1px solid rgba(18, 207, 255, 0.28);
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  position: relative;
+  z-index: 3200;
+  overflow: visible;
+}
+
+.nav-inner {
+  width: 100%;
+  min-height: 76px;
+  padding: 12px 30px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  overflow: visible;
+  white-space: normal;
+}
+
+.nav-inner::-webkit-scrollbar {
+  height: 8px;
+}
+
+.nav-inner::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.18);
+  border-radius: 999px;
+}
+
+.nav-item {
+  flex: 0 0 auto;
+  height: 44px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 10px;
+  color: #8f9cb5;
+  border: 1px solid transparent;
+  font-size: 0.9rem;  
+  font-weight: 600;
+  transition: .18s ease;
+  position: relative;
+}
+
+.nav-item:hover {
+  color: #e8f3ff;
+  background: rgba(255,255,255,0.04);
+}
+
+.nav-item.active {
+  color: #dff8ff;
+  background: var(--cyan-soft);
+  border-color: var(--cyan-border);
+}
+
+.nav-spacer {
+  flex: 1 0 auto;
+  min-width: 20px;
+}
+
+/* DROPDOWN */
+.dropdown {
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 3300;
+}
+
+.dropdown-toggle::after {
+  content: "▾";
+  font-size: 11px;
+  margin-left: 8px;
+  opacity: .7;
+}
+
+.dropdown-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 220px;
+  padding: 10px 0;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(8, 18, 46, 0.98) 0%, rgba(10, 21, 52, 0.98) 100%);
+  border: 1px solid rgba(18, 207, 255, 0.34);
+  box-shadow: 0 18px 40px rgba(3, 10, 24, 0.45);
+  z-index: 99999;
+}
+
+.dropdown.open .dropdown-menu {
+  display: block;
+}
+
+.dropdown-link {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  color: #94a2bb;
+  font-size: 14px;
+  font-weight: 500;
+  transition: .18s ease;
+}
+
+.dropdown-link:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.05);
+}
+
+/* RESPONSIVE */
+@media (max-width: 900px) {
+  .topbar-inner {
+    padding: 14px 16px;
+    min-height: auto;
+    flex-wrap: wrap;
+  }
+
+  .nav-inner {
+    padding: 0 16px;
+  }
+
+  .user-area {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .portal-title {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 640px) {
+  .brand-group {
+    gap: 10px;
+  }
+
+  .slash {
+    display: none;
+  }
+
+  .portal-title {
+    width: 100%;
+    font-size: 14px;
+  }
+
+  .nav-item {
+    font-size: 14px;
+    padding: 0 14px;
+  }
+
+  .dropdown-menu {
+    min-width: 190px;
+  }
+
+  .menu-button {
+    min-width: 145px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .topbar-inner {
+    padding: 14px 18px;
+    min-height: auto;
+    flex-wrap: wrap;
+  }
+
+  .nav-wrap {
+    top: 0;
+    position: relative;
+  }
+
+  .nav-inner {
+    padding: 12px 18px;
+  }
+
+  .user-area {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-content {
+    padding: 18px 0 24px;
+  }
+
+  .slider-container {
+    width: calc(100% - 24px);
+    height: auto;
+    min-height: 540px;
+  }
+
+  #divisionSelectorContainer {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    margin: 0 12px 16px;
+    z-index: 30 !important;
+  }
+}

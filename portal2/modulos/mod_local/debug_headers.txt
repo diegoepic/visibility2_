@@ -1,0 +1,96 @@
+Array
+(
+    [0] => Expires: Thu, 19 Nov 1981 08:52:00 GMT
+    [1] => Cache-Control: no-store, no-cache, must-revalidate
+    [2] => Pragma: no-cache
+    [3] => Content-Type: application/json; charset=utf-8
+)
+Array
+(
+    [Content-Length] => 1016
+    [Content-Type] => multipart/form-data; boundary=----WebKitFormBoundaryfjyRNQhAG4fRKrTq
+    [Accept] => application/json, text/javascript, */*; q=0.01
+    [Accept-Encoding] => gzip, deflate, br, zstd
+    [Accept-Language] => es-US,es-419;q=0.9,es;q=0.8
+    [Connection] => keep-alive
+    [Cookie] => PHPSESSID=9405e43fe0d20ab35c6e62ef99090f29
+    [Host] => visibility.cl
+    [Origin] => https://visibility.cl
+    [Referer] => https://visibility.cl/visibility2/portal/modulos/mod_local.php
+    [Sec-Ch-Ua] => "Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"
+    [Sec-Ch-Ua-Mobile] => ?0
+    [Sec-Ch-Ua-Platform] => "Windows"
+    [Sec-Fetch-Dest] => empty
+    [Sec-Fetch-Mode] => cors
+    [Sec-Fetch-Site] => same-origin
+    [User-Agent] => Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36
+    [X-Https] => 1
+    [X-Requested-With] => XMLHttpRequest
+)
+
+Array
+(
+    [Content-Length] => 39238
+    [Content-Type] => multipart/form-data; boundary=----WebKitFormBoundarylOFsL75Eu03QiPzf
+    [Accept] => application/json, text/javascript, */*; q=0.01
+    [Accept-Encoding] => gzip, deflate, br, zstd
+    [Accept-Language] => es-US,es-419;q=0.9,es;q=0.8
+    [Connection] => keep-alive
+    [Cookie] => PHPSESSID=9405e43fe0d20ab35c6e62ef99090f29
+    [Host] => visibility.cl
+    [Origin] => https://visibility.cl
+    [Referer] => https://visibility.cl/visibility2/portal/modulos/mod_local.php
+    [Sec-Ch-Ua] => "Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"
+    [Sec-Ch-Ua-Mobile] => ?0
+    [Sec-Ch-Ua-Platform] => "Windows"
+    [Sec-Fetch-Dest] => empty
+    [Sec-Fetch-Mode] => cors
+    [Sec-Fetch-Site] => same-origin
+    [User-Agent] => Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36
+    [X-Https] => 1
+    [X-Requested-With] => XMLHttpRequest
+)
+
+Array
+(
+    [Content-Length] => 39238
+    [Content-Type] => multipart/form-data; boundary=----WebKitFormBoundaryO2AH8y1RXyGnBnit
+    [Accept] => application/json, text/javascript, */*; q=0.01
+    [Accept-Encoding] => gzip, deflate, br, zstd
+    [Accept-Language] => es-US,es-419;q=0.9,es;q=0.8
+    [Connection] => keep-alive
+    [Cookie] => PHPSESSID=9405e43fe0d20ab35c6e62ef99090f29
+    [Host] => visibility.cl
+    [Origin] => https://visibility.cl
+    [Referer] => https://visibility.cl/visibility2/portal/modulos/mod_local.php
+    [Sec-Ch-Ua] => "Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"
+    [Sec-Ch-Ua-Mobile] => ?0
+    [Sec-Ch-Ua-Platform] => "Windows"
+    [Sec-Fetch-Dest] => empty
+    [Sec-Fetch-Mode] => cors
+    [Sec-Fetch-Site] => same-origin
+    [User-Agent] => Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36
+    [X-Https] => 1
+    [X-Requested-With] => XMLHttpRequest
+)
+
+Array
+(
+    [Accept] => text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
+    [Accept-Encoding] => gzip, deflate, br, zstd
+    [Accept-Language] => es-US,es-419;q=0.9,es;q=0.8
+    [Connection] => keep-alive
+    [Cookie] => PHPSESSID=9405e43fe0d20ab35c6e62ef99090f29
+    [Host] => visibility.cl
+    [Sec-Ch-Ua] => "Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"
+    [Sec-Ch-Ua-Mobile] => ?0
+    [Sec-Ch-Ua-Platform] => "Windows"
+    [Sec-Fetch-Dest] => document
+    [Sec-Fetch-Mode] => navigate
+    [Sec-Fetch-Site] => none
+    [Sec-Fetch-User] => ?1
+    [Upgrade-Insecure-Requests] => 1
+    [User-Agent] => Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36
+    [X-Https] => 1
+)
+
