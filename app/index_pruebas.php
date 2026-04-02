@@ -752,7 +752,7 @@ if (isset($_SESSION['success'])) {
         <div class="row" id="journalRow">
           <div class="col-sm-12">
             <div class="panel panel-default" id="journalPanel">
-              <div class="panel-heading" style="display:flex; align-items:left; flex-wrap:wrap; gap:6px;">
+              <div class="panel-heading" style="display:flex; align-items:left; flex-wrap:wrap; gap:10px;">
                 <span class="label label-default" id="jr-badge-pending">Pendientes: 0</span>
                 <span class="label label-warning" id="jr-badge-running">Enviando: 0</span>
                 <span class="label label-success" id="jr-badge-success">Subidas: 0</span>

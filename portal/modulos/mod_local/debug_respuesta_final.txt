@@ -1,28 +1,429 @@
 {
-    "success": true,
-    "inserted": 19,
-    "failed": 0,
-    "reportUrl": "",
-    "successes": [
-        "L\u00ednea 2: Local 'GRIDO' (c\u00f3digo NES011068802) insertado.",
-        "L\u00ednea 3: Local 'BUIN ZOO' (c\u00f3digo NES015344382) insertado.",
-        "L\u00ednea 4: Local 'BUIN ZOO' (c\u00f3digo NES025344382) insertado.",
-        "L\u00ednea 5: Local 'BUIN ZOO 6' (c\u00f3digo NES035344382) insertado.",
-        "L\u00ednea 6: Local 'BUIN ZOO' (c\u00f3digo NES045344382) insertado.",
-        "L\u00ednea 7: Local 'BUIN ZOO 5' (c\u00f3digo NES055344382) insertado.",
-        "L\u00ednea 8: Local 'VELONIA' (c\u00f3digo NES021068802) insertado.",
-        "L\u00ednea 9: Local 'BUIN ZOO 7' (c\u00f3digo NES065344382) insertado.",
-        "L\u00ednea 10: Local 'BUIN ZOO 4' (c\u00f3digo NES075344382) insertado.",
-        "L\u00ednea 11: Local 'BUIN ZOO' (c\u00f3digo NES085344382) insertado.",
-        "L\u00ednea 12: Local 'BUIN ZOO' (c\u00f3digo NES095344382) insertado.",
-        "L\u00ednea 13: Local 'BUIN ZOO 2' (c\u00f3digo NES115344382) insertado.",
-        "L\u00ednea 14: Local 'BUIN ZOO 3' (c\u00f3digo NES105344382) insertado.",
-        "L\u00ednea 15: Local 'KIOSKO TERMINAL FTS 120' (c\u00f3digo NES031068802) insertado.",
-        "L\u00ednea 16: Local 'BUIN ZOO' (c\u00f3digo NES125344382) insertado.",
-        "L\u00ednea 17: Local 'BUIN ZOO' (c\u00f3digo NES135344382) insertado.",
-        "L\u00ednea 18: Local 'BUIN ZOO' (c\u00f3digo NES145344382) insertado.",
-        "L\u00ednea 19: Local 'BUIN ZOO' (c\u00f3digo NES155344382) insertado.",
-        "L\u00ednea 20: Local 'BUIN ZOO' (c\u00f3digo NES165344382) insertado."
-    ],
-    "failures": []
+    "success": false,
+    "inserted": 0,
+    "failed": 70,
+    "reportUrl": "\/visibility2\/portal\/modulos\/mod_local\/uploads\/reports\/failed_locals_1775134613.csv",
+    "successes": [],
+    "failures": [
+        {
+            "line": 2,
+            "codigo": "3317766",
+            "nombre": "CARCAMO ALVAREZ ERIKA LORENA",
+            "reason": "El c\u00f3digo de local '3317766' ya existe (l\u00ednea 2)."
+        },
+        {
+            "line": 3,
+            "codigo": "5204582",
+            "nombre": "PANADERIA Y PASTELERIA PETER PAN",
+            "reason": "El c\u00f3digo de local '5204582' ya existe (l\u00ednea 3)."
+        },
+        {
+            "line": 4,
+            "codigo": "5341795",
+            "nombre": "URIBE ALARCON ERNESTINA DEL ROSARIO",
+            "reason": "El c\u00f3digo de local '5341795' ya existe (l\u00ednea 4)."
+        },
+        {
+            "line": 5,
+            "codigo": "5683216",
+            "nombre": "RUIZ GALLARDO CECILIA JAZMIN",
+            "reason": "El c\u00f3digo de local '5683216' ya existe (l\u00ednea 5)."
+        },
+        {
+            "line": 6,
+            "codigo": "6172567",
+            "nombre": "ADONES ALARCON SERGIO ALEJANDRO",
+            "reason": "El c\u00f3digo de local '6172567' ya existe (l\u00ednea 6)."
+        },
+        {
+            "line": 7,
+            "codigo": "6395524",
+            "nombre": "PIGGIE S MARKET SPA",
+            "reason": "El c\u00f3digo de local '6395524' ya existe (l\u00ednea 7)."
+        },
+        {
+            "line": 8,
+            "codigo": "6672748",
+            "nombre": "PATRICIA DEL CARMEN MEDEL MACHUCA",
+            "reason": "El c\u00f3digo de local '6672748' ya existe (l\u00ednea 8)."
+        },
+        {
+            "line": 9,
+            "codigo": "6809363",
+            "nombre": "MORALES VALENZUELA MERCEDES DE LAS",
+            "reason": "El c\u00f3digo de local '6809363' ya existe (l\u00ednea 9)."
+        },
+        {
+            "line": 10,
+            "codigo": "310561",
+            "nombre": "PONCE MARTINEZ RA\u00daL ALEJANDRO",
+            "reason": "El c\u00f3digo de local '310561' ya existe (l\u00ednea 10)."
+        },
+        {
+            "line": 11,
+            "codigo": "3319161",
+            "nombre": "SUC ORLANDO SOLIS MEZA",
+            "reason": "El c\u00f3digo de local '3319161' ya existe (l\u00ednea 11)."
+        },
+        {
+            "line": 12,
+            "codigo": "4266975",
+            "nombre": "LOPEZ GATICA ANDRES DEL CARMEN",
+            "reason": "El c\u00f3digo de local '4266975' ya existe (l\u00ednea 12)."
+        },
+        {
+            "line": 13,
+            "codigo": "6229730",
+            "nombre": "ROTHEN FLORES SHAMY SONORA",
+            "reason": "El c\u00f3digo de local '6229730' ya existe (l\u00ednea 13)."
+        },
+        {
+            "line": 14,
+            "codigo": "6256971",
+            "nombre": "JANETH CARMONA SANDRA",
+            "reason": "El c\u00f3digo de local '6256971' ya existe (l\u00ednea 14)."
+        },
+        {
+            "line": 15,
+            "codigo": "6454021",
+            "nombre": "FERNANDEZ REYES RAFAEL ISAAC",
+            "reason": "El c\u00f3digo de local '6454021' ya existe (l\u00ednea 15)."
+        },
+        {
+            "line": 16,
+            "codigo": "6857085",
+            "nombre": "IP2 COMERCIALIZADORA DE",
+            "reason": "El c\u00f3digo de local '6857085' ya existe (l\u00ednea 16)."
+        },
+        {
+            "line": 17,
+            "codigo": "6928354",
+            "nombre": "PACHECO LAURIN MARIA DE LOURDES",
+            "reason": "El c\u00f3digo de local '6928354' ya existe (l\u00ednea 17)."
+        },
+        {
+            "line": 18,
+            "codigo": "6996508",
+            "nombre": "PONCE MARTINEZ RAUL ALEJANDRO",
+            "reason": "El c\u00f3digo de local '6996508' ya existe (l\u00ednea 18)."
+        },
+        {
+            "line": 19,
+            "codigo": "7496596",
+            "nombre": "COMERCIAL VALDERAS SPA",
+            "reason": "El c\u00f3digo de local '7496596' ya existe (l\u00ednea 19)."
+        },
+        {
+            "line": 20,
+            "codigo": "1442113",
+            "nombre": "TAPIA CASANOVA GLADYS DEL CARMEN",
+            "reason": "El c\u00f3digo de local '1442113' ya existe (l\u00ednea 20)."
+        },
+        {
+            "line": 21,
+            "codigo": "3264044",
+            "nombre": "CID RIOS LUCY DEL ROSARIO",
+            "reason": "El c\u00f3digo de local '3264044' ya existe (l\u00ednea 21)."
+        },
+        {
+            "line": 22,
+            "codigo": "3653573",
+            "nombre": "LAZO VASQUEZ JUAN RAFAEL",
+            "reason": "El c\u00f3digo de local '3653573' ya existe (l\u00ednea 22)."
+        },
+        {
+            "line": 23,
+            "codigo": "3786040",
+            "nombre": "AGUAYO FERREIRA HECTOR ALEXIS",
+            "reason": "El c\u00f3digo de local '3786040' ya existe (l\u00ednea 23)."
+        },
+        {
+            "line": 24,
+            "codigo": "4057217",
+            "nombre": "PANCHILLO CASTRO GUILLERMO ANTONIO",
+            "reason": "El c\u00f3digo de local '4057217' ya existe (l\u00ednea 24)."
+        },
+        {
+            "line": 25,
+            "codigo": "4562805",
+            "nombre": "QUEVEDO SALVO MARIA CRISTINA",
+            "reason": "El c\u00f3digo de local '4562805' ya existe (l\u00ednea 25)."
+        },
+        {
+            "line": 26,
+            "codigo": "4682720",
+            "nombre": "NAIN INAL MARIA JUANA",
+            "reason": "El c\u00f3digo de local '4682720' ya existe (l\u00ednea 26)."
+        },
+        {
+            "line": 27,
+            "codigo": "5205315",
+            "nombre": "ESTABLECIMIENTOS DROGUETT HNOS SPA",
+            "reason": "El c\u00f3digo de local '5205315' ya existe (l\u00ednea 27)."
+        },
+        {
+            "line": 28,
+            "codigo": "5339283",
+            "nombre": "ARMIJO ITE CAROLINA TREISY",
+            "reason": "El c\u00f3digo de local '5339283' ya existe (l\u00ednea 28)."
+        },
+        {
+            "line": 29,
+            "codigo": "5735635",
+            "nombre": "COLLAO REYES KAREN ELIZABETH",
+            "reason": "El c\u00f3digo de local '5735635' ya existe (l\u00ednea 29)."
+        },
+        {
+            "line": 30,
+            "codigo": "5964461",
+            "nombre": "GALDAMEZ UGALDE GRECO ALCINO",
+            "reason": "El c\u00f3digo de local '5964461' ya existe (l\u00ednea 30)."
+        },
+        {
+            "line": 31,
+            "codigo": "6377160",
+            "nombre": "SANTA SILVIA SPA",
+            "reason": "El c\u00f3digo de local '6377160' ya existe (l\u00ednea 31)."
+        },
+        {
+            "line": 32,
+            "codigo": "6829246",
+            "nombre": "FARIAS GONZALEZ FELIPE PATRICIO",
+            "reason": "El c\u00f3digo de local '6829246' ya existe (l\u00ednea 32)."
+        },
+        {
+            "line": 33,
+            "codigo": "7276011",
+            "nombre": "CLAUDIA URRUTIA MINIMARKET EIRL",
+            "reason": "El c\u00f3digo de local '7276011' ya existe (l\u00ednea 33)."
+        },
+        {
+            "line": 34,
+            "codigo": "7467600",
+            "nombre": "ALMACEN BYB SPA",
+            "reason": "El c\u00f3digo de local '7467600' ya existe (l\u00ednea 34)."
+        },
+        {
+            "line": 35,
+            "codigo": "7498525",
+            "nombre": "MINIMARKET PAULA ANDREA ARREDONDO",
+            "reason": "El c\u00f3digo de local '7498525' ya existe (l\u00ednea 35)."
+        },
+        {
+            "line": 36,
+            "codigo": "7501738",
+            "nombre": "ALMACEN NUEVOS HORIZONTES SPA",
+            "reason": "El c\u00f3digo de local '7501738' ya existe (l\u00ednea 36)."
+        },
+        {
+            "line": 37,
+            "codigo": "7510958",
+            "nombre": "RODRIGO JESUS VERDUGO FUENTEALBA",
+            "reason": "El c\u00f3digo de local '7510958' ya existe (l\u00ednea 37)."
+        },
+        {
+            "line": 38,
+            "codigo": "174017",
+            "nombre": "CASTILLO VILLA EDITH ELENA",
+            "reason": "El c\u00f3digo de local '174017' ya existe (l\u00ednea 38)."
+        },
+        {
+            "line": 39,
+            "codigo": "519056",
+            "nombre": "BRUNA SILVA SERGIO HERNANDO",
+            "reason": "El c\u00f3digo de local '519056' ya existe (l\u00ednea 39)."
+        },
+        {
+            "line": 40,
+            "codigo": "3526100",
+            "nombre": "MORA ARENAS ARIEL ANTONIO",
+            "reason": "El c\u00f3digo de local '3526100' ya existe (l\u00ednea 40)."
+        },
+        {
+            "line": 41,
+            "codigo": "4350202",
+            "nombre": "BARROS ROJAS LUIS RODOLFO",
+            "reason": "El c\u00f3digo de local '4350202' ya existe (l\u00ednea 41)."
+        },
+        {
+            "line": 42,
+            "codigo": "4758209",
+            "nombre": "JEREZ CONTRERAS SANDRA JACQUELINE",
+            "reason": "El c\u00f3digo de local '4758209' ya existe (l\u00ednea 42)."
+        },
+        {
+            "line": 43,
+            "codigo": "5035233",
+            "nombre": "FLORES BUSTOS RENATO ANTONIO",
+            "reason": "El c\u00f3digo de local '5035233' ya existe (l\u00ednea 43)."
+        },
+        {
+            "line": 44,
+            "codigo": "5872839",
+            "nombre": "MATUS LOBOS ELENA DEL CARMEN",
+            "reason": "El c\u00f3digo de local '5872839' ya existe (l\u00ednea 44)."
+        },
+        {
+            "line": 45,
+            "codigo": "5897713",
+            "nombre": "VIERA SANTIAGO MARCO ANTONIO",
+            "reason": "El c\u00f3digo de local '5897713' ya existe (l\u00ednea 45)."
+        },
+        {
+            "line": 46,
+            "codigo": "6905478",
+            "nombre": "HERNANDEZ FIGUEROA MATIAS PAULO",
+            "reason": "El c\u00f3digo de local '6905478' ya existe (l\u00ednea 46)."
+        },
+        {
+            "line": 47,
+            "codigo": "4416012",
+            "nombre": "CASTRO CASTRO VICTOR PABLO",
+            "reason": "El c\u00f3digo de local '4416012' ya existe (l\u00ednea 47)."
+        },
+        {
+            "line": 48,
+            "codigo": "5522050",
+            "nombre": "AVILA TORRES ISABEL ELIANA",
+            "reason": "El c\u00f3digo de local '5522050' ya existe (l\u00ednea 48)."
+        },
+        {
+            "line": 49,
+            "codigo": "5744653",
+            "nombre": "ARROYO TORRES JOVANNA MERY",
+            "reason": "El c\u00f3digo de local '5744653' ya existe (l\u00ednea 49)."
+        },
+        {
+            "line": 50,
+            "codigo": "6235486",
+            "nombre": "PALMA PALMA KATHERINE LEONOR",
+            "reason": "El c\u00f3digo de local '6235486' ya existe (l\u00ednea 50)."
+        },
+        {
+            "line": 51,
+            "codigo": "6610626",
+            "nombre": "ARAYA ROJAS YASNA CAROLINA",
+            "reason": "El c\u00f3digo de local '6610626' ya existe (l\u00ednea 51)."
+        },
+        {
+            "line": 52,
+            "codigo": "7003405",
+            "nombre": "MINIMARKET DANIEL PINTO VILLARROEL",
+            "reason": "El c\u00f3digo de local '7003405' ya existe (l\u00ednea 52)."
+        },
+        {
+            "line": 53,
+            "codigo": "7372817",
+            "nombre": "TRANSPORTE JAN SPA",
+            "reason": "El c\u00f3digo de local '7372817' ya existe (l\u00ednea 53)."
+        },
+        {
+            "line": 54,
+            "codigo": "7474912",
+            "nombre": "MINIMARKET Y DISTRIBUIDORA PEREZ",
+            "reason": "El c\u00f3digo de local '7474912' ya existe (l\u00ednea 54)."
+        },
+        {
+            "line": 55,
+            "codigo": "7475193",
+            "nombre": "EMPRESA BERMAX SPA",
+            "reason": "El c\u00f3digo de local '7475193' ya existe (l\u00ednea 55)."
+        },
+        {
+            "line": 56,
+            "codigo": "7476262",
+            "nombre": "JUAN DAVID LOPEZ MORA",
+            "reason": "El c\u00f3digo de local '7476262' ya existe (l\u00ednea 56)."
+        },
+        {
+            "line": 57,
+            "codigo": "7481756",
+            "nombre": "MINIMARKET GUERRERO SPA",
+            "reason": "El c\u00f3digo de local '7481756' ya existe (l\u00ednea 57)."
+        },
+        {
+            "line": 58,
+            "codigo": "7487507",
+            "nombre": "COMERCIAL AFTER LTDA",
+            "reason": "El c\u00f3digo de local '7487507' ya existe (l\u00ednea 58)."
+        },
+        {
+            "line": 59,
+            "codigo": "7501714",
+            "nombre": "JAZMIN ALEJANDRA OLMEDO VENEGAS",
+            "reason": "El c\u00f3digo de local '7501714' ya existe (l\u00ednea 59)."
+        },
+        {
+            "line": 60,
+            "codigo": "7511613",
+            "nombre": "MINIMARKET EXPRESS SPA",
+            "reason": "El c\u00f3digo de local '7511613' ya existe (l\u00ednea 60)."
+        },
+        {
+            "line": 61,
+            "codigo": "5077540",
+            "nombre": "DISTRIBUIDORA LA BODEGA LIMITADA",
+            "reason": "El c\u00f3digo de local '5077540' ya existe (l\u00ednea 61)."
+        },
+        {
+            "line": 62,
+            "codigo": "6821710",
+            "nombre": "COMERCIALIZADORA Y PANIFICADORA",
+            "reason": "El c\u00f3digo de local '6821710' ya existe (l\u00ednea 62)."
+        },
+        {
+            "line": 63,
+            "codigo": "6917246",
+            "nombre": "GARRIDO SEPULVEDA JUAN CARLOS",
+            "reason": "El c\u00f3digo de local '6917246' ya existe (l\u00ednea 63)."
+        },
+        {
+            "line": 64,
+            "codigo": "7287840",
+            "nombre": "COMERCIALIZADORA Y DISTRIBUIDORA",
+            "reason": "El c\u00f3digo de local '7287840' ya existe (l\u00ednea 64)."
+        },
+        {
+            "line": 65,
+            "codigo": "7469944",
+            "nombre": "LLANERO MARKET SPA",
+            "reason": "El c\u00f3digo de local '7469944' ya existe (l\u00ednea 65)."
+        },
+        {
+            "line": 66,
+            "codigo": "7499898",
+            "nombre": "RODRIGO ALEJANDRO CUEVAS CABRERA",
+            "reason": "El c\u00f3digo de local '7499898' ya existe (l\u00ednea 66)."
+        },
+        {
+            "line": 67,
+            "codigo": "7534549",
+            "nombre": "SIGLO III SPA",
+            "reason": "El c\u00f3digo de local '7534549' ya existe (l\u00ednea 67)."
+        },
+        {
+            "line": 68,
+            "codigo": "2788502",
+            "nombre": "INVERSIONES EL SOLAR LIMITADA",
+            "reason": "El c\u00f3digo de local '2788502' ya existe (l\u00ednea 68)."
+        },
+        {
+            "line": 69,
+            "codigo": "3663888",
+            "nombre": "GOMEZ VEGA ALEJANDRO PATRICIO",
+            "reason": "El c\u00f3digo de local '3663888' ya existe (l\u00ednea 69)."
+        },
+        {
+            "line": 70,
+            "codigo": "5203018",
+            "nombre": "ARENAS MUNOZ EVA DEL CARMEN",
+            "reason": "El c\u00f3digo de local '5203018' ya existe (l\u00ednea 70)."
+        },
+        {
+            "line": 71,
+            "codigo": "6286282",
+            "nombre": "PACHECO PARRA SOLEDAD DE LAS",
+            "reason": "El c\u00f3digo de local '6286282' ya existe (l\u00ednea 71)."
+        }
+    ]
 }
