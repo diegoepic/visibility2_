@@ -88,6 +88,30 @@ $stmt_div->close();
         td {
             font-size: 85% !important;
         }
+        .local-cell-title,
+        .region-cell-title {
+            font-weight: 700;
+            font-size: 14px;
+            line-height: 1.15;
+            color: #1f2d3d;
+            margin-bottom: 2px;
+        }
+        
+        .local-cell-subtitle,
+        .region-cell-subtitle {
+            font-size: 12px;
+            line-height: 1.15;
+            color: #6c757d;
+        }
+        
+        .local-cell,
+        .region-cell {
+            min-width: 180px;
+        }
+        
+        #tablaLocales td {
+            vertical-align: middle;
+        }
     </style>
     <!-- DEFINICIÓN DE LA FUNCIÓN mostrarAlertaPrincipal -->
     <script>
@@ -298,12 +322,10 @@ $stmt_div->close();
                                 <th>ID</th>
                                 <th>Código</th>
                                 <th>Canal</th>
-                                <th>Nombre</th>
-                                <th>Dirección</th>
+                                <th>Local</th>
                                 <th>Cuenta</th>
                                 <th>Cadena</th>
-                                <th>Comuna</th>
-                                <th>Región</th>
+                                <th>Región / Comuna</th>
                                 <th>Empresa</th>
                                 <th>Latitud</th>
                                 <th>Longitud</th>
@@ -1212,7 +1234,7 @@ $(function () {
     bsCustomFileInput.init();
 
     const puedeEditar = <?= json_encode(strtolower($perfilUser) === 'editor' || strtolower($perfilUser) === 'coordinador') ?>;
-    const colspanTabla = puedeEditar ? 13 : 12;
+    const colspanTabla = puedeEditar ? 11 : 10;
 
     let currentOffset = 0;
     let itemsPerPage = 50;
@@ -1247,32 +1269,45 @@ $(function () {
     }
 
     function renderFilaLocal(local) {
-        let fila = '<tr>' +
-            '<td>' + escapeHtml(local.id) + '</td>' +
-            '<td>' + escapeHtml(local.codigo) + '</td>' +
-            '<td>' + escapeHtml(local.canal) + '</td>' +
-            '<td>' + escapeHtml(local.nombre) + '</td>' +
-            '<td>' + escapeHtml(local.direccion) + '</td>' +
-            '<td>' + escapeHtml(local.cuenta) + '</td>' +
-            '<td>' + escapeHtml(local.cadena) + '</td>' +
-            '<td>' + escapeHtml(local.comuna) + '</td>' +
-            '<td>' + escapeHtml(local.region) + '</td>' +
-            '<td>' + escapeHtml(local.empresa) + '</td>' +
-            '<td>' + escapeHtml(local.lat ?? 'N/A') + '</td>' +
-            '<td>' + escapeHtml(local.lng ?? 'N/A') + '</td>';
+    const nombreLocal = escapeHtml(local.nombre || 'Sin nombre');
+    const direccionLocal = escapeHtml(local.direccion || 'Sin dirección');
+    const regionLocal = escapeHtml(local.region || 'Sin región');
+    const comunaLocal = escapeHtml(local.comuna || 'Sin comuna');
 
-        if (puedeEditar) {
-            fila += '<td>' +
-                '<button type="button" class="btn btn-sm btn-primary mr-2 btnEditarLocal" data-id="' + escapeHtml(local.id) + '">' +
-                '<i class="fas fa-edit"></i> Editar</button>' +
-                '<a href="mod_local/eliminar_local.php?id=' + encodeURIComponent(local.id) + '" class="btn btn-sm btn-danger">' +
-                '<i class="fas fa-trash-alt"></i> Eliminar</a>' +
-                '</td>';
-        }
+    let fila = '<tr>' +
+        '<td>' + escapeHtml(local.id) + '</td>' +
+        '<td>' + escapeHtml(local.codigo) + '</td>' +
+        '<td>' + escapeHtml(local.canal) + '</td>' +
 
-        fila += '</tr>';
-        return fila;
+        '<td class="local-cell">' +
+            '<div class="local-cell-title">' + nombreLocal + '</div>' +
+            '<div class="local-cell-subtitle">' + direccionLocal + '</div>' +
+        '</td>' +
+
+        '<td>' + escapeHtml(local.cuenta) + '</td>' +
+        '<td>' + escapeHtml(local.cadena) + '</td>' +
+
+        '<td class="region-cell">' +
+            '<div class="region-cell-title">' + regionLocal + '</div>' +
+            '<div class="region-cell-subtitle">' + comunaLocal + '</div>' +
+        '</td>' +
+
+        '<td>' + escapeHtml(local.empresa) + '</td>' +
+        '<td>' + escapeHtml(local.lat ?? 'N/A') + '</td>' +
+        '<td>' + escapeHtml(local.lng ?? 'N/A') + '</td>';
+
+    if (puedeEditar) {
+        fila += '<td>' +
+            '<button type="button" class="btn btn-sm btn-primary mr-2 btnEditarLocal" data-id="' + escapeHtml(local.id) + '">' +
+            '<i class="fas fa-edit"></i> Editar</button>' +
+            '<a href="mod_local/eliminar_local.php?id=' + encodeURIComponent(local.id) + '" class="btn btn-sm btn-danger">' +
+            '<i class="fas fa-trash-alt"></i> Eliminar</a>' +
+            '</td>';
     }
+
+    fila += '</tr>';
+    return fila;
+}
 
     /* =========================================================
        AJAX CATALOGOS

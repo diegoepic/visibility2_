@@ -250,11 +250,27 @@ $tmp = $f['tmp_name'];
 $nm  = $f['name'];
 $sz  = (int)$f['size'];
 if ($sz <= 0) json_fail(400, 'Archivo vacío');
-$mime = @mime_content_type($tmp) ?: ($f['type'] ?? '');
-$ext  = strtolower(pathinfo($nm, PATHINFO_EXTENSION));
-$looksImage = (strpos((string)$mime,'image/') === 0) || in_array($ext, ['heic','heif'], true);
-if (!$looksImage) json_fail(400, 'El archivo no parece una imagen válida');
 if ($sz > 20*1024*1024) json_fail(413, 'La imagen excede 20MB');
+
+// Validar MIME por magic bytes (finfo) — nunca confiar en el tipo enviado por el cliente
+$finfo = finfo_open(FILEINFO_MIME_TYPE);
+$mime  = $finfo ? (finfo_file($finfo, $tmp) ?: '') : '';
+if ($finfo) finfo_close($finfo);
+$ext   = strtolower(pathinfo($nm, PATHINFO_EXTENSION));
+
+// Extensiones HEIC/HEIF: no tienen magic bytes estándar, usar fallback por extensión solo para ellas
+$allowedMimes = ['image/jpeg','image/jpg','image/png','image/gif','image/webp','image/bmp','image/tiff'];
+$allowedExts  = ['heic','heif'];
+$mimeOk = in_array($mime, $allowedMimes, true);
+$extOk  = in_array($ext, $allowedExts, true);
+
+// Bloquear SVG y cualquier texto/script explícitamente
+if (stripos($mime, 'svg') !== false || stripos($mime, 'text/') !== false || stripos($mime, 'application/') !== false) {
+  json_fail(400, 'Tipo de archivo no permitido');
+}
+if (!$mimeOk && !$extOk) {
+  json_fail(400, 'El archivo no parece una imagen válida');
+}
 
 /* ---------------- Utilidad de conversión ---------------- */
 function convertToWebP($srcPath, $dstPath, $maxDim = 1280, $quality = 80): bool {
@@ -345,28 +361,44 @@ foreach ([$dirBase, $dirFecha, $dirMat] as $d) {
   if (!is_dir($d) && !mkdir($d, 0755, true)) { json_fail(500, 'No se pudo preparar el directorio de subida'); }
 }
 
-/* ---------------- Convertir y guardar (con fallback si falla WebP) ---------------- */
+/* ---------------- Convertir y guardar a archivo de staging ---------------- */
+// Guardamos primero a un archivo staging (fuera del nombre final).
+// El rename al nombre definitivo ocurre DENTRO de la transacción DB,
+// garantizando que no queden archivos huérfanos si el INSERT falla.
 $filenameBase = 'foto_' . uniqid('', true);
-$destWebp     = $dirMat . $filenameBase . '.webp';
-$savedPath    = null;   // pista del archivo realmente guardado
+$stagingPath  = $dirMat . $filenameBase . '.staging';  // nombre temporal
+$finalExt     = 'webp';
+$savedPath    = null;   // pista del archivo realmente persistido
 $relUrl       = '';
 
-if (!convertToWebP($tmp, $destWebp, 1280, 80)) {
-  // Guardar original (sin imprimir warnings)
+if (!convertToWebP($tmp, $stagingPath, 1280, 80)) {
+  // WebP falló — guardar original como staging con JPEG q70 o formato original
   $ext = strtolower($ext ?: 'jpg');
   if (!in_array($ext, ['jpg','jpeg','png','webp','heic','heif'], true)) { $ext = 'jpg'; }
-  $destOrig = $dirMat . $filenameBase . '.' . $ext;
-  if (!@move_uploaded_file($tmp, $destOrig)) {
-    if (!@copy($tmp, $destOrig)) { json_fail(500, 'No se pudo guardar la imagen (fallback)'); }
+  $finalExt = $ext;
+  if (!@move_uploaded_file($tmp, $stagingPath)) {
+    if (!@copy($tmp, $stagingPath)) { json_fail(500, 'No se pudo guardar la imagen'); }
   }
-  @chmod($destOrig, 0644);
-  $savedPath = $destOrig;
+  // Intentar recomprimir como JPEG q70 para reducir tamaño (PERF-02)
+  if (in_array($ext, ['jpg','jpeg'], true) && function_exists('imagejpeg')) {
+    $imSrc = @imagecreatefromjpeg($stagingPath);
+    if ($imSrc) {
+      $jpegStaging = $stagingPath . '.jpg';
+      if (@imagejpeg($imSrc, $jpegStaging, 70)) {
+        @unlink($stagingPath);
+        $stagingPath = $jpegStaging;
+        $finalExt = 'jpg';
+      }
+      imagedestroy($imSrc);
+    }
+  }
 } else {
-  $savedPath = $destWebp;
+  $finalExt = 'webp';
 }
 
+$destFinal = $dirMat . $filenameBase . '.' . $finalExt;
 // URL relativa normalizada SIEMPRE 'uploads/...'
-$relUrl = norm_rel_url('uploads/' . $hoy . '/material_' . $idMaterial . '/' . basename($savedPath));
+$relUrl = norm_rel_url('uploads/' . $hoy . '/material_' . $idMaterial . '/' . basename($destFinal));
 // URL absoluta pública (con base de app)
 $absUrl = abs_url($relUrl);
 
@@ -402,10 +434,44 @@ if ($meta_json_raw !== null && $meta_json_raw !== '') {
   }
 }
 
-/* ---------------- Persistencia ---------------- */
+/* ---------------- Persistencia (archivo + DB en bloque atómico) ---------------- */
 $conn->begin_transaction();
 try {
-  // 1) Insert en fotoVisita (URL ABSOLUTA para consistencia con procesar_gestion)
+  // 0) Renombrar staging → nombre final dentro de la transacción.
+  //    Si falla, se lanza excepción y el rollback limpia el staging.
+  if (!@rename($stagingPath, $destFinal)) {
+    if (!@copy($stagingPath, $destFinal)) {
+      throw new RuntimeException('No se pudo mover el archivo al destino final');
+    }
+    @unlink($stagingPath);
+  }
+  $savedPath = $destFinal;
+  @chmod($savedPath, 0644);
+
+  // 1) Verificar duplicado (misma visita + FQ + URL) antes de insertar (DI-06)
+  if ($idFQ > 0 && $visita_id > 0) {
+    $dupChk = $conn->prepare("SELECT id FROM fotoVisita WHERE visita_id=? AND id_formularioQuestion=? AND url=? LIMIT 1");
+    if ($dupChk) {
+      $dupChk->bind_param('iis', $visita_id, $idFQ, $relUrl);
+      $dupChk->execute();
+      $dupResult = $dupChk->get_result();
+      $dupRow = $dupResult ? $dupResult->fetch_assoc() : null;
+      $dupChk->close();
+      if ($dupRow) {
+        // Ya existe esta foto — responder idempotente sin re-insertar
+        $conn->rollback();
+        if (isset($stagingPath) && is_file($stagingPath)) @unlink($stagingPath);
+        idempo_store_and_reply($conn, 'upload_material_foto', 200, [
+          'ok' => true, 'status' => 'duplicate', 'url' => $absUrl,
+          'relative' => $relUrl, 'absolute' => $absUrl,
+          'id_foto' => (int)$dupRow['id'], 'idMat' => $idMaterial, 'idFQ' => $idFQ, 'visita_id' => $visita_id
+        ]);
+        exit;
+      }
+    }
+  }
+
+  // 2) Insert en fotoVisita (URL relativa normalizada)
   $stmt = $conn->prepare("
     INSERT INTO fotoVisita
       (visita_id, url, id_usuario, id_formulario, id_local, id_material, id_formularioQuestion, fotoLat, fotoLng)
@@ -485,8 +551,10 @@ try {
 
 } catch (Throwable $e) {
   $conn->rollback();
-  if ($savedPath && is_file($savedPath)) @unlink($savedPath);
-  if ($savedPath && is_file($savedPath.'.json')) @unlink($savedPath.'.json');
+  // Limpiar archivos: staging (si aún existe) y final (si ya fue renombrado)
+  if (isset($stagingPath) && is_file($stagingPath)) @unlink($stagingPath);
+  if ($savedPath && is_file($savedPath))            @unlink($savedPath);
+  if ($savedPath && is_file($savedPath.'.json'))    @unlink($savedPath.'.json');
   error_log('upload_material_foto_pruebas.php: '.$e->getMessage());
   json_fail(500, 'No se pudo procesar la foto: '.$e->getMessage(), ['error_code' => 'UPLOAD_ERROR', 'retryable' => true]);
 }

@@ -83,17 +83,33 @@ require_once __DIR__ . '/lib/idempotency.php';
 if (function_exists('idempo_claim_or_fail')) { idempo_claim_or_fail($conn, 'procesar_gestion'); }
 
 /* ---------------- Utilidades columnas opcionales ---------------- */
+// PERF-03: Cache de resultados de DESCRIBE para evitar 3 queries por request.
+// Se usa APC/APCu si está disponible; si no, variable estática de proceso.
 function table_has_col(mysqli $c, string $table, string $col): bool {
+  static $cache = [];
+  $key = "$table.$col";
+  if (array_key_exists($key, $cache)) return $cache[$key];
+
+  // Intentar leer desde APCu (cross-request)
+  $apcKey = "v2_col_exists:$key";
+  if (function_exists('apcu_fetch')) {
+    $hit = apcu_fetch($apcKey, $success);
+    if ($success) { $cache[$key] = (bool)$hit; return $cache[$key]; }
+  }
+
   try {
-    // Validar que table y col sean nombres alfanuméricos válidos (prevenir SQL injection)
     if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $table) ||
         !preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $col)) {
-      return false;
+      return $cache[$key] = false;
     }
     $res = $c->query("SHOW COLUMNS FROM `$table` LIKE '".$c->real_escape_string($col)."'");
-    if ($res) { $ok = $res->num_rows > 0; $res->close(); return $ok; }
+    $ok = $res ? $res->num_rows > 0 : false;
+    if ($res) $res->close();
+    $cache[$key] = $ok;
+    if (function_exists('apcu_store')) apcu_store($apcKey, $ok, 3600); // TTL 1h
+    return $ok;
   } catch (Throwable $e) {}
-  return false;
+  return $cache[$key] = false;
 }
 $FQR_HAS_CREATED_AT   = table_has_col($conn, 'form_question_responses', 'created_at');
 $FQR_HAS_VALOR        = table_has_col($conn, 'form_question_responses', 'valor');
@@ -520,9 +536,11 @@ try {
       if (!ctype_digit($valorImp) || intval($valorImp) < 1) { throw new Exception("Valor implementado (ID=$idFQ) debe ser un entero ≥ 1."); }
       $valorNum = intval($valorImp);
 
-      $stmtVal = $conn->prepare("SELECT valor_propuesto FROM formularioQuestion WHERE id=? LIMIT 1");
-      $stmtVal->bind_param("i",$idFQ); $stmtVal->execute();
+      // Verificar ownership antes de leer datos del FQ (IDOR fix)
+      $stmtVal = $conn->prepare("SELECT valor_propuesto FROM formularioQuestion WHERE id=? AND id_formulario=? AND id_local=? AND id_usuario=? LIMIT 1");
+      $stmtVal->bind_param("iiii",$idFQ,$idCampana,$idLocal,$usuario_id); $stmtVal->execute();
       $rowV = $stmtVal->get_result()->fetch_assoc(); $stmtVal->close();
+      if (!$rowV) { throw new Exception("No tienes permisos sobre el material (ID=$idFQ)."); }
       if ($rowV && $valorNum > intval($rowV['valor_propuesto'])) { throw new Exception("Valor ($valorNum) excede valor_propuesto ({$rowV['valor_propuesto']}) en ID=$idFQ."); }
 
       $obs = isset($observaciones[$idFQ]) ? htmlspecialchars(trim((string)$observaciones[$idFQ]), ENT_QUOTES, 'UTF-8') : '';
@@ -543,9 +561,11 @@ try {
 
     if (is_array($motivoSelect)) {
       foreach ($motivoSelect as $idFQ => $motivoSel) {
+        $idFQ = (int)$idFQ; // sanitizar clave del array POST
         if (!isset($valores[$idFQ]) || trim((string)$valores[$idFQ]) === '') {
           $motNImpl  = isset($motivoNoImpl[$idFQ]) ? trim((string)$motivoNoImpl[$idFQ]) : '';
           $obsConcat = trim($motivoSel . ($motNImpl !== '' ? ' - ' . $motNImpl : ''));
+          // Ownership validado via WHERE en el UPDATE — solo afecta al FQ del usuario
           $stmtNo = $conn->prepare("UPDATE formularioQuestion SET observacion = CONCAT(COALESCE(observacion,''),' ',?) WHERE id=? AND id_formulario=? AND id_local=? AND id_usuario=?");
           if (!$stmtNo) throw new Exception("Error preparando actualización de no implementación (ID=$idFQ): ".$conn->error);
           $stmtNo->bind_param("siiii",$obsConcat,$idFQ,$idCampana,$idLocal,$usuario_id);

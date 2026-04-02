@@ -4,6 +4,7 @@ if (!isset($_SESSION['usuario_id'])) {
     exit();
 }
 
+
 mysqli_report(MYSQLI_REPORT_OFF);
 
 if (empty($_SESSION['csrf_token'])) {
@@ -16,9 +17,7 @@ if (!$conn || !($conn instanceof mysqli)) {
 
 $conn->set_charset("utf8mb4");
 
-/* =========================
-   Helpers DB sin get_result()
-   ========================= */
+
 function dbFetchAllAssoc(mysqli $conn, string $sql, string $types = '', array $params = []): array {
     $stmt = $conn->prepare($sql);
     if (!$stmt) {

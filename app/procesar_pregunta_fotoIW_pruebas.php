@@ -1,5 +1,5 @@
   <?php
-  // procesar_pregunta_fotoIW.php
+
   header('Content-Type: application/json; charset=utf-8');
   ob_start(); // capturar cualquier warning/notice que rompa el JSON
   session_start();

@@ -13,7 +13,7 @@ $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 | BYPASS PARA API MOBILE
 |--------------------------------------------------------------------------
 | Todo lo que cuelgue de /visibility2/app/api/mobile/ no debe pasar por la
-| validaciÃ³n de sesiÃ³n web del portal.
+| validaci¨®n de sesi¨®n web del portal.
 */
 if (
     preg_match('#^/visibility2/app/api/mobile/#i', $uri) ||
@@ -74,7 +74,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
   session_start();
 }
 
-// Conexiè»Šn
+// ConexiÜ‡n
 if (!isset($conn) || !($conn instanceof mysqli)) {
   require_once __DIR__ . '/con_.php';
   if (!isset($conn) || !($conn instanceof mysqli)) {
@@ -286,10 +286,7 @@ if (!function_exists('assert_session_is_valid')) {
         $st->close();
 
         if ($row && !is_null($row['revoked_at'])) {
-          if ($offlineQueue) {
-            return;
-          }
-          // Cerrar sesin y volver a login con aviso
+          // Sesi¨®n revocada ¡ª no hay bypass, ni para cola offline
           session_unset();
           session_destroy();
           if ($wantsJson) {
@@ -298,7 +295,7 @@ if (!function_exists('assert_session_is_valid')) {
             echo json_encode([
               'ok' => false,
               'error_code' => 'SESSION_REVOKED',
-              'message' => 'Sesin revocada',
+              'message' => 'Sesi¨®n revocada',
               'retryable' => false
             ], JSON_UNESCAPED_UNICODE);
             exit;
@@ -315,7 +312,37 @@ if (!function_exists('assert_session_is_valid')) {
       return;
     }
 
-    // Heartbeat (no crtico)
+    // Inactividad: si last_seen_at supera el umbral, cerrar sesi¨®n
+    $inactivityMinutes = (int)(getenv('SESSION_INACTIVITY_MINUTES') ?: 480); // 8h por defecto
+    if ($row && isset($row['last_seen_at'])) {
+      $inactSt = $conn->prepare(
+        "SELECT TIMESTAMPDIFF(MINUTE, last_seen_at, NOW()) AS idle_min FROM user_sessions WHERE user_id = ? AND session_fpr = ? LIMIT 1"
+      );
+      if ($inactSt) {
+        $inactSt->bind_param("is", $uid, $fpr);
+        $inactSt->execute();
+        $inactRow = null;
+        if (method_exists($inactSt, 'get_result')) {
+          $inactRes = $inactSt->get_result();
+          $inactRow = $inactRes ? $inactRes->fetch_assoc() : null;
+        }
+        $inactSt->close();
+        if ($inactRow && (int)$inactRow['idle_min'] > $inactivityMinutes) {
+          $revSt = $conn->prepare("UPDATE user_sessions SET revoked_at = NOW() WHERE user_id = ? AND session_fpr = ?");
+          if ($revSt) { $revSt->bind_param("is", $uid, $fpr); $revSt->execute(); $revSt->close(); }
+          session_unset(); session_destroy();
+          if ($wantsJson) {
+            http_response_code(401);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['ok' => false, 'error_code' => 'SESSION_EXPIRED', 'message' => 'Sesi¨®n expirada por inactividad', 'retryable' => false], JSON_UNESCAPED_UNICODE);
+            exit;
+          }
+          header('Location: /visibility2/app/login.php?session_expired=1'); exit;
+        }
+      }
+    }
+
+    // Heartbeat (no cr¨ªtico)
     $hb = $conn->prepare("UPDATE user_sessions SET last_seen_at = NOW() WHERE user_id = ? AND session_fpr = ?");
     if ($hb) {
       $hb->bind_param("is", $uid, $fpr);

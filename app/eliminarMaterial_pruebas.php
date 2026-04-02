@@ -86,21 +86,34 @@ try {
     throw new Exception('No se puede eliminar: el material tiene fotos asociadas');
   }
 
-  // ===== Eliminar =====
-  $sqlDel = "
-    DELETE FROM formularioQuestion
-    WHERE id = ? AND id_usuario = ? AND estado = 0 AND valor = 0 AND countVisita = 0
-    LIMIT 1
-  ";
-  $stDel = $conn->prepare($sqlDel);
-  if (!$stDel) throw new Exception('Error preparando DELETE: '.$conn->error);
-  $stDel->bind_param('ii', $idFQ, $idUsuario);
-  if (!$stDel->execute()) {
+  // ===== Soft delete: marcar deleted_at / deleted_by si la columna existe =====
+  // Intentar soft delete primero; si la columna no existe, hacer hard delete con log de auditoría.
+  $hasSoftDelete = false;
+  $chkCol = $conn->query("SHOW COLUMNS FROM formularioQuestion LIKE 'deleted_at'");
+  if ($chkCol && $chkCol->num_rows > 0) { $hasSoftDelete = true; if ($chkCol) $chkCol->free(); }
+
+  if ($hasSoftDelete) {
+    $stDel = $conn->prepare("UPDATE formularioQuestion SET deleted_at=NOW(), deleted_by=? WHERE id=? AND id_usuario=? AND estado=0 AND valor=0 AND countVisita=0 AND deleted_at IS NULL LIMIT 1");
+    if (!$stDel) throw new Exception('Error preparando soft DELETE: '.$conn->error);
+    $stDel->bind_param('iii', $idUsuario, $idFQ, $idUsuario);
+    if (!$stDel->execute()) { $stDel->close(); throw new Exception('Error al eliminar'); }
+    $ok = $stDel->affected_rows > 0;
     $stDel->close();
-    throw new Exception('Error al eliminar');
+  } else {
+    // Registrar en tabla de auditoría antes del hard delete (si existe)
+    $auditSt = $conn->prepare("INSERT IGNORE INTO audit_deleted_fq (id_fq, id_usuario, id_formulario, id_local, deleted_at) VALUES (?, ?, ?, ?, NOW())");
+    if ($auditSt) {
+      $auditSt->bind_param('iiii', $idFQ, $idUsuario, $row['id_formulario'], $row['id_local']);
+      $auditSt->execute();
+      $auditSt->close();
+    }
+    $stDel = $conn->prepare("DELETE FROM formularioQuestion WHERE id=? AND id_usuario=? AND estado=0 AND valor=0 AND countVisita=0 LIMIT 1");
+    if (!$stDel) throw new Exception('Error preparando DELETE: '.$conn->error);
+    $stDel->bind_param('ii', $idFQ, $idUsuario);
+    if (!$stDel->execute()) { $stDel->close(); throw new Exception('Error al eliminar'); }
+    $ok = $stDel->affected_rows > 0;
+    $stDel->close();
   }
-  $ok = $stDel->affected_rows > 0;
-  $stDel->close();
 
   if (!$ok) {
     throw new Exception('No se pudo eliminar (quizá cambió de estado o ya no existe)');

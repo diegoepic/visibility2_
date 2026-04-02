@@ -36,6 +36,9 @@
       setInterval(() => this._cleanup(), 10000);
     },
 
+    // OFL-09: detectar ausencia de BroadcastChannel (iOS Safari < 15.4) y advertir
+    hasBroadcastChannel() { return !!this._channel; },
+
     _handleMessage(msg) {
       if (!msg || msg.tabId === this._tabId) return;
       if (msg.type === 'lock_acquired') {
@@ -44,6 +47,13 @@
         const lock = this._locks.get(msg.jobId);
         if (lock && lock.tabId === msg.tabId) {
           this._locks.delete(msg.jobId);
+        }
+      } else if (msg.type === 'csrf_refreshed' && msg.token) {
+        // OFL-03: sincronizar token CSRF recibido desde otro tab
+        window.CSRF_TOKEN = msg.token;
+        if (window.queueState) {
+          window.queueState.csrfStale = false;
+          window.queueState.lastCsrfRefresh = Date.now();
         }
       }
     },
@@ -111,6 +121,21 @@
   // Inicializar sistema de locks
   CrossTabLock.init();
 
+  // OFL-09: Advertir si BroadcastChannel no está disponible (iOS Safari < 15.4)
+  if (!CrossTabLock.hasBroadcastChannel()) {
+    // Solo advertir si hay más de una pestaña (heurística: sessionStorage es por-tab)
+    try {
+      const tabCount = parseInt(sessionStorage.getItem('v2_tab_count') || '0', 10) + 1;
+      sessionStorage.setItem('v2_tab_count', String(tabCount));
+      if (tabCount > 1) {
+        console.warn('[Queue] BroadcastChannel no disponible. Usa una sola pestaña para evitar duplicados en la cola offline.');
+        window.dispatchEvent(new CustomEvent('queue:no_broadcast_channel', {
+          detail: { message: 'Tu navegador no soporta sincronización entre pestañas. Usa solo una pestaña a la vez.' }
+        }));
+      }
+    } catch(_) {}
+  }
+
   // --------------------------------------------------------------------------------
   // Event bus (para UI Avance)
   // --------------------------------------------------------------------------------
@@ -177,6 +202,8 @@
         queueState.csrfStale = false;
         queueState.lastCsrfRefresh = Date.now();
         queueState.csrfRefreshAttempts = 0;
+        // OFL-03: broadcast token a otros tabs para evitar race condition
+        CrossTabLock._broadcast({ type: 'csrf_refreshed', tabId: CrossTabLock._tabId, token: js.csrf_token });
         return { ok:true, token: js.csrf_token };
       }
       if (parsed.isHtml) {
@@ -1197,6 +1224,11 @@
         const now = Date.now();
         QueueEvents.emit('queue:update', { pending: pending.length });
 
+        // OFL-05: heartbeat cada 5 jobs para detectar expiración de sesión mid-drain
+        let _jobsProcessedInDrain = 0;
+        const MID_DRAIN_HB_EVERY = 5;
+        const _drainStartTime = Date.now();
+
         for (const raw of pending) {
           const t = AppDB.normalizeJob ? AppDB.normalizeJob(raw) : raw;
           const nextTryAt = t.nextTryAt || t.nextTry || 0;
@@ -1284,6 +1316,22 @@
             QueueEvents.emit('queue:dispatch:success', { job: t, responseStatus: result.status || 200, response: result.data });
             jr('onSuccess', t, result.data, result.status);
             window.dispatchEvent(new CustomEvent('queue:done', { detail: { id: t.id, type: t.type, response: result.data } }));
+
+            // OFL-05: heartbeat proactivo cada N jobs para detectar sesión expirada mid-drain
+            _jobsProcessedInDrain++;
+            if (_jobsProcessedInDrain % MID_DRAIN_HB_EVERY === 0) {
+              const midHb = await heartbeat();
+              if (!midHb.ok) {
+                if (midHb.blocked === 'auth') {
+                  blockQueue('auth', midHb.data || null);
+                  QueueEvents.emit('queue:session_expired_mid_drain', {
+                    jobsDone: _jobsProcessedInDrain,
+                    elapsedMs: Date.now() - _drainStartTime
+                  });
+                  break;
+                }
+              }
+            }
           } catch (err) {
             const parsed = err && err.parsed ? err.parsed : null;
             const responseStub = err && err.status ? { status: err.status } : null;

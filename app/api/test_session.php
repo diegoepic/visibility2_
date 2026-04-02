@@ -5,7 +5,12 @@ header('Content-Type: application/json; charset=UTF-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 
-if (getenv('V2_TEST_MODE') !== '1') {
+// Este endpoint solo funciona en modo test explícito Y desde localhost/127.0.0.1
+$allowedIps = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+$remoteIp   = $_SERVER['REMOTE_ADDR'] ?? '';
+$testMode   = getenv('V2_TEST_MODE') === '1';
+
+if (!$testMode || !in_array($remoteIp, $allowedIps, true)) {
     http_response_code(404);
     echo json_encode(['ok' => false, 'error_code' => 'NOT_FOUND'], JSON_UNESCAPED_UNICODE);
     exit;

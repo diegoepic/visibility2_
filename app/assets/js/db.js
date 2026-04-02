@@ -92,7 +92,11 @@
         const idx = os.index('dedupeKey');
         const r = idx.getAll(rec.dedupeKey);
         r.onsuccess = () => {
-          const dup = (r.result || []).find(it => ['queued','running'].includes(normalizeStatus(it.status)));
+          // OFL-04: incluir 'error' y 'blocked_*' para evitar re-enqueue de tareas fallidas
+          const dup = (r.result || []).find(it => {
+            const s = normalizeStatus(it.status);
+            return s === 'queued' || s === 'running' || s === 'error' || s.startsWith('blocked');
+          });
           if (dup) { res(dup.id); try { tx.abort(); } catch(_e){} return; }
           doAdd();
         };
@@ -103,7 +107,19 @@
 
       tx.oncomplete = () => res(rec.id);
       tx.onabort    = () => { /* abort esperado en dedupe */ };
-      tx.onerror    = () => rej(tx.error);
+      tx.onerror    = (e) => {
+        const err = tx.error;
+        // OFL-07: detectar QuotaExceededError e informar al usuario
+        if (err && (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+          console.error('[AppDB] Almacenamiento IndexedDB lleno (QuotaExceededError). Sincroniza para liberar espacio.');
+          try {
+            window.dispatchEvent(new CustomEvent('db:quota_exceeded', {
+              detail: { message: 'Almacenamiento local lleno. Sincroniza tus datos para liberar espacio.' }
+            }));
+          } catch(_) {}
+        }
+        rej(err);
+      };
     });
   }
 

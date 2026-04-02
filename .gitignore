@@ -42,6 +42,10 @@ portal/RESTful/cache/
 *.tmp
 *.log
 
+# === Variables de entorno (nunca commitear) ===
+.env
+app/.env
+
 # === Cosas de IDE / sistema ===
 .vscode/
 .idea/

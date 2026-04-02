@@ -11,13 +11,13 @@ if (!isset($_SESSION['usuario_id'])) {
   echo json_encode([
     'ok' => false,
     'error_code' => 'NO_SESSION',
-    'message' => 'Sesi®Æn expirada',
+    'message' => 'SesiËªän expirada',
     'retryable' => false
   ], JSON_UNESCAPED_UNICODE);
   exit;
 }
 
-// Rotaci®Æn autom®¢tica del CSRF token cada hora (seguridad mejorada)
+// Rotaci√≥n autom√°tica del CSRF token cada hora (seguridad mejorada)
 $CSRF_TTL = 3600; // 1 hora en segundos
 $needsRotation = false;
 
@@ -35,7 +35,7 @@ if (!$needsRotation && isset($_SESSION['csrf_token_time'])) {
   }
 }
 
-// Permitir rotaci®Æn manual expl®™cita
+// Permitir rotaci√≥n manual expl√≠cita
 if (!$needsRotation && isset($_GET['rotate']) && $_GET['rotate'] === '1') {
   $needsRotation = true;
 }

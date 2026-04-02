@@ -378,6 +378,15 @@
 
     _onPositionError(err) {
       console.warn('[Navigator3D] Position error:', err);
+      // UX-02: graceful degradation — emitir evento cuando GPS es denegado explícitamente
+      if (err && err.code === 1 /* GeolocationPositionError.PERMISSION_DENIED */) {
+        window.dispatchEvent(new CustomEvent('nav:gps_denied', {
+          detail: {
+            message: 'Activa la ubicación en Configuración → Privacidad → Ubicación para usar la navegación.',
+            code: err.code
+          }
+        }));
+      }
       if (this.hooks.onError) {
         this.hooks.onError(err);
       }

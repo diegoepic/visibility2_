@@ -97,6 +97,7 @@
 
   let animationFrame = null;
   let isActive = false;
+  let _orientationHandler = null; // OFL-06: referencia para poder remover el listener
 
   // ==================== INICIALIZACIÓN ====================
 
@@ -128,7 +129,13 @@
    * Configura el listener de orientación del dispositivo
    */
   function setupOrientationListener() {
-    const handler = (e) => {
+    // OFL-06: remover listener previo antes de añadir uno nuevo para evitar acumulación
+    if (_orientationHandler) {
+      window.removeEventListener('deviceorientation', _orientationHandler, true);
+      _orientationHandler = null;
+    }
+
+    _orientationHandler = (e) => {
       if (e.absolute === false && e.alpha == null) return;
       heading = e.alpha || heading;
       pitch = e.beta || pitch;
@@ -142,12 +149,22 @@
       DeviceOrientationEvent.requestPermission()
         .then(state => {
           if (state === 'granted') {
-            window.addEventListener('deviceorientation', handler, true);
+            window.addEventListener('deviceorientation', _orientationHandler, true);
+          } else {
+            // UX-02: GPS/orientación denegado — informar al usuario
+            window.dispatchEvent(new CustomEvent('ar:orientation_denied', {
+              detail: { message: 'Activa la orientación del dispositivo en Configuración → Privacidad para usar la brújula AR.' }
+            }));
           }
         })
-        .catch(console.error);
+        .catch(err => {
+          console.error('[ARView] Orientation permission error:', err);
+          window.dispatchEvent(new CustomEvent('ar:orientation_denied', {
+            detail: { message: 'No se pudo acceder a la orientación del dispositivo.' }
+          }));
+        });
     } else {
-      window.addEventListener('deviceorientation', handler, true);
+      window.addEventListener('deviceorientation', _orientationHandler, true);
     }
   }
 
@@ -397,6 +414,12 @@
     if (animationFrame) {
       cancelAnimationFrame(animationFrame);
       animationFrame = null;
+    }
+
+    // OFL-06: remover listener de orientación para evitar memory/battery leak
+    if (_orientationHandler) {
+      window.removeEventListener('deviceorientation', _orientationHandler, true);
+      _orientationHandler = null;
     }
 
     stopCamera();

@@ -208,7 +208,7 @@
     let hidden = false;
 
     rows.forEach(tr => {
-      // Si hay formId, verificar que la fila corresponde a esa campa�0�9a
+      // Si hay formId, verificar que la fila corresponde a esa campa�1�70�1�79a
       if (formId) {
         const camps = (tr.getAttribute('data-campanas') || '').split(',').filter(Boolean);
         const matchesCampaign = camps.length === 0 || camps.includes(String(formId));
@@ -264,10 +264,83 @@
     }
   });
 
+  // UX-01: Manejar errores de sincronización — marcar filas con indicador de error visible
+  window.addEventListener('queue:dispatch:error', function(ev) {
+    try {
+      const detail = ev.detail || {};
+      const job = detail.job || {};
+      const errorObj = detail.error || {};
+      const jobType = job.type || '';
+      if (jobType !== 'procesar_gestion' && jobType !== 'procesar_gestion_pruebas') return;
+
+      const localId = job.fields && (job.fields.idLocal || job.fields.id_local);
+      const campId  = job.fields && (job.fields.idCampana || job.fields.id_formulario);
+      if (!localId || !campId) return;
+
+      // Buscar la fila correspondiente en la tabla
+      const rows = document.querySelectorAll('[data-local-id][data-camp-id]');
+      rows.forEach(function(row) {
+        if (String(row.dataset.localId) === String(localId) && String(row.dataset.campId) === String(campId)) {
+          row.classList.add('sync-error');
+          // Añadir badge de error si no existe
+          if (!row.querySelector('.sync-error-badge')) {
+            const badge = document.createElement('span');
+            badge.className = 'sync-error-badge label label-danger';
+            badge.title = 'Error de sincronización: ' + (errorObj.message || errorObj.code || 'Error desconocido');
+            badge.innerHTML = '<i class="fa fa-exclamation-triangle"></i> Error sync';
+            const firstCell = row.querySelector('td');
+            if (firstCell) firstCell.appendChild(badge);
+          }
+        }
+      });
+    } catch(e) {
+      console.warn('[bootstrap_index_cache] Error en queue:dispatch:error handler:', e);
+    }
+  });
+
+  // UX-01: Manejar alerta de almacenamiento lleno
+  window.addEventListener('db:quota_exceeded', function(ev) {
+    try {
+      const msg = (ev.detail && ev.detail.message) || 'Almacenamiento local lleno. Sincroniza para liberar espacio.';
+      // Reutilizar el mecanismo de alerta existente si está disponible
+      if (typeof window.showAlert === 'function') {
+        window.showAlert('warning', msg);
+      } else {
+        const container = document.querySelector('.alert-container, #alert-container, .container-fluid');
+        if (container) {
+          const alertEl = document.createElement('div');
+          alertEl.className = 'alert alert-warning alert-dismissible';
+          alertEl.innerHTML = '<strong><i class="fa fa-database"></i> Almacenamiento lleno</strong> ' + msg +
+            '<button type="button" class="close" data-dismiss="alert">&times;</button>';
+          container.insertBefore(alertEl, container.firstChild);
+        }
+      }
+    } catch(e) {}
+  });
+
+  // UX-02: Manejar GPS denegado — mostrar mensaje amigable
+  window.addEventListener('nav:gps_denied', function(ev) {
+    try {
+      const msg = (ev.detail && ev.detail.message) || 'Activa la ubicación para usar la navegación.';
+      console.warn('[Nav] GPS denegado:', msg);
+      // Solo mostrar una vez por sesión
+      if (sessionStorage.getItem('v2_gps_denied_shown')) return;
+      sessionStorage.setItem('v2_gps_denied_shown', '1');
+      const container = document.querySelector('.alert-container, #alert-container, .container-fluid');
+      if (container) {
+        const alertEl = document.createElement('div');
+        alertEl.className = 'alert alert-info alert-dismissible';
+        alertEl.innerHTML = '<strong><i class="fa fa-map-marker"></i> Ubicación desactivada</strong> ' + msg +
+          '<button type="button" class="close" data-dismiss="alert">&times;</button>';
+        container.insertBefore(alertEl, container.firstChild);
+      }
+    } catch(e) {}
+  });
+
   // Re-ejecutar hideDoneRows cuando la pagina vuelve a ser visible (por si hubo cambios en background)
   document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'visible') {
-      // Peque�0�9o delay para dar tiempo a que se procesen otras actualizaciones
+      // Peque�1�70�1�79o delay para dar tiempo a que se procesen otras actualizaciones
       setTimeout(hideDoneRows, 500);
     }
   });

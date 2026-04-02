@@ -69,7 +69,7 @@ if (isset($conn) && $conn instanceof mysqli) {
 }
 clear_remember_cookie();
 
-// ----- Limpiar sesi��n y cookie -----
+// ----- Limpiar sesi��n y cookie -----
 $_SESSION = [];
 
 if (ini_get('session.use_cookies')) {
@@ -87,6 +87,34 @@ if (ini_get('session.use_cookies')) {
 
 session_destroy();
 
-
-header('Location: login.php');
+// Entregar página HTML mínima que limpia caché del SW y luego redirige.
+// No podemos usar header('Location:') aquí porque necesitamos correr JS del lado cliente.
+header('Content-Type: text/html; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate');
+echo <<<'HTML'
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><title>Cerrando sesión…</title>
+<meta http-equiv="refresh" content="2;url=login.php">
+</head>
+<body>
+<script>
+(async () => {
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && reg.active) {
+        reg.active.postMessage({ type: 'CLEAR_USER_CACHES' });
+        // Esperar brevemente para que el SW procese la limpieza
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+  } catch (_) {}
+  window.location.replace('login.php');
+})();
+</script>
+<p>Cerrando sesión…</p>
+</body>
+</html>
+HTML;
 exit();

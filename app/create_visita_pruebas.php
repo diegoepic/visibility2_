@@ -67,15 +67,21 @@ function read_csrf(): ?string {
     return null;
 }
 
-function norm_lat($v): float {
-    $x = is_numeric($v) ? (float)$v : 0.0;
+function norm_lat($v): ?float {
+    if ($v === null || $v === '' || $v === false) return null;
+    if (!is_numeric($v)) return null;
+    $x = (float)$v;
+    if ($x === 0.0) return null; // (0,0) = Océano Atlántico, no es un punto de campo válido
     if ($x > 90) $x = 90.0;
     if ($x < -90) $x = -90.0;
     return $x;
 }
 
-function norm_lng($v): float {
-    $x = is_numeric($v) ? (float)$v : 0.0;
+function norm_lng($v): ?float {
+    if ($v === null || $v === '' || $v === false) return null;
+    if (!is_numeric($v)) return null;
+    $x = (float)$v;
+    if ($x === 0.0) return null;
     if ($x > 180) $x = 180.0;
     if ($x < -180) $x = -180.0;
     return $x;
@@ -160,8 +166,8 @@ if ($local_id === 0) {
 
 $client_guid = isset($_POST['client_guid']) ? trim((string)$_POST['client_guid']) : (string)($_GET['client_guid'] ?? '');
 $visita_local = isset($_POST['visita_local_id']) ? trim((string)$_POST['visita_local_id']) : (string)($_GET['visita_local_id'] ?? '');
-$lat = norm_lat($_POST['lat'] ?? ($_GET['lat'] ?? 0));
-$lng = norm_lng($_POST['lng'] ?? ($_GET['lng'] ?? 0));
+$lat = norm_lat($_POST['lat'] ?? ($_GET['lat'] ?? null));
+$lng = norm_lng($_POST['lng'] ?? ($_GET['lng'] ?? null));
 $started_at_in = isset($_POST['started_at']) ? trim((string)$_POST['started_at']) : (string)($_GET['started_at'] ?? '');
 $started_at = normalize_datetime($started_at_in);
 
@@ -249,6 +255,25 @@ if (!$perm_ok) {
     ]);
 }
 
+/* -------------------- Cerrar visitas huérfanas >20h -------------------- */
+// Si hay visitas abiertas del mismo usuario/campaña/local de más de 20h, se cierran automáticamente
+// para evitar mezcla de datos de días distintos.
+$orphanHours = (int)(getenv('VISITA_ORPHAN_HOURS') ?: 20);
+$orphanSt = $conn->prepare("
+    UPDATE visita
+       SET fecha_fin = DATE_SUB(NOW(), INTERVAL 1 SECOND)
+     WHERE id_usuario    = ?
+       AND id_formulario = ?
+       AND id_local      = ?
+       AND fecha_fin IS NULL
+       AND fecha_inicio < DATE_SUB(NOW(), INTERVAL ? HOUR)
+");
+if ($orphanSt) {
+    $orphanSt->bind_param('iiii', $user_id, $form_id, $local_id, $orphanHours);
+    $orphanSt->execute();
+    $orphanSt->close();
+}
+
 /* -------------------- Idempotencia -------------------- */
 sanitize_idempotency_key();
 idempo_claim_or_fail($conn, 'create_visita');
@@ -263,7 +288,7 @@ try {
     $reused = false;
 
     // -------------------------------------------------------
-    // 1) Reusar visita abierta por client_guid
+    // 1) Reusar visita abierta por client_guid (FOR UPDATE evita race condition)
     // -------------------------------------------------------
     if ($client_guid !== '') {
         $sel = $conn->prepare("
@@ -276,6 +301,7 @@ try {
               AND (fecha_fin IS NULL)
             ORDER BY id DESC
             LIMIT 1
+            FOR UPDATE
         ");
         $sel->bind_param('iiis', $user_id, $form_id, $local_id, $client_guid);
         $sel->execute();
@@ -289,7 +315,7 @@ try {
     }
 
     // -------------------------------------------------------
-    // 2) Reusar cualquier visita abierta del mismo trío
+    // 2) Reusar cualquier visita abierta del mismo trío (FOR UPDATE evita race condition)
     // -------------------------------------------------------
     if ($visita_id === 0) {
         $sel2 = $conn->prepare("
@@ -301,6 +327,7 @@ try {
               AND (fecha_fin IS NULL)
             ORDER BY id DESC
             LIMIT 1
+            FOR UPDATE
         ");
         $sel2->bind_param('iii', $user_id, $form_id, $local_id);
         $sel2->execute();

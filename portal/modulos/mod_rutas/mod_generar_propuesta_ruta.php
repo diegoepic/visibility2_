@@ -171,6 +171,259 @@ function minDistanceToGroup(array $local, array $group): float
     return $best;
 }
 
+function countDistinctComunas(array $group): int
+{
+    $keys = [];
+
+    foreach ($group as $local) {
+        $keys[normalizeGeoKey((string)($local['comuna'] ?? ''))] = true;
+    }
+
+    return count($keys);
+}
+
+function calculateMedoid(array $group): array
+{
+    if (empty($group)) {
+        return ['lat' => 0.0, 'lng' => 0.0];
+    }
+
+    if (count($group) === 1) {
+        return $group[0];
+    }
+
+    $bestIdx = 0;
+    $bestScore = PHP_FLOAT_MAX;
+
+    foreach ($group as $i => $candidate) {
+        $sum = 0.0;
+
+        foreach ($group as $j => $other) {
+            if ($i === $j) {
+                continue;
+            }
+
+            $sum += haversineKm(
+                (float)$candidate['lat'],
+                (float)$candidate['lng'],
+                (float)$other['lat'],
+                (float)$other['lng']
+            );
+        }
+
+        if ($sum < $bestScore) {
+            $bestScore = $sum;
+            $bestIdx = $i;
+        }
+    }
+
+    return $group[$bestIdx];
+}
+
+function maxDistanceToMedoid(array $group): float
+{
+    if (count($group) <= 1) {
+        return 0.0;
+    }
+
+    $medoid = calculateMedoid($group);
+    $max = 0.0;
+
+    foreach ($group as $local) {
+        $dist = haversineKm(
+            (float)$medoid['lat'],
+            (float)$medoid['lng'],
+            (float)$local['lat'],
+            (float)$local['lng']
+        );
+
+        if ($dist > $max) {
+            $max = $dist;
+        }
+    }
+
+    return $max;
+}
+
+function groupDiameterKm(array $group): float
+{
+    $count = count($group);
+
+    if ($count <= 1) {
+        return 0.0;
+    }
+
+    $max = 0.0;
+
+    for ($i = 0; $i < $count; $i++) {
+        for ($j = $i + 1; $j < $count; $j++) {
+            $dist = haversineKm(
+                (float)$group[$i]['lat'],
+                (float)$group[$i]['lng'],
+                (float)$group[$j]['lat'],
+                (float)$group[$j]['lng']
+            );
+
+            if ($dist > $max) {
+                $max = $dist;
+            }
+        }
+    }
+
+    return $max;
+}
+
+function routeViolatesConstraints(array $group, array $opts): bool
+{
+    if (empty($group)) {
+        return false;
+    }
+
+    $maxDiameterKm   = (float)($opts['max_diameter_km'] ?? 0);
+    $maxRadiusKm     = (float)($opts['max_radius_km'] ?? 0);
+    $maxComunasRuta  = (int)($opts['max_comunas_ruta'] ?? 0);
+
+    if ($maxDiameterKm > 0 && groupDiameterKm($group) > $maxDiameterKm) {
+        return true;
+    }
+
+    if ($maxRadiusKm > 0 && maxDistanceToMedoid($group) > $maxRadiusKm) {
+        return true;
+    }
+
+    if ($maxComunasRuta > 0 && countDistinctComunas($group) > $maxComunasRuta) {
+        return true;
+    }
+
+    return false;
+}
+
+function splitGroupByConstraints(array $orderedGroup, array $opts): array
+{
+    if (empty($orderedGroup)) {
+        return [];
+    }
+
+    $maxJumpKm = (float)($opts['max_jump_km'] ?? 0);
+
+    $chunks = [[$orderedGroup[0]]];
+
+    for ($i = 1; $i < count($orderedGroup); $i++) {
+        $currentChunkIdx = count($chunks) - 1;
+        $prev = $orderedGroup[$i - 1];
+        $curr = $orderedGroup[$i];
+
+        $jumpKm = haversineKm(
+            (float)$prev['lat'],
+            (float)$prev['lng'],
+            (float)$curr['lat'],
+            (float)$curr['lng']
+        );
+
+        $candidateChunk = $chunks[$currentChunkIdx];
+        $candidateChunk[] = $curr;
+
+        $breakByJump  = ($maxJumpKm > 0 && $jumpKm > $maxJumpKm);
+        $breakByShape = routeViolatesConstraints($candidateChunk, $opts);
+
+        if ($breakByJump || $breakByShape) {
+            $chunks[] = [$curr];
+        } else {
+            $chunks[$currentChunkIdx][] = $curr;
+        }
+    }
+
+    return $chunks;
+}
+
+function averageDistanceToKNearest(array $local, array $allLocales, int $k = 3): float
+{
+    $distances = [];
+
+    foreach ($allLocales as $other) {
+        if (($other['codigo'] ?? null) === ($local['codigo'] ?? null)) {
+            continue;
+        }
+
+        $distances[] = haversineKm(
+            (float)$local['lat'],
+            (float)$local['lng'],
+            (float)$other['lat'],
+            (float)$other['lng']
+        );
+    }
+
+    if (empty($distances)) {
+        return 0.0;
+    }
+
+    sort($distances, SORT_NUMERIC);
+    $slice = array_slice($distances, 0, max(1, $k));
+
+    return array_sum($slice) / count($slice);
+}
+
+function partitionSuspiciousOutliers(array $locales, float $thresholdKm = 0.0, int $k = 3): array
+{
+    if ($thresholdKm <= 0 || count($locales) <= $k) {
+        return [$locales, []];
+    }
+
+    $valid = [];
+    $suspicious = [];
+
+    foreach ($locales as $local) {
+        $avg = averageDistanceToKNearest($local, $locales, $k);
+
+        if ($avg > $thresholdKm) {
+            $local['_motivo_sospechoso'] = 'Promedio a ' . $k . ' vecinos más cercanos: ' . round($avg, 2) . ' km';
+            $suspicious[] = $local;
+        } else {
+            $valid[] = $local;
+        }
+    }
+
+    return [$valid, $suspicious];
+}
+
+function canJoinGroupByDistance(array $local, array $group, float $maxKm): bool
+{
+    if (empty($group)) {
+        return true;
+    }
+
+    return minDistanceToGroup($local, $group) <= $maxKm;
+}
+
+function splitGroupByMaxJump(array $orderedGroup, float $maxKm): array
+{
+    if (empty($orderedGroup)) {
+        return [];
+    }
+
+    $chunks = [[$orderedGroup[0]]];
+
+    for ($i = 1; $i < count($orderedGroup); $i++) {
+        $prev = $orderedGroup[$i - 1];
+        $curr = $orderedGroup[$i];
+
+        $dist = haversineKm(
+            (float)$prev['lat'],
+            (float)$prev['lng'],
+            (float)$curr['lat'],
+            (float)$curr['lng']
+        );
+
+        if ($dist > $maxKm) {
+            $chunks[] = [$curr];
+        } else {
+            $chunks[count($chunks) - 1][] = $curr;
+        }
+    }
+
+    return $chunks;
+}
+
 function getMaxPerDay(int $targetPerDay): int
 {
     return $targetPerDay + max(1, (int) ceil($targetPerDay * 0.15));
@@ -353,6 +606,50 @@ function estimateRouteDistanceKm(array $orderedGroup): float
     return $total;
 }
 
+function sortGroupsByPriority(array $groups): array
+{
+    if (empty($groups)) {
+        return [];
+    }
+
+    $meta = [];
+
+    foreach ($groups as $idx => $group) {
+        if (empty($group)) {
+            continue;
+        }
+
+        $meta[] = [
+            'original_index' => $idx,
+            'group'          => $group,
+            'size'           => count($group),
+            'km'             => estimateRouteDistanceKm($group),
+        ];
+    }
+
+    usort($meta, function ($a, $b) {
+        // 1) Prioridad principal: mayor cantidad de locales
+        $cmp = $b['size'] <=> $a['size'];
+        if ($cmp !== 0) {
+            return $cmp;
+        }
+
+        // 2) Desempate: mayor KM estimado primero
+        $cmp = $b['km'] <=> $a['km'];
+        if ($cmp !== 0) {
+            return $cmp;
+        }
+
+        // 3) Desempate final: respetar orden original
+        return $a['original_index'] <=> $b['original_index'];
+    });
+
+    return array_values(array_map(
+        static fn($item) => $item['group'],
+        $meta
+    ));
+}
+
 function orderGroupByBestStart(array $group): array
 {
     if (count($group) <= 2) {
@@ -394,13 +691,16 @@ function orderGroupByBestStart(array $group): array
         : $routeB;
 }
 
-function buildBalancedDistanceGroups(array $locales, array $capacities): array
+function buildBalancedDistanceGroups(array $locales, array $capacities, array $opts = []): array
 {
     if (empty($locales) || empty($capacities)) {
         return [];
     }
 
     $groupCount = count($capacities);
+    $defaultCapacity = max(1, (int)max($capacities));
+
+    $maxJumpKm = (float)($opts['max_jump_km'] ?? 0);
 
     if ($groupCount >= count($locales)) {
         $groups = [];
@@ -427,12 +727,15 @@ function buildBalancedDistanceGroups(array $locales, array $capacities): array
         }
     }
 
-    // Asignar primero los más "difíciles" / más alejados
     usort($remaining, function ($a, $b) use ($groups) {
         $distA = PHP_FLOAT_MAX;
         $distB = PHP_FLOAT_MAX;
 
         foreach ($groups as $group) {
+            if (empty($group)) {
+                continue;
+            }
+
             $dA = minDistanceToGroup($a, $group);
             $dB = minDistanceToGroup($b, $group);
 
@@ -452,25 +755,44 @@ function buildBalancedDistanceGroups(array $locales, array $capacities): array
         $bestScore = PHP_FLOAT_MAX;
 
         foreach ($groups as $groupIdx => $group) {
-            if (count($group) >= $capacities[$groupIdx]) {
-                continue; // tope duro
+            $groupCapacity = $capacities[$groupIdx] ?? $defaultCapacity;
+
+            if (count($group) >= $groupCapacity) {
+                continue;
+            }
+
+            $distNearest = minDistanceToGroup($local, $group);
+
+            if (!empty($group) && $maxJumpKm > 0 && $distNearest > $maxJumpKm) {
+                continue;
+            }
+
+            $candidateGroup = $group;
+            $candidateGroup[] = $local;
+
+            if (routeViolatesConstraints($candidateGroup, $opts)) {
+                continue;
             }
 
             $distCentroid = distanceToCentroid($local, $group);
-            $distNearest  = minDistanceToGroup($local, $group);
-            $fillRatio    = count($group) / max(1, $capacities[$groupIdx]);
+            $fillRatio    = count($group) / max(1, $groupCapacity);
 
             $sameComunaBonus = 0.0;
             foreach ($group as $member) {
                 if (sameComuna($local, $member)) {
-                    $sameComunaBonus = -2.5; // prioriza mantener comuna junta
+                    $sameComunaBonus = -2.5;
                     break;
                 }
             }
 
-            $score = ($distCentroid * 0.58)
-                   + ($distNearest  * 0.32)
-                   + ($fillRatio    * 4.80)
+            $diameterAfter = groupDiameterKm($candidateGroup);
+            $radiusAfter   = maxDistanceToMedoid($candidateGroup);
+
+            $score = ($distCentroid * 0.42)
+                   + ($distNearest  * 0.28)
+                   + ($fillRatio    * 4.50)
+                   + ($diameterAfter * 0.18)
+                   + ($radiusAfter   * 0.20)
                    + $sameComunaBonus;
 
             if ($score < $bestScore) {
@@ -479,31 +801,35 @@ function buildBalancedDistanceGroups(array $locales, array $capacities): array
             }
         }
 
-        // fallback: grupo más cercano que aún tenga cupo
+        // Ya no forzamos fallback al grupo "más cercano".
+        // Si no cabe por restricciones, nace una nueva ruta.
         if ($bestGroupIdx === null) {
-            $fallbackIdx = null;
-            $fallbackScore = PHP_FLOAT_MAX;
-
-            foreach ($groups as $groupIdx => $group) {
-                if (count($group) >= $capacities[$groupIdx]) {
-                    continue;
-                }
-
-                $score = minDistanceToGroup($local, $group);
-
-                if ($score < $fallbackScore) {
-                    $fallbackScore = $score;
-                    $fallbackIdx = $groupIdx;
-                }
-            }
-
-            $bestGroupIdx = $fallbackIdx ?? 0;
+            $groups[] = [$local];
+            $capacities[] = $defaultCapacity;
+            continue;
         }
 
         $groups[$bestGroupIdx][] = $local;
     }
 
-    usort($groups, function ($a, $b) {
+    $finalGroups = [];
+
+    foreach ($groups as $group) {
+        if (empty($group)) {
+            continue;
+        }
+
+        $orderedGroup = orderGroupByBestStart($group);
+        $chunks = splitGroupByConstraints($orderedGroup, $opts);
+
+        foreach ($chunks as $chunk) {
+            if (!empty($chunk)) {
+                $finalGroups[] = $chunk;
+            }
+        }
+    }
+
+    usort($finalGroups, function ($a, $b) {
         $ca = calculateCentroid($a);
         $cb = calculateCentroid($b);
 
@@ -515,11 +841,7 @@ function buildBalancedDistanceGroups(array $locales, array $capacities): array
         return $ca['lng'] <=> $cb['lng'];
     });
 
-    foreach ($groups as $idx => $group) {
-        $groups[$idx] = orderGroupByBestStart($group);
-    }
-
-    return $groups;
+    return $finalGroups;
 }
 
 function normalizeGeoKey(string $text): string
@@ -630,7 +952,7 @@ function allocateGroupCountsByTargetPerDay(array $buckets, int $targetPerDay): a
     return $alloc;
 }
 
-function buildCommuneFirstGroups(array $locales, int $targetPerDay): array
+function buildCommuneFirstGroups(array $locales, int $targetPerDay, array $opts = []): array
 {
     if ($targetPerDay <= 0 || empty($locales)) {
         return [];
@@ -641,7 +963,6 @@ function buildCommuneFirstGroups(array $locales, int $targetPerDay): array
         return [];
     }
 
-    // Orden previo: primero por comuna, luego por cercanía interna
     $buckets = bucketLocalesByComuna($locales);
 
     uasort($buckets, function ($a, $b) {
@@ -657,7 +978,7 @@ function buildCommuneFirstGroups(array $locales, int $targetPerDay): array
         }
     }
 
-    return buildBalancedDistanceGroups($orderedLocales, $capacities);
+    return buildBalancedDistanceGroups($orderedLocales, $capacities, $opts);
 }
 
 function styleHeader($sheet, string $range): void
@@ -711,6 +1032,34 @@ $cantidadPorDia = (int)($_POST['cantidad_por_dia'] ?? 0);
 if ($cantidadPorDia < 1) {
     fail('Cantidad por día inválida.');
 }
+
+$maxKmEntrePuntos = isset($_POST['max_km_ruta']) && is_numeric($_POST['max_km_ruta'])
+    ? max(1.0, (float)$_POST['max_km_ruta'])
+    : 30.0;
+
+$maxDiameterKm = isset($_POST['max_diameter_km']) && is_numeric($_POST['max_diameter_km'])
+    ? max(1.0, (float)$_POST['max_diameter_km'])
+    : 20.0;
+
+$maxRadiusKm = isset($_POST['max_radius_km']) && is_numeric($_POST['max_radius_km'])
+    ? max(1.0, (float)$_POST['max_radius_km'])
+    : 10.0;
+
+$maxComunasRuta = isset($_POST['max_comunas_ruta']) && is_numeric($_POST['max_comunas_ruta'])
+    ? max(1, (int)$_POST['max_comunas_ruta'])
+    : 2;
+
+$outlierKnnKm = isset($_POST['outlier_knn_km']) && is_numeric($_POST['outlier_knn_km'])
+    ? max(0.0, (float)$_POST['outlier_knn_km'])
+    : 0.0;
+
+$routeOptions = [
+    'max_jump_km'      => $maxKmEntrePuntos,
+    'max_diameter_km'  => $maxDiameterKm,
+    'max_radius_km'    => $maxRadiusKm,
+    'max_comunas_ruta' => $maxComunasRuta,
+    'outlier_knn_km'   => $outlierKnnKm,
+];
 
 $codigosJson = $_POST['codigos_json'] ?? '[]';
 $codigos = json_decode($codigosJson, true);
@@ -788,16 +1137,27 @@ foreach ($locales as $local) {
     }
 }
 
+$localesSospechosos = [];
+
+if ($routeOptions['outlier_knn_km'] > 0) {
+    [$localesConCoords, $localesSospechosos] = partitionSuspiciousOutliers(
+        $localesConCoords,
+        $routeOptions['outlier_knn_km'],
+        3
+    );
+}
+
 $cantidadLocalesGeoref = count($localesConCoords);
 $maximoPorDia = getMaxPerDay($cantidadPorDia);
 $capacidadesPlan = buildCapacitiesByTarget($cantidadLocalesGeoref, $cantidadPorDia);
 
-$diasPlanificados = count($capacidadesPlan);
-
 $groups = [];
 if (!empty($localesConCoords) && !empty($capacidadesPlan)) {
-    $groups = buildCommuneFirstGroups($localesConCoords, $cantidadPorDia);
+    $groups = buildCommuneFirstGroups($localesConCoords, $cantidadPorDia, $routeOptions);
+    $groups = sortGroupsByPriority($groups);
 }
+
+$diasPlanificados = count($groups);
 
 $dayNames = [
     1 => 'Lunes',
@@ -852,7 +1212,7 @@ foreach ($groups as $group) {
             'tamano_ruta'              => count($group),
             'distancia_desde_anterior' => $distAnterior,
             'distancia_ruta_km'        => $distanciaRutaKm,
-            'observacion'              => 'Ruta optimizada por cercanía y comuna. Objetivo mínimo: ' . $cantidadPorDia . ' locales. Máximo permitido: ' . $maximoPorDia . ' locales.'
+            'observacion'              => 'Ruta optimizada por cercanía y comuna. Objetivo mínimo: ' . $cantidadPorDia . ' locales. Máximo permitido: ' . $maximoPorDia . ' locales. Priorización Excel: rutas con mayor cantidad de locales primero.'
         ];
     }
 }
@@ -873,21 +1233,27 @@ $sheet->fromArray([
     ['Cantidad objetivo por día', $cantidadPorDia],
     ['Máximo permitido por día', $maximoPorDia],
     ['Rango esperado por ruta', $cantidadPorDia . ' a ' . $maximoPorDia],
+    ['Máx. salto entre puntos (KM)', round($maxKmEntrePuntos, 2)],
+    ['Máx. diámetro por ruta (KM)', round($maxDiameterKm, 2)],
+    ['Máx. radio por ruta (KM)', round($maxRadiusKm, 2)],
+    ['Máx. comunas por ruta', $maxComunasRuta],
+    ['Filtro outlier KNN (KM)', $outlierKnnKm > 0 ? round($outlierKnnKm, 2) : 'Desactivado'],
     ['Días planificados', $diasPlanificados],
     ['Códigos recibidos', count($codigos)],
     ['Locales encontrados', count($locales)],
     ['Locales con coordenadas', count($localesConCoords)],
+    ['Locales sospechosos por georreferencia', count($localesSospechosos)],
     ['Locales sin coordenadas', count($localesSinCoords)],
     ['Códigos no encontrados', count($codigosNoEncontrados)],
     ['Grupos/rutas generadas', count($groups)],
     ['Promedio real locales por día', count($groups) > 0 ? round(count($localesConCoords) / count($groups), 2) : 0],
     ['KM totales estimados', round($totalKmEstimado, 2)],
     ['Promedio KM por ruta', count($groups) > 0 ? round($totalKmEstimado / count($groups), 2) : 0],
-    ['Criterio de agrupación', 'Prioridad por comuna, luego proximidad geográfica, respetando rango mínimo/máximo por día'],
+    ['Criterio de agrupación', 'Prioridad por comuna, proximidad geográfica y compactación real de ruta'],
 ], null, 'A1');
 
 styleHeader($sheet, 'A1:B1');
-styleDataRange($sheet, 'A2:B14');
+styleDataRange($sheet, 'A2:B22');
 $sheet->freezePane('A2');
 setFixedColumnsWidth($sheet, [
     'A' => 35,
@@ -1012,6 +1378,50 @@ setFixedColumnsWidth($sheetSin, [
     'D' => 20,
     'E' => 45,
 ]);
+
+if (!empty($localesSospechosos)) {
+    $sheetSusp = $spreadsheet->createSheet();
+    $sheetSusp->setTitle('Sospechosos');
+
+    $sheetSusp->fromArray([[
+        'Código Local',
+        'Nombre',
+        'Dirección',
+        'Comuna',
+        'Lat',
+        'Lng',
+        'Motivo'
+    ]], null, 'A1');
+
+    $rowIndex = 2;
+    foreach ($localesSospechosos as $local) {
+        $sheetSusp->fromArray([[
+            $local['codigo'],
+            $local['nombre'],
+            $local['direccion'],
+            $local['comuna'],
+            $local['lat'],
+            $local['lng'],
+            $local['_motivo_sospechoso'] ?? 'Coordenada potencialmente aislada'
+        ]], null, 'A' . $rowIndex);
+        $rowIndex++;
+    }
+
+    styleHeader($sheetSusp, 'A1:G1');
+    if ($rowIndex > 2) {
+        styleDataRange($sheetSusp, 'A2:G' . ($rowIndex - 1));
+    }
+    $sheetSusp->freezePane('A2');
+    setFixedColumnsWidth($sheetSusp, [
+        'A' => 18,
+        'B' => 28,
+        'C' => 35,
+        'D' => 20,
+        'E' => 14,
+        'F' => 14,
+        'G' => 45,
+    ]);
+}
 
 //
 // HOJA 4: NO ENCONTRADOS

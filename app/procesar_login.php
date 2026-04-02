@@ -149,6 +149,7 @@ if ($needsRehash) {
 }
 
 session_regenerate_id(true);
+$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 
 $_SESSION['usuario_id']         = (int)$u['id'];
 $_SESSION['usuario_nombre']     = (string)$u['nombre'];

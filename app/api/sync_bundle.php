@@ -15,7 +15,7 @@ try {
             'ok' => false,
             'status' => 'no_session',
             'error_code' => 'NO_SESSION',
-            'message' => 'Sesi��n expirada',
+            'message' => 'Sesi�1�7�1�7n expirada',
             'retryable' => false
         ], JSON_UNESCAPED_UNICODE);
         exit;
@@ -33,7 +33,7 @@ try {
     $empresa_id  = (int)($_SESSION['empresa_id']  ?? 0);
     $division_id = (int)($_SESSION['division_id'] ?? 0);
 
-    // -------- Par��metros de rango de fechas
+    // -------- Par�1�7�1�7metros de rango de fechas
     $tz  = new DateTimeZone('America/Santiago');
     $now = new DateTime('now', $tz);
 
@@ -50,7 +50,7 @@ try {
     if (!empty($_GET['delta_since'])) {
         $tmp = date_create((string)$_GET['delta_since']);
         if ($tmp !== false) {
-            $deltaSince = $tmp->format('Y-m-d H:i:00'); // minuto-resoluci��n
+            $deltaSince = $tmp->format('Y-m-d H:i:00'); // minuto-resoluci�1�7�1�7n
         }
     }
 
@@ -69,7 +69,7 @@ try {
         ];
     };
 
-    // -------- 1) Campa�0�9as relevantes (para ETag y alcance)
+    // -------- 1) Campa�1�70�1�79as relevantes (para ETag y alcance)
     $sqlCamp = "
         SELECT DISTINCT
             f.id,
@@ -168,7 +168,23 @@ try {
     $stmt->execute();
     $reagRes = $stmt->get_result();
     $reagendados = $reagRes->fetch_all(MYSQLI_ASSOC);
+    $reagendadosTruncated = count($reagendados) >= 500;
     $stmt->close();
+
+    // Si se truncó, obtener total real para informar al cliente
+    $reagendadosTotalCount = null;
+    if ($reagendadosTruncated) {
+        $sqlCount = str_replace('SELECT' . PHP_EOL . '            fq.id_formulario, f.nombre AS nombre_campana,', 'SELECT COUNT(*) AS total', $sqlReag);
+        // Usar query directa de conteo
+        $stmtCnt = $conn->prepare(preg_replace('/LIMIT\s+\d+/i', '', $sqlReag));
+        if ($stmtCnt) {
+            // Re-bind sin el LIMIT para contar
+            $stmtCnt->bind_param('iiisssi', $usuario_id, $empresa_id, $division_id, $division_id, $from, $from, $reagendadosDays);
+            $stmtCnt->execute();
+            $reagendadosTotalCount = $stmtCnt->get_result()->num_rows;
+            $stmtCnt->close();
+        }
+    }
 
     // -------- 4) Construir "agenda"
     $agenda = [];
@@ -259,7 +275,7 @@ try {
         }
     }
 
-    // material (por divisi��n)
+    // material (por divisi�1�7�1�7n)
     $stmt = $conn->prepare(
         "SELECT MAX(COALESCE(updated_at, '1970-01-01 00:00:00')) AS mx FROM material WHERE (id_division = ? OR ? = 0)"
     );
@@ -295,7 +311,7 @@ try {
         'locals'  => $routeLocalIds,
         'max'     => $maxUpd,
     ], $jsonFlags);
-    $etag = substr(sha1($etagPayload ?: ''), 0, 32);
+    $etag = hash('sha256', $etagPayload ?: ''); // 64 chars hex — no truncar para evitar colisiones
 
     // If-None-Match handling
     $clientEtag = '';
@@ -425,8 +441,10 @@ try {
         'campaigns' => $campaigns,
         'locales'   => $locales,
         'route' => [
-            'programados' => $programados,
-            'reagendados' => $reagendados,
+            'programados'             => $programados,
+            'reagendados'             => $reagendados,
+            'reagendados_truncated'   => $reagendadosTruncated ?? false,
+            'reagendados_total_count' => $reagendadosTotalCount,
         ],
         'agenda'    => $agenda,
         'questions' => array_values($questionsByForm),

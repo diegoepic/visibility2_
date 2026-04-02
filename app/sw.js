@@ -80,6 +80,15 @@ self.addEventListener('message', (event) => {
   } else if (data.type === 'PRECACHE_ASSETS') {
     const urls = Array.isArray(data.assets) ? data.assets : [];
     event.waitUntil(precacheAssets(urls));
+  } else if (data.type === 'CLEAR_USER_CACHES') {
+    // Limpiar caches de datos de usuario al hacer logout.
+    // Se eliminan RUNTIME_CACHE y STATIC_CACHE para que el próximo usuario
+    // no vea datos del anterior en modo offline.
+    event.waitUntil(
+      caches.keys().then(keys =>
+        Promise.all(keys.map(k => caches.delete(k)))
+      )
+    );
   }
 });
 

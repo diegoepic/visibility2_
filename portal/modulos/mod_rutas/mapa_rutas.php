@@ -120,7 +120,8 @@ date_default_timezone_set('America/Santiago');
             <i class="fa-solid fa-map-location-dot"></i> Planificador de Rutas
         </h2>
         <p class="text-muted mb-0">
-            Carga un archivo CSV con códigos de locales para visualizar los puntos georreferenciados y validar cuáles existen en el sistema.
+            Carga un archivo CSV con códigos de locales para validar cuáles existen, cuáles tienen georreferencia válida
+            y generar una propuesta de ruta con restricción máxima de distancia entre puntos consecutivos.
         </p>
     </div>
 
@@ -131,12 +132,14 @@ date_default_timezone_set('America/Santiago');
                 <div class="col-md-8">
                     <label for="csvFile" class="form-label fw-semibold">Archivo CSV</label>
                     <input type="file" class="form-control" id="csvFile" name="csvFile" accept=".csv" required>
-                    <small class="text-muted">Debe contener al menos una columna con el código del local.</small>
+                    <small class="text-muted">
+                        Debe contener al menos una columna con el código del local.
+                    </small>
                 </div>
                 <div class="col-md-4 text-end">
                     <label class="form-label d-block invisible">Acción</label>
                     <button type="submit" class="btn btn-primary w-100">
-                        <i class="fa-solid fa-upload"></i> Cargar Locales
+                        <i class="fa-solid fa-upload"></i> Cargar locales
                     </button>
                 </div>
             </form>
@@ -145,60 +148,79 @@ date_default_timezone_set('America/Santiago');
 
     <!-- RESUMEN -->
     <div class="row g-3 mb-4" id="resumenBloques" style="display:none;">
-        <div class="col-md-4">
+        <div class="col-lg-3 col-md-6">
             <div class="stat-box">
                 <div class="stat-number text-primary" id="statTotalCsv">0</div>
                 <div class="stat-label">Códigos cargados desde CSV</div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-lg-3 col-md-6">
             <div class="stat-box">
                 <div class="stat-number text-success" id="statEncontrados">0</div>
                 <div class="stat-label">Locales encontrados en sistema</div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-box">
+                <div class="stat-number text-info" id="statConCoords">0</div>
+                <div class="stat-label">Locales con coordenadas válidas</div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
             <div class="stat-box">
                 <div class="stat-number text-danger" id="statNoEncontrados">0</div>
                 <div class="stat-label">Códigos no encontrados</div>
             </div>
         </div>
     </div>
-    
-<!-- PROPUESTA DE RUTA -->
-<div class="card mb-4" id="cardPlanificacionRuta" style="display:none;">
-    <div class="card-header bg-dark text-white">
-        <i class="fa-solid fa-route"></i> Armar propuesta de ruta
-    </div>
-    <div class="card-body">
-        <div class="row g-3 align-items-end">
-            <div class="col-md-4">
-                <label for="cantidadPorDia" class="form-label fw-semibold">
-                    Cantidad objetivo por día
-                </label>
-                <div class="input-group">
-                    <span class="input-group-text">Locales por día</span>
-                    <input type="number" min="1" step="1" value="10" class="form-control" id="cantidadPorDia">
-                </div>
-                <small class="text-muted">
-                    El sistema intentará respetar esta cantidad, priorizando comuna y cercanía geográfica.
-                </small>
-            </div>
 
-            <div class="col-md-5">
-                <div class="border rounded p-3 bg-light" id="resumenPlanificacionRuta">
-                    Aún no hay datos para planificar.
+    <!-- PROPUESTA DE RUTA -->
+    <div class="card mb-4" id="cardPlanificacionRuta" style="display:none;">
+        <div class="card-header bg-dark text-white">
+            <i class="fa-solid fa-route"></i> Generar propuesta de ruta
+        </div>
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-lg-3 col-md-6">
+                    <label for="cantidadPorDia" class="form-label fw-semibold">
+                        Cantidad objetivo por día
+                    </label>
+                    <div class="input-group">
+                        <span class="input-group-text">Locales/día</span>
+                        <input type="number" min="1" step="1" value="10" class="form-control" id="cantidadPorDia">
+                    </div>
+                    <small class="text-muted">
+                        El sistema intentará respetar esta cantidad para distribuir las rutas.
+                    </small>
                 </div>
-            </div>
 
-            <div class="col-md-3">
-                <button type="button" class="btn btn-success w-100" id="btnProcesarPlanificacion">
-                    <i class="fa-solid fa-file-excel"></i> Procesar planificación
-                </button>
+                <div class="col-lg-3 col-md-6">
+                    <label for="maxKmRuta" class="form-label fw-semibold">
+                        Distancia máxima entre puntos
+                    </label>
+                    <div class="input-group">
+                        <input type="number" min="1" step="1" value="80" class="form-control" id="maxKmRuta">
+                        <span class="input-group-text">KM</span>
+                    </div>
+                    <small class="text-muted">
+                        Si un salto supera este límite, el sistema separará la ruta o moverá el local a otra.
+                    </small>
+                </div>
+
+                <div class="col-lg-4 col-md-8">
+                    <div class="border rounded p-3 bg-light" id="resumenPlanificacionRuta">
+                        Aún no hay datos para planificar.
+                    </div>
+                </div>
+
+                <div class="col-lg-2 col-md-4">
+                    <button type="button" class="btn btn-success w-100" id="btnProcesarPlanificacion">
+                        <i class="fa-solid fa-file-excel"></i> Generar Excel
+                    </button>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
     <!-- MAPA -->
     <div class="card mb-4">
@@ -208,9 +230,11 @@ date_default_timezone_set('America/Santiago');
         <div class="card-body">
             <div id="map"></div>
             <div class="mt-3 small text-muted">
-                <i class="fa-solid fa-circle text-danger"></i> Punto disponible en mapa
+                <i class="fa-solid fa-circle text-danger"></i> Local disponible
                 &nbsp;&nbsp;
-                <i class="fa-solid fa-circle text-success"></i> Punto seleccionado
+                <i class="fa-solid fa-circle text-success"></i> Local seleccionado
+                &nbsp;&nbsp;
+                <span>Solo se muestran en el mapa los locales con coordenadas válidas.</span>
             </div>
         </div>
     </div>
@@ -231,7 +255,7 @@ date_default_timezone_set('America/Santiago');
                                 <th>Código</th>
                                 <th>Dirección</th>
                                 <th>Comuna</th>
-                                <th style="width: 130px;">Mapa</th>
+                                <th style="width: 150px;">Estado</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -294,13 +318,6 @@ function initMap() {
     infoWindow = new google.maps.InfoWindow();
 }
 
-function limpiarMapa() {
-    markers.forEach(marker => marker.setMap(null));
-    markers = [];
-    markerByCodigo = {};
-    localesSeleccionados = [];
-}
-
 function escapeHtml(text) {
     return String(text ?? '')
         .replace(/&/g, '&amp;')
@@ -310,22 +327,118 @@ function escapeHtml(text) {
         .replace(/'/g, '&#039;');
 }
 
-function actualizarResumen(totalCsv, encontrados, noEncontrados) {
-    $('#statTotalCsv').text(totalCsv);
-    $('#statEncontrados').text(encontrados);
-    $('#statNoEncontrados').text(noEncontrados);
-    $('#resumenBloques').fadeIn();
-}
-
-function renderMapa(locales) {
-    limpiarMapa();
-
-    const conCoordenadas = locales.filter(local =>
+function localTieneCoords(local) {
+    return (
+        local &&
         local.lat !== null && local.lat !== '' &&
         local.lng !== null && local.lng !== '' &&
         !isNaN(parseFloat(local.lat)) &&
         !isNaN(parseFloat(local.lng))
     );
+}
+
+function limpiarMapa() {
+    if (infoWindow) {
+        infoWindow.close();
+    }
+
+    markers.forEach(marker => marker.setMap(null));
+    markers = [];
+    markerByCodigo = {};
+}
+
+function getLocalesObjetivo() {
+    if (localesSeleccionados.length > 0) {
+        return localesEncontrados.filter(local => localesSeleccionados.includes(local.codigo));
+    }
+    return [...localesEncontrados];
+}
+
+function getPlanStats() {
+    const cantidadPorDia = Math.max(parseInt($('#cantidadPorDia').val(), 10) || 1, 1);
+    const maxKmRuta = Math.max(parseFloat($('#maxKmRuta').val()) || 80, 1);
+
+    const localesObjetivo = getLocalesObjetivo();
+    const localesConCoords = localesObjetivo.filter(localTieneCoords);
+    const localesSinCoords = localesObjetivo.filter(local => !localTieneCoords(local));
+
+    const diasPlanificados = localesConCoords.length > 0
+        ? Math.ceil(localesConCoords.length / cantidadPorDia)
+        : 0;
+
+    const promedioReal = diasPlanificados > 0
+        ? (localesConCoords.length / diasPlanificados).toFixed(2)
+        : '0.00';
+
+    return {
+        cantidadPorDia,
+        maxKmRuta,
+        localesObjetivo,
+        localesConCoords,
+        localesSinCoords,
+        diasPlanificados,
+        promedioReal
+    };
+}
+
+function actualizarResumen(totalCsv, encontrados, noEncontrados, conCoords) {
+    $('#statTotalCsv').text(totalCsv);
+    $('#statEncontrados').text(encontrados);
+    $('#statNoEncontrados').text(noEncontrados);
+    $('#statConCoords').text(conCoords);
+    $('#resumenBloques').fadeIn();
+}
+
+function setMarkerSelectionState(codigo) {
+    const marker = markerByCodigo[codigo];
+    if (!marker) return;
+
+    const seleccionado = localesSeleccionados.includes(codigo);
+    marker.setIcon(
+        seleccionado
+            ? 'https://maps.google.com/mapfiles/ms/icons/green-dot.png'
+            : 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+    );
+}
+
+function abrirInfoLocal(local, marker) {
+    if (!infoWindow || !marker) return;
+
+    infoWindow.setContent(`
+        <div style="min-width:220px;">
+            <div><strong>Código:</strong> ${escapeHtml(local.codigo)}</div>
+            <div><strong>Nombre:</strong> ${escapeHtml(local.nombre || '-')}</div>
+            <div><strong>Dirección:</strong> ${escapeHtml(local.direccion || '-')}</div>
+            <div><strong>Comuna:</strong> ${escapeHtml(local.comuna || '-')}</div>
+            <div><strong>Estado:</strong> ${localTieneCoords(local) ? 'Con coordenadas válidas' : 'Sin coordenadas válidas'}</div>
+        </div>
+    `);
+
+    infoWindow.open(mapa, marker);
+}
+
+function toggleSeleccion(codigo) {
+    const idx = localesSeleccionados.indexOf(codigo);
+
+    if (idx === -1) {
+        localesSeleccionados.push(codigo);
+    } else {
+        localesSeleccionados.splice(idx, 1);
+    }
+
+    setMarkerSelectionState(codigo);
+    renderTablaEncontrados();
+    actualizarResumenPlanificacion();
+}
+
+function renderMapa(locales) {
+    if (!window.google || !window.google.maps || !mapa) {
+        return;
+    }
+
+    limpiarMapa();
+
+    const conCoordenadas = locales.filter(localTieneCoords);
 
     if (conCoordenadas.length === 0) {
         mapa.setCenter({ lat: -33.45, lng: -70.66 });
@@ -345,21 +458,12 @@ function renderMapa(locales) {
             position: pos,
             map: mapa,
             title: local.codigo,
-            icon: "https://maps.google.com/mapfiles/ms/icons/red-dot.png"
+            icon: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
         });
 
         marker.addListener('click', () => {
             toggleSeleccion(local.codigo);
-
-            infoWindow.setContent(`
-                <div style="min-width:220px;">
-                    <div><strong>Código:</strong> ${escapeHtml(local.codigo)}</div>
-                    <div><strong>Nombre:</strong> ${escapeHtml(local.nombre || '-')}</div>
-                    <div><strong>Dirección:</strong> ${escapeHtml(local.direccion || '-')}</div>
-                    <div><strong>Comuna:</strong> ${escapeHtml(local.comuna || '-')}</div>
-                </div>
-            `);
-            infoWindow.open(mapa, marker);
+            abrirInfoLocal(local, marker);
         });
 
         markers.push(marker);
@@ -387,13 +491,7 @@ function renderTablaEncontrados() {
     $('#tablaEncontradosVacia').hide();
 
     localesEncontrados.forEach((local, index) => {
-        const tieneCoords = (
-            local.lat !== null && local.lat !== '' &&
-            local.lng !== null && local.lng !== '' &&
-            !isNaN(parseFloat(local.lat)) &&
-            !isNaN(parseFloat(local.lng))
-        );
-
+        const tieneCoords = localTieneCoords(local);
         const seleccionado = localesSeleccionados.includes(local.codigo);
 
         tbody.append(`
@@ -404,7 +502,7 @@ function renderTablaEncontrados() {
                 <td>${escapeHtml(local.comuna || '-')}</td>
                 <td>
                     ${tieneCoords
-                        ? '<span class="badge badge-soft-success">Con coordenadas</span>'
+                        ? '<span class="badge badge-soft-success">Planificable</span>'
                         : '<span class="badge badge-soft-warning">Sin coordenadas</span>'
                     }
                 </td>
@@ -433,32 +531,40 @@ function renderTablaNoEncontrados() {
     });
 }
 
-function toggleSeleccion(codigo) {
-    const idx = localesSeleccionados.indexOf(codigo);
+function actualizarResumenPlanificacion() {
+    const stats = getPlanStats();
+    const haySeleccion = localesSeleccionados.length > 0;
+    const tienePlanificables = stats.localesConCoords.length > 0;
 
-    if (idx === -1) {
-        localesSeleccionados.push(codigo);
-    } else {
-        localesSeleccionados.splice(idx, 1);
-    }
+    $('#resumenPlanificacionRuta').html(`
+        <div><strong>Cantidad objetivo por día:</strong> ${stats.cantidadPorDia}</div>
+        <div><strong>Distancia máxima entre puntos:</strong> ${stats.maxKmRuta} KM</div>
+        <div><strong>Locales considerados:</strong> ${stats.localesObjetivo.length}</div>
+        <div><strong>Locales planificables:</strong> ${stats.localesConCoords.length}</div>
+        <div><strong>Locales excluidos por georreferencia:</strong> ${stats.localesSinCoords.length}</div>
+        <div><strong>Días estimados:</strong> ${stats.diasPlanificados}</div>
+        <div><strong>Promedio real estimado:</strong> ${stats.promedioReal} locales/día</div>
+        <div class="small text-muted mt-2">
+            ${haySeleccion
+                ? 'Se usarán solo los locales seleccionados en mapa o tabla.'
+                : 'Se usarán todos los locales encontrados.'
+            }
+        </div>
+        <div class="small ${tienePlanificables ? 'text-muted' : 'text-danger'} mt-1">
+            ${tienePlanificables
+                ? 'Los locales sin coordenadas válidas no entran en la ruta, pero deben quedar informados en la hoja de observación del Excel.'
+                : 'No hay locales con coordenadas válidas para generar una ruta.'
+            }
+        </div>
+    `);
 
-    const marker = markerByCodigo[codigo];
-    if (marker) {
-        const seleccionado = localesSeleccionados.includes(codigo);
-        marker.setIcon(
-            seleccionado
-                ? "https://maps.google.com/mapfiles/ms/icons/green-dot.png"
-                : "https://maps.google.com/mapfiles/ms/icons/red-dot.png"
-        );
-    }
-
-    renderTablaEncontrados();
-    actualizarResumenPlanificacion();
+    $('#btnProcesarPlanificacion').prop('disabled', !tienePlanificables);
 }
 
 function cargarTablas(data) {
     localesEncontrados = Array.isArray(data.encontrados) ? data.encontrados : [];
     localesNoEncontrados = Array.isArray(data.no_encontrados) ? data.no_encontrados : [];
+    localesSeleccionados = [];
 
     $('#tablaEncontradosContainer').show();
     $('#tablaNoEncontradosContainer').show();
@@ -467,18 +573,21 @@ function cargarTablas(data) {
     renderTablaNoEncontrados();
     renderMapa(localesEncontrados);
 
+    const totalConCoords = localesEncontrados.filter(localTieneCoords).length;
+
     actualizarResumen(
         Number(data.total_csv || 0),
         localesEncontrados.length,
-        localesNoEncontrados.length
+        localesNoEncontrados.length,
+        totalConCoords
     );
 
-if (localesEncontrados.length > 0) {
-    $('#cardPlanificacionRuta').fadeIn();
-    actualizarResumenPlanificacion();
-} else {
-    $('#cardPlanificacionRuta').hide();
-}
+    if (localesEncontrados.length > 0) {
+        $('#cardPlanificacionRuta').fadeIn();
+        actualizarResumenPlanificacion();
+    } else {
+        $('#cardPlanificacionRuta').hide();
+    }
 }
 
 $('#formCSV').on('submit', function(e) {
@@ -526,53 +635,39 @@ $(document).on('click', '#tablaEncontrados tbody tr', function() {
     toggleSeleccion(codigo);
 
     const marker = markerByCodigo[codigo];
+    const local = localesEncontrados.find(l => l.codigo === codigo);
+
     if (marker) {
         mapa.panTo(marker.getPosition());
         mapa.setZoom(Math.max(mapa.getZoom(), 14));
-        google.maps.event.trigger(marker, 'click');
+        if (local) {
+            abrirInfoLocal(local, marker);
+        }
     }
 });
 
-function actualizarResumenPlanificacion() {
-    const cantidadPorDia = Math.max(parseInt($('#cantidadPorDia').val()) || 1, 1);
-
-    const codigosPlanificar = (localesSeleccionados.length > 0)
-        ? localesSeleccionados
-        : localesEncontrados.map(l => l.codigo);
-
-    const totalLocales = codigosPlanificar.length;
-    const diasPlanificados = totalLocales > 0
-        ? Math.ceil(totalLocales / cantidadPorDia)
-        : 0;
-
-    $('#resumenPlanificacionRuta').html(`
-        <div><strong>Cantidad objetivo por día:</strong> ${cantidadPorDia}</div>
-        <div><strong>Locales a planificar:</strong> ${totalLocales}</div>
-        <div><strong>Días estimados de planificación:</strong> ${diasPlanificados}</div>
-        <div><strong>Promedio real estimado:</strong> ${diasPlanificados > 0 ? (totalLocales / diasPlanificados).toFixed(2) : 0} locales/día</div>
-        <div class="small text-muted mt-2">
-            ${localesSeleccionados.length > 0
-                ? 'Se usarán solo los locales seleccionados en mapa/tabla.'
-                : 'Se usarán todos los locales encontrados.'}
-        </div>
-    `);
-}
-
-$('#cantidadPorDia').on('input change', function() {
+$('#cantidadPorDia, #maxKmRuta').on('input change', function() {
     actualizarResumenPlanificacion();
 });
 
 $('#btnProcesarPlanificacion').on('click', function() {
-    const cantidadPorDia = Math.max(parseInt($('#cantidadPorDia').val()) || 1, 1);
+    const stats = getPlanStats();
 
-    const codigosPlanificar = (localesSeleccionados.length > 0)
-        ? [...localesSeleccionados]
-        : localesEncontrados.map(l => l.codigo);
-
-    if (!codigosPlanificar.length) {
+    if (!stats.localesObjetivo.length) {
         alert('⚠️ No hay locales para planificar.');
         return;
     }
+
+    if (!stats.localesConCoords.length) {
+        alert('⚠️ No hay locales con coordenadas válidas para generar la ruta.');
+        return;
+    }
+
+    const codigosPlanificar = stats.localesObjetivo.map(local => local.codigo);
+
+    const btn = $(this);
+    const originalText = btn.html();
+    btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> Generando...');
 
     const form = document.createElement('form');
     form.method = 'POST';
@@ -582,8 +677,14 @@ $('#btnProcesarPlanificacion').on('click', function() {
     const inputCantidad = document.createElement('input');
     inputCantidad.type = 'hidden';
     inputCantidad.name = 'cantidad_por_dia';
-    inputCantidad.value = cantidadPorDia;
+    inputCantidad.value = stats.cantidadPorDia;
     form.appendChild(inputCantidad);
+
+    const inputMaxKm = document.createElement('input');
+    inputMaxKm.type = 'hidden';
+    inputMaxKm.name = 'max_km_ruta';
+    inputMaxKm.value = stats.maxKmRuta;
+    form.appendChild(inputMaxKm);
 
     const inputCodigos = document.createElement('input');
     inputCodigos.type = 'hidden';
@@ -594,6 +695,10 @@ $('#btnProcesarPlanificacion').on('click', function() {
     document.body.appendChild(form);
     form.submit();
     form.remove();
+
+    setTimeout(() => {
+        btn.prop('disabled', false).html(originalText);
+    }, 2000);
 });
 </script>
 
