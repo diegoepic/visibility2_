@@ -596,6 +596,46 @@
     });
   }
 
+  // ==================== REPORTE AL SERVIDOR ====================
+
+  // Throttle: un envío por (level+message) por minuto para no saturar el endpoint
+  const _serverThrottle = {};
+
+  /**
+   * Envía un error JS al backend para observabilidad en producción.
+   * Throttle: 1 reporte del mismo tipo/mensaje por minuto.
+   * @param {{level?: string, message: string, stack?: string, url?: string}} errObj
+   */
+  function reportToServer(errObj) {
+    if (!errObj || !errObj.message) return;
+    const level   = (errObj.level   || 'error').slice(0, 20);
+    const message = (errObj.message || '').slice(0, 200);
+    const key     = level + ':' + message;
+    const now     = Date.now();
+    if (_serverThrottle[key] && now - _serverThrottle[key] < 60000) return;
+    _serverThrottle[key] = now;
+
+    const payload = {
+      level,
+      message:     (errObj.message || '').slice(0, 1000),
+      stack:       (errObj.stack   || '').slice(0, 4000),
+      url:         (errObj.url     || window.location.href).slice(0, 500),
+      app_version: (window.APP_VERSION || '').slice(0, 50),
+      timestamp:   new Date().toISOString(),
+    };
+
+    // fetch best-effort: errores al reportar se ignoran silenciosamente
+    try {
+      fetch('/visibility2/app/api/errors.php', {
+        method:      'POST',
+        credentials: 'same-origin',
+        headers:     { 'Content-Type': 'application/json' },
+        body:        JSON.stringify(payload),
+        keepalive:   true,
+      }).catch(() => {});
+    } catch (_) {}
+  }
+
   // ==================== EXPORTAR API ====================
 
   window.RouteErrorManager = {
@@ -618,6 +658,9 @@
     showInfo,
     showWarning,
     showError,
+
+    // Reportar al servidor
+    reportToServer,
 
     // Tipos de error
     ERROR_TYPES

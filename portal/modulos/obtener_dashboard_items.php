@@ -6,7 +6,6 @@ if (isset($_GET['empresa_id']) && isset($_GET['division_id'])) {
     $empresa_id  = $conn->real_escape_string($_GET['empresa_id']);
     $division_id = $conn->real_escape_string($_GET['division_id']);
 
-    // Ahora ordenamos por 'orden' ASC
     $queryDash = "
       SELECT *
       FROM dashboard_items
@@ -16,96 +15,109 @@ if (isset($_GET['empresa_id']) && isset($_GET['division_id'])) {
     ";
     $resultDash = $conn->query($queryDash);
 
-    if ($resultDash->num_rows > 0) {
-        echo '<table class="table table-bordered table-hover">';
+    if ($resultDash && $resultDash->num_rows > 0) {
+        echo '<div class="dashboard-table-wrap">';
+        echo '<table class="table table-bordered table-hover dashboard-items-table">';
         echo '<thead>
                 <tr>
-                  <th style="width:5%;">ID</th>
-                  <th style="width:5%;">Orden</th>
-                  <th style="width:15%;">Imagen</th>
-                  <th style="width:20%;">Codigo Iframe</th>
-                  <th style="width:15%;">Etiqueta Principal</th>
-                  <th style="width:15%;">Etiqueta Secundaria</th>
-                  <th style="width:10%;">Icono</th>
-                  <th style="width:5%;">Activo</th>
-                  <th style="width:10%;">Creado</th>
-                  <th style="width:10%;">Accion</th>
+                  <th>ID</th>
+                  <th>Orden</th>
+                  <th>Imagen</th>
+                  <th>C贸digo Iframe</th>
+                  <th>Etiqueta Principal</th>
+                  <th>Etiqueta Secundaria</th>
+                  <th>脥cono</th>
+                  <th>Activo</th>
+                  <th>Creado</th>
+                  <th>Acci贸n</th>
                 </tr>
               </thead>
               <tbody>';
+
         while ($row = $resultDash->fetch_assoc()) {
-            echo '<tr>';
-              // Un único <td> con todo el form
-              echo '<td colspan="10">';
-                echo '<form method="post" action="modulos/actualizar_dashboard_item.php" enctype="multipart/form-data">';
-                  echo '<table style="width:100%;">';
-                    echo '<tr>';
-                      // ID
-                      echo '<td style="width:5%;">' . $row['id'] . '</td>';
+            $id         = (int)$row['id'];
+            $orden      = (int)$row['orden'];
+            $image_url  = htmlspecialchars((string)$row['image_url'], ENT_QUOTES, 'UTF-8');
+            $target_url = htmlspecialchars((string)$row['target_url'], ENT_QUOTES, 'UTF-8');
+            $main_label = htmlspecialchars((string)$row['main_label'], ENT_QUOTES, 'UTF-8');
+            $sub_label  = htmlspecialchars((string)$row['sub_label'], ENT_QUOTES, 'UTF-8');
+            $icon_class = htmlspecialchars((string)$row['icon_class'], ENT_QUOTES, 'UTF-8');
+            $created_at = htmlspecialchars((string)$row['created_at'], ENT_QUOTES, 'UTF-8');
+            $is_active  = !empty($row['is_active']) ? 'checked' : '';
 
-                      // Orden (input number)
-                      echo '<td style="width:7%;">';
-                        echo '<input type="number" name="orden" class="form-control form-control-sm" '
-                           . 'value="' . intval($row['orden']) . '" min="1">';
-                      echo '</td>';
+echo '<tr class="dashboard-item-row" data-id="' . $id . '">';
 
-                      // Imagen
-                      echo '<td style="width:15%;">';
-                        echo '<img src="' . htmlspecialchars($row['image_url']) . '" '
-                           . 'alt="" style="max-width:100px; margin-bottom:5px; display:block;">';
-                        echo '<input type="file" name="image" class="form-control form-control-sm">';
-                      echo '</td>';
+// ID
+echo '<td class="col-id">';
+echo $id;
+echo '</td>';
 
-                      // Código Iframe
-                      echo '<td style="width:20%;">';
-                        echo '<textarea name="target_url" class="form-control form-control-sm" rows="3">'
-                           . htmlspecialchars($row['target_url'])
-                           . '</textarea>';
-                      echo '</td>';
+// Orden
+echo '<td class="col-orden">';
+echo '<input type="number" name="orden" class="table-input" value="' . $orden . '" min="1">';
+echo '</td>';
 
-                      // Main label
-                      echo '<td style="width:15%;">';
-                        echo '<input type="text" name="main_label" class="form-control form-control-sm" '
-                           . 'value="' . htmlspecialchars($row['main_label']) . '">';
-                      echo '</td>';
+// Imagen
+echo '<td class="col-imagen text-center">';
+echo '  <button 
+            type="button"
+            class="image-thumb-btn js-open-image-modal"
+            data-id="' . $id . '"
+            data-image="' . $image_url . '"
+            data-main="' . $main_label . '"
+            title="Ver o cambiar imagen"
+        >';
+echo '      <img src="' . $image_url . '" alt="Imagen dashboard" class="table-thumb">';
+echo '      <span class="thumb-overlay">Cambiar</span>';
+echo '  </button>';
+echo '</td>';
 
-                      // Sub label
-                      echo '<td style="width:15%;">';
-                        echo '<input type="text" name="sub_label" class="form-control form-control-sm" '
-                           . 'value="' . htmlspecialchars($row['sub_label']) . '">';
-                      echo '</td>';
+// C贸digo iframe / target_url
+echo '<td class="col-iframe">';
+echo '<textarea name="target_url" class="table-textarea" rows="3">' . $target_url . '</textarea>';
+echo '</td>';
 
-                      // Icon class
-                      echo '<td style="width:10%;">';
-                        echo '<input type="text" name="icon_class" class="form-control form-control-sm" '
-                           . 'value="' . htmlspecialchars($row['icon_class']) . '">';
-                      echo '</td>';
+// Etiqueta principal
+echo '<td class="col-main">';
+echo '<input type="text" name="main_label" class="table-input" value="' . $main_label . '">';
+echo '</td>';
 
-                      // Activo checkbox
-                      echo '<td style="width:5%; text-align:center;">';
-                        echo '<input type="checkbox" name="is_active" '
-                           . ($row['is_active'] ? 'checked' : '') . '>';
-                      echo '</td>';
+// Etiqueta secundaria
+echo '<td class="col-sub">';
+echo '<input type="text" name="sub_label" class="table-input" value="' . $sub_label . '">';
+echo '</td>';
 
-                      // Created at
-                      echo '<td style="width:10%;">' . htmlspecialchars($row['created_at']) . '</td>';
+// 脥cono
+echo '<td class="col-icon">';
+echo '<input type="text" name="icon_class" class="table-input" value="' . $icon_class . '">';
+echo '</td>';
 
-                      // Botón guardar
-                      echo '<td style="width:10%;">';
-                        // Campo oculto ID y empresa/división
-                        echo '<input type="hidden" name="id" value="' . $row['id'] . '">';
-                        echo '<button type="submit" class="btn btn-sm btn-primary">Guardar</button>';
-                      echo '</td>';
-                    echo '</tr>';
-                  echo '</table>';
-                echo '</form>';
-              echo '</td>';
-            echo '</tr>';
+// Activo
+echo '<td class="col-active text-center">';
+echo '<label class="table-check-wrap">';
+echo '<input type="checkbox" name="is_active" ' . $is_active . '>';
+echo '</label>';
+echo '</td>';
+
+// Creado
+echo '<td class="col-created">';
+echo $created_at;
+echo '</td>';
+
+// Acci贸n
+echo '<td class="col-action text-center">';
+echo '<button type="button" class="btn btn-sm btn-primary table-save-btn js-save-dashboard-row">Guardar</button>';
+echo '</td>';
+
+echo '</tr>';
         }
+
         echo '</tbody></table>';
+        echo '</div>';
     } else {
-        echo '<p>No hay dashboard items creados para esta empresa y división.</p>';
+        echo '<div class="empty-dashboard-items">';
+        echo 'No hay dashboard items creados para esta empresa y divisi贸n.';
+        echo '</div>';
     }
 }
 ?>
-

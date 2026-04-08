@@ -15,11 +15,12 @@
 
   const BADGE_UPDATE_INTERVAL = 5000; // Actualizar cada 5 segundos
   const BADGE_STYLES = {
-    synced: { bg: '#4CAF50', text: 'white', icon: '✓' },
+    synced:  { bg: '#4CAF50', text: 'white', icon: '✓' },
     pending: { bg: '#FFC107', text: 'black', icon: '⏳' },
     syncing: { bg: '#2196F3', text: 'white', icon: '↻' },
-    error: { bg: '#F44336', text: 'white', icon: '⚠️' },
+    error:   { bg: '#F44336', text: 'white', icon: '⚠️' },
     blocked: { bg: '#FF9800', text: 'white', icon: '🔒' },
+    offline: { bg: '#e53e3e', text: 'white', icon: '✗' },
     unknown: { bg: '#9E9E9E', text: 'white', icon: '?' }
   };
 
@@ -53,8 +54,9 @@
       .v2-sync-badge.pending { background: ${BADGE_STYLES.pending.bg}; color: ${BADGE_STYLES.pending.text}; }
       .v2-sync-badge.syncing { background: ${BADGE_STYLES.syncing.bg}; color: ${BADGE_STYLES.syncing.text}; }
       .v2-sync-badge.error { background: ${BADGE_STYLES.error.bg}; color: ${BADGE_STYLES.error.text}; }
-      .v2-sync-badge.blocked { background: ${BADGE_STYLES.blocked.bg}; color: ${BADGE_STYLES.blocked.text}; }
-      .v2-sync-badge.unknown { background: ${BADGE_STYLES.unknown.bg}; color: ${BADGE_STYLES.unknown.text}; }
+      .v2-sync-badge.blocked  { background: ${BADGE_STYLES.blocked.bg};  color: ${BADGE_STYLES.blocked.text}; }
+      .v2-sync-badge.offline  { background: ${BADGE_STYLES.offline.bg};  color: ${BADGE_STYLES.offline.text}; }
+      .v2-sync-badge.unknown  { background: ${BADGE_STYLES.unknown.bg};  color: ${BADGE_STYLES.unknown.text}; }
 
       .v2-sync-badge .badge-icon {
         font-size: 12px;
@@ -133,6 +135,11 @@
    * Obtiene el estado de sincronización para un local
    */
   async function getLocalSyncStatus(localId, formIds) {
+    // Si el dispositivo está offline, reportar ese estado directamente
+    if (!navigator.onLine) {
+      return { state: 'offline', label: 'Sin conexión', detail: 'Sin conexión a internet', jobs: [] };
+    }
+
     // Primero verificar en V2Cache si está marcado como done
     if (window.V2Cache && typeof V2Cache.isDone === 'function') {
       const ymd = new Date().toISOString().slice(0, 10);
@@ -364,10 +371,9 @@
       updateAllBadges();
     });
 
-    // Actualizar cuando vuelve la conexión
-    window.addEventListener('online', () => {
-      setTimeout(updateAllBadges, 1000);
-    });
+    // Actualizar cuando cambia la conectividad
+    window.addEventListener('online',  () => { setTimeout(updateAllBadges, 1000); });
+    window.addEventListener('offline', () => { updateAllBadges(); });
 
     // Configurar warning de beforeunload
     setupBeforeUnloadWarning();

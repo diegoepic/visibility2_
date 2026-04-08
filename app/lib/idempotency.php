@@ -11,9 +11,11 @@
 
 declare(strict_types=1);
 
-// Timeout en minutos para considerar un placeholder como abandonado
+// Timeout en minutos para considerar un placeholder como abandonado.
+// PHP tiene set_time_limit(20), así que ningún request legítimo dura más de 1 minuto.
+// 2 minutos da margen suficiente sin bloquear reintentos por largo tiempo.
 if (!defined('IDEMPO_PROCESSING_TIMEOUT_MINUTES')) {
-    define('IDEMPO_PROCESSING_TIMEOUT_MINUTES', 10);
+    define('IDEMPO_PROCESSING_TIMEOUT_MINUTES', 2);
 }
 
 // TTL en días para entradas completadas

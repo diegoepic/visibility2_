@@ -932,7 +932,7 @@
     if (task.fields && !task.fields.visita_id) {
       // 1. Intentar desde client_guid → visita_id real (mapping actualizado)
       if (task.fields.client_guid) {
-        const mapped = LocalByGuid.get(task.fields.client_guid);
+        const mapped = LocalByGuid.getSync(task.fields.client_guid);
         // Solo usar si es numérico (visita_id real, no "local-xxx")
         if (mapped && !String(mapped).startsWith('local-')) {
           task.fields.visita_id = mapped;
@@ -941,14 +941,14 @@
 
       // 2. Fallback: buscar en Visits map si tenemos visita_local_id
       if (!task.fields.visita_id && task.fields.visita_local_id) {
-        const real = Visits.get(String(task.fields.visita_local_id));
+        const real = Visits.getSync(String(task.fields.visita_local_id));
         if (real) task.fields.visita_id = real;
       }
     }
 
     // Si todavía tenemos un ID local, intentar traducir o limpiar
     if (task.fields && task.fields.visita_id && String(task.fields.visita_id).startsWith('local-')) {
-      const real = Visits.get(String(task.fields.visita_id));
+      const real = Visits.getSync(String(task.fields.visita_id));
       if (real) {
         task.fields.visita_id = real;
       } else {
@@ -1237,7 +1237,7 @@
           // MEJORA: Validación mejorada de dependencias
           if (t.dependsOn && !CompletedDeps.has(t.dependsOn)) {
             const guid = t.fields?.client_guid;
-            const mapped = guid ? LocalByGuid.get(guid) : null;
+            const mapped = guid ? LocalByGuid.getSync(guid) : null;
 
             if (mapped && !String(mapped).startsWith('local-')) {
               CompletedDeps.add(t.dependsOn);
@@ -1464,7 +1464,13 @@
       // Evento histórico que ya usabas:
       window.dispatchEvent(new CustomEvent('queue:enqueued', { detail:{ id, type: task.type, url: task.url }}));
 
-      if (navigator.onLine) drain();
+      if (navigator.onLine) {
+        drain();
+      } else {
+        // A1: Registrar Background Sync para que el navegador drene automáticamente
+        // cuando vuelva la conexión, incluso con la app en segundo plano.
+        _registerBackgroundSync();
+      }
       return id;
     },
 
@@ -1492,7 +1498,7 @@
       }
 
       if (!fields['visita_id'] && fields['client_guid']) {
-        const lid = LocalByGuid.get(fields['client_guid']);
+        const lid = LocalByGuid.getSync(fields['client_guid']);
         if (lid) fields['visita_id'] = lid;
       }
 
@@ -1865,6 +1871,26 @@
         }
       } catch(_) {}
     }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  // A1: Background Sync helper — registra el tag en el SW para sync autónomo
+  async function _registerBackgroundSync() {
+    try {
+      if (!('serviceWorker' in navigator) || !('SyncManager' in window)) return; // iOS fallback
+      const reg = await navigator.serviceWorker.ready;
+      if (reg.sync) {
+        await reg.sync.register('v2-queue-sync');
+      }
+    } catch(_) { /* fail silently — el sync normal sigue activo */ }
+  }
+
+  // A1: Escuchar mensajes del SW (Background Sync dispara DRAIN_QUEUE a todos los clientes)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'DRAIN_QUEUE') {
+        resumeFromBackground();
+      }
+    });
   }
 
   window.addEventListener('online', () => {

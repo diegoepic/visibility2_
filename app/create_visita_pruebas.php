@@ -365,8 +365,34 @@ try {
         $ins->bind_param('iiissdd', $user_id, $form_id, $local_id, $client_guid, $fecha_ini, $lat, $lng);
 
         if (!$ins->execute()) {
-            $err = (string)$ins->error;
+            $err      = (string)$ins->error;
+            $errno    = (int)$ins->errno;
             $ins->close();
+
+            // Duplicate entry en uq_visita_client_guid (errno 1062):
+            // Dos requests concurrentes con el mismo client_guid llegaron casi al mismo tiempo.
+            // El primer INSERT ya creó la fila — recuperarla y tratarlo como éxito.
+            if ($errno === 1062 && $client_guid !== '') {
+                $conn->rollback();
+                $sel_dup = $conn->prepare("
+                    SELECT id FROM visita
+                    WHERE client_guid = ? AND id_usuario = ? LIMIT 1
+                ");
+                if ($sel_dup) {
+                    $sel_dup->bind_param('si', $client_guid, $user_id);
+                    $sel_dup->execute();
+                    $sel_dup->bind_result($dup_id);
+                    $found = $sel_dup->fetch();
+                    $sel_dup->close();
+                    if ($found && $dup_id) {
+                        $visita_id = (int)$dup_id;
+                        $reused    = true;
+                        // Saltar el bloque else (update), ir directo al commit
+                        goto commit_visita;
+                    }
+                }
+            }
+
             throw new RuntimeException('Error insert visita: ' . $err);
         }
 
@@ -388,6 +414,7 @@ try {
         $upd->close();
     }
 
+    commit_visita:
     if (!$conn->commit()) {
         throw new RuntimeException('No se pudo confirmar la transacción');
     }
@@ -424,6 +451,13 @@ try {
 
     error_log('create_visita_pruebas.php ERROR: ' . $e->getMessage());
     error_log('create_visita_pruebas.php TRACE: ' . $e->getTraceAsString());
+
+    // Liberar el slot de idempotencia para que la cola pueda reintentar de inmediato.
+    // Sin esto el slot queda en 'processing' 10 minutos y el cliente recibe
+    // REQUEST_IN_PROGRESS en cada reintento durante ese período.
+    if ($conn instanceof mysqli && function_exists('idempo_mark_failed')) {
+        try { idempo_mark_failed($conn, 'create_visita'); } catch (Throwable $_) {}
+    }
 
     json_fail(500, 'Error interno al crear la visita.', [
         'error' => 'E_CREATE_VISITA',

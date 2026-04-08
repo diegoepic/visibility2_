@@ -700,7 +700,7 @@ if ($division_id > 0) {
 </div>
 
   
-<!-- Modal para Descargar Data programados -->
+<!-- Modal para Descargar Data IPT -->
 <div class="modal fade" id="modalDataIPT" tabindex="-1" role="dialog" aria-labelledby="modalDataIPTLabel" aria-hidden="true">
   <div class="modal-dialog" role="document" aria-modal="true">
     <div class="modal-content">
@@ -711,84 +711,84 @@ if ($division_id > 0) {
         </button>
       </div>
 
-      <div class="modal-body">
-        <form id="formFiltros2" novalidate>
-        <?php if (strtoupper(trim($division_nombre)) == 'MC'): ?>
-          <div class="form-group">
-            <label for="division_ipt">Seleccionar División</label>
-            <select class="form-control" id="division_ipt" name="id_division">
-              <option value="">Todas las Divisiones</option>
-              <?php 
-                $queryDiv = "SELECT id, nombre FROM division_empresa WHERE estado = 1 ORDER BY nombre ASC";
-                $resultDiv = $conn->query($queryDiv);
-                while($rowDiv = $resultDiv->fetch_assoc()){
-                  echo '<option value="'.$rowDiv['id'].'">'.
-                       htmlspecialchars($rowDiv['nombre'], ENT_QUOTES, 'UTF-8').
-                       '</option>';
-                }
-              ?>
-            </select>
-          </div>
-        <?php else: ?>
-          <input type="hidden" id="division_ipt" name="id_division"
-                 value="<?php echo isset($division_id) ? htmlspecialchars($division_id, ENT_QUOTES, 'UTF-8') : ''; ?>">
-        <?php endif; ?>
+<div class="modal-body">
+  <form id="formFiltros2" novalidate>
+    <?php if (strtoupper(trim($division_nombre)) === 'MC'): ?>
+      <div class="form-group">
+        <label for="division_ipt">Seleccionar División</label>
+        <select class="form-control" id="division_ipt" name="id_division">
+          <option value="">Todas las Divisiones</option>
+          <?php
+            $queryDiv = "SELECT id, nombre
+                         FROM division_empresa
+                         WHERE estado = 1
+                         ORDER BY nombre ASC";
+            $resultDiv = $conn->query($queryDiv);
 
-        <div class="form-group">
-          <label for="subdivision_ipt">Seleccionar Subdivisión</label>
-          <select class="form-control" id="subdivision_ipt" name="id_subdivision">
-            <option value="">Todas las Subdivisiones</option>
-            <?php 
-              // Ajusta el nombre de tabla/campos a tu esquema real
-              $qSub = "SELECT id, nombre FROM subdivision WHERE 1 = 1 ORDER BY nombre ASC";
-              $rSub = $conn->query($qSub);
-              while($row = $rSub->fetch_assoc()){
-                echo '<option value="'.$row['id'].'">'.htmlspecialchars($row['nombre'], ENT_QUOTES, 'UTF-8').'</option>';
-              }
-            ?>
-          </select>
-        </div>
-
-          <div class="form-group">
-            <label for="ejecutor_ipt">Seleccionar Ejecutor</label>
-            <select class="form-control" id="ejecutor_ipt" name="id_usuario">
-              <option value="">Todos los Ejecutores</option>
-              <!-- Opcional: se llenará vía JS -->
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label for="fecha_inicio_ipt">Fecha Inicio</label>
-            <input type="date" class="form-control" id="fecha_inicio_ipt" name="fecha_inicio" required>
-          </div>
-
-          <div class="form-group">
-            <label for="fecha_fin_ipt">Fecha Fin</label>
-            <input type="date" class="form-control" id="fecha_fin_ipt" name="fecha_fin" required>
-          </div>
-
-          <div class="form-group">
-            <label for="tipo_gestion2">Tipo de Gestión</label>
-            <select class="form-control" id="tipo_gestion2" name="tipo_gestion">
-              <option value="implementacion">Implementación</option>
-              <option value="encuesta">Encuesta</option>
-            </select>
-          </div>
-        <div class="form-check">
-          <input class="form-check-input" type="checkbox" id="separar" name="separar" value="1">
-          <label class="form-check-label" for="separar">Una fila por respuesta (no agrupar)</label>
-        </div>          
-            <div class="text-right">
-              <!-- Grupo otras divisiones -->
-              <button type="button" class="btn btn-primary" id="btnDescargarImplementacionExcelipt" style="display:none;">
-                Descargar implementaciones
-              </button>
-              <button type="button" class="btn btn-primary" id="btnDescargarEncuestaipt" style="display:none;">
-                Descargar encuesta
-              </button>
-            </div>
-        </form>
+            while ($rowDiv = $resultDiv->fetch_assoc()) {
+              echo '<option value="' . (int)$rowDiv['id'] . '">'
+                 . htmlspecialchars($rowDiv['nombre'], ENT_QUOTES, 'UTF-8')
+                 . '</option>';
+            }
+          ?>
+        </select>
       </div>
+    <?php else: ?>
+      <input type="hidden"
+             id="division_ipt"
+             name="id_division"
+             value="<?php echo isset($division_id) ? (int)$division_id : 0; ?>">
+    <?php endif; ?>
+
+    <div class="form-group">
+      <label for="subdivision_ipt">Seleccionar Subdivisión</label>
+      <select class="form-control" id="subdivision_ipt" name="id_subdivision" disabled>
+        <option value="0">Todas</option>
+        <option value="-1">Sin Subdivisión</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="ejecutor_ipt">Seleccionar Ejecutor</label>
+      <select class="form-control" id="ejecutor_ipt" name="id_usuario">
+        <option value="">Todos los Ejecutores</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="fecha_inicio_ipt">Fecha Inicio</label>
+      <input type="date" class="form-control" id="fecha_inicio_ipt" name="fecha_inicio" required>
+    </div>
+
+    <div class="form-group">
+      <label for="fecha_fin_ipt">Fecha Fin</label>
+      <input type="date" class="form-control" id="fecha_fin_ipt" name="fecha_fin" required>
+    </div>
+
+    <div class="form-group">
+      <label for="tipo_gestion2">Tipo de Gestión</label>
+      <select class="form-control" id="tipo_gestion2" name="tipo_gestion">
+        <option value="implementacion">Implementación</option>
+        <option value="encuesta">Encuesta</option>
+      </select>
+    </div>
+
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id="separar" name="separar" value="1">
+      <label class="form-check-label" for="separar">Una fila por respuesta (no agrupar)</label>
+    </div>
+
+    <div class="text-right mt-3">
+      <button type="button" class="btn btn-primary" id="btnDescargarImplementacionExcelipt" style="display:none;">
+        Descargar implementaciones
+      </button>
+      <button type="button" class="btn btn-primary" id="btnDescargarEncuestaipt" style="display:none;">
+        Descargar encuesta
+      </button>
+    </div>
+
+  </form>
+</div>
 
       <div class="modal-footer">
         <small id="ayudaRango" class="text-muted mr-auto">Sugerencia: usa rangos acotados para acelerar la descarga.</small>
@@ -798,6 +798,34 @@ if ($division_id > 0) {
   </div>
 </div>
 
+<!-- Overlay de descarga IPT -->
+<div id="downloadIPTOverlay" class="form-submit-overlay" style="display:none;">
+    <div class="form-submit-box">
+        <div class="spinner-border text-primary mb-3" role="status" style="width:3rem;height:3rem;">
+            <span class="sr-only">Procesando...</span>
+        </div>
+        <h5 class="mb-2" id="downloadIPTTitulo">Generando archivo</h5>
+        <p class="mb-3 text-muted" id="downloadIPTTexto">
+            Preparando la descarga del reporte IPT, por favor espera...
+        </p>
+
+        <div class="progress" style="height:10px; border-radius:999px;">
+            <div id="downloadIPTBar"
+                 class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                 role="progressbar"
+                 style="width:0%">
+            </div>
+        </div>
+
+        <small class="d-block mt-3 text-muted" id="downloadIPTPercent">
+            0%
+        </small>
+
+        <small class="d-block mt-2 text-muted">
+            No cierres esta ventana ni recargues la página.
+        </small>
+    </div>
+</div>
 
   <!-- Main Sidebar Container -->
   <aside class="main-sidebar sidebar-dark-primary elevation-4">
@@ -945,21 +973,20 @@ if ($division_id > 0) {
                       <p>Ruta Planificada</p>
                   </a>
               </li>
-          <?php if (strtoupper(trim($division_nombre)) == 'SAVORY' or 'MC'): ?>              
-              <li class="nav-item">
-                  <a href="https://visibility.cl/visibility2/portal/repositorio/SAVORY/SAVORY_TEMPORADA_2024-2025.xlsx" class="nav-link">
-                      <i class="far fa-circle nav-icon"></i>
-                      <p>Temporada 2024-2025</p>
-                  </a>
-              </li>
-              <li class="nav-item">
-                  <a href="https://visibility.cl/visibility2/portal/repositorio/SAVORY/SAVORY_TEMPORADA_2023-2024.xlsx" class="nav-link">
-                      <i class="far fa-circle nav-icon"></i>
-                      <p>Temporada 2023-2024</p>
-                  </a>
-              </li>              
-          <?php else: ?>  
-          <?php endif; ?>                
+            <?php if (in_array(strtoupper(trim($division_nombre)), ['SAVORY', 'MC'], true)): ?>              
+                <li class="nav-item">
+                    <a href="https://visibility.cl/visibility2/portal/repositorio/SAVORY/SAVORY_TEMPORADA_2024-2025.xlsx" class="nav-link">
+                        <i class="far fa-circle nav-icon"></i>
+                        <p>Temporada 2024-2025</p>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="https://visibility.cl/visibility2/portal/repositorio/SAVORY/SAVORY_TEMPORADA_2023-2024.xlsx" class="nav-link">
+                        <i class="far fa-circle nav-icon"></i>
+                        <p>Temporada 2023-2024</p>
+                    </a>
+                </li>
+            <?php endif; ?>              
             </ul>
           </li>
           <li class="nav-item">
@@ -1492,249 +1519,149 @@ function descargarDataUsuarios() {
 </script>
 
 <script>
-    $(document).ready(function() {
-        // Al abrir el modal, cargar opciones de Canal y Distrito
-        $('#modalDataLocales').on('show.bs.modal', function () {
-            $.get('modulos/cargar_filtros.php', { filtro: 'canal' }, function(data) {
-                $('#canal').html(data);
-            });
-            $.get('modulos/cargar_filtros.php', { filtro: 'distrito' }, function(data) {
-                $('#distrito').html(data);
-            });
-        });
-        $('#modalDataIPT').on('show.bs.modal', function () {
-          const division  = $('#division_ipt').val();
-          // ya cargas canal y distrito; ahora cargamos ejecutores:
-          $.get('modulos/cargar_filtros.php',
-            { filtro: 'ejecutor', division },
-            data => $('#ejecutor_ipt').html(data)
-          );
-        });
-        
-        $('#division_ipt').on('change', function(){
-          const division = $(this).val();
-          $.get('modulos/cargar_filtros.php',
-            { filtro: 'ejecutor', division },
-            data => $('#ejecutor_ipt').html(data)
-          );
-        });
-        
-        $('#modalDataProgramados').on('show.bs.modal', function () {
-          const division = $('#division_programados').val();
-    
-          $.get('modulos/cargar_filtros.php', { filtro: 'ejecutor', division }, function(html){
-            $('#ejecutor_programados').html(html);
-          });
-        });
-    
-        $('#division_programados').on('change', function(){
-          const division = $(this).val();
-          $.get('modulos/cargar_filtros.php', { filtro: 'ejecutor', division }, function(html){
-            $('#ejecutor_programados').html(html);
-          });
-        });
+$(document).ready(function () {
+    let xhrEjecutoresIPT = null;
+    let ultimoFiltroEjecutoresIPT = '';
 
-});
-  
-    $(document).ready(function() {
-        // Al abrir el modal, cargar opciones de Canal y Distrito
-        $('#modalDataLocalesUltimaGestion').on('show.bs.modal', function () {
-            $.get('modulos/cargar_filtros.php', { filtro: 'canalug' }, function(data) {
-                $('#canalug').html(data);
-            });
-            $.get('modulos/cargar_filtros.php', { filtro: 'distritoug' }, function(data) {
-                $('#distritoug').html(data);
-            });
-        });
-    });    
-    
-        function descargarData(btn, formato, debug = false) {
-          const $form = $(btn).closest('form');                 // <-- form del botón
-          const params = $form.serializeArray();
-          params.push({ name: 'formato', value: formato });
-          if (debug) params.push({ name: 'debug', value: '1' });
-        
-          const usp = new URLSearchParams();
-          params.forEach(p => usp.append(p.name, p.value || ''));
-          const url = `modulos/descargar_data_locales.php?${usp.toString()}`;
-        
-          console.log('URL descarga:', url);
-          if (debug) window.open(url, '_blank'); else window.location.href = url;
+    function resetSelectIPT(sel, placeholder) {
+        if (!sel || !sel.length) return;
+        sel.html(`<option value="0">${placeholder}</option>`);
+    }
+
+function cargarSubdivisionesIPT(idDivision, restaurar = false) {
+    const $subdivision = $('#subdivision_ipt');
+    if (!$subdivision.length) return;
+
+    console.log('cargarSubdivisionesIPT -> idDivision:', idDivision);
+
+    $subdivision.prop('disabled', true);
+    resetSelectIPT($subdivision, 'Cargando...');
+
+    $.get('/visibility2/portal/modulos/mod_cargar/cargar_subdivisiones.php', {
+        id_division: idDivision || 0
+    }, function (resp) {
+        console.log('respuesta subdivisiones:', resp);
+
+        let data = resp;
+
+        if (typeof resp === 'string') {
+            try {
+                data = JSON.parse(resp);
+            } catch (e) {
+                data = { ok: false, subdivisiones: [] };
+            }
         }
-    function descargarDataUltimaGestion(formato) {
-        var canal = $('#canalug').val();
-        var distrito = $('#distritoug').val();
-        var division = $('#division').val(); // Valor del select o input oculto
-        window.location.href = 'modulos/descargar_data_locales_ultimaGestion.php?formato=' + formato + '&canal=' + canal + '&distrito=' + distrito + '&division=' + division;
-    }  
-    
-    function modalDataLocalesHistoricoGestion(formato) {
-      var $modal    = $('#modalDataLocalesHistoricoGestion');
-      var canal     = $modal.find('#canal').val();
-      var distrito  = $modal.find('#distrito').val();
-      var division  = $modal.find('#division').val();
-      var tipoGest  = $modal.find('#tipoGestion').val();
-    
-      var url = 'modulos/descargar_data_locales_historicoGestion.php'
-        + '?formato='    + encodeURIComponent(formato)
-        + '&canal='      + encodeURIComponent(canal)
-        + '&distrito='   + encodeURIComponent(distrito)
-        + '&division='   + encodeURIComponent(division)
-        + '&tipoGestion='+ encodeURIComponent(tipoGest);
-    
-      window.open(url, '_blank');
-    }  
-        
-    
-function descargarDataProgramados(formato) {
-        var canal     = document.getElementById('canal_programados').value;
-        var distrito  = document.getElementById('distrito_programados').value;
-        var division  = document.getElementById('division_programados').value;
-        var fecha_inicio = document.getElementById('fecha_inicio_programados').value;
-        var fecha_fin    = document.getElementById('fecha_fin_programados').value;
-        var estado    = document.getElementById('estado_programados').value;
-        const ejecutor = $('#ejecutor_programados').val();
 
-    // Construir la URL y codificar los parámetros
-    var url = 'modulos/descargar_data_programada.php?formato=' + encodeURIComponent(formato)
-                  + "&id_canal=" + encodeURIComponent(canal)
-                  + "&id_distrito=" + encodeURIComponent(distrito)
-                  + "&id_division=" + encodeURIComponent(division)
-                  + "&fecha_inicio=" + encodeURIComponent(fecha_inicio)
-                  + "&fecha_fin=" + encodeURIComponent(fecha_fin)
-                  + "&estado=" + encodeURIComponent(estado);
-                 if (ejecutor) {
-                  url += '&id_usuario=' + encodeURIComponent(ejecutor);
-                    }
-    
-    // Abrir la URL en una nueva pestaña
-   window.location.href = url;
-} 
+        $subdivision.empty();
+        $subdivision.append('<option value="0">Todas</option>');
+        $subdivision.append('<option value="-1">Sin Subdivisión</option>');
 
-function descargarDataAdicionales(formato) {
-        var canal     = document.getElementById('canal_programados').value;
-        var distrito  = document.getElementById('distrito_programados').value;
-        var division  = document.getElementById('division_programados').value;
-        var fecha_inicio = document.getElementById('fecha_inicio_programados').value;
-        var fecha_fin    = document.getElementById('fecha_fin_programados').value;
-        var estado    = document.getElementById('estado_programados').value;
-        const ejecutor = $('#ejecutor_programados').val();
+        if (data.ok && Array.isArray(data.subdivisiones)) {
+            data.subdivisiones.forEach(function (item) {
+                $subdivision.append(
+                    $('<option>', {
+                        value: item.id,
+                        text: item.nombre
+                    })
+                );
+            });
+        }
 
-    // Construir la URL y codificar los parámetros
-    var url = 'modulos/descargar_data_programada_adicionales.php?formato=' + encodeURIComponent(formato)
-                  + "&id_canal=" + encodeURIComponent(canal)
-                  + "&id_distrito=" + encodeURIComponent(distrito)
-                  + "&id_division=" + encodeURIComponent(division)
-                  + "&fecha_inicio=" + encodeURIComponent(fecha_inicio)
-                  + "&fecha_fin=" + encodeURIComponent(fecha_fin)
-                  + "&estado=" + encodeURIComponent(estado);
-                 if (ejecutor) {
-                  url += '&id_usuario=' + encodeURIComponent(ejecutor);
-                    }
-    
-    // Abrir la URL en una nueva pestaña
-   window.location.href = url;
-} 
-    
-function descargarEncuestaPivot(formato) {
-        var canal     = document.getElementById('canal_programados').value;
-        var distrito  = document.getElementById('distrito_programados').value;
-        var division  = document.getElementById('division_programados').value;
-        var fecha_inicio = document.getElementById('fecha_inicio_programados').value;
-        var fecha_fin    = document.getElementById('fecha_fin_programados').value;
-        var estado    = document.getElementById('estado_programados').value;
-        const ejecutor = $('#ejecutor_programados').val();
-        var url = "modulos/descargar_data_programada_E.php?formato=" + encodeURIComponent(formato)
-                  + "&id_canal=" + encodeURIComponent(canal)
-                  + "&id_distrito=" + encodeURIComponent(distrito)
-                  + "&id_division=" + encodeURIComponent(division)
-                  + "&fecha_inicio=" + encodeURIComponent(fecha_inicio)
-                  + "&fecha_fin=" + encodeURIComponent(fecha_fin)
-                  + "&estado=" + encodeURIComponent(estado);
-                   if (ejecutor) {
-                    url += '&id_usuario=' + encodeURIComponent(ejecutor);
-                    }
-                  
-        //window.location.href = url;
-    window.location.href = url;        
+        if (restaurar) {
+            const saved = $('#subdivision_ipt').data('selected') || '0';
+            if ($subdivision.find(`option[value="${saved}"]`).length) {
+                $subdivision.val(saved);
+            }
+        }
+
+        $subdivision.prop('disabled', false);
+    }).fail(function (xhr) {
+        console.error('Error cargando subdivisiones IPT:', xhr.status, xhr.responseText);
+        resetSelectIPT($subdivision, 'Error al cargar');
+        $subdivision.prop('disabled', false);
+    });
+}
+
+    function cargarEjecutoresIPT() {
+        const division    = $('#division_ipt').val() || '';
+        const subdivision = $('#subdivision_ipt').val() || '';
+
+        const firma = [division, subdivision].join('|');
+
+        if (firma === ultimoFiltroEjecutoresIPT) {
+            return;
+        }
+        ultimoFiltroEjecutoresIPT = firma;
+
+        if (xhrEjecutoresIPT && xhrEjecutoresIPT.readyState !== 4) {
+            xhrEjecutoresIPT.abort();
+        }
+
+        $('#ejecutor_ipt').html('<option value="">Cargando ejecutores...</option>');
+
+        xhrEjecutoresIPT = $.ajax({
+            url: 'modulos/cargar_filtros.php',
+            type: 'GET',
+            data: {
+                filtro: 'ejecutor',
+                division: division,
+                subdivision: subdivision
+            },
+            cache: false,
+            success: function (data) {
+                $('#ejecutor_ipt').html(data);
+            },
+            error: function (xhr, status) {
+                if (status !== 'abort') {
+                    $('#ejecutor_ipt').html('<option value="">No fue posible cargar ejecutores</option>');
+                }
+            }
+        });
     }
-    
-function descargarDataIPTMC(formato) {
-    var canal2 = document.getElementById('canal_ipt').value;
-    var distrito2 = document.getElementById('distrito_ipt').value;
-    var division2 = document.getElementById('division_ipt').value;
-    console.log("Valor de división:", division2);
-    var fecha_inicio2 = document.getElementById('fecha_inicio_ipt').value;
-    var fecha_fin2 = document.getElementById('fecha_fin_ipt').value;
-    const ejecutor     = $('#ejecutor_ipt').val();
-    
-    var url = "modulos/descarga_data_ruta.php?formato=" + encodeURIComponent(formato)
-              + "&id_canal=" + encodeURIComponent(canal2)
-              + "&id_distrito=" + encodeURIComponent(distrito2)
-              + "&id_division=" + encodeURIComponent(division2)
-              + "&fecha_inicio=" + encodeURIComponent(fecha_inicio2)
-              + "&fecha_fin=" + encodeURIComponent(fecha_fin2);
-    if (ejecutor) url += "&id_usuario=" + encodeURIComponent(ejecutor);
-    window.location.href = url;     
-}    
-    
-function descargarDataIPT(formato) {
-    var canal2 = document.getElementById('canal_ipt').value;
-    var distrito2 = document.getElementById('distrito_ipt').value;
-    var division2 = document.getElementById('division_ipt').value;
-    console.log("Valor de división:", division2);
-    var fecha_inicio2 = document.getElementById('fecha_inicio_ipt').value;
-    var fecha_fin2 = document.getElementById('fecha_fin_ipt').value;
-    const ejecutor = $('#ejecutor_ipt').val();
-    
-    var url = "modulos/descargar_data_ipt.php?formato=" + encodeURIComponent(formato)
-              + "&id_canal=" + encodeURIComponent(canal2)
-              + "&id_distrito=" + encodeURIComponent(distrito2)
-              + "&id_division=" + encodeURIComponent(division2)
-              + "&fecha_inicio=" + encodeURIComponent(fecha_inicio2)
-              + "&fecha_fin=" + encodeURIComponent(fecha_fin2);
-            if (ejecutor) url += "&id_usuario=" + encodeURIComponent(ejecutor);
-    window.location.href = url;     
-}
 
-function showDlModal(show) {
-  document.getElementById('dlModal').style.display = show ? 'block' : 'none';
-}
-function setDlProgress(percent, text) {
-  const p = Math.max(0, Math.min(100, percent|0));
-  document.getElementById('dlBar').style.width = p + '%';
-  document.getElementById('dlText').textContent = text ?? (p + '%');
-}
+$('#modalDataIPT').on('shown.bs.modal', function () {
+    ultimoFiltroEjecutoresIPT = '';
 
-   
-    function toggleDownloadButtons() {
-    var tipo = document.getElementById("tipo_gestion").value;
-    if (tipo === "implementacion") {
-        document.getElementById("btnDescargarImplementacionExcel").style.display = "";
-        document.getElementById("btnDescargarEncuesta").style.display = "none";
-        
-    } else if (tipo === "encuesta") {
-        document.getElementById("btnDescargarImplementacionExcel").style.display = "none";
-        document.getElementById("btnDescargarEncuesta").style.display = "";
+    const division = $('#division_ipt').val() || 0;
+    console.log('division_ipt al abrir modal:', division);
+
+    if (parseInt(division, 10) > 0) {
+        cargarSubdivisionesIPT(division, false);
+
+        setTimeout(function () {
+            cargarEjecutoresIPT();
+        }, 200);
+    } else {
+        $('#subdivision_ipt').html('<option value="0">Todas</option><option value="-1">Sin Subdivisión</option>');
+        $('#subdivision_ipt').prop('disabled', false);
+        cargarEjecutoresIPT();
     }
-}
-
-$(document).ready(function() {
-  // al cargar
-  toggleDownloadButtons2();
-
-  // cuando abres el modal (usa shown para que el DOM del modal ya esté en pantalla)
-  $('#modalDataIPT').on('shown.bs.modal', function () {
-    toggleDownloadButtons2();
-  });
-
-  // cuando cambie el tipo
-  $('#tipo_gestion2').on('change', toggleDownloadButtons2);
-
-  // cuando cambie la división (por si el usuario la cambia manualmente)
-  $('#division_ipt').on('change', toggleDownloadButtons2);
 });
 
+$('#division_ipt').on('change', function () {
+    const division = $(this).val() || 0;
+
+    ultimoFiltroEjecutoresIPT = '';
+    $('#ejecutor_ipt').html('<option value="">Todos los Ejecutores</option>');
+
+    if (parseInt(division, 10) > 0) {
+        cargarSubdivisionesIPT(division, false);
+
+        setTimeout(function () {
+            cargarEjecutoresIPT();
+        }, 200);
+    } else {
+        $('#subdivision_ipt').html('<option value="0">Todas</option><option value="-1">Sin Subdivisión</option>');
+        $('#subdivision_ipt').prop('disabled', false);
+        cargarEjecutoresIPT();
+    }
+});
+
+    $('#subdivision_ipt').on('change', function () {
+        ultimoFiltroEjecutoresIPT = '';
+        cargarEjecutoresIPT();
+    });
+});
 </script>
 
 <script>
@@ -1778,17 +1705,5 @@ $(document).ready(function() {
 });
 </script>
 
-<script>
-    var timeout;
-    function resetTimeout() {
-        clearTimeout(timeout);
-        timeout = setTimeout(function(){
-            window.location.href = "index.php?session_expired=1";
-        }, 1800000); // 10 minutos de inactividad
-    }
-    window.onload = resetTimeout;
-    document.onmousemove = resetTimeout;
-    document.onkeypress = resetTimeout;
-</script>
 </body>
 </html>

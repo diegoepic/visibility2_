@@ -973,17 +973,17 @@ table.dataTable.display tbody tr.even {
         <div class="form-group col-md-3 filter-group">
           <label for="id_ejecutor" class="filter-label">EJECUTOR</label>
           <select class="form-control filter-control" id="id_ejecutor" name="id_ejecutor">
-            <option value="0" selected>SELECCIONE EJECUTOR</option>
+            <option value="0" selected>TODOS LOS EJECUTORES</option>
           </select>
-          <small class="help">SI NO ELIGES CAMPAÑA, VERÁS TODAS SUS RUTAS.</small>
+<small class="help">SI NO ELIGES CAMPAÑA O RUTA, SE MOSTRARÁN TODOS LOS EJECUTORES DISPONIBLES.</small>
         </div>
 
-        <div class="form-group col-md-2 filter-group" id="campo-desde" style="display:none">
+        <div class="form-group col-md-2 filter-group" id="campo-desde">
           <label for="desde" class="filter-label">DESDE</label>
           <input type="date" class="form-control filter-control" id="desde" name="desde" value="<?= htmlspecialchars($fecha_desde) ?>">
         </div>
 
-        <div class="form-group col-md-2 filter-group" id="campo-hasta" style="display:none">
+        <div class="form-group col-md-2 filter-group" id="campo-hasta">
           <label for="hasta" class="filter-label">HASTA</label>
           <input type="date" class="form-control filter-control" id="hasta" name="hasta" value="<?= htmlspecialchars($fecha_hasta) ?>">
         </div>
@@ -1074,6 +1074,7 @@ table.dataTable.display tbody tr.even {
         }
       ?>
       <tr>
+         
         <td><?= $codigoLocal ?></td>
 
         <!-- Visible solo front -->
@@ -1185,18 +1186,14 @@ document.addEventListener("DOMContentLoaded", function () {
   const campoDesde = document.getElementById("campo-desde");
   const campoHasta = document.getElementById("campo-hasta");
 
-function actualizarVisibilidad() {
-  const valor = parseInt(tipoGestion?.value || 0);
-  if (!campoCampana || !campoDesde || !campoHasta) return;
+  function actualizarVisibilidad() {
+    const valor = parseInt(tipoGestion?.value || 0, 10);
+    if (!campoCampana || !campoDesde || !campoHasta) return;
 
-
-  campoCampana.style.display = (valor === 0 || valor === 1) ? "block" : "none";
-
-  
-  const mostrarFechas = (valor === 1 || valor === 3);
-  campoDesde.style.display = mostrarFechas ? "block" : "none";
-  campoHasta.style.display = mostrarFechas ? "block" : "none";
-}
+    campoCampana.style.display = (valor === 0 || valor === 1) ? "block" : "none";
+    campoDesde.style.display = "block";
+    campoHasta.style.display = "block";
+  }
 
   if (tipoGestion) {
     actualizarVisibilidad();
@@ -1214,299 +1211,381 @@ function actualizarVisibilidad() {
   function setOptions(select, options, selectedVal = null) {
     if (!select) return;
     while (select.firstChild) select.removeChild(select.firstChild);
+
     options.forEach(o => {
       const opt = new Option(o.nombre, o.id);
-      if (selectedVal !== null && String(selectedVal) === String(o.id)) opt.selected = true;
+      if (selectedVal !== null && String(selectedVal) === String(o.id)) {
+        opt.selected = true;
+      }
       select.add(opt);
     });
   }
- 
 
   /* ============================================
      🧩 ELEMENTOS DEL FORMULARIO
   ============================================ */
   const $division = document.getElementById('id_division');
-  const divisionIsHidden = ! $division;  
+  const divisionIsHidden = !$division;
   const $subdivision = document.getElementById('id_subdivision');
   const $campana = document.getElementById('id_campana');
   const $ejecutor = document.getElementById('id_ejecutor');
   const $estado = document.getElementById('estado');
   const $tipo = document.getElementById('tipo_gestion');
-  const $empresa = document.querySelector('input[name="empresa_id"]') || { value: '<?= $id_empresa ?>' };
   const $distrito = document.getElementById('id_distrito');
+  const $empresa = document.querySelector('input[name="empresa_id"]') || { value: '<?= $id_empresa ?>' };
 
-  // 🔹 Valores guardados desde PHP
+  // Valores guardados desde PHP
   const val_division = document.getElementById('val_division')?.value || 0;
   const val_subdivision = document.getElementById('val_subdivision')?.value || 0;
   const val_campana = document.getElementById('val_campana')?.value || 0;
   const val_ejecutor = document.getElementById('val_ejecutor')?.value || 0;
   const val_tipo = document.getElementById('val_tipo')?.value || 0;
 
-/* ============================================
-   🧩 SUBDIVISIONES DINÁMICAS + RESTAURACIÓN
-============================================ */
+  let xhrEjecutores = null;
+  let firmaEjecutores = '';
 
-function cargarSubdivisionesAuto(idDivision) {
+  /* ============================================
+     🧩 SUBDIVISIONES DINÁMICAS
+  ============================================ */
+  function cargarSubdivisionesAuto(idDivision, restaurar = false) {
+    if (!$subdivision) return;
 
-    $subdivision.disabled = false; // SIEMPRE habilitado para no MC
+    $subdivision.disabled = false;
     resetSelect($subdivision, 'Cargando...');
 
     fetch(`../mod_cargar/cargar_subdivisiones.php?id_division=${idDivision}`)
-        .then(r => r.json())
-        .then(data => {
+      .then(r => r.json())
+      .then(data => {
+        const items = (data.ok && Array.isArray(data.subdivisiones))
+          ? data.subdivisiones
+          : [];
 
-            const items = (data.ok && Array.isArray(data.subdivisiones))
-                ? data.subdivisiones
-                : [];
+        setOptions($subdivision, [
+          { id: 0, nombre: 'TODAS' },
+          { id: -1, nombre: 'SIN SUB DIVISIÓN' },
+          ...items
+        ]);
 
-            setOptions($subdivision, [
-                { id: 0, nombre: 'TODAS' },
-                { id: -1, nombre: 'SIN SUB DIVISIÓN' },
-                ...items
-            ]);
-
-            // Restaurar selección si aplica
-            if (
-                val_subdivision !== "0" &&
-                $subdivision.querySelector(`option[value="${val_subdivision}"]`)
-            ) {
-                $subdivision.value = val_subdivision;
-                $subdivision.dispatchEvent(new Event('change'));
-            }
-        })
-        .catch(err => {
-            console.error('Error cargando subdivisiones:', err);
-            resetSelect($subdivision, 'ERROR AL CARGAR');
-            $subdivision.disabled = false;
-        });
-}
-
-
-/* ============================================
-   🔥 LÓGICA PARA USUARIO NO MC
-============================================ */
-if (!isMC || divisionIsHidden) {
-
-    // Siempre habilitado para NO MC
-    $subdivision.disabled = false;
-
-    // Cargar subdivisiones automáticamente usando su división nativa
-    cargarSubdivisionesAuto(divisionUsuario);
-
-} else {
-
-    /* ============================================
-       ✔ LÓGICA PARA MC (con select visible)
-    ============================================ */
-    $division.addEventListener('change', function () {
-        const idDivision = parseInt($division.value, 10) || 0;
-
-        resetSelect($campana, 'SELECCIONE CAMPAÑA');
-        resetSelect($ejecutor, 'SELECCIONE EJECUTOR');
-
-        if (idDivision <= 0) {
-            resetSelect($subdivision, 'SIN SUBDIVISIÓN');
-            $subdivision.disabled = true;
-            return;
+        if (
+          restaurar &&
+          val_subdivision !== "0" &&
+          $subdivision.querySelector(`option[value="${val_subdivision}"]`)
+        ) {
+          $subdivision.value = val_subdivision;
         }
 
         $subdivision.disabled = false;
-        cargarSubdivisionesAuto(idDivision);
-    });
-
-    if (parseInt(val_division) > 0) {
-        $division.value = val_division;
-        cargarSubdivisionesAuto(val_division);
-    }
-}
-  /* ============================================
-     🧩 CAMPANAS DINÁMICAS
-  ============================================ */
-  if ($subdivision) {
-    $subdivision.addEventListener('change', function () {
-      const division = $division ? $division.value : divisionUsuario;
-      const subdiv = $subdivision?.value || 0;
-      const estado = $estado?.value || 1;
-      const tipoG = $tipo?.value || 0;
-
-      resetSelect($campana, 'Cargando campañas...');
-      $campana.disabled = true;
-
-      fetch(`../mod_cargar/cargar_campanas2.php?id_empresa=${$empresa.value}&id_division=${division}&id_subdivision=${subdiv}&estado=${estado}&tipo_gestion=${tipoG}`)
-        .then(r => r.json())
-        .then(data => {
-          resetSelect($campana, 'SELECCIONE CAMPAÑA');
-          if (data.ok && Array.isArray(data.campanas)) {
-            data.campanas.forEach(c => {
-              const opt = new Option(c.nombre, c.id);
-              $campana.add(opt);
-            });
-          }
-
-          $campana.disabled = false;
-
-          // ✅ Restaurar selección si aplica
-          if (val_campana !== "0" && $campana.querySelector(`option[value="${val_campana}"]`)) {
-            $campana.value = val_campana;
-            $campana.dispatchEvent(new Event('change'));
-          }
-        })
-        .catch(err => {
-          console.error('Error cargando campañas:', err);
-          resetSelect($campana, 'ERROR AL CARGAR');
-          $campana.disabled = false;
-        });
-    });
+      })
+      .catch(err => {
+        console.error('Error cargando subdivisiones:', err);
+        resetSelect($subdivision, 'ERROR AL CARGAR');
+        $subdivision.disabled = false;
+      });
   }
 
   /* ============================================
-     🧩 EJECUTORES DINÁMICOS + RESTAURACIÓN
+     🧩 CAMPAÑAS DINÁMICAS
   ============================================ */
-function cargarEjecutores({ idCampana = 0 } = {}) {
-  const empresa = $empresa.value || 0;
-  const division = $division?.value || 0;
-  const tipoG = $tipo?.value || 0;
-  const distrito = $distrito?.value || 0;
+  function cargarCampanasMapa(restaurar = false) {
+    if (!$campana || !$subdivision) return;
 
-  resetSelect($ejecutor, 'Cargando ejecutores...');
-  $ejecutor.disabled = true;
+    const division = $division ? ($division.value || 0) : divisionUsuario;
+    const subdiv = $subdivision.value || 0;
+    const estado = $estado?.value || 0;
+    const tipoG = $tipo?.value || 0;
 
-  fetch(`../mod_cargar/cargar_ejecutores.php?id_empresa=${empresa}&id_campana=${idCampana}&id_division=${division}&id_distrito=${distrito}&tipo_gestion=${tipoG}`)
-    .then(r => r.json())
-    .then(data => {
-      resetSelect($ejecutor, 'SELECCIONE EJECUTOR');
-      if (data.ok && Array.isArray(data.ejecutores)) {
-        data.ejecutores.forEach(e => {
-          const opt = new Option(`${e.nombre} ${e.apellido}`, e.id);
-          $ejecutor.add(opt);
-        });
-      }
-
-      // ✅ Restaurar ejecutor solo si coincide con el tipo actual
-      if (
-        val_ejecutor &&
-        $ejecutor.querySelector(`option[value="${val_ejecutor}"]`) &&
-        parseInt($tipo.value) === parseInt(val_tipo)
-      ) {
-        $ejecutor.value = val_ejecutor;
-      }
-
-      $ejecutor.disabled = false;
-    })
-    .catch(err => {
-      console.error('Error cargando ejecutores:', err);
-      resetSelect($ejecutor, 'ERROR AL CARGAR');
-      $ejecutor.disabled = false;
-    });
-}
-
-/* =========================================================
-   🔄 SINCRONIZACIÓN ENTRE CAMPANA / RUTA / EJECUTOR
-========================================================= */
-// Cuando cambia campaña → cargar ejecutores
-if ($campana) {
-  $campana.addEventListener('change', function () {
-    const idCampana = parseInt($campana.value, 10) || 0;
-    resetSelect($ejecutor, 'Cargando ejecutores...');
-    cargarEjecutores({ idCampana });
-  });
-}
-
-// Cuando cambia tipo de gestión
-if ($tipo) {
-  $tipo.addEventListener('change', function () {
-    const tipoG = parseInt($tipo.value, 10);
-
-    // Limpia selects dependientes
-    resetSelect($campana, 'SELECCIONE CAMPAÑA');
-    resetSelect($ejecutor, 'SELECCIONE EJECUTOR');
+    resetSelect($campana, 'Cargando campañas...');
     $campana.disabled = true;
+
+    fetch(`../mod_cargar/cargar_campanas2.php?id_empresa=${$empresa.value}&id_division=${division}&id_subdivision=${subdiv}&estado=${estado}&tipo_gestion=${tipoG}`)
+      .then(r => r.json())
+      .then(data => {
+        resetSelect($campana, 'SELECCIONE CAMPAÑA');
+
+        if (data.ok && Array.isArray(data.campanas)) {
+          data.campanas.forEach(c => {
+            const opt = new Option(c.nombre, c.id);
+            $campana.add(opt);
+          });
+        }
+
+        if (
+          restaurar &&
+          val_campana !== "0" &&
+          $campana.querySelector(`option[value="${val_campana}"]`)
+        ) {
+          $campana.value = val_campana;
+        }
+
+        $campana.disabled = false;
+      })
+      .catch(err => {
+        console.error('Error cargando campañas:', err);
+        resetSelect($campana, 'ERROR AL CARGAR');
+        $campana.disabled = false;
+      });
+  }
+
+  /* ============================================
+     🧩 EJECUTORES DINÁMICOS
+  ============================================ */
+  function recargarEjecutoresMapa(restaurar = false) {
+    if (!$ejecutor) return;
+
+    const empresa = $empresa?.value || 0;
+    const division = $division ? ($division.value || 0) : divisionUsuario;
+    const subdivision = $subdivision?.value || 0;
+    const distrito = $distrito?.value || 0;
+    const tipoG = $tipo?.value || 0;
+    const idCampana = $campana?.value || 0;
+    const estado = $estado?.value || 0;
+
+    const firmaActual = [empresa, division, subdivision, distrito, tipoG, idCampana, estado].join('|');
+    if (!restaurar && firmaActual === firmaEjecutores) return;
+    firmaEjecutores = firmaActual;
+
+    if (xhrEjecutores && xhrEjecutores.abort) {
+      xhrEjecutores.abort();
+    }
+
+    resetSelect($ejecutor, 'Cargando ejecutores...');
     $ejecutor.disabled = true;
 
-    if (tipoG === 3) { 
-      cargarEjecutores({ idCampana: 0 });
-      $ejecutor.disabled = false;
-    }
-    
-    if (tipoG === 0 || tipoG === 1) {
-      $subdivision.dispatchEvent(new Event('change'));
-      $campana.disabled = false;
-    }
-  });
-}
+    const params = new URLSearchParams({
+      id_empresa: empresa,
+      id_division: division,
+      id_subdivision: subdivision,
+      id_distrito: distrito,
+      tipo_gestion: tipoG,
+      id_campana: idCampana,
+      estado: estado
+    });
 
-/* =========================================================
-   🔁 RESTAURACIÓN AUTOMÁTICA TRAS "BUSCAR"
-========================================================= */
-if (parseInt(val_tipo) === 1 && parseInt(val_campana) > 0) {
-  // Modo campaña
-  cargarEjecutores({ idCampana: val_campana });
-} else if (parseInt(val_tipo) === 3) {
-  // Modo ruta
-  cargarEjecutores({ idCampana: 0 });
-}
+    xhrEjecutores = new AbortController();
 
-  // ✅ Carga según tipo de gestión
+    fetch(`../mod_cargar/cargar_ejecutores.php?${params.toString()}`, {
+      signal: xhrEjecutores.signal
+    })
+      .then(r => r.json())
+      .then(data => {
+        resetSelect($ejecutor, 'TODOS LOS EJECUTORES');
+
+        if (data.ok && Array.isArray(data.ejecutores)) {
+          data.ejecutores.forEach(e => {
+            const opt = new Option(`${e.nombre} ${e.apellido}`, e.id);
+            $ejecutor.add(opt);
+          });
+        }
+
+        if (
+          restaurar &&
+          val_ejecutor &&
+          $ejecutor.querySelector(`option[value="${val_ejecutor}"]`)
+        ) {
+          $ejecutor.value = val_ejecutor;
+        } else {
+          $ejecutor.value = "0";
+        }
+
+        $ejecutor.disabled = false;
+      })
+      .catch(err => {
+        if (err.name === 'AbortError') return;
+        console.error('Error cargando ejecutores:', err);
+        resetSelect($ejecutor, 'ERROR AL CARGAR');
+        $ejecutor.disabled = false;
+      });
+  }
+
+  /* ============================================
+     🔥 LÓGICA INICIAL SEGÚN TIPO DE USUARIO
+  ============================================ */
+  if (!isMC || divisionIsHidden) {
+    if ($subdivision) {
+      $subdivision.disabled = false;
+      cargarSubdivisionesAuto(divisionUsuario, true);
+    }
+  } else if ($division) {
+    $division.addEventListener('change', function () {
+      const idDivision = parseInt($division.value, 10) || 0;
+
+      resetSelect($campana, 'SELECCIONE CAMPAÑA');
+      resetSelect($ejecutor, 'TODOS LOS EJECUTORES');
+
+      if (idDivision <= 0) {
+        resetSelect($subdivision, 'SIN SUBDIVISIÓN');
+        $subdivision.disabled = true;
+        return;
+      }
+
+      cargarSubdivisionesAuto(idDivision, false);
+
+      setTimeout(() => {
+        if ($subdivision) $subdivision.dispatchEvent(new Event('change'));
+      }, 100);
+    });
+
+    if (parseInt(val_division, 10) > 0) {
+      $division.value = val_division;
+      cargarSubdivisionesAuto(val_division, true);
+    }
+  }
+
+  /* ============================================
+     🔄 SINCRONIZACIÓN ENTRE FILTROS
+  ============================================ */
+  if ($subdivision) {
+    $subdivision.addEventListener('change', function () {
+      const tipoG = parseInt($tipo?.value || 0, 10);
+
+      if ($campana) {
+        resetSelect($campana, 'SELECCIONE CAMPAÑA');
+      }
+
+      if ($ejecutor) {
+        resetSelect($ejecutor, 'TODOS LOS EJECUTORES');
+      }
+
+      if (tipoG === 0 || tipoG === 1) {
+        cargarCampanasMapa(false);
+      } else if ($campana) {
+        resetSelect($campana, 'SELECCIONE CAMPAÑA');
+        $campana.disabled = true;
+      }
+
+      recargarEjecutoresMapa(false);
+    });
+  }
+
   if ($campana) {
     $campana.addEventListener('change', function () {
-      const idCampana = parseInt($campana.value, 10) || 0;
-      cargarEjecutores({ idCampana });
+      recargarEjecutoresMapa(false);
     });
   }
 
   if ($tipo) {
     $tipo.addEventListener('change', function () {
-      const tipoG = parseInt($tipo.value, 10);
-      if (tipoG === 3) { // Ruta
-        cargarEjecutores({ idCampana: 0 });
+      const tipoG = parseInt($tipo.value || 0, 10);
+
+      if ($campana) {
+        resetSelect($campana, 'SELECCIONE CAMPAÑA');
+      }
+
+      if ($ejecutor) {
+        resetSelect($ejecutor, 'TODOS LOS EJECUTORES');
+        $ejecutor.disabled = false;
+      }
+
+      if (tipoG === 3) {
+        if ($campana) {
+          $campana.disabled = true;
+        }
+        recargarEjecutoresMapa(false);
+        return;
+      }
+
+      if (tipoG === 0 || tipoG === 1) {
+        if ($campana) {
+          $campana.disabled = false;
+        }
+
+        if ($subdivision) {
+          $subdivision.dispatchEvent(new Event('change'));
+        } else {
+          recargarEjecutoresMapa(false);
+        }
       }
     });
   }
 
-  // ✅ Restauración automática al cargar tras "Buscar"
-  if (parseInt(val_tipo) === 1 && parseInt(val_campana) > 0) {
-    cargarEjecutores({ idCampana: val_campana });
-  } else if (parseInt(val_tipo) === 3) {
-    cargarEjecutores({ idCampana: 0 });
+  if ($estado) {
+    $estado.addEventListener('change', function () {
+      const tipoG = parseInt($tipo?.value || 0, 10);
+
+      if ($campana) {
+        resetSelect($campana, 'SELECCIONE CAMPAÑA');
+      }
+
+      if ($ejecutor) {
+        resetSelect($ejecutor, 'TODOS LOS EJECUTORES');
+      }
+
+      if (tipoG === 0 || tipoG === 1) {
+        cargarCampanasMapa(false);
+      }
+
+      recargarEjecutoresMapa(false);
+    });
   }
-  
-  
-if ($estado) {
-  $estado.addEventListener('change', function () {
-    const tipoG = parseInt($tipo?.value || 0, 10);
 
-    resetSelect($campana, 'SELECCIONE CAMPAÑA');
-    resetSelect($ejecutor, 'SELECCIONE EJECUTOR');
+  if ($distrito) {
+    $distrito.addEventListener('change', function () {
+      recargarEjecutoresMapa(false);
+    });
+  }
 
-    if (tipoG === 3) {
-      $campana.disabled = true;
-      cargarEjecutores({ idCampana: 0 });
-      return;
+  /* ============================================
+     🔁 RESTAURACIÓN AUTOMÁTICA
+  ============================================ */
+  function restaurarEstadoInicial() {
+    const tipoG = parseInt(val_tipo || 0, 10);
+
+    if ($tipo) {
+      $tipo.value = val_tipo || 0;
     }
 
-    $ejecutor.disabled = false;
+    actualizarVisibilidad();
 
-    if ($subdivision) {
-      $subdivision.dispatchEvent(new Event('change'));
+    if (!isMC || divisionIsHidden) {
+      setTimeout(() => {
+        if ($subdivision && val_subdivision) {
+          $subdivision.value = val_subdivision;
+        }
+
+        if (tipoG === 0 || tipoG === 1) {
+          cargarCampanasMapa(true);
+        } else if ($campana) {
+          resetSelect($campana, 'SELECCIONE CAMPAÑA');
+          $campana.disabled = true;
+        }
+
+        recargarEjecutoresMapa(true);
+      }, 250);
+    } else {
+      setTimeout(() => {
+        if ($subdivision && val_subdivision) {
+          $subdivision.value = val_subdivision;
+        }
+
+        if (tipoG === 0 || tipoG === 1) {
+          cargarCampanasMapa(true);
+        } else if ($campana) {
+          resetSelect($campana, 'SELECCIONE CAMPAÑA');
+          $campana.disabled = true;
+        }
+
+        recargarEjecutoresMapa(true);
+      }, 250);
     }
-  });
-}
-  
+  }
+
+  restaurarEstadoInicial();
 });
-
-
 
 const panel = document.getElementById('panel-filtros');
 const boton = document.querySelector('[data-target="#panel-filtros"]');
-const icono = boton.querySelector('i');
 
-panel.addEventListener('hide.bs.collapse', () => {
-  icono.classList.replace('fa-chevron-up', 'fa-chevron-down');
-});
+if (panel && boton) {
+  const icono = boton.querySelector('i');
 
-panel.addEventListener('show.bs.collapse', () => {
-  icono.classList.replace('fa-chevron-down', 'fa-chevron-up');
-});
+  panel.addEventListener('hide.bs.collapse', () => {
+    icono?.classList.replace('fa-chevron-up', 'fa-chevron-down');
+  });
+
+  panel.addEventListener('show.bs.collapse', () => {
+    icono?.classList.replace('fa-chevron-down', 'fa-chevron-up');
+  });
+}
 </script>
 
 

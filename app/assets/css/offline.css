@@ -281,3 +281,44 @@
    Compatibilidad con enlaces en tarjetas
    ----------------------------------------------------------- */
 .route-card, .route-card:hover, .route-card:focus{ text-decoration: none; color: inherit; }
+
+/* -----------------------------------------------------------
+   Badge offline persistente en navbar fijo
+   ----------------------------------------------------------- */
+.navbar-offline-badge {
+  display: none;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: #e53e3e;
+  border-radius: 999px;
+  padding: 3px 10px;
+  margin-right: 8px;
+  white-space: nowrap;
+  animation: offlinePulse 1.6s ease-in-out infinite;
+  vertical-align: middle;
+}
+
+/* Estado offline del navbar completo */
+.navbar.navbar--offline {
+  background-color: #b71c1c !important; /* rojo oscuro */
+  border-color: #7f0000 !important;
+  transition: background-color 0.4s ease;
+}
+
+/* Asegurar legibilidad del texto cuando el navbar está offline */
+.navbar.navbar--offline .nickname,
+.navbar.navbar--offline .navbar-brand2 span {
+  color: #fff !important;
+}
+
+/* Icono wifi en font-awesome (fallback texto si no existe fa-wifi-slash) */
+.navbar-offline-badge::before {
+  font-family: 'FontAwesome';
+  content: "\f1eb";  /* fa-wifi — se tachará visualmente con opacity 0.6 */
+  opacity: 0.6;
+  text-decoration: line-through;
+  margin-right: 2px;
+}

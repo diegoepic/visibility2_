@@ -581,19 +581,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                 $url = "{$relDir}/{$name}";
 
+                // Buscar el visita_id más reciente (requerido NOT NULL en fotoVisita)
+                $stmtV = $conn->prepare("
+                    SELECT id FROM visita
+                    WHERE id_formulario = ? AND id_local = ? AND id_usuario = ?
+                    ORDER BY fecha_inicio DESC
+                    LIMIT 1
+                ");
+                $stmtV->bind_param("iii", $formulario_id, $local_id, $ejecutor);
+                $stmtV->execute();
+                $resV = $stmtV->get_result()->fetch_assoc();
+                $stmtV->close();
+                $visita_id = $resV ? (int)$resV['id'] : 0;
+
                 $stmtI = $conn->prepare("
                     INSERT INTO fotoVisita
-                        (url, id_formularioQuestion, id_usuario, id_material, id_formulario, id_local)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                        (url, id_formularioQuestion, id_usuario, id_material, id_formulario, id_local, visita_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 ");
                 $stmtI->bind_param(
-                    "siiiii",
+                    "siiiiii",
                     $url,
                     $impl_id,
                     $ejecutor,
                     $material_id,
                     $formulario_id,
-                    $local_id
+                    $local_id,
+                    $visita_id
                 );
                 $ok = $stmtI->execute();
                 $stmtI->close();

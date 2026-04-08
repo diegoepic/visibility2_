@@ -618,6 +618,26 @@ if (empty($_SESSION['csrf_token'])) {
                                     </select>
                                 </div>
                             </div>
+                            
+                            <div class="form-group row" id="subdivisionField" style="display:none;">
+                                <label for="selectSubdivision" class="col-sm-2 col-form-label">Subdivisión:</label>
+                                <div class="col-sm-10">
+                                    <select class="form-control" id="selectSubdivision" name="id_subdivision">
+                                        <option value="">Seleccione una subdivisión</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group row">
+                                <label for="clasificacion_usuario" class="col-sm-2 col-form-label">Tipo:*</label>
+                                <div class="col-sm-10">
+                                    <select class="form-control" id="clasificacion_usuario" name="clasificacion_usuario" required>
+                                        <option value="">Seleccione un tipo</option>
+                                        <option value="interno">Interno</option>
+                                        <option value="externo">Externo</option>
+                                    </select>
+                                </div>
+                            </div>
 
                             <div class="form-group row">
                                 <label for="fotoPerfil" class="col-sm-2 col-form-label">Foto de perfil:</label>
@@ -786,6 +806,26 @@ if (empty($_SESSION['csrf_token'])) {
                             </select>
                         </div>
                     </div>
+                    
+                    <div class="form-group row" id="editar_subdivisionField" style="display:none;">
+                        <label for="editar_subdivision" class="col-sm-2 col-form-label">Subdivisión:</label>
+                        <div class="col-sm-10">
+                            <select class="form-control" id="editar_subdivision" name="id_subdivision">
+                                <option value="">Seleccione una subdivisión</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group row">
+                        <label for="editar_clasificacion_usuario" class="col-sm-2 col-form-label">Tipo:</label>
+                        <div class="col-sm-10">
+                            <select class="form-control" id="editar_clasificacion_usuario" name="clasificacion_usuario" required>
+                                <option value="">Seleccione un tipo</option>
+                                <option value="interno">Interno</option>
+                                <option value="externo">Externo</option>
+                            </select>
+                        </div>
+                    </div>
 
                     <div class="form-group row">
                         <label class="col-sm-2 col-form-label">Contraseña:</label>
@@ -897,6 +937,28 @@ $(function () {
             }
         });
     }
+    
+    function cargarSubdivisiones(divisionId, $select, callback) {
+        if (!divisionId) {
+            $select.html('<option value="">Seleccione una subdivisión</option>');
+            if (typeof callback === 'function') callback(false);
+            return;
+        }
+    
+        $.ajax({
+            url: 'mod_user/obtener_subdivisiones.php',
+            type: 'GET',
+            data: { division_id: divisionId },
+            success: function (html) {
+                $select.html(html);
+                if (typeof callback === 'function') callback(true);
+            },
+            error: function () {
+                $select.html('<option value="">Seleccione una subdivisión</option>');
+                if (typeof callback === 'function') callback(false);
+            }
+        });
+    }
 
     function controlarCampoDivisionCrear() {
         const perfilSeleccionado = $('#selectPerfil option:selected').text();
@@ -921,6 +983,30 @@ $(function () {
         } else {
             $('#editar_divisionField').hide();
             $('#editar_division').removeAttr('required').val('');
+        }
+    }
+
+    function controlarCampoSubdivisionCrear() {
+        const divisionId = $('#selectDivision').val();
+        const subdivisionsAvailable = $('#selectSubdivision option').length > 1;
+    
+        if (divisionId && subdivisionsAvailable) {
+            $('#subdivisionField').show();
+        } else {
+            $('#subdivisionField').hide();
+            $('#selectSubdivision').val('');
+        }
+    }
+    
+    function controlarCampoSubdivisionEditar() {
+        const divisionId = $('#editar_division').val();
+        const subdivisionsAvailable = $('#editar_subdivision option').length > 1;
+    
+        if (divisionId && subdivisionsAvailable) {
+            $('#editar_subdivisionField').show();
+        } else {
+            $('#editar_subdivisionField').hide();
+            $('#editar_subdivision').val('');
         }
     }
 
@@ -958,12 +1044,23 @@ $(function () {
         }
     });
 
-    $('#selectEmpresas').on('change', function () {
-        const empresaId = $(this).val();
-        cargarDivisiones(empresaId, $('#selectDivision'), function () {
-            controlarCampoDivisionCrear();
-        });
+$('#selectEmpresas').on('change', function () {
+    const empresaId = $(this).val();
+
+    cargarDivisiones(empresaId, $('#selectDivision'), function () {
+        $('#selectSubdivision').html('<option value="">Seleccione una subdivisión</option>');
+        controlarCampoDivisionCrear();
+        controlarCampoSubdivisionCrear();
     });
+});
+
+$('#selectDivision').on('change', function () {
+    const divisionId = $(this).val();
+
+    cargarSubdivisiones(divisionId, $('#selectSubdivision'), function () {
+        controlarCampoSubdivisionCrear();
+    });
+});
 
     $('#selectPerfil').on('change', controlarCampoDivisionCrear);
 
@@ -973,12 +1070,23 @@ $(function () {
 
     $('#editar_perfil').on('change', controlarCampoDivisionEditar);
 
-    $('#editar_empresa').on('change', function () {
-        const empresaId = $(this).val();
-        cargarDivisiones(empresaId, $('#editar_division'), function () {
-            controlarCampoDivisionEditar();
-        });
+$('#editar_empresa').on('change', function () {
+    const empresaId = $(this).val();
+
+    cargarDivisiones(empresaId, $('#editar_division'), function () {
+        $('#editar_subdivision').html('<option value="">Seleccione una subdivisión</option>');
+        controlarCampoDivisionEditar();
+        controlarCampoSubdivisionEditar();
     });
+});
+
+$('#editar_division').on('change', function () {
+    const divisionId = $(this).val();
+
+    cargarSubdivisiones(divisionId, $('#editar_subdivision'), function () {
+        controlarCampoSubdivisionEditar();
+    });
+});
 
     $(document).on('click', '.editar-usuario-btn', function () {
         const usuarioId = $(this).data('id');
@@ -993,9 +1101,9 @@ $(function () {
                     alert(response.message || 'No fue posible cargar el usuario.');
                     return;
                 }
-
+            
                 const data = response.data || {};
-
+            
                 $('#editar_usuario_id').val(data.id || '');
                 $('#editar_rut').val(data.rut || '');
                 $('#editar_nombre').val(data.nombre || '');
@@ -1005,12 +1113,18 @@ $(function () {
                 $('#editar_usuario').val(data.usuario || '');
                 $('#editar_perfil').val(data.id_perfil || '');
                 $('#editar_empresa').val(data.id_empresa || '');
+                $('#editar_clasificacion_usuario').val(data.clasificacion_usuario || '');
                 $('#actual_fotoPerfil').attr('src', data.fotoPerfil ? data.fotoPerfil : 'ruta_por_defecto.jpg');
-
+            
                 cargarDivisiones(data.id_empresa || '', $('#editar_division'), function () {
                     $('#editar_division').val(data.id_division || '');
                     controlarCampoDivisionEditar();
-                    $('#editarUsuarioModal').modal('show');
+            
+                    cargarSubdivisiones(data.id_division || '', $('#editar_subdivision'), function () {
+                        $('#editar_subdivision').val(data.id_subdivision || '');
+                        controlarCampoSubdivisionEditar();
+                        $('#editarUsuarioModal').modal('show');
+                    });
                 });
             },
             error: function () {
@@ -1097,9 +1211,13 @@ $(function () {
         showOverlay();
     });
 
-    controlarCampoDivisionCrear();
+controlarCampoDivisionCrear();
+controlarCampoSubdivisionCrear();
+controlarCampoSubdivisionEditar(); 
 });
 </script>
+
+
 
 </body>
 </html>

@@ -68,6 +68,9 @@
       };
       req.onsuccess = () => res(req.result);
       req.onerror   = () => rej(req.error);
+      // Sin este handler, si otra pestaña tiene la DB abierta con versión antigua,
+      // la promesa queda colgada para siempre (onsuccess nunca dispara).
+      req.onblocked = () => rej(new Error('IDB_BLOCKED'));
     });
   }
 

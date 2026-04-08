@@ -427,6 +427,8 @@ try {
         'manifest' => [
             'etag' => $etag,
             'generated_at' => (new DateTime('now', $tz))->format(DateTime::ATOM),
+            'is_delta' => $deltaSince !== null, // true = cliente debe hacer MERGE, no REPLACE
+            'delta_since' => $deltaSince,
             'date_range' => [
                 'from' => $from,
                 'to'   => $to,

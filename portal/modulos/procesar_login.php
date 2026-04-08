@@ -38,7 +38,7 @@ register_shutdown_function(function () {
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
 
 /* ===================== Config ===================== */
-const LOGIN_URL             = '/visibility2/portal/index.php';
+const LOGIN_URL             = '/index.php';
 const HOME_URL              = '/visibility2/portal/home.php';
 const USER_HOME_MAP = [
     'mgomez'   => '/visibility2/portal/home.php',

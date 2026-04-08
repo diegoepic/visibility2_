@@ -133,7 +133,9 @@ if (!function_exists('assert_session_is_valid')) {
 
         // Si no hay fila (sesión no registrada) o fue revocada → expulsar
         if (!$row) {
-          return;
+            session_unset();
+            session_destroy();
+            expel_to_login_top('session_expired=1');
         }
         
         if (!is_null($row['revoked_at'])) {

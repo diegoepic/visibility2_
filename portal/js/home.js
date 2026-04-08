@@ -62,22 +62,23 @@ function detectarModoMC() {
 
 // ===== PROGRESO SIMPLE =====
 function showDlModal(show) {
-  if (show) {
-    if (!document.getElementById("miniProgress")) {
-      const d = document.createElement("div");
-      d.id = "miniProgress";
-      d.style.cssText = "position:fixed;right:16px;bottom:16px;padding:10px 14px;background:#000;color:#fff;border-radius:8px;z-index:9999";
-      d.textContent = "Preparando… 0%";
-      document.body.appendChild(d);
-    }
-  } else {
-    const d = document.getElementById("miniProgress");
-    if (d) d.remove();
-  }
+  const overlay = document.getElementById('downloadIPTOverlay');
+  if (!overlay) return;
+  overlay.style.display = show ? 'flex' : 'none';
 }
-function setDlProgress(pct, txt) {
-  const d = document.getElementById("miniProgress");
-  if (d) d.textContent = (txt ? `${txt} ` : "") + `${Math.floor(pct)}%`;
+
+function setDlProgress(percent, text) {
+  const bar = document.getElementById('downloadIPTBar');
+  const title = document.getElementById('downloadIPTTitulo');
+  const subtitle = document.getElementById('downloadIPTTexto');
+  const percentText = document.getElementById('downloadIPTPercent');
+
+  const p = Math.max(0, Math.min(100, percent | 0));
+
+  if (bar) bar.style.width = p + '%';
+  if (percentText) percentText.textContent = p + '%';
+  if (title) title.textContent = 'Generando archivo';
+  if (subtitle) subtitle.textContent = text || 'Preparando la descarga del reporte IPT, por favor espera...';
 }
 
 // ===== TOGGLE BOTONES POR TIPO =====

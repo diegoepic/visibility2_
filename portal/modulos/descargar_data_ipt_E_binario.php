@@ -43,6 +43,7 @@ $CHUNK_DAYS  = 31;
 
 $division     = (int)($_GET['id_division']    ?? 0);
 $subdivision  = (int)($_GET['id_subdivision'] ?? 0);
+$canal        = (int)($_GET['id_canal']       ?? 0);
 $ejecutor     = (int)($_GET['id_usuario']     ?? 0);
 $fecha_inicio = $_GET['fecha_inicio'] ?? '2000-01-01';
 $fecha_fin    = $_GET['fecha_fin']    ?? date('Y-m-d');
@@ -56,7 +57,6 @@ $whereBase = " WHERE f.tipo = 3 ";
 if ($division)    $whereBase .= " AND f.id_division = $division";
 if ($subdivision) $whereBase .= " AND f.id_subdivision = $subdivision";
 if ($ejecutor)    $whereBase .= " AND fqr.id_usuario = $ejecutor";
-
 // ==================== HELPERS ====================
 function buildDateWindows($start, $end, $chunk) {
   $out = [];
@@ -96,6 +96,7 @@ SELECT
 FROM formulario f
 JOIN form_questions fp ON fp.id_formulario = f.id
 JOIN form_question_responses fqr ON fqr.id_form_question = fp.id
+JOIN local l ON l.id = fqr.id_local
 $whereCols
 GROUP BY fp.question_text, fp.id_question_type, answer_text
 ORDER BY sorder, fp.question_text, answer_text

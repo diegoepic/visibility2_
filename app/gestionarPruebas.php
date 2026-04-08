@@ -4,7 +4,6 @@ if (!isset($_SESSION['usuario_id'])) {
     exit();
 }
 
-
 mysqli_report(MYSQLI_REPORT_OFF);
 
 if (empty($_SESSION['csrf_token'])) {
@@ -17,7 +16,9 @@ if (!$conn || !($conn instanceof mysqli)) {
 
 $conn->set_charset("utf8mb4");
 
-
+/* =========================
+   Helpers DB sin get_result()
+   ========================= */
 function dbFetchAllAssoc(mysqli $conn, string $sql, string $types = '', array $params = []): array {
     $stmt = $conn->prepare($sql);
     if (!$stmt) {
@@ -1355,17 +1356,21 @@ async function queueCreateVisita(payload, idempKey) {
     local_id: Number(QUEUE_META_BASE.local_id || 0)
   };
 
-  return OfflineQueue.enqueueJSON(
-    '/visibility2/app/create_visita_pruebas.php',
-    cleanPayload,
-    {
-      type: 'create_visita',
-      idempotencyKey: String(idempKey || ''),
-      client_guid: String(payload.client_guid || ''),
-      dedupeKey: payload.client_guid ? `create_visita:${payload.client_guid}` : undefined,
-      meta: cleanMeta
-    }
-  );
+  // IMPORTANT: No usar smartPost/enqueueJSON aquí porque reintentan online y añaden
+  // hasta 32 segundos extra de espera con timeouts encadenados (heartbeat 6s + CSRF 6s +
+  // processTask 20s), dejando el botón bloqueado en "Iniciando visita…" durante ~40s.
+  // Encolamos directamente en IDB; drain() intentará enviar en background sin bloquear UI.
+  const task = {
+    url: '/visibility2/app/create_visita_pruebas.php',
+    type: 'create_visita',
+    fields: cleanPayload,
+    sendCSRF: true,
+    id: String(idempKey || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))),
+    dedupeKey: cleanPayload.client_guid ? `create_visita:${cleanPayload.client_guid}` : undefined,
+    client_guid: String(cleanPayload.client_guid || ''),
+    meta: cleanMeta
+  };
+  return window.Queue.enqueue(task);
 }
 async function queueProcesarGestion(formEl, meta={}) {
   const cg = document.getElementById('client_guid').value || ensureClientGuid();
@@ -1824,9 +1829,12 @@ async function extractPhotoMeta(file){
 }
 
 async function compressFile(file) {
-  const options = { maxSizeMB: 1, maxWidthOrHeight: 1024, useWebWorker: true };
-  const blob = await imageCompression(file, options);
-  return new File([blob], file.name, { type: blob.type, lastModified: Date.now() });
+  if (typeof imageCompression !== 'function') return file;
+  const options = { maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true };
+  try {
+    const blob = await imageCompression(file, options);
+    return new File([blob], file.name, { type: blob.type, lastModified: Date.now() });
+  } catch (_) { return file; }
 }
 
 async function uploadFile(file, url, idFQ, onProgress, meta = {}, extra = {}) {
@@ -2038,6 +2046,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const mapped = resolveVisitaIdFromMappings(sess.client_guid);
   if (mapped) { updateVisitSession({ visita_id: mapped }); }
   document.querySelectorAll('.file-input').forEach(input=>{ setupFileInput(input); });
+  // Comprimir fotos de evidencia genérica antes del submit del form
+  ['fotoLocalCerrado','fotoLocalNoExiste','fotoMuebleNoSala','fotoPendienteGenerica','fotoCanceladoGenerica']
+    .forEach(id => { const el = document.getElementById(id); if (el) bindCompressionTo(el); });
 });
 
 $(document).ready(function(){
@@ -2175,7 +2186,12 @@ $(document).ready(function(){
   }
 
   try {
-    await queueCreateVisita(payload, idempKey);
+    // Timeout de seguridad: si el encolado IDB tarda más de 5s, avanzar igual.
+    // Evita que un IDB bloqueado congele el botón indefinidamente.
+    await Promise.race([
+      queueCreateVisita(payload, idempKey),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('E_ENQUEUE_TIMEOUT')), 5000))
+    ]);
     const offlineMsg = (e.name === 'AbortError')
       ? 'El servidor tardó demasiado. Continuamos en modo offline.'
       : 'No se pudo iniciar la visita online. Continuamos en modo offline.';
@@ -2183,8 +2199,16 @@ $(document).ready(function(){
     currentStep = 2;
     showStep(currentStep);
   } catch (offlineErr) {
-    console.error('Error encolando visita:', offlineErr);
-    alert('No se pudo iniciar la visita ni online ni offline.');
+    if (offlineErr && offlineErr.message === 'E_ENQUEUE_TIMEOUT') {
+      // IDB no respondió pero avanzamos igual; la gestión se reintentará
+      console.warn('[queueCreateVisita] timeout de encolado — avanzando a paso 2');
+      mcToast('warning', 'Modo offline', 'Continuamos en modo offline.');
+      currentStep = 2;
+      showStep(currentStep);
+    } else {
+      console.error('Error encolando visita:', offlineErr);
+      alert('No se pudo iniciar la visita ni online ni offline.');
+    }
   }
 } finally {
     $btn.prop('disabled', false).text('Siguiente »');
