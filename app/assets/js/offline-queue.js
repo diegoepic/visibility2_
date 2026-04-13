@@ -1414,8 +1414,10 @@
 
       if (!task.id) task.id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
 
-      // PATCH P1-3: Dedupe semántico automático para gestiones
-      // Evita duplicar tareas idénticas por tipo+campaña+local
+      // PATCH P1-3 (ajuste): evitar dedupe demasiado agresivo en gestiones/fotos.
+      // Antes se usaba type+campaña+local, lo que colapsaba envíos distintos
+      // del mismo local/campaña y terminaba "perdiendo" gestiones válidas.
+      // Para esas rutas dejamos que mande el idempotency key del job/backend.
       if (!task.dedupeKey && task.type && task.fields) {
         const f = task.fields;
         const formId = f.id_formulario || f.idCampana || f.id_campana || f.campana || '';
@@ -1424,6 +1426,10 @@
           (task.url && (task.url.includes('procesar_gestion') || task.url.includes('upload_material_foto')));
 
         if (isGestion && formId && localId) {
+          // No autodedupe para gestiones/fotos: cada tarea debe conservarse.
+          // Si el caller realmente quiere dedupe, debe pasar dedupeKey explícito.
+        } else if (formId && localId && task.type === 'add_material') {
+          // add_material sí puede deduplicarse por forma semántica sin perder data.
           task.dedupeKey = `${task.type}:${formId}:${localId}`;
         }
       }
@@ -1576,7 +1582,7 @@
           await heartbeat();
           if (needCSRF) {
             const csrfOk = await refreshCSRF();
-            if (!csrfOk && shouldEnqueue) {
+            if ((!csrfOk || !csrfOk.ok) && shouldEnqueue) {
               const id = await this.enqueue(task);
               return { queued:true, ok:true, id };
             }
