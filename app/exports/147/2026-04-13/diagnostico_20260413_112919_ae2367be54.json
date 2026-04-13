@@ -1,0 +1,244 @@
+{
+    "exported_at": "2026-04-13T15:29:20.463Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 13; SM-A127M Build/TP1A.220624.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.177 Mobile Safari/537.36 median",
+    "sw_version": "v6.0.6",
+    "stats": {
+        "today": {
+            "ymd": "2026-04-13",
+            "pending": 2,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 2
+        },
+        "overall": {
+            "pending": 2,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 2
+        }
+    },
+    "queue": {
+        "total_records": 2,
+        "last_created_at": 1776092036572,
+        "last_updated_at": 1776093181110
+    },
+    "recent_events": [
+        {
+            "id": "c0887400-1933-43a2-8225-1681ca4a6eb7:1776093181079:d41ed39c3aa288",
+            "job_id": "c0887400-1933-43a2-8225-1681ca4a6eb7",
+            "created": 1776093181079,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "MISSING_DEPENDENCY",
+            "message": "MISSING_DEPENDENCY",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "c0887400-1933-43a2-8225-1681ca4a6eb7:1776093181077:9f37ad7c7dbb9",
+            "job_id": "c0887400-1933-43a2-8225-1681ca4a6eb7",
+            "created": 1776093181077,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "MISSING_DEPENDENCY",
+            "message": "MISSING_DEPENDENCY",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "1271676c-f7af-476d-bc24-b02aeb45785b:1776093181058:bb2bd6786b1458",
+            "job_id": "1271676c-f7af-476d-bc24-b02aeb45785b",
+            "created": 1776093181058,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "MISSING_DEPENDENCY",
+            "message": "MISSING_DEPENDENCY",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "1271676c-f7af-476d-bc24-b02aeb45785b:1776093181056:dc35d7b72bab58",
+            "job_id": "1271676c-f7af-476d-bc24-b02aeb45785b",
+            "created": 1776093181056,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "MISSING_DEPENDENCY",
+            "message": "MISSING_DEPENDENCY",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "d0e02d0e-bee0-48ac-9432-a62e77ac75a3:1772655079673:2f1df68543bd1",
+            "job_id": "d0e02d0e-bee0-48ac-9432-a62e77ac75a3",
+            "created": 1772655079673,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "idemp-1772122640464-90451c25f233a:1772122668172:8e0d2474edf768",
+            "job_id": "idemp-1772122640464-90451c25f233a",
+            "created": 1772122668172,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1772122640464-90451c25f233a:1772122660494:58db489009741",
+            "job_id": "idemp-1772122640464-90451c25f233a",
+            "created": 1772122660494,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1772112887292-1b5a96aefe07b8:1772112907327:a568385e1d58e",
+            "job_id": "idemp-1772112887292-1b5a96aefe07b8",
+            "created": 1772112907327,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1772112702394-548b82497aa9a8:1772112742431:46a88373fa077",
+            "job_id": "idemp-1772112702394-548b82497aa9a8",
+            "created": 1772112742431,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "AbortError: E_SMART_TIMEOUT",
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "idemp-1772112702394-548b82497aa9a8:1772112722422:d94f3ff973ba48",
+            "job_id": "idemp-1772112702394-548b82497aa9a8",
+            "created": 1772112722422,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "e338e10c-f84e-41e3-853d-abb125d8292f:1772046319881:f70a43194ffb5",
+            "job_id": "e338e10c-f84e-41e3-853d-abb125d8292f",
+            "created": 1772046319881,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "c723a5b6-3ca5-4485-9fd9-7e962d2b7839:1772032318781:7379bd820afb88",
+            "job_id": "c723a5b6-3ca5-4485-9fd9-7e962d2b7839",
+            "created": 1772032318781,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/agregarMaterial_pruebas.php"
+        },
+        {
+            "id": "c723a5b6-3ca5-4485-9fd9-7e962d2b7839:1772032318515:cfe531b39d62d",
+            "job_id": "c723a5b6-3ca5-4485-9fd9-7e962d2b7839",
+            "created": 1772032318515,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/agregarMaterial_pruebas.php"
+        }
+    ],
+    "storage_estimate": {
+        "usage": 9499090,
+        "quota": 70639197388,
+        "percent_used": 0
+    },
+    "connection_info": {
+        "effectiveType": "4g",
+        "downlink": 10,
+        "rtt": null,
+        "saveData": false
+    },
+    "service_worker": {
+        "active": "active",
+        "installing": null,
+        "waiting": null,
+        "scope": "https://visibility.cl/visibility2/app/"
+    },
+    "idb_databases": [
+        {
+            "name": "v2_journal",
+            "version": 9
+        },
+        {
+            "name": "v2_mappings",
+            "version": 1
+        },
+        {
+            "name": "v2_offline",
+            "version": 9
+        },
+        {
+            "name": "v2_route_cache",
+            "version": 1
+        },
+        {
+            "name": "visibility2-v2",
+            "version": 9
+        }
+    ],
+    "recent_errors": [],
+    "client_time": {
+        "local": "Mon Apr 13 2026 11:29:20 GMT-0400 (hora estándar de Chile)",
+        "timezone": "America/Santiago",
+        "offset_minutes": 240
+    },
+    "csrf_token": "70ed2c69d1fec810f1f35ef9680ca5f273d7b21b7c0f382e92803cd985e74639"
+}

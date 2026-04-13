@@ -1,0 +1,378 @@
+{
+    "exported_at": "2026-04-13T16:52:46.478Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/29.0 Chrome/136.0.0.0 Mobile Safari/537.36",
+    "sw_version": "v6.0.6",
+    "stats": {
+        "today": {
+            "ymd": "2026-04-13",
+            "pending": 6,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 6
+        },
+        "overall": {
+            "pending": 11,
+            "running": 0,
+            "success": 0,
+            "error": 3,
+            "blocked": 0,
+            "total": 14
+        }
+    },
+    "queue": {
+        "total_records": 14,
+        "last_created_at": 1776099024442,
+        "last_updated_at": 1776099024442
+    },
+    "recent_events": [
+        {
+            "id": "7eaf7d63-cf2f-4aba-a281-06e0eaf3c49e:1776098210640:c8df8165acd56",
+            "job_id": "7eaf7d63-cf2f-4aba-a281-06e0eaf3c49e",
+            "created": 1776098210640,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "MISSING_DEPENDENCY",
+            "message": "MISSING_DEPENDENCY",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "7eaf7d63-cf2f-4aba-a281-06e0eaf3c49e:1776098210639:11eb078ebb81d8",
+            "job_id": "7eaf7d63-cf2f-4aba-a281-06e0eaf3c49e",
+            "created": 1776098210639,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "MISSING_DEPENDENCY",
+            "message": "MISSING_DEPENDENCY",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "6778644b-1add-4806-ba52-46a441f08d96:1776097066229:702fecb7bcce78",
+            "job_id": "6778644b-1add-4806-ba52-46a441f08d96",
+            "created": 1776097066229,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "MISSING_DEPENDENCY",
+            "message": "MISSING_DEPENDENCY",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "6778644b-1add-4806-ba52-46a441f08d96:1776097066228:3338bbaffd574",
+            "job_id": "6778644b-1add-4806-ba52-46a441f08d96",
+            "created": 1776097066228,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "MISSING_DEPENDENCY",
+            "message": "MISSING_DEPENDENCY",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "47f9ca0f-9cd6-4017-a82b-717719d3313e:1776093498118:7663ba9bf72de",
+            "job_id": "47f9ca0f-9cd6-4017-a82b-717719d3313e",
+            "created": 1776093498118,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "MISSING_DEPENDENCY",
+            "message": "MISSING_DEPENDENCY",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "47f9ca0f-9cd6-4017-a82b-717719d3313e:1776093498118:2b0cd3621dda2",
+            "job_id": "47f9ca0f-9cd6-4017-a82b-717719d3313e",
+            "created": 1776093498118,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "MISSING_DEPENDENCY",
+            "message": "MISSING_DEPENDENCY",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "903e65f1-1c52-4ce5-8853-eb1e60bd9afe:1776092047778:c6f03140947bb",
+            "job_id": "903e65f1-1c52-4ce5-8853-eb1e60bd9afe",
+            "created": 1776092047778,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "MISSING_DEPENDENCY",
+            "message": "MISSING_DEPENDENCY",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "903e65f1-1c52-4ce5-8853-eb1e60bd9afe:1776092047778:c697a324d922b",
+            "job_id": "903e65f1-1c52-4ce5-8853-eb1e60bd9afe",
+            "created": 1776092047778,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "MISSING_DEPENDENCY",
+            "message": "MISSING_DEPENDENCY",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "idemp-1775846346429-057487ad7edcd8:1775846347547:59208f4feedbc",
+            "job_id": "idemp-1775846346429-057487ad7edcd8",
+            "created": 1775846347547,
+            "type": "attempt_error",
+            "status": "error",
+            "http_status": 409,
+            "error": "IDEMPOTENCY_MISMATCH",
+            "message": "HTTP 409",
+            "attempts": 1,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"ok\":false,\"status\":\"error\",\"error_code\":\"IDEMPOTENCY_PAYLOAD_MISMATCH\",\"message\":\"La misma idempotency key se usó con datos diferentes.\",\"retryable\":false}"
+        },
+        {
+            "id": "idemp-1775846346429-057487ad7edcd8:1775846347153:fba31a55099738",
+            "job_id": "idemp-1775846346429-057487ad7edcd8",
+            "created": 1775846347153,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1775843609854-13b8d0c376fe58:1775843610652:059742919777",
+            "job_id": "idemp-1775843609854-13b8d0c376fe58",
+            "created": 1775843610652,
+            "type": "attempt_error",
+            "status": "error",
+            "http_status": 409,
+            "error": "IDEMPOTENCY_MISMATCH",
+            "message": "HTTP 409",
+            "attempts": 1,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"ok\":false,\"status\":\"error\",\"error_code\":\"IDEMPOTENCY_PAYLOAD_MISMATCH\",\"message\":\"La misma idempotency key se usó con datos diferentes.\",\"retryable\":false}"
+        },
+        {
+            "id": "idemp-1775843609854-13b8d0c376fe58:1775843610292:5ee40f69b603",
+            "job_id": "idemp-1775843609854-13b8d0c376fe58",
+            "created": 1775843610292,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1775843522909-d75915c7c54728:1775843523667:6acdb7741c51f8",
+            "job_id": "idemp-1775843522909-d75915c7c54728",
+            "created": 1775843523667,
+            "type": "attempt_error",
+            "status": "error",
+            "http_status": 409,
+            "error": "IDEMPOTENCY_MISMATCH",
+            "message": "HTTP 409",
+            "attempts": 1,
+            "url": "/visibility2/app/create_visita_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"ok\":false,\"status\":\"error\",\"error_code\":\"IDEMPOTENCY_PAYLOAD_MISMATCH\",\"message\":\"La misma idempotency key se usó con datos diferentes.\",\"retryable\":false}"
+        },
+        {
+            "id": "idemp-1775843522909-d75915c7c54728:1775843523308:079ae22ec66ac8",
+            "job_id": "idemp-1775843522909-d75915c7c54728",
+            "created": 1775843523308,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1775581890062-7e87f3f3723bd8:1775581891099:d88aa62a21908",
+            "job_id": "idemp-1775581890062-7e87f3f3723bd8",
+            "created": 1775581891099,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1775581890062-7e87f3f3723bd8:1775581890694:b31dfb7aeb61b",
+            "job_id": "idemp-1775581890062-7e87f3f3723bd8",
+            "created": 1775581890694,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "986582ca-95df-4938-a01b-f8d9b1422954:1775573970519:26227e817b1b68",
+            "job_id": "986582ca-95df-4938-a01b-f8d9b1422954",
+            "created": 1775573970519,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "986582ca-95df-4938-a01b-f8d9b1422954:1775573970325:0dd6d074731ba8",
+            "job_id": "986582ca-95df-4938-a01b-f8d9b1422954",
+            "created": 1775573970325,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "82af2f2d-cebf-47bb-9ffd-c0a01df036f6:1775508604547:4948877c9d2c",
+            "job_id": "82af2f2d-cebf-47bb-9ffd-c0a01df036f6",
+            "created": 1775508604547,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "82af2f2d-cebf-47bb-9ffd-c0a01df036f6:1775508604336:8eed82ea2616b8",
+            "job_id": "82af2f2d-cebf-47bb-9ffd-c0a01df036f6",
+            "created": 1775508604336,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        }
+    ],
+    "storage_estimate": {
+        "usage": 6571902,
+        "quota": 69063187660,
+        "percent_used": 0
+    },
+    "connection_info": {
+        "effectiveType": "4g",
+        "downlink": 9.9000000000000003552713678800500929355621337890625,
+        "rtt": null,
+        "saveData": false
+    },
+    "service_worker": {
+        "active": "active",
+        "installing": null,
+        "waiting": null,
+        "scope": "https://visibility.cl/visibility2/app/"
+    },
+    "idb_databases": [
+        {
+            "name": "v2_journal",
+            "version": 9
+        },
+        {
+            "name": "v2_mappings",
+            "version": 1
+        },
+        {
+            "name": "v2_offline",
+            "version": 9
+        },
+        {
+            "name": "v2_route_cache",
+            "version": 1
+        },
+        {
+            "name": "visibility2-queue",
+            "version": 1
+        },
+        {
+            "name": "visibility2-v2",
+            "version": 9
+        }
+    ],
+    "recent_errors": [
+        {
+            "id": "idemp-1775843522909-d75915c7c54728",
+            "kind": "create_visita",
+            "status": "error",
+            "http_status": 409,
+            "error": "HTTP 409",
+            "error_code": "IDEMPOTENCY_MISMATCH",
+            "attempts": 1,
+            "created": 1775843523120,
+            "updated": 1775843523670
+        },
+        {
+            "id": "idemp-1775843609854-13b8d0c376fe58",
+            "kind": "create_visita",
+            "status": "error",
+            "http_status": 409,
+            "error": "HTTP 409",
+            "error_code": "IDEMPOTENCY_MISMATCH",
+            "attempts": 1,
+            "created": 1775843610110,
+            "updated": 1775843610656
+        },
+        {
+            "id": "idemp-1775846346429-057487ad7edcd8",
+            "kind": "create_visita",
+            "status": "error",
+            "http_status": 409,
+            "error": "HTTP 409",
+            "error_code": "IDEMPOTENCY_MISMATCH",
+            "attempts": 1,
+            "created": 1775846346727,
+            "updated": 1775846347550
+        }
+    ],
+    "client_time": {
+        "local": "Mon Apr 13 2026 12:52:46 GMT-0400 (hora estándar de Chile)",
+        "timezone": "America/Santiago",
+        "offset_minutes": 240
+    },
+    "csrf_token": "c613b6c0f9bd17ed04a73e3e3d7c1536c8240e2b01a877a1d4ce7d8362a46ec1"
+}

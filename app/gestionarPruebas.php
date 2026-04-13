@@ -2483,7 +2483,7 @@ function onAddMaterialSuccess(ev){
     `#materialesContainer .implementa-material[data-id-material="${resp.idNuevo}"]`
   );
   if (yaExiste) {
-    // Ya se agregó desde el submit online, evitamos duplicar bloque y toast
+    // ya se agregó desde el submit online, evitamos duplicar bloque y toast
     return;
   }
 
@@ -2532,7 +2532,7 @@ window.addEventListener('queue:dispatch:error', (ev) => {
 });
 
 
-/* Agregar Material (modal) */
+/* modal de agregar material (funciona solo online de momento) */
 $('#btnAgregarMaterial').on('click', function(){ $('#modalAgregarMaterial').modal('show'); });
 
 $('#formAgregarMaterial').on('submit', async function (e) {
