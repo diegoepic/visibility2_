@@ -2166,7 +2166,7 @@ $(document).ready(function(){
         await window.Queue.LocalByGuid.set(client_guid, js.visita_id);
       }
 
-      updateVisitSession({ visita_id: js.visita_id, client_guid });
+      updateVisitSession({ visita_id: js.visita_id, client_guid: js.client_guid || client_guid });
       currentStep = 2;
       showStep(currentStep);
       return;
@@ -2940,7 +2940,6 @@ $('#nombreMaterial').on('change', function(){
 });
     </script>
     
-
     <!-- Google Maps API  -->
     <script async defer
       src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw&callback=initMap&libraries=geometry"

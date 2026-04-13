@@ -347,11 +347,38 @@ try {
         if ($client_guid === '') {
             try {
                 $client_guid = bin2hex(random_bytes(16));
-            } catch (Throwable $e) {
+            } catch (Throwable $_e) {
                 $client_guid = substr(hash('sha1', uniqid((string)$user_id, true)), 0, 32);
             }
         } elseif (strlen($client_guid) > 64) {
             $client_guid = substr(hash('sha256', $client_guid), 0, 64);
+        } else {
+            // PRE-FLIGHT: Si el guid del cliente ya existe en una visita CERRADA
+            // (cerrada por orphan-hours), el INSERT fallaría con 1062 porque la constraint
+            // sigue activa. Detectar este caso ANTES del INSERT y asignar un guid fresco.
+            // NOTA: En PHP 8.1+ mysqli lanza excepciones en vez de retornar false, por lo
+            // que el manejo post-INSERT no es suficiente — hay que prevenirlo aquí.
+            $chk = $conn->prepare("
+                SELECT id FROM visita
+                WHERE client_guid = ? AND id_usuario = ? AND fecha_fin IS NOT NULL
+                LIMIT 1
+            ");
+            if ($chk) {
+                $chk->bind_param('si', $client_guid, $user_id);
+                $chk->execute();
+                $chk->bind_result($_chk_id);
+                $is_stale_guid = (bool)$chk->fetch();
+                $chk->free_result();
+                $chk->close();
+                if ($is_stale_guid) {
+                    // Guid apunta a visita cerrada — generar uno fresco
+                    try {
+                        $client_guid = bin2hex(random_bytes(16));
+                    } catch (Throwable $_e) {
+                        $client_guid = substr(hash('sha1', uniqid((string)$user_id . 'r', true)), 0, 32);
+                    }
+                }
+            }
         }
 
         $fecha_ini = $started_at ?: $now;
@@ -363,40 +390,51 @@ try {
         ");
         $ins->bind_param('iiissdd', $user_id, $form_id, $local_id, $client_guid, $fecha_ini, $lat, $lng);
 
-        if (!$ins->execute()) {
-            $err      = (string)$ins->error;
-            $errno    = (int)$ins->errno;
+        // Ejecutar con manejo compatible con PHP 8.1+ (mysqli_sql_exception por defecto)
+        // y PHP < 8.1 (execute() retorna false). Ambos casos se capturan aquí.
+        try {
+            if (!$ins->execute()) {
+                // PHP < 8.1 sin mysqli_report: execute() retorna false
+                throw new RuntimeException($ins->error, $ins->errno);
+            }
+            $visita_id = (int)$ins->insert_id;
             $ins->close();
+        } catch (Throwable $ins_ex) {
+            $ins->close();
+            // Detectar errno 1062 (duplicate key): race condition entre requests concurrentes
+            $ins_errno = (int)$ins_ex->getCode();
+            $ins_msg   = $ins_ex->getMessage();
+            $is_dup_key = ($ins_errno === 1062 || stripos($ins_msg, 'Duplicate entry') !== false);
 
-            // Duplicate entry en uq_visita_client_guid (errno 1062):
-            // Dos requests concurrentes con el mismo client_guid llegaron casi al mismo tiempo.
-            // El primer INSERT ya creó la fila — recuperarla y tratarlo como éxito.
-            if ($errno === 1062 && $client_guid !== '') {
+            if ($is_dup_key) {
+                // Race condition: dos requests simultáneos con el mismo guid.
+                // El otro ya insertó — buscar esa visita abierta y reutilizarla.
                 $conn->rollback();
-                $sel_dup = $conn->prepare("
+                $sel_r = $conn->prepare("
                     SELECT id FROM visita
-                    WHERE client_guid = ? AND id_usuario = ? LIMIT 1
+                    WHERE client_guid = ? AND id_usuario = ? AND fecha_fin IS NULL
+                    LIMIT 1
                 ");
-                if ($sel_dup) {
-                    $sel_dup->bind_param('si', $client_guid, $user_id);
-                    $sel_dup->execute();
-                    $sel_dup->bind_result($dup_id);
-                    $found = $sel_dup->fetch();
-                    $sel_dup->close();
-                    if ($found && $dup_id) {
-                        $visita_id = (int)$dup_id;
+                if ($sel_r) {
+                    $sel_r->bind_param('si', $client_guid, $user_id);
+                    $sel_r->execute();
+                    $sel_r->bind_result($race_dup_id);
+                    $found_r = $sel_r->fetch();
+                    $sel_r->free_result();
+                    $sel_r->close();
+                    if ($found_r && $race_dup_id) {
+                        $visita_id = (int)$race_dup_id;
                         $reused    = true;
-                        // Saltar el bloque else (update), ir directo al commit
-                        goto commit_visita;
+                        // $visita_id > 0 → no lanzar excepción, salir del catch y continuar
                     }
                 }
             }
 
-            throw new RuntimeException('Error insert visita: ' . $err);
+            if ($visita_id === 0) {
+                throw new RuntimeException('Error insert visita: ' . $ins_msg);
+            }
+            // Si $visita_id > 0 se recuperó por race condition — continuar al commit
         }
-
-        $visita_id = (int)$ins->insert_id;
-        $ins->close();
     } else {
         $reuse_started_at = $started_at ?: $now;
 
@@ -413,7 +451,6 @@ try {
         $upd->close();
     }
 
-    commit_visita:
     if (!$conn->commit()) {
         throw new RuntimeException('No se pudo confirmar la transacción');
     }
