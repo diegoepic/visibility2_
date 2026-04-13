@@ -202,6 +202,8 @@ if (!in_array($formato, $formatosPermitidos, true)) {
 $sqlBase = "
     SELECT
         UPPER(COALESCE(de.nombre, '')) AS DIVISION,
+        UPPER(COALESCE(sd.nombre, '')) AS SUBDIVISION,
+        UPPER(COALESCE(u.clasificacion_usuario, '')) AS CLASIFICACION,        
         UPPER(COALESCE(u.rut, '')) AS RUT,
         UPPER(COALESCE(u.nombre, '')) AS NOMBRE,
         UPPER(COALESCE(u.apellido, '')) AS APELLIDO,
@@ -229,6 +231,7 @@ $sqlBase = "
 		END AS ESTADO
     FROM usuario u
     INNER JOIN division_empresa de ON de.id = u.id_division
+    INNER JOIN subdivision sd ON sd.id = u.id_subdivision
     INNER JOIN perfil p ON p.id = u.id_perfil
     WHERE 1=1
 ";

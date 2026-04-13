@@ -99,14 +99,6 @@ date_default_timezone_set('America/Santiago');
             vertical-align: middle;
         }
 
-        .badge-soft {
-            background: #e8f1ff;
-            color: #004AAD;
-            font-weight: 600;
-            padding: .45rem .7rem;
-            border-radius: 999px;
-        }
-
         .empty-box {
             background: #fff;
             border: 1px dashed #ced4da;
@@ -156,7 +148,7 @@ date_default_timezone_set('America/Santiago');
             <i class="fa-solid fa-route"></i> Visualizador de Rutas Planificadas
         </h2>
         <p class="text-muted mb-0">
-            Sube el archivo Excel generado por la planificación y revisa los grupos de rutas directamente en el mapa.
+            Sube el archivo Excel generado por la planificación y revisa rutas por usuario, fecha y grupo directamente en el mapa.
         </p>
     </div>
 
@@ -220,15 +212,13 @@ date_default_timezone_set('America/Santiago');
                                     </div>
                                     <hr>
                                     <div class="mb-2"><strong>Campos esperados:</strong></div>
+                                    <div class="summary-pill">Usuario Nombre</div>
+                                    <div class="summary-pill">Grupo Ruta Usuario</div>
+                                    <div class="summary-pill">Fecha Ruta</div>
                                     <div class="summary-pill">Código Local</div>
                                     <div class="summary-pill">Lat</div>
                                     <div class="summary-pill">Lng</div>
-                                    <div class="summary-pill">Grupo Ruta</div>
                                     <div class="summary-pill">Orden Visita</div>
-                                    <div class="summary-pill">Día Plan</div>
-                                    <div class="summary-pill">Día Semana</div>
-                                    <div class="summary-pill">Semana Plan</div>
-                                    <div class="summary-pill">Cantidad Objetivo Día</div>
                                 </div>
                             </div>
                         </div>
@@ -282,6 +272,20 @@ date_default_timezone_set('America/Santiago');
                                     </div>
                                     <div class="card-body">
                                         <div class="mb-3">
+                                            <label for="filtroUsuario" class="form-label fw-semibold">Usuario</label>
+                                            <select id="filtroUsuario" class="form-select">
+                                                <option value="__ALL__">Todos los usuarios</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="filtroFechaRuta" class="form-label fw-semibold">Fecha planificada</label>
+                                            <select id="filtroFechaRuta" class="form-select">
+                                                <option value="__ALL__">Todas las fechas</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="mb-3">
                                             <label for="filtroGrupoRuta" class="form-label fw-semibold">Grupo de ruta</label>
                                             <select id="filtroGrupoRuta" class="form-select">
                                                 <option value="__ALL__">Todas las rutas</option>
@@ -293,14 +297,14 @@ date_default_timezone_set('America/Santiago');
                                                 <i class="fa-solid fa-expand"></i> Ajustar mapa
                                             </button>
                                             <button class="btn btn-outline-secondary" id="btnVerTodas" type="button">
-                                                <i class="fa-solid fa-layer-group"></i> Ver todas las rutas
+                                                <i class="fa-solid fa-layer-group"></i> Ver todo
                                             </button>
                                         </div>
 
                                         <hr>
 
                                         <div class="mini-note mb-2">
-                                            Al seleccionar una ruta, el mapa mostrará la secuencia de visita según el campo <strong>Orden Visita</strong>.
+                                            Puedes filtrar primero por usuario, luego por fecha y finalmente por grupo de ruta.
                                         </div>
 
                                         <div id="leyendaRutas"></div>
@@ -316,8 +320,9 @@ date_default_timezone_set('America/Santiago');
                                             <thead>
                                                 <tr>
                                                     <th>Ruta</th>
+                                                    <th>Usuario</th>
+                                                    <th>Fecha</th>
                                                     <th>Paradas</th>
-                                                    <th>KM</th>
                                                 </tr>
                                             </thead>
                                             <tbody></tbody>
@@ -345,6 +350,8 @@ date_default_timezone_set('America/Santiago');
                                         <table class="table table-hover table-sm mb-0" id="tablaDetalleRuta">
                                             <thead>
                                                 <tr>
+                                                    <th>Usuario</th>
+                                                    <th>Fecha</th>
                                                     <th>Grupo</th>
                                                     <th>Día Plan</th>
                                                     <th>Orden</th>
@@ -382,6 +389,7 @@ let polylinesRutas = [];
 let planRows = [];
 let planGroups = [];
 let planSummary = {};
+let planFilters = { usuarios: [], fechas: [], grupos: [] };
 
 const routePalette = [
     '#d32f2f', '#1976d2', '#388e3c', '#f57c00', '#7b1fa2',
@@ -407,8 +415,9 @@ function getRouteColor(groupName) {
 
 function hashCode(str) {
     let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    const safe = String(str || '');
+    for (let i = 0; i < safe.length; i++) {
+        hash = ((hash << 5) - hash) + safe.charCodeAt(i);
         hash |= 0;
     }
     return hash;
@@ -430,41 +439,130 @@ function clearMapRutas() {
     polylinesRutas = [];
 }
 
-function getRowsByGroup(groupName) {
-    if (groupName === '__ALL__') {
-        return [...planRows];
-    }
-    return planRows.filter(row => row.grupo_ruta === groupName);
+function getCurrentFilters() {
+    return {
+        usuario: $('#filtroUsuario').val() || '__ALL__',
+        fecha: $('#filtroFechaRuta').val() || '__ALL__',
+        grupo: $('#filtroGrupoRuta').val() || '__ALL__'
+    };
+}
+
+function getFilteredRows() {
+    const filters = getCurrentFilters();
+
+    return planRows.filter(row => {
+        const okUsuario = filters.usuario === '__ALL__'
+            || String(row.usuario_id) === String(filters.usuario)
+            || String(row.usuario_login) === String(filters.usuario);
+
+        const okFecha = filters.fecha === '__ALL__'
+            || String(row.fecha_ruta_sql) === String(filters.fecha)
+            || String(row.fecha_ruta) === String(filters.fecha);
+
+        const okGrupo = filters.grupo === '__ALL__'
+            || String(row.grupo_ruta) === String(filters.grupo);
+
+        return okUsuario && okFecha && okGrupo;
+    });
+}
+
+function getFilteredGroups() {
+    const rows = getFilteredRows();
+    const groupMap = {};
+
+    rows.forEach(row => {
+        const key = row.grupo_ruta;
+        if (!groupMap[key]) {
+            groupMap[key] = {
+                grupo_ruta: row.grupo_ruta,
+                ruta_global: row.ruta_global || '',
+                usuario_id: row.usuario_id || '',
+                usuario_login: row.usuario_login || '',
+                usuario_nombre: row.usuario_nombre || '',
+                fecha_ruta: row.fecha_ruta || '',
+                fecha_ruta_sql: row.fecha_ruta_sql || '',
+                total_paradas: 0,
+                distancia_total_ruta_km: Number(row.distancia_total_ruta_km || 0)
+            };
+        }
+        groupMap[key].total_paradas++;
+    });
+
+    return Object.values(groupMap).sort((a, b) => {
+        const cmpUsuario = String(a.usuario_nombre).localeCompare(String(b.usuario_nombre));
+        if (cmpUsuario !== 0) return cmpUsuario;
+
+        const cmpFecha = String(a.fecha_ruta_sql).localeCompare(String(b.fecha_ruta_sql));
+        if (cmpFecha !== 0) return cmpFecha;
+
+        return String(a.grupo_ruta).localeCompare(String(b.grupo_ruta));
+    });
 }
 
 function renderSummary() {
-    const totalKm = (planGroups || []).reduce((acc, g) => acc + Number(g.distancia_total_ruta_km || 0), 0);
+    const rows = getFilteredRows();
+    const groups = getFilteredGroups();
+    const totalKm = groups.reduce((acc, g) => acc + Number(g.distancia_total_ruta_km || 0), 0);
 
-    $('#statTotalGrupos').text(planGroups.length);
-    $('#statTotalPuntos').text(planRows.length);
+    $('#statTotalGrupos').text(groups.length);
+    $('#statTotalPuntos').text(rows.length);
     $('#statTotalKm').text(totalKm.toFixed(2));
     $('#statFilasIgnoradas').text(planSummary.filas_ignoradas || 0);
 
     $('#bloqueResumen').show();
 }
 
+function renderUsuarioSelect() {
+    const select = $('#filtroUsuario').empty();
+    select.append('<option value="__ALL__">Todos los usuarios</option>');
+
+    (planFilters.usuarios || []).forEach(user => {
+        const value = user.usuario_id || user.usuario_login;
+        const label = user.usuario_nombre || user.usuario_login || user.usuario_id;
+        select.append(`<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`);
+    });
+}
+
+function renderFechaSelect() {
+    const select = $('#filtroFechaRuta').empty();
+    select.append('<option value="__ALL__">Todas las fechas</option>');
+
+    (planFilters.fechas || []).forEach(fecha => {
+        const value = fecha.fecha_ruta_sql || fecha.fecha_ruta;
+        const label = fecha.fecha_ruta || fecha.fecha_ruta_sql;
+        select.append(`<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`);
+    });
+}
+
 function renderGroupSelect() {
+    const currentRows = getFilteredRows();
+    const availableGroups = [...new Set(currentRows.map(r => r.grupo_ruta))].sort((a, b) => String(a).localeCompare(String(b)));
+    const currentValue = $('#filtroGrupoRuta').val() || '__ALL__';
+
     const select = $('#filtroGrupoRuta').empty();
     select.append('<option value="__ALL__">Todas las rutas</option>');
 
-    planGroups.forEach(group => {
+    availableGroups.forEach(groupName => {
+        const total = currentRows.filter(r => r.grupo_ruta === groupName).length;
         select.append(`
-            <option value="${escapeHtml(group.grupo_ruta)}">
-                ${escapeHtml(group.grupo_ruta)} · ${group.total_paradas} paradas
+            <option value="${escapeHtml(groupName)}">
+                ${escapeHtml(groupName)} · ${total} paradas
             </option>
         `);
     });
+
+    if (availableGroups.includes(currentValue)) {
+        select.val(currentValue);
+    } else {
+        select.val('__ALL__');
+    }
 }
 
 function renderLegend() {
     const container = $('#leyendaRutas').empty();
+    const groups = getFilteredGroups();
 
-    planGroups.slice(0, 12).forEach(group => {
+    groups.slice(0, 12).forEach(group => {
         const color = getRouteColor(group.grupo_ruta);
         container.append(`
             <div class="legend-item">
@@ -474,15 +572,16 @@ function renderLegend() {
         `);
     });
 
-    if (planGroups.length > 12) {
+    if (groups.length > 12) {
         container.append('<div class="mini-note mt-2">La paleta se reutiliza si hay muchos grupos.</div>');
     }
 }
 
 function renderGroupSummaryTable() {
     const tbody = $('#tablaGruposResumen tbody').empty();
+    const groups = getFilteredGroups();
 
-    planGroups.forEach(group => {
+    groups.forEach(group => {
         const color = getRouteColor(group.grupo_ruta);
 
         tbody.append(`
@@ -491,27 +590,35 @@ function renderGroupSummaryTable() {
                     <span class="route-color-box" style="background:${color};"></span>
                     ${escapeHtml(group.grupo_ruta)}
                 </td>
+                <td>${escapeHtml(group.usuario_nombre || group.usuario_login || '')}</td>
+                <td>${escapeHtml(group.fecha_ruta || '')}</td>
                 <td>${group.total_paradas}</td>
-                <td>${Number(group.distancia_total_ruta_km || 0).toFixed(2)}</td>
             </tr>
         `);
     });
 }
 
-function renderDetalleTable(groupName = '__ALL__') {
-    const rows = getRowsByGroup(groupName)
-        .sort((a, b) => {
-            if (a.grupo_ruta !== b.grupo_ruta) {
-                return a.grupo_ruta.localeCompare(b.grupo_ruta);
-            }
-            return Number(a.orden_visita || 0) - Number(b.orden_visita || 0);
-        });
+function renderDetalleTable() {
+    const rows = getFilteredRows().sort((a, b) => {
+        const cmpUsuario = String(a.usuario_nombre).localeCompare(String(b.usuario_nombre));
+        if (cmpUsuario !== 0) return cmpUsuario;
+
+        const cmpFecha = String(a.fecha_ruta_sql).localeCompare(String(b.fecha_ruta_sql));
+        if (cmpFecha !== 0) return cmpFecha;
+
+        const cmpGrupo = String(a.grupo_ruta).localeCompare(String(b.grupo_ruta));
+        if (cmpGrupo !== 0) return cmpGrupo;
+
+        return Number(a.orden_visita || 0) - Number(b.orden_visita || 0);
+    });
 
     const tbody = $('#tablaDetalleRuta tbody').empty();
 
     rows.forEach(row => {
         tbody.append(`
             <tr class="clickable-row" data-group="${escapeHtml(row.grupo_ruta)}" data-codigo="${escapeHtml(row.codigo_local)}">
+                <td>${escapeHtml(row.usuario_nombre || row.usuario_login || '')}</td>
+                <td>${escapeHtml(row.fecha_ruta || '')}</td>
                 <td>${escapeHtml(row.grupo_ruta)}</td>
                 <td>${escapeHtml(row.dia_plan || '')}</td>
                 <td>${row.orden_visita ?? ''}</td>
@@ -549,7 +656,9 @@ function createMarker(row, color) {
 
     marker.addListener('click', () => {
         infoWindowRutas.setContent(`
-            <div style="min-width:240px;">
+            <div style="min-width:260px;">
+                <div><strong>Usuario:</strong> ${escapeHtml(row.usuario_nombre || row.usuario_login || '')}</div>
+                <div><strong>Fecha ruta:</strong> ${escapeHtml(row.fecha_ruta || '')}</div>
                 <div><strong>Grupo:</strong> ${escapeHtml(row.grupo_ruta)}</div>
                 <div><strong>Día plan:</strong> ${escapeHtml(row.dia_plan || '')}</div>
                 <div><strong>Orden:</strong> ${escapeHtml(row.orden_visita)}</div>
@@ -568,96 +677,73 @@ function createMarker(row, color) {
     return marker;
 }
 
-function drawGroup(groupName, fitBounds = false) {
-    const rows = getRowsByGroup(groupName)
-        .filter(row => !isNaN(Number(row.lat)) && !isNaN(Number(row.lng)))
-        .sort((a, b) => Number(a.orden_visita || 0) - Number(b.orden_visita || 0));
-
-    const color = getRouteColor(groupName);
-    const bounds = new google.maps.LatLngBounds();
-    const path = [];
-
-    rows.forEach(row => {
-        const position = { lat: Number(row.lat), lng: Number(row.lng) };
-        path.push(position);
-        bounds.extend(position);
-        createMarker(row, color);
-    });
-
-    if (path.length > 1) {
-        const polyline = new google.maps.Polyline({
-            path,
-            geodesic: true,
-            strokeColor: color,
-            strokeOpacity: 0.9,
-            strokeWeight: 4,
-            map: mapaRutas
-        });
-
-        polylinesRutas.push(polyline);
-    }
-
-    if (fitBounds && !bounds.isEmpty()) {
-        mapaRutas.fitBounds(bounds);
-
-        google.maps.event.addListenerOnce(mapaRutas, 'bounds_changed', function() {
-            if (mapaRutas.getZoom() > 15) {
-                mapaRutas.setZoom(15);
-            }
-        });
-    }
-}
-
-function renderMap(groupName = '__ALL__') {
+function renderMap() {
     clearMapRutas();
 
-    if (!planRows.length) {
+    const rows = getFilteredRows()
+        .filter(row => !isNaN(Number(row.lat)) && !isNaN(Number(row.lng)));
+
+    if (!rows.length) {
+        $('#badgeRutaActiva').text('Sin datos para el filtro actual');
+        renderDetalleTable();
         return;
     }
 
-    $('#badgeRutaActiva').text(groupName === '__ALL__' ? 'Todas las rutas' : groupName);
+    const groupMap = {};
+    rows.forEach(row => {
+        if (!groupMap[row.grupo_ruta]) {
+            groupMap[row.grupo_ruta] = [];
+        }
+        groupMap[row.grupo_ruta].push(row);
+    });
 
-    if (groupName === '__ALL__') {
-        const allBounds = new google.maps.LatLngBounds();
+    const allBounds = new google.maps.LatLngBounds();
+    const selectedGroup = $('#filtroGrupoRuta').val() || '__ALL__';
 
-        planGroups.forEach(group => {
-            const rows = getRowsByGroup(group.grupo_ruta)
-                .filter(row => !isNaN(Number(row.lat)) && !isNaN(Number(row.lng)))
-                .sort((a, b) => Number(a.orden_visita || 0) - Number(b.orden_visita || 0));
+    Object.keys(groupMap).sort().forEach(groupName => {
+        const groupRows = groupMap[groupName].sort((a, b) => Number(a.orden_visita || 0) - Number(b.orden_visita || 0));
+        const color = getRouteColor(groupName);
+        const path = [];
 
-            const color = getRouteColor(group.grupo_ruta);
-            const path = [];
-
-            rows.forEach(row => {
-                const position = { lat: Number(row.lat), lng: Number(row.lng) };
-                path.push(position);
-                allBounds.extend(position);
-                createMarker(row, color);
-            });
-
-            if (path.length > 1) {
-                const polyline = new google.maps.Polyline({
-                    path,
-                    geodesic: true,
-                    strokeColor: color,
-                    strokeOpacity: 0.85,
-                    strokeWeight: 4,
-                    map: mapaRutas
-                });
-
-                polylinesRutas.push(polyline);
-            }
+        groupRows.forEach(row => {
+            const position = { lat: Number(row.lat), lng: Number(row.lng) };
+            path.push(position);
+            allBounds.extend(position);
+            createMarker(row, color);
         });
 
-        if (!allBounds.isEmpty()) {
-            mapaRutas.fitBounds(allBounds);
-        }
+        if (path.length > 1) {
+            const polyline = new google.maps.Polyline({
+                path,
+                geodesic: true,
+                strokeColor: color,
+                strokeOpacity: 0.85,
+                strokeWeight: 4,
+                map: mapaRutas
+            });
 
-    } else {
-        drawGroup(groupName, true);
+            polylinesRutas.push(polyline);
+        }
+    });
+
+    if (!allBounds.isEmpty()) {
+        mapaRutas.fitBounds(allBounds);
     }
 
-    renderDetalleTable(groupName);
+    $('#badgeRutaActiva').text(selectedGroup === '__ALL__' ? 'Vista filtrada' : selectedGroup);
+    renderDetalleTable();
+}
+
+function refreshAllViews(resetGroup = false) {
+    if (resetGroup) {
+        $('#filtroGrupoRuta').val('__ALL__');
+    }
+
+    renderGroupSelect();
+    renderSummary();
+    renderLegend();
+    renderGroupSummaryTable();
+    renderMap();
 }
 
 function activateMapView() {
@@ -670,7 +756,7 @@ function activateMapView() {
     setTimeout(() => {
         if (mapaRutas) {
             google.maps.event.trigger(mapaRutas, 'resize');
-            renderMap($('#filtroGrupoRuta').val() || '__ALL__');
+            renderMap();
         }
     }, 250);
 }
@@ -704,19 +790,20 @@ $('#formUploadPlanificacion').on('submit', function(e) {
             planRows = Array.isArray(resp.rows) ? resp.rows : [];
             planGroups = Array.isArray(resp.groups) ? resp.groups : [];
             planSummary = resp.summary || {};
+            planFilters = resp.filters || { usuarios: [], fechas: [], grupos: [] };
 
-            renderSummary();
-            renderGroupSelect();
-            renderLegend();
-            renderGroupSummaryTable();
-            renderDetalleTable('__ALL__');
+            renderUsuarioSelect();
+            renderFechaSelect();
+            $('#filtroGrupoRuta').html('<option value="__ALL__">Todas las rutas</option>');
+
+            refreshAllViews(true);
 
             $('#uploadResultBox')
                 .show()
                 .html(`
                     <div class="alert alert-success mb-0">
                         <strong>Archivo procesado correctamente.</strong><br>
-                        Se cargaron ${planRows.length} puntos distribuidos en ${planGroups.length} grupo(s) de ruta.
+                        Se cargaron ${planRows.length} puntos, ${planGroups.length} grupo(s), ${planSummary.total_usuarios || 0} usuario(s) y ${planSummary.total_fechas || 0} fecha(s).
                     </div>
                 `);
 
@@ -736,18 +823,29 @@ $('#formUploadPlanificacion').on('submit', function(e) {
     });
 });
 
+$('#filtroUsuario').on('change', function() {
+    $('#filtroGrupoRuta').val('__ALL__');
+    refreshAllViews(true);
+});
+
+$('#filtroFechaRuta').on('change', function() {
+    $('#filtroGrupoRuta').val('__ALL__');
+    refreshAllViews(true);
+});
+
 $('#filtroGrupoRuta').on('change', function() {
-    const selected = $(this).val();
-    renderMap(selected);
+    refreshAllViews(false);
 });
 
 $('#btnVerTodas').on('click', function() {
+    $('#filtroUsuario').val('__ALL__');
+    $('#filtroFechaRuta').val('__ALL__');
     $('#filtroGrupoRuta').val('__ALL__');
-    renderMap('__ALL__');
+    refreshAllViews(true);
 });
 
 $('#btnAjustarMapa').on('click', function() {
-    renderMap($('#filtroGrupoRuta').val() || '__ALL__');
+    renderMap();
 });
 
 $(document).on('click', '#tablaGruposResumen tbody tr', function() {
@@ -755,7 +853,7 @@ $(document).on('click', '#tablaGruposResumen tbody tr', function() {
     if (!group) return;
 
     $('#filtroGrupoRuta').val(group);
-    renderMap(group);
+    refreshAllViews(false);
 });
 
 $(document).on('click', '#tablaDetalleRuta tbody tr', function() {
@@ -764,7 +862,7 @@ $(document).on('click', '#tablaDetalleRuta tbody tr', function() {
 
     if (group && $('#filtroGrupoRuta').val() !== group) {
         $('#filtroGrupoRuta').val(group);
-        renderMap(group);
+        refreshAllViews(false);
     }
 
     const marker = markersRutas.find(m => m.getTitle() && m.getTitle().includes(codigo));

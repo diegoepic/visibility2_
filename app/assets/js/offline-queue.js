@@ -981,9 +981,9 @@
       // PATCH 2: Mapear client_guid → visita_id REAL (no el local)
       if (task.fields.client_guid) {
         const depTag = `create:${task.fields.client_guid}`;
-        CompletedDeps.add(depTag);
+        await CompletedDeps.add(depTag);
         // Guardar el ID REAL, no el local
-        LocalByGuid.set(task.fields.client_guid, realVisitaId);
+        await LocalByGuid.set(task.fields.client_guid, realVisitaId);
       }
     }
 

@@ -658,54 +658,88 @@ if (empty($_SESSION['csrf_token'])) {
                         </form>
                     </div>
 
-                    <div class="tab-pane fade" id="cargaMasiva" role="tabpanel">
-                        <form class="form-horizontal mt-3 user-submit-form" method="POST" action="mod_user/procesar_csv.php" enctype="multipart/form-data">
-                            <input type="hidden" name="csrf_token" value="<?php echo e($_SESSION['csrf_token']); ?>">
+<div class="tab-pane fade" id="cargaMasiva" role="tabpanel">
+    <form class="form-horizontal mt-3 user-submit-form" method="POST" action="mod_user/procesar_csv.php" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="<?php echo e($_SESSION['csrf_token']); ?>">
 
-                            <div class="section-title">Carga Masiva de Usuarios</div>
+        <div class="section-title">Carga Masiva de Usuarios</div>
 
-                            <div class="form-group row">
-                                <label for="csvFile" class="col-sm-2 col-form-label">Archivo CSV:*</label>
-                                <div class="col-sm-10">
-                                    <div class="custom-file">
-                                        <input type="file" class="custom-file-input" name="csvFile" id="csvFile" accept=".csv" required>
-                                        <label class="custom-file-label" for="csvFile">Seleccionar archivo</label>
-                                    </div>
-                                    <small class="form-text text-muted">Formato requerido: CSV. Asegúrate de seguir la plantilla proporcionada.</small>
-                                    <a href="mod_user/descargar_plantilla.php" class="btn btn-sm btn-outline-success mt-2">
-                                        <i class="fas fa-download mr-1"></i> Descargar plantilla de prueba
-                                    </a>
-                                </div>
-                            </div>
+        <div class="form-group row">
+            <label for="csvFile" class="col-sm-2 col-form-label">Archivo CSV:*</label>
+            <div class="col-sm-10">
+                <div class="custom-file">
+                    <input type="file" class="custom-file-input" name="csvFile" id="csvFile" accept=".csv" required>
+                    <label class="custom-file-label" for="csvFile">Seleccionar archivo</label>
+                </div>
+                <small class="form-text text-muted">Formato requerido: CSV. Asegúrate de seguir la plantilla proporcionada.</small>
+                <a href="mod_user/descargar_plantilla.php" class="btn btn-sm btn-outline-success mt-2">
+                    <i class="fas fa-download mr-1"></i> Descargar plantilla de prueba
+                </a>
+            </div>
+        </div>
 
-                            <div class="form-group row">
-                                <label for="empresa_id_csv" class="col-sm-2 col-form-label">Empresa:</label>
-                                <div class="col-sm-10">
-                                    <select class="form-control" id="empresa_id_csv" name="empresa_id_csv">
-                                        <option value="">Seleccione una empresa</option>
-                                        <?php foreach ($empresas as $empresa): ?>
-                                            <option value="<?php echo e($empresa['id']); ?>"><?php echo e($empresa['nombre']); ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                            </div>
+        <div class="form-group row">
+            <label for="perfil_id_csv" class="col-sm-2 col-form-label">Perfil:*</label>
+            <div class="col-sm-10">
+                <select class="form-control" id="perfil_id_csv" name="id_perfil" required>
+                    <option value="">Seleccione un perfil</option>
+                    <?php foreach ($perfiles as $perfil): ?>
+                        <option value="<?php echo e($perfil['id']); ?>">
+                            <?php echo e($perfil['nombre']); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+        </div>
 
-                            <div class="form-group row">
-                                <label for="division_id_csv" class="col-sm-2 col-form-label">División:</label>
-                                <div class="col-sm-10">
-                                    <select class="form-control" id="division_id_csv" name="division_id">
-                                        <option value="">Seleccione una división</option>
-                                    </select>
-                                </div>
-                            </div>
+        <div class="form-group row">
+            <label for="empresa_id_csv" class="col-sm-2 col-form-label">Empresa:*</label>
+            <div class="col-sm-10">
+                <select class="form-control" id="empresa_id_csv" name="empresa_id_csv" required>
+                    <option value="">Seleccione una empresa</option>
+                    <?php foreach ($empresas as $empresa): ?>
+                        <option value="<?php echo e($empresa['id']); ?>"><?php echo e($empresa['nombre']); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+        </div>
 
-                            <div class="text-right mt-4">
-                                <button type="submit" class="btn btn-primary btn-modern submit-btn">
-                                    <i class="fas fa-upload mr-1"></i> Cargar Usuarios
-                                </button>
-                            </div>
-                        </form>
-                    </div>
+        <div class="form-group row" id="divisionFieldCsv" style="display:none;">
+            <label for="division_id_csv" class="col-sm-2 col-form-label">División:</label>
+            <div class="col-sm-10">
+                <select class="form-control" id="division_id_csv" name="division_id">
+                    <option value="">Seleccione una división</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group row" id="subdivisionFieldCsv" style="display:none;">
+            <label for="subdivision_id_csv" class="col-sm-2 col-form-label">Subdivisión:</label>
+            <div class="col-sm-10">
+                <select class="form-control" id="subdivision_id_csv" name="id_subdivision">
+                    <option value="">Seleccione una subdivisión</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group row">
+            <label for="clasificacion_usuario_csv" class="col-sm-2 col-form-label">Tipo:*</label>
+            <div class="col-sm-10">
+                <select class="form-control" id="clasificacion_usuario_csv" name="clasificacion_usuario" required>
+                    <option value="">Seleccione un tipo</option>
+                    <option value="interno">Interno</option>
+                    <option value="externo">Externo</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="text-right mt-4">
+            <button type="submit" class="btn btn-primary btn-modern submit-btn">
+                <i class="fas fa-upload mr-1"></i> Cargar Usuarios
+            </button>
+        </div>
+    </form>
+</div>
                 </div>
             </div>
         </div>
@@ -1009,8 +1043,35 @@ $(function () {
             $('#editar_subdivision').val('');
         }
     }
+    
+    function controlarCampoDivisionCsv() {
+        const perfilSeleccionado = $('#perfil_id_csv option:selected').text();
+        const divisionsAvailable = $('#division_id_csv option').length > 1;
+    
+        if (requiereDivision(perfilSeleccionado) && divisionsAvailable) {
+            $('#divisionFieldCsv').show();
+            $('#division_id_csv').attr('required', 'required');
+        } else {
+            $('#divisionFieldCsv').hide();
+            $('#division_id_csv').removeAttr('required').val('');
+            $('#subdivisionFieldCsv').hide();
+            $('#subdivision_id_csv').val('');
+        }
+    }
+    
+    function controlarCampoSubdivisionCsv() {
+        const divisionId = $('#division_id_csv').val();
+        const subdivisionsAvailable = $('#subdivision_id_csv option').length > 1;
+    
+        if (divisionId && subdivisionsAvailable) {
+            $('#subdivisionFieldCsv').show();
+        } else {
+            $('#subdivisionFieldCsv').hide();
+            $('#subdivision_id_csv').val('');
+        }
+    }
 
-    $('#tablaUsuarios').DataTable({
+$('#tablaUsuarios').DataTable({
         dom: '<"d-flex flex-wrap justify-content-between align-items-center mb-3"Bf>rt<"d-flex flex-wrap justify-content-between align-items-center mt-3"lip>',
         pageLength: 10,
         lengthMenu: [[10,25,50,100],[10,25,50,100]],
@@ -1062,13 +1123,13 @@ $('#selectDivision').on('change', function () {
     });
 });
 
-    $('#selectPerfil').on('change', controlarCampoDivisionCrear);
+$('#selectPerfil').on('change', controlarCampoDivisionCrear);
 
-    $('#empresa_id_csv').on('change', function () {
+$('#empresa_id_csv').on('change', function () {
         cargarDivisiones($(this).val(), $('#division_id_csv'));
     });
 
-    $('#editar_perfil').on('change', controlarCampoDivisionEditar);
+$('#editar_perfil').on('change', controlarCampoDivisionEditar);
 
 $('#editar_empresa').on('change', function () {
     const empresaId = $(this).val();
@@ -1088,7 +1149,7 @@ $('#editar_division').on('change', function () {
     });
 });
 
-    $(document).on('click', '.editar-usuario-btn', function () {
+$(document).on('click', '.editar-usuario-btn', function () {
         const usuarioId = $(this).data('id');
 
         $.ajax({
@@ -1133,19 +1194,19 @@ $('#editar_division').on('change', function () {
         });
     });
 
-    $('#btnCambiarClave').on('click', function () {
+$('#btnCambiarClave').on('click', function () {
         $('#bloqueCambioClave').toggle();
         if ($('#bloqueCambioClave').is(':hidden')) {
             $('#new_password, #confirm_password').val('');
         }
     });
 
-    $('#editarUsuarioModal').on('show.bs.modal', function () {
+$('#editarUsuarioModal').on('show.bs.modal', function () {
         $('#bloqueCambioClave').hide();
         $('#new_password, #confirm_password').val('');
     });
 
-    $(document).on('click', '.eliminar-usuario-btn', function () {
+$(document).on('click', '.eliminar-usuario-btn', function () {
         const usuarioId = $(this).data('id');
         const fila = $('#usuario-' + usuarioId);
 
@@ -1175,7 +1236,7 @@ $('#editar_division').on('change', function () {
         });
     });
 
-    $(document).on('click', '.reactivar-usuario-btn', function () {
+$(document).on('click', '.reactivar-usuario-btn', function () {
         const usuarioId = $(this).data('id');
         const fila = $('#usuario-' + usuarioId);
 
@@ -1205,15 +1266,39 @@ $('#editar_division').on('change', function () {
         });
     });
 
-    $('.user-submit-form').on('submit', function () {
+$('.user-submit-form').on('submit', function () {
         const $form = $(this);
         bloquearSubmit($form);
         showOverlay();
     });
 
+$('#perfil_id_csv').on('change', function () {
+    controlarCampoDivisionCsv();
+});
+
+$('#empresa_id_csv').on('change', function () {
+    const empresaId = $(this).val();
+
+    cargarDivisiones(empresaId, $('#division_id_csv'), function () {
+        $('#subdivision_id_csv').html('<option value="">Seleccione una subdivisión</option>');
+        controlarCampoDivisionCsv();
+        controlarCampoSubdivisionCsv();
+    });
+});
+
+$('#division_id_csv').on('change', function () {
+    const divisionId = $(this).val();
+
+    cargarSubdivisiones(divisionId, $('#subdivision_id_csv'), function () {
+        controlarCampoSubdivisionCsv();
+    });
+});
+
 controlarCampoDivisionCrear();
 controlarCampoSubdivisionCrear();
-controlarCampoSubdivisionEditar(); 
+controlarCampoSubdivisionEditar();
+controlarCampoDivisionCsv();
+controlarCampoSubdivisionCsv();
 });
 </script>
 

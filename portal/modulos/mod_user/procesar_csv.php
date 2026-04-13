@@ -22,11 +22,6 @@ function redirectWithMessage(string $type, string $message): void
     exit();
 }
 
-function limpiarTexto(?string $value): string
-{
-    return trim((string)($value ?? ''));
-}
-
 function normalizarHeader(string $col): string
 {
     $col = trim($col);
@@ -88,6 +83,12 @@ function divisionValidaParaEmpresa(int $divisionId, int $empresaId): bool
     return false;
 }
 
+function perfilRequiereDivisionCsv(string $perfilNombre): bool
+{
+    $perfil = mb_strtolower(trim($perfilNombre), 'UTF-8');
+    return in_array($perfil, ['visor', 'ejecutor', 'editor', 'coordinador'], true);
+}
+
 /* =========================================================
    CSRF / método
 ========================================================= */
@@ -127,15 +128,28 @@ if ($fileSize > 10 * 1024 * 1024) {
 }
 
 /* =========================================================
-   Empresa / división
+   Datos globales de asignación
 ========================================================= */
 $id_empresa_csv = isset($_POST['empresa_id_csv']) ? (int)$_POST['empresa_id_csv'] : 0;
+$id_perfil_csv = isset($_POST['id_perfil']) ? (int)$_POST['id_perfil'] : 0;
 $id_division_csv = isset($_POST['division_id']) && $_POST['division_id'] !== ''
     ? (int)$_POST['division_id']
     : 0;
+$id_subdivision_csv = isset($_POST['id_subdivision']) && $_POST['id_subdivision'] !== ''
+    ? (int)$_POST['id_subdivision']
+    : 0;
+$clasificacion_usuario_csv = trim((string)($_POST['clasificacion_usuario'] ?? ''));
 
 if ($id_empresa_csv <= 0) {
     redirectWithMessage('error_formulario', 'Debes seleccionar una empresa para la carga masiva.');
+}
+
+if ($id_perfil_csv <= 0) {
+    redirectWithMessage('error_formulario', 'Debes seleccionar un perfil para la carga masiva.');
+}
+
+if (!in_array($clasificacion_usuario_csv, ['interno', 'externo'], true)) {
+    redirectWithMessage('error_formulario', 'Debes seleccionar si los usuarios serán internos o externos.');
 }
 
 $empresas = obtenerEmpresasActivas();
@@ -143,8 +157,32 @@ if (!empresaExiste($id_empresa_csv, $empresas)) {
     redirectWithMessage('error_formulario', 'La empresa seleccionada no es válida.');
 }
 
+$perfilNombre = obtenerNombrePerfil($id_perfil_csv);
+if (empty($perfilNombre)) {
+    redirectWithMessage('error_formulario', 'El perfil seleccionado no es válido.');
+}
+
 if (!divisionValidaParaEmpresa($id_division_csv, $id_empresa_csv)) {
     redirectWithMessage('error_formulario', 'La división seleccionada no pertenece a la empresa indicada.');
+}
+
+if ($id_subdivision_csv > 0 && $id_division_csv <= 0) {
+    redirectWithMessage('error_formulario', 'No puedes asignar una subdivisión sin seleccionar una división.');
+}
+
+if ($id_subdivision_csv > 0 && !subdivisionPerteneceADivision($id_subdivision_csv, $id_division_csv)) {
+    redirectWithMessage('error_formulario', 'La subdivisión seleccionada no pertenece a la división indicada.');
+}
+
+if (perfilRequiereDivisionCsv($perfilNombre)) {
+    $total_divisiones = contarDivisionesPorEmpresa($id_empresa_csv);
+
+    if ($total_divisiones > 0 && $id_division_csv <= 0) {
+        redirectWithMessage('error_formulario', 'La división es obligatoria para el perfil seleccionado.');
+    }
+} else {
+    $id_division_csv = 0;
+    $id_subdivision_csv = 0;
 }
 
 /* =========================================================
@@ -211,23 +249,30 @@ $usuario_idx  = array_search('usuario', $header_normalizado, true);
 $password_idx = array_search('password', $header_normalizado, true);
 
 /* =========================================================
-   Perfil fijo
-========================================================= */
-$id_perfil_ejecutor = obtenerIdPerfilEjecutor();
-if ($id_perfil_ejecutor === null) {
-    fclose($handle);
-    @unlink($dest_path);
-    redirectWithMessage('error_formulario', "Perfil 'ejecutor' no encontrado en el sistema.");
-}
-
-/* =========================================================
    SQL
 ========================================================= */
 $stmt_insert = $conn->prepare("
     INSERT INTO usuario
-        (rut, nombre, apellido, telefono, email, usuario, clave, fechaCreacion, activo, id_perfil, id_empresa, id_division, login_count, last_login)
+        (
+            rut,
+            nombre,
+            apellido,
+            telefono,
+            email,
+            usuario,
+            clave,
+            fechaCreacion,
+            activo,
+            id_perfil,
+            id_empresa,
+            id_division,
+            id_subdivision,
+            login_count,
+            last_login,
+            clasificacion_usuario
+        )
     VALUES
-        (?, ?, ?, ?, ?, ?, ?, NOW(), 1, ?, ?, ?, 1, NOW())
+        (?, ?, ?, ?, ?, ?, ?, NOW(), 1, ?, ?, ?, ?, 1, NOW(), ?)
 ");
 
 if (!$stmt_insert) {
@@ -257,7 +302,6 @@ try {
     while (($data = fgetcsv($handle, 0, $delimiter)) !== false) {
         $fila++;
 
-        // Saltar filas completamente vacías
         $filaTexto = implode('', array_map('trim', $data));
         if ($filaTexto === '') {
             continue;
@@ -323,8 +367,11 @@ try {
 
         $hashed_password = password_hash($clave, PASSWORD_DEFAULT);
 
+        $divisionFinal = ($id_division_csv > 0) ? $id_division_csv : null;
+        $subdivisionFinal = ($id_subdivision_csv > 0) ? $id_subdivision_csv : null;
+
         $stmt_insert->bind_param(
-            'sssssssiii',
+            'sssssssiiiis',
             $rut_estandarizado,
             $nombre,
             $apellido,
@@ -332,9 +379,11 @@ try {
             $email,
             $usuario,
             $hashed_password,
-            $id_perfil_ejecutor,
+            $id_perfil_csv,
             $id_empresa_csv,
-            $id_division_csv
+            $divisionFinal,
+            $subdivisionFinal,
+            $clasificacion_usuario_csv
         );
 
         if ($stmt_insert->execute()) {
@@ -344,7 +393,6 @@ try {
         }
     }
 
-    // Mantengo tu lógica: inserta válidos aunque existan errores en otras filas
     $conn->commit();
 
 } catch (Throwable $e) {

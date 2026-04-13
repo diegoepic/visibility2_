@@ -280,7 +280,7 @@ idempo_claim_or_fail($conn, 'create_visita');
 
 /* -------------------- Lógica principal -------------------- */
 try {
-    @$conn->query('SET SESSION innodb_lock_wait_timeout = 3');
+    @$conn->query('SET SESSION innodb_lock_wait_timeout = 15');
     $conn->begin_transaction();
 
     $now = date('Y-m-d H:i:s');
@@ -327,7 +327,6 @@ try {
               AND (fecha_fin IS NULL)
             ORDER BY id DESC
             LIMIT 1
-            FOR UPDATE
         ");
         $sel2->bind_param('iii', $user_id, $form_id, $local_id);
         $sel2->execute();

@@ -421,7 +421,6 @@ if ($division_id > 0) {
                               <option value="">Todos los Distritos</option>
                           </select>
                       </div>
-                      <!-- Filtro de Divisi車n: mostrar select solo si la divisi車n del usuario es "MC" -->
                       <?php if (strtoupper(trim($division_nombre)) == 'MC'): ?>
                           <div class="form-group">
                               <label for="division"  class="t2">Seleccionar Divisi&oacute;n:</label>
@@ -438,7 +437,6 @@ if ($division_id > 0) {
                               </select>
                           </div>
                       <?php else: ?>
-                          <!-- Si no es "MC", se env赤a el ID de la divisi車n del usuario en un input oculto -->
                           <input type="hidden" id="division_locales" name="division" value="<?php echo (int)$division; ?>">
                       <?php endif; ?>
                       <button type="button" class="btn btn-primary" onclick="descargarData('excel')" hidden>Descargar en Excel</button>
@@ -943,12 +941,6 @@ if ($division_id > 0) {
                       <p>Historico Gestiones</p>
                   </a>
               </li>
-              <li class="nav-item">
-                  <a href="modulos/mod_etl/mod_etl_locales.php" class="nav-link">
-                      <i class="fas fa-wrench nav-icon"></i>
-                      <p>Procesar ETL</p>
-                  </a>
-              </li>                
               <?php endif; ?>              
             </ul>
           </li>
@@ -1070,7 +1062,102 @@ if ($division_id > 0) {
               </li>              
             </ul>
           </li>
-
+          
+          <li class="nav-header">CONTROL DE GESTION</li>
+          <li class="nav-item">
+            <a href="#" class="nav-link">
+              <i class="nav-icon fas fa-chart-line"></i>
+              <p>
+                Administrador de dashboard
+                <i class="fas fa-angle-left right"></i>
+              </p>
+            </a>
+            <ul class="nav nav-treeview">
+              </li>                
+              <li class="nav-item">
+                <a href="UI_crear_dashboard.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Crear/editar Dashboard</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="UI_subir_archivo.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Subir archivo - deprecated</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="UI_subir_archivo_nuevo.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Subir archivo nuevo</p>
+                </a>
+              </li>
+            <li class="nav-item">
+              <a href="#" class="nav-link" data-toggle="modal" data-target="#modalDescargaRBTradicional">
+                <i class="far fa-circle nav-icon"></i>
+                <p>Descarga data RB Tradicional (formato rb)</p>
+              </a>
+            </li>               
+            </ul>
+          </li>
+          <li class="nav-item">
+            <a href="#" class="nav-link">
+              <i class="nav-icon fas fa-code"></i>
+              <p>
+                Desarrollo Testing
+                <i class="fas fa-angle-left right"></i>
+              </p>
+            </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="modulos/mod_dashboard_carousel.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Nuevo menu para dashboard</p>
+                </a>
+              </li>      
+              <li class="nav-item">
+                <a href="ui_dashboard1_test.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>ENLACE DE PRUEBAS</p>
+                </a>
+              </li>              
+            </ul>
+          </li> 
+          <li class="nav-item">
+            <a href="#" class="nav-link">
+              <i class="nav-icon fas fa-database"></i>
+              <p>
+                Analisis de datos
+                <i class="fas fa-angle-left right"></i>
+              </p>
+            </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="modulos/mod_rutas/mapa_rutas.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Planificador de rutas</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="modulos/mod_rutas/mod_visualizar_rutas_planificadas.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Visor de rutas planificadas</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                  <a href="modulos/mod_etl/mod_etl_locales.php" class="nav-link">
+                      <i class="far fa-circle nav-icon"></i>
+                      <p>Procesar ETL</p>
+                  </a>
+              </li>                 
+            </ul>
+          </li>
+              <li class="nav-item">
+                <a href="ui_changelog.php" class="nav-link">
+                  <i class="fas fa-sliders-h nav-icon"></i>
+                  <p>Changelog</p>
+                </a>
+              </li>            
           
           <li class="nav-header">ELEMENTOS PORTAL</li>
           <li class="nav-item">
@@ -1096,104 +1183,6 @@ if ($division_id > 0) {
               </li>              
             </ul>
           </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="nav-icon fas fa-edit"></i>
-              <p>
-                Administrador de dashboard
-                <i class="fas fa-angle-left right"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="modulos/mod_dashboard_carousel.php" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Editor menu principal</p>
-                </a>
-              </li>                
-              <li class="nav-item">
-                <a href="UI_crear_dashboard.php" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Crear/editar Dashboard</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="nav-icon fas fa-upload"></i>
-              <p>
-                Subida y bajada de archivos
-                <i class="fas fa-angle-left right"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="UI_subir_archivo.php" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Subir archivo - deprecated</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="UI_subir_archivo_nuevo.php" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Subir archivo nuevo</p>
-                </a>
-              </li>
-            <li class="nav-item">
-              <a href="#" class="nav-link" data-toggle="modal" data-target="#modalDescargaRBTradicional">
-                <i class="far fa-circle nav-icon"></i>
-                <p>Descarga data RB Tradicional nuevo</p>
-              </a>
-            </li>              
-            </ul>
-          </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="nav-icon fas fa-map"></i>
-              <p>
-                Generar rutas
-                <i class="fas fa-angle-left right"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="modulos/mod_rutas/mapa_rutas.php" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Planificador de rutas</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="modulos/mod_rutas/mod_visualizar_rutas_planificadas.php" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Visor de rutas planificadas</p>
-                </a>
-              </li>              
-            </ul>
-          </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="nav-icon fas fa-map"></i>
-              <p>
-                Pruebas
-                <i class="fas fa-angle-left right"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="ui_dashboard1_test.php" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>ENLACE DE PRUEBAS</p>
-                </a>
-              </li>
-            <li class="nav-item">
-            <a href="UI_crear_dashboard_test.php" class="nav-link">
-              <i class="nav-icon fas fa-th"></i>
-              <p>Crear dashboard</p>
-            </a>
-          </li>              
-            </ul>
-          </li>             
             <li class="nav-item">
               <i class="nav-icon far "></i>
               <p class="text"></p>
@@ -1665,6 +1654,209 @@ $('#division_ipt').on('change', function () {
 </script>
 
 <script>
+
+    $(document).ready(function() {
+        // Al abrir el modal, cargar opciones de Canal y Distrito
+        $('#modalDataLocalesUltimaGestion').on('show.bs.modal', function () {
+            $.get('modulos/cargar_filtros.php', { filtro: 'canalug' }, function(data) {
+                $('#canalug').html(data);
+            });
+            $.get('modulos/cargar_filtros.php', { filtro: 'distritoug' }, function(data) {
+                $('#distritoug').html(data);
+            });
+        });
+    });    
+    
+        function descargarData(btn, formato, debug = false) {
+          const $form = $(btn).closest('form');                 // <-- form del botón
+          const params = $form.serializeArray();
+          params.push({ name: 'formato', value: formato });
+          if (debug) params.push({ name: 'debug', value: '1' });
+        
+          const usp = new URLSearchParams();
+          params.forEach(p => usp.append(p.name, p.value || ''));
+          const url = `modulos/descargar_data_locales.php?${usp.toString()}`;
+        
+          console.log('URL descarga:', url);
+          if (debug) window.open(url, '_blank'); else window.location.href = url;
+        }
+    function descargarDataUltimaGestion(formato) {
+        var canal = $('#canalug').val();
+        var distrito = $('#distritoug').val();
+        var division = $('#division').val(); // Valor del select o input oculto
+        window.location.href = 'modulos/descargar_data_locales_ultimaGestion.php?formato=' + formato + '&canal=' + canal + '&distrito=' + distrito + '&division=' + division;
+    }  
+    
+    function modalDataLocalesHistoricoGestion(formato) {
+      var $modal    = $('#modalDataLocalesHistoricoGestion');
+      var canal     = $modal.find('#canal').val();
+      var distrito  = $modal.find('#distrito').val();
+      var division  = $modal.find('#division').val();
+      var tipoGest  = $modal.find('#tipoGestion').val();
+    
+      var url = 'modulos/descargar_data_locales_historicoGestion.php'
+        + '?formato='    + encodeURIComponent(formato)
+        + '&canal='      + encodeURIComponent(canal)
+        + '&distrito='   + encodeURIComponent(distrito)
+        + '&division='   + encodeURIComponent(division)
+        + '&tipoGestion='+ encodeURIComponent(tipoGest);
+    
+      window.open(url, '_blank');
+    }  
+        
+    
+function descargarDataProgramados(formato) {
+        var canal     = document.getElementById('canal_programados').value;
+        var distrito  = document.getElementById('distrito_programados').value;
+        var division  = document.getElementById('division_programados').value;
+        var fecha_inicio = document.getElementById('fecha_inicio_programados').value;
+        var fecha_fin    = document.getElementById('fecha_fin_programados').value;
+        var estado    = document.getElementById('estado_programados').value;
+        const ejecutor = $('#ejecutor_programados').val();
+
+    // Construir la URL y codificar los parámetros
+    var url = 'modulos/descargar_data_programada.php?formato=' + encodeURIComponent(formato)
+                  + "&id_canal=" + encodeURIComponent(canal)
+                  + "&id_distrito=" + encodeURIComponent(distrito)
+                  + "&id_division=" + encodeURIComponent(division)
+                  + "&fecha_inicio=" + encodeURIComponent(fecha_inicio)
+                  + "&fecha_fin=" + encodeURIComponent(fecha_fin)
+                  + "&estado=" + encodeURIComponent(estado);
+                 if (ejecutor) {
+                  url += '&id_usuario=' + encodeURIComponent(ejecutor);
+                    }
+    
+    // Abrir la URL en una nueva pestaña
+   window.location.href = url;
+} 
+
+function descargarDataAdicionales(formato) {
+        var canal     = document.getElementById('canal_programados').value;
+        var distrito  = document.getElementById('distrito_programados').value;
+        var division  = document.getElementById('division_programados').value;
+        var fecha_inicio = document.getElementById('fecha_inicio_programados').value;
+        var fecha_fin    = document.getElementById('fecha_fin_programados').value;
+        var estado    = document.getElementById('estado_programados').value;
+        const ejecutor = $('#ejecutor_programados').val();
+
+    // Construir la URL y codificar los parámetros
+    var url = 'modulos/descargar_data_programada_adicionales.php?formato=' + encodeURIComponent(formato)
+                  + "&id_canal=" + encodeURIComponent(canal)
+                  + "&id_distrito=" + encodeURIComponent(distrito)
+                  + "&id_division=" + encodeURIComponent(division)
+                  + "&fecha_inicio=" + encodeURIComponent(fecha_inicio)
+                  + "&fecha_fin=" + encodeURIComponent(fecha_fin)
+                  + "&estado=" + encodeURIComponent(estado);
+                 if (ejecutor) {
+                  url += '&id_usuario=' + encodeURIComponent(ejecutor);
+                    }
+    
+    // Abrir la URL en una nueva pestaña
+   window.location.href = url;
+} 
+    
+function descargarEncuestaPivot(formato) {
+        var canal     = document.getElementById('canal_programados').value;
+        var distrito  = document.getElementById('distrito_programados').value;
+        var division  = document.getElementById('division_programados').value;
+        var fecha_inicio = document.getElementById('fecha_inicio_programados').value;
+        var fecha_fin    = document.getElementById('fecha_fin_programados').value;
+        var estado    = document.getElementById('estado_programados').value;
+        const ejecutor = $('#ejecutor_programados').val();
+        var url = "modulos/descargar_data_programada_E.php?formato=" + encodeURIComponent(formato)
+                  + "&id_canal=" + encodeURIComponent(canal)
+                  + "&id_distrito=" + encodeURIComponent(distrito)
+                  + "&id_division=" + encodeURIComponent(division)
+                  + "&fecha_inicio=" + encodeURIComponent(fecha_inicio)
+                  + "&fecha_fin=" + encodeURIComponent(fecha_fin)
+                  + "&estado=" + encodeURIComponent(estado);
+                   if (ejecutor) {
+                    url += '&id_usuario=' + encodeURIComponent(ejecutor);
+                    }
+                  
+        //window.location.href = url;
+    window.location.href = url;        
+    }
+    
+function descargarDataIPTMC(formato) {
+    var canal2 = document.getElementById('canal_ipt').value;
+    var distrito2 = document.getElementById('distrito_ipt').value;
+    var division2 = document.getElementById('division_ipt').value;
+    console.log("Valor de división:", division2);
+    var fecha_inicio2 = document.getElementById('fecha_inicio_ipt').value;
+    var fecha_fin2 = document.getElementById('fecha_fin_ipt').value;
+    const ejecutor     = $('#ejecutor_ipt').val();
+    
+    var url = "modulos/descarga_data_ruta.php?formato=" + encodeURIComponent(formato)
+              + "&id_canal=" + encodeURIComponent(canal2)
+              + "&id_distrito=" + encodeURIComponent(distrito2)
+              + "&id_division=" + encodeURIComponent(division2)
+              + "&fecha_inicio=" + encodeURIComponent(fecha_inicio2)
+              + "&fecha_fin=" + encodeURIComponent(fecha_fin2);
+    if (ejecutor) url += "&id_usuario=" + encodeURIComponent(ejecutor);
+    window.location.href = url;     
+}    
+    
+function descargarDataIPT(formato) {
+    var canal2 = document.getElementById('canal_ipt').value;
+    var distrito2 = document.getElementById('distrito_ipt').value;
+    var division2 = document.getElementById('division_ipt').value;
+    console.log("Valor de división:", division2);
+    var fecha_inicio2 = document.getElementById('fecha_inicio_ipt').value;
+    var fecha_fin2 = document.getElementById('fecha_fin_ipt').value;
+    const ejecutor = $('#ejecutor_ipt').val();
+    
+    var url = "modulos/descargar_data_ipt.php?formato=" + encodeURIComponent(formato)
+              + "&id_canal=" + encodeURIComponent(canal2)
+              + "&id_distrito=" + encodeURIComponent(distrito2)
+              + "&id_division=" + encodeURIComponent(division2)
+              + "&fecha_inicio=" + encodeURIComponent(fecha_inicio2)
+              + "&fecha_fin=" + encodeURIComponent(fecha_fin2);
+            if (ejecutor) url += "&id_usuario=" + encodeURIComponent(ejecutor);
+    window.location.href = url;     
+}
+
+function showDlModal(show) {
+  document.getElementById('dlModal').style.display = show ? 'block' : 'none';
+}
+function setDlProgress(percent, text) {
+  const p = Math.max(0, Math.min(100, percent|0));
+  document.getElementById('dlBar').style.width = p + '%';
+  document.getElementById('dlText').textContent = text ?? (p + '%');
+}
+
+   
+    function toggleDownloadButtons() {
+    var tipo = document.getElementById("tipo_gestion").value;
+    if (tipo === "implementacion") {
+        document.getElementById("btnDescargarImplementacionExcel").style.display = "";
+        document.getElementById("btnDescargarEncuesta").style.display = "none";
+        
+    } else if (tipo === "encuesta") {
+        document.getElementById("btnDescargarImplementacionExcel").style.display = "none";
+        document.getElementById("btnDescargarEncuesta").style.display = "";
+    }
+}
+
+$(document).ready(function() {
+  // al cargar
+  toggleDownloadButtons2();
+
+  // cuando abres el modal (usa shown para que el DOM del modal ya esté en pantalla)
+  $('#modalDataIPT').on('shown.bs.modal', function () {
+    toggleDownloadButtons2();
+  });
+
+  // cuando cambie el tipo
+  $('#tipo_gestion2').on('change', toggleDownloadButtons2);
+
+  // cuando cambie la división (por si el usuario la cambia manualmente)
+  $('#division_ipt').on('change', toggleDownloadButtons2);
+});
+
+</script>
+
+<script>
 $(document).ready(function() {
     $("#formPerfil").submit(function(e) {
         e.preventDefault();
@@ -1704,6 +1896,8 @@ $(document).ready(function() {
     });
 });
 </script>
-
+<script>
+    
+</script>
 </body>
 </html>

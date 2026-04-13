@@ -793,68 +793,42 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
             </div>
         </div>
 
-        <div class="section-title mt-4 mb-3">
-            <i class="fas fa-table"></i>
-            <span>Formularios creados</span>
-        </div>
+<div class="section-title mt-4 mb-3">
+    <i class="fas fa-table"></i>
+    <span>Formularios creados</span>
+</div>
 
-        <div class="table-wrap">
-            <div class="table-responsive">
-                <table id="tablaFormularios" class="table table-hover w-100">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Nombre</th>
-                            <th>Fecha Inicio</th>
-                            <th>Fecha Término</th>
-                            <th>Estado</th>
-                            <th>Tipo</th>
-                            <th>División</th>
-                            <th>Subdivisión</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                        <tbody>
-                            <?php if (!empty($formularios)): ?>
-                                <?php foreach ($formularios as $row): ?>
-                                    <?php
-                                        $estado_texto       = obtenerTextoEstado($row['estado']);
-                                        $estado_clase       = obtenerClaseEstado($row['estado']);
-                                        $tipo_texto         = obtenerTextoTipo($row['tipo']);
-                                        $tipo_clase         = obtenerClaseTipo($row['tipo']);
-                                        $division_nombre    = !empty($row['division_nombre']) ? e($row['division_nombre']) : '<span class="table-muted">Sin División</span>';
-                                        $subdivision_nombre = !empty($row['subdivision_nombre']) ? e($row['subdivision_nombre']) : '<span class="table-muted">Sin Subdivisión</span>';
-                        
-                                        $editar_url = "mod_formulario/editar_formulario.php?id=" . urlencode($row['id']);
-                                    ?>
-                                    <tr>
-                                        <td><strong>#<?php echo e($row['id']); ?></strong></td>
-                                        <td class="campaign-name"><?php echo e($row['nombre']); ?></td>
-                                        <td><?php echo e(formatearFecha($row['fechaInicio'])); ?></td>
-                                        <td><?php echo e(formatearFecha($row['fechaTermino'])); ?></td>
-                                        <td><span class="<?php echo e($estado_clase); ?>"><?php echo e($estado_texto); ?></span></td>
-                                        <td><span class="<?php echo e($tipo_clase); ?>"><?php echo e($tipo_texto); ?></span></td>
-                                        <td><?php echo $division_nombre; ?></td>
-                                        <td><?php echo $subdivision_nombre; ?></td>
-                                        <td>
-                                            <div class="action-group">
-                                                <a href="<?php echo e($editar_url); ?>" class="btn btn-warning btn-sm btn-icon" title="Editar">
-                                                    <i class="fas fa-edit"></i>
-                                                </a>
-                        
-                                                <a href="mod_formulario/mapa_campana.php?id=<?php echo urlencode($row['id']); ?>" class="btn btn-info btn-sm btn-icon" title="Ver Mapa">
-                                                    <i class="fas fa-map-marker-alt"></i>
-                                                </a>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
-                </table>
+<div id="formularioTableContainer" class="table-wrap">
+    <div class="table-loading-state text-center py-5">
+        <div class="spinner-border text-success mb-3" role="status">
+            <span class="sr-only">Cargando...</span>
+        </div>
+        <div class="text-muted">Cargando formularios...</div>
+    </div>
+</div>
+
+    </div>
+</div>
+
+<div class="modal fade" id="contenidoExternoModal" tabindex="-1" role="dialog" aria-labelledby="contenidoExternoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" role="document" style="max-width: 96%;">
+        <div class="modal-content" style="height: 92vh;">
+            <div class="modal-header">
+                <h5 class="modal-title" id="contenidoExternoModalLabel">Detalle</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+
+            <div class="modal-body p-0" style="height: calc(92vh - 56px); overflow: hidden;">
+                <iframe
+                    id="contenidoExternoFrame"
+                    src="about:blank"
+                    style="width:100%; height:100%; border:0;"
+                    loading="lazy">
+                </iframe>
             </div>
         </div>
-
     </div>
 </div>
 
@@ -1050,7 +1024,7 @@ function actualizarDivisionesFiltro() {
                         divisionSelect.appendChild(option);
                     }
                 }
-                document.getElementById('filterForm').submit();
+                cargarTablaFormularios(true);
             },
             error: function(xhr, status, error) {
                 console.error('Error al obtener divisiones:', error);
@@ -1059,7 +1033,7 @@ function actualizarDivisionesFiltro() {
         });
     } else {
         divisionSelect.innerHTML = '<option value="0">-- Todas las Divisiones --</option>';
-        document.getElementById('filterForm').submit();
+        cargarTablaFormularios(true);
     }
 }
 
@@ -1249,31 +1223,7 @@ document.addEventListener('DOMContentLoaded', function(){
         });
     }
 
-    $(document).ready(function () {
-        $('#tablaFormularios').DataTable({
-            pageLength: 25,
-            order: [[0, 'desc']],
-            autoWidth: false,
-            responsive: true,
-            language: {
-                emptyTable: "No se encontraron formularios.",
-                info: "Mostrando _START_ a _END_ de _TOTAL_ registros",
-                infoEmpty: "Mostrando 0 a 0 de 0 registros",
-                infoFiltered: "(filtrado de _MAX_ registros totales)",
-                lengthMenu: "Mostrar _MENU_ registros",
-                loadingRecords: "Cargando...",
-                processing: "Procesando...",
-                search: "Buscar:",
-                zeroRecords: "No se encontraron coincidencias",
-                paginate: {
-                    first: "Primero",
-                    last: "Último",
-                    next: "Siguiente",
-                    previous: "Anterior"
-                }
-            }
-        });
-    });
+
 });
 </script>
 <script>
@@ -1295,6 +1245,246 @@ document.addEventListener('DOMContentLoaded', function(){
         });
     }
 });
+</script>
+
+<script>
+$.fn.dataTable.ext.errMode = 'none';
+
+$(document).on('error.dt', function (e, settings, techNote, message) {
+    console.warn('DataTables error:', message);
+
+    const tabla = document.getElementById('tablaFormularios');
+    if (tabla) {
+        console.log('Cantidad headers:', tabla.querySelectorAll('thead th').length);
+        tabla.querySelectorAll('tbody tr').forEach((tr, i) => {
+            console.log('Fila', i + 1, 'columnas:', tr.children.length);
+        });
+    }
+});
+</script>
+
+<script>
+let tablaFormulariosDT = null;
+
+function getFiltrosFormulario() {
+    const form = document.getElementById('filterForm');
+
+    if (!form) {
+        return {
+            buscar: 1
+        };
+    }
+
+    const formData = new FormData(form);
+    const params = new URLSearchParams();
+
+    for (const [key, value] of formData.entries()) {
+        params.append(key, value);
+    }
+
+    params.set('buscar', '1');
+    return params;
+}
+
+function destruirDataTableFormularios() {
+    if ($.fn.DataTable.isDataTable('#tablaFormularios')) {
+        $('#tablaFormularios').DataTable().destroy();
+    }
+}
+
+function inicializarDataTableFormularios() {
+    tablaFormulariosDT = $('#tablaFormularios').DataTable({
+        pageLength: 25,
+        order: [[0, 'desc']],
+        autoWidth: false,
+        responsive: true,
+        destroy: true,
+        language: {
+            emptyTable: "No se encontraron formularios.",
+            info: "Mostrando _START_ a _END_ de _TOTAL_ registros",
+            infoEmpty: "Mostrando 0 a 0 de 0 registros",
+            infoFiltered: "(filtrado de _MAX_ registros totales)",
+            lengthMenu: "Mostrar _MENU_ registros",
+            loadingRecords: "Cargando...",
+            processing: "Procesando...",
+            search: "Buscar:",
+            zeroRecords: "No se encontraron coincidencias",
+            paginate: {
+                first: "Primero",
+                last: "Último",
+                next: "Siguiente",
+                previous: "Anterior"
+            }
+        }
+    });
+}
+
+function cargarTablaFormularios(pushUrl = false) {
+    const container = document.getElementById('formularioTableContainer');
+    const params = getFiltrosFormulario();
+
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="table-loading-state text-center py-5">
+            <div class="spinner-border text-success mb-3" role="status">
+                <span class="sr-only">Cargando...</span>
+            </div>
+            <div class="text-muted">Cargando formularios...</div>
+        </div>
+    `;
+
+    fetch('mod_formulario/ajax_listado_formularios.php?' + params.toString(), {
+        method: 'GET',
+        credentials: 'same-origin'
+    })
+    .then(response => response.text())
+    .then(html => {
+        container.innerHTML = html;
+        inicializarDataTableFormularios();
+
+        if (pushUrl) {
+            const newUrl = window.location.pathname + '?' + params.toString();
+            window.history.replaceState({}, '', newUrl);
+        }
+
+        actualizarContadorFormularios();
+        enlazarBotonesConSpinner();
+    })
+    .catch(error => {
+        console.error('Error cargando formularios:', error);
+        container.innerHTML = `
+            <div class="alert alert-danger mb-0">
+                No fue posible cargar los formularios.
+            </div>
+        `;
+    });
+}
+
+function actualizarContadorFormularios() {
+    const countElement = document.querySelector('.count-pill .count');
+    const filas = document.querySelectorAll('#tablaFormularios tbody tr');
+
+    if (!countElement) return;
+
+    if (!filas.length) {
+        countElement.textContent = '0';
+        return;
+    }
+
+    if (filas.length === 1) {
+        const td = filas[0].querySelector('td[colspan]');
+        if (td) {
+            countElement.textContent = '0';
+            return;
+        }
+    }
+
+    countElement.textContent = String(filas.length);
+}
+
+function enlazarBotonesConSpinner() {
+    document.querySelectorAll('#tablaFormularios a.btn-info, #tablaFormularios a.btn-warning').forEach(function(el) {
+        el.addEventListener('click', function() {
+            const spinner = document.getElementById('globalSpinner');
+            if (spinner) {
+                spinner.classList.add('show');
+            }
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const filterForm = document.getElementById('filterForm');
+    const divisionFilter = document.getElementById('division_filter');
+    const subdivisionFilter = document.getElementById('subdivision_filter');
+    const estadoFilter = document.getElementById('estado_filter');
+    const tipoFilter = document.getElementById('tipo_filter');
+
+    cargarTablaFormularios(false);
+
+    if (filterForm) {
+        filterForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            cargarTablaFormularios(true);
+        });
+    }
+
+    if (divisionFilter) {
+        divisionFilter.onchange = function() {
+            const divisionId = this.value;
+
+            if (divisionId && divisionId !== '0') {
+                cargarSubdivisionesFiltro(divisionId, 0);
+
+                setTimeout(function() {
+                    cargarTablaFormularios(true);
+                }, 250);
+            } else {
+                const subCont = document.getElementById('subdivision_filter_container');
+                const subSel = document.getElementById('subdivision_filter');
+                if (subCont && subSel) {
+                    subSel.innerHTML = '<option value="0">-- Todas las Subdivisiones --</option>';
+                    subSel.value = '0';
+                    subCont.style.display = 'none';
+                }
+                cargarTablaFormularios(true);
+            }
+        };
+    }
+
+    if (subdivisionFilter) {
+        subdivisionFilter.addEventListener('change', function() {
+            cargarTablaFormularios(true);
+        });
+    }
+
+    if (estadoFilter) {
+        estadoFilter.addEventListener('change', function() {
+            cargarTablaFormularios(true);
+        });
+    }
+
+    if (tipoFilter) {
+        tipoFilter.addEventListener('change', function() {
+            cargarTablaFormularios(true);
+        });
+    }
+});
+</script>
+
+<script>
+function abrirModalExterno(url, titulo) {
+    const modal = $('#contenidoExternoModal');
+    const frame = document.getElementById('contenidoExternoFrame');
+    const title = document.getElementById('contenidoExternoModalLabel');
+
+    if (title) {
+        title.textContent = titulo || 'Detalle';
+    }
+
+    if (frame) {
+        frame.src = url;
+    }
+
+    modal.modal('show');
+}
+
+$(document).on('click', '.btn-open-modal', function () {
+    const url = $(this).data('modal-url');
+    const titulo = $(this).data('modal-title') || 'Detalle';
+
+    abrirModalExterno(url, titulo);
+});
+
+$('#contenidoExternoModal').on('hidden.bs.modal', function () {
+    const frame = document.getElementById('contenidoExternoFrame');
+    if (frame) {
+        frame.src = 'about:blank';
+    }
+});
+
+
 </script>
 </body>
 </html>

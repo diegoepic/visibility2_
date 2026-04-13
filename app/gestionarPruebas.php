@@ -1260,7 +1260,7 @@ function resolveVisitaIdFromMappings(guid){
   if (!guid) return null;
   try {
     if (window.Queue && window.Queue.LocalByGuid) {
-      const mapped = window.Queue.LocalByGuid.get(guid);
+      const mapped = window.Queue.LocalByGuid.getSync(guid);
       if (mapped) return mapped;
     }
   } catch(_){}
@@ -2160,10 +2160,10 @@ $(document).ready(function(){
       $('#visita_id').val(js.visita_id);
 
       if (window.Queue && window.Queue.CompletedDeps) {
-        window.Queue.CompletedDeps.add(`create:${client_guid}`);
+        await window.Queue.CompletedDeps.add(`create:${client_guid}`);
       }
       if (window.Queue && window.Queue.LocalByGuid) {
-        window.Queue.LocalByGuid.set(client_guid, js.visita_id);
+        await window.Queue.LocalByGuid.set(client_guid, js.visita_id);
       }
 
       updateVisitSession({ visita_id: js.visita_id, client_guid });
@@ -2885,8 +2885,13 @@ const online = await isReallyOnline();
         }
       }
 
+      // Limpiar sólo localStorage para que la próxima sesión use un GUID fresco,
+      // sin tocar los inputs del form actual (visita_id y client_guid se necesitan en el POST).
+      try {
+        localStorage.setItem(VISIT_SESSION_KEY, JSON.stringify({}));
+        localStorage.removeItem(clientGuidKey());
+      } catch(_) {}
       document.getElementById('gestionarForm').submit();
-      setTimeout(() => { try { clearClientGuid(); } catch(_){} }, 8000);
       return;
     } catch (err) {
       console.error('No se pudo sincronizar la visita antes de enviar la gestión', err);

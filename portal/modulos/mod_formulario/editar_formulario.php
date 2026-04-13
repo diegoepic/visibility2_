@@ -623,7 +623,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         exit();
     }
 
-    $req_cols = ['codigo', 'usuario', 'material', 'valor_propuesto', 'fechapropuesta'];
+$req_cols = ['codigo', 'usuario', 'material', 'categoria', 'marca', 'valor_propuesto', 'fechapropuesta'];
     $header_norm = array_map(fn($c) => strtolower(trim($c)), $header);
     $faltantes = array_diff($req_cols, $header_norm);
 
@@ -637,6 +637,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $idx_codigo          = array_search('codigo', $header_norm, true);
     $idx_usuario         = array_search('usuario', $header_norm, true);
     $idx_material        = array_search('material', $header_norm, true);
+    $idx_categoria       = array_search('categoria', $header_norm, true);
+    $idx_marca           = array_search('marca', $header_norm, true);
     $idx_valor_propuesto = array_search('valor_propuesto', $header_norm, true);
     $idx_fechaPropuesta  = array_search('fechapropuesta', $header_norm, true);
 
@@ -651,24 +653,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $stmt_usuario = $conn->prepare("SELECT id FROM usuario WHERE usuario = ?");
     }
 
-    $stmt_insert_fq = $conn->prepare("
-        INSERT INTO formularioQuestion
-        (
-            pregunta,
-            motivo,
-            material,
-            valor,
-            valor_propuesto,
-            fechaPropuesta,
-            countVisita,
-            observacion,
-            id_formulario,
-            id_local,
-            id_usuario,
-            estado
-        )
-        VALUES ('', '', ?, '', ?, ?, 0, '', ?, ?, ?, 0)
-    ");
+$stmt_insert_fq = $conn->prepare("
+    INSERT INTO formularioQuestion
+    (
+        pregunta,
+        motivo,
+        material,
+        categoria,
+        marca,
+        valor,
+        valor_propuesto,
+        fechaPropuesta,
+        countVisita,
+        observacion,
+        id_formulario,
+        id_local,
+        id_usuario,
+        estado
+    )
+    VALUES ('', '', ?, ?, ?, '', ?, ?, 0, '', ?, ?, ?, 0)
+");
 
     $fila = 1;
     $errores_csv = [];
@@ -680,10 +684,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $cod_local      = trim($data[$idx_codigo] ?? '');
         $usr_name       = trim($data[$idx_usuario] ?? '');
         $material       = trim($data[$idx_material] ?? '');
+        $categoria      = trim($data[$idx_categoria] ?? '');
+        $marca          = trim($data[$idx_marca] ?? '');
         $val_prop       = trim($data[$idx_valor_propuesto] ?? '');
         $fechaRaw       = trim($data[$idx_fechaPropuesta] ?? '');
 
-        if ($cod_local === '' || $usr_name === '' || $material === '' || $val_prop === '' || $fechaRaw === '') {
+        if (
+            $cod_local === '' ||
+            $usr_name === '' ||
+            $material === '' ||
+            $categoria === '' ||
+            $marca === '' ||
+            $val_prop === '' ||
+            $fechaRaw === ''
+        ) {
             $errores_csv[] = "Fila $fila: Hay campos vacíos.";
             continue;
         }
@@ -730,8 +744,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $stmt_usuario->reset();
 
         $stmt_insert_fq->bind_param(
-            "sssiii",
+            "sssssiii",
             $material,
+            $categoria,
+            $marca,
             $val_prop,
             $fechaPropuesta,
             $formulario_id,
@@ -1425,8 +1441,15 @@ $sets = getQuestionSets();
                 <div class="form-group">
                     <label for="csvFile">Archivo CSV:</label>
                     <input type="file" id="csvFile" name="csvFile" class="form-control-file" accept=".csv" required>
-                    <small class="form-text text-muted">
-    Debe contener las columnas: <strong>codigo</strong>, <strong>usuario</strong>, <strong>material</strong>, <strong>valor_propuesto</strong>, <strong>fechaPropuesta</strong>.
+<small class="form-text text-muted">
+    Debe contener las columnas:
+    <strong>codigo</strong>,
+    <strong>usuario</strong>,
+    <strong>material</strong>,
+    <strong>categoria</strong>,
+    <strong>marca</strong>,
+    <strong>valor_propuesto</strong>,
+    <strong>fechaPropuesta</strong>.
 </small>
                 </div>
                 <button type="submit" class="btn btn-primary">Subir CSV Masivo</button>

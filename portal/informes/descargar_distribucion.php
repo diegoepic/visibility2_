@@ -164,7 +164,7 @@ $sql = "
         UPPER(CONCAT(COALESCE(u.nombre, ''), ' ', COALESCE(u.apellido, ''))) AS nombre_operador,
         COALESCE(u.telefono, '') AS contacto,
 
-        UPPER(TRIM(fq.material)) AS material,
+        UPPER(TRIM(CONCAT(fq.material, ' - ', fq.marca))) AS material,
         COALESCE(fq.valor_propuesto, 0) AS cantidad_material
 
     FROM formularioQuestion fq

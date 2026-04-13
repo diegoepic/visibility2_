@@ -206,6 +206,15 @@ date_default_timezone_set('America/Santiago');
                         Si un salto supera este límite, el sistema separará la ruta o moverá el local a otra.
                     </small>
                 </div>
+                <div class="col-lg-3 col-md-6">
+                    <label for="fechaInicioRuta" class="form-label fw-semibold">
+                        Fecha de inicio
+                    </label>
+                    <input type="date" class="form-control" id="fechaInicioRuta">
+                    <small class="text-muted">
+                        La ruta 1 partirá desde esta fecha y las siguientes se asignarán en secuencia.
+                    </small>
+                </div>                
 
                 <div class="col-lg-4 col-md-8">
                     <div class="border rounded p-3 bg-light" id="resumenPlanificacionRuta">
@@ -296,7 +305,6 @@ date_default_timezone_set('America/Santiago');
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
-<!-- OJO: idealmente esta API KEY no debiera quedar expuesta en código público -->
 <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw&callback=initMap"></script>
 
 <script>
@@ -652,6 +660,7 @@ $('#cantidadPorDia, #maxKmRuta').on('input change', function() {
 
 $('#btnProcesarPlanificacion').on('click', function() {
     const stats = getPlanStats();
+    const fechaInicio = $('#fechaInicioRuta').val();
 
     if (!stats.localesObjetivo.length) {
         alert('⚠️ No hay locales para planificar.');
@@ -663,7 +672,18 @@ $('#btnProcesarPlanificacion').on('click', function() {
         return;
     }
 
-    const codigosPlanificar = stats.localesObjetivo.map(local => local.codigo);
+    if (!fechaInicio) {
+        alert('⚠️ Debes indicar una fecha de inicio.');
+        return;
+    }
+
+    const registrosPlanificar = stats.localesObjetivo.map(local => ({
+        codigo: local.codigo,
+        usuario_input: local.usuario_input || '',
+        usuario_id: local.usuario_id || '',
+        usuario_login: local.usuario_login || '',
+        usuario_nombre: local.usuario_nombre || ''
+    }));
 
     const btn = $(this);
     const originalText = btn.html();
@@ -674,23 +694,18 @@ $('#btnProcesarPlanificacion').on('click', function() {
     form.action = 'mod_generar_propuesta_ruta.php';
     form.style.display = 'none';
 
-    const inputCantidad = document.createElement('input');
-    inputCantidad.type = 'hidden';
-    inputCantidad.name = 'cantidad_por_dia';
-    inputCantidad.value = stats.cantidadPorDia;
-    form.appendChild(inputCantidad);
+    const appendHidden = (name, value) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value;
+        form.appendChild(input);
+    };
 
-    const inputMaxKm = document.createElement('input');
-    inputMaxKm.type = 'hidden';
-    inputMaxKm.name = 'max_km_ruta';
-    inputMaxKm.value = stats.maxKmRuta;
-    form.appendChild(inputMaxKm);
-
-    const inputCodigos = document.createElement('input');
-    inputCodigos.type = 'hidden';
-    inputCodigos.name = 'codigos_json';
-    inputCodigos.value = JSON.stringify(codigosPlanificar);
-    form.appendChild(inputCodigos);
+    appendHidden('cantidad_por_dia', stats.cantidadPorDia);
+    appendHidden('max_km_ruta', stats.maxKmRuta);
+    appendHidden('fecha_inicio', fechaInicio);
+    appendHidden('registros_json', JSON.stringify(registrosPlanificar));
 
     document.body.appendChild(form);
     form.submit();

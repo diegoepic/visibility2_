@@ -81,12 +81,17 @@ if (!function_exists('idempo_compute_request_hash')) {
         }
 
         $body = $_POST;
-        // Excluir campos que pueden variar entre reintentos legítimos
+        // Excluir campos que pueden variar entre reintentos legítimos.
+        // visita_id y visita_local_id son resueltos dinámicamente por el sistema
+        // offline (LocalByGuid) y pueden estar ausentes en el primer intento y
+        // presentes en reintentos, causando un falso IDEMPOTENCY_PAYLOAD_MISMATCH.
         unset(
             $body['csrf_token'],
             $body['X_Idempotency_Key'],
             $body['_timestamp'],
-            $body['_nonce']
+            $body['_nonce'],
+            $body['visita_id'],
+            $body['visita_local_id']
         );
 
         if (empty($body)) {
@@ -136,12 +141,8 @@ if (!function_exists('idempo_claim_or_fail')) {
         }
 
         // Iniciar transacción para atomicidad
-        $was_autocommit = true;
-        if ($conn->autocommit !== false) {
-            $conn->autocommit(false);
-        } else {
-            $was_autocommit = false;
-        }
+        $conn->autocommit(false);
+        $was_autocommit = true; // siempre restaurar al salir
 
         $stmt->bind_param("ssi", $key, $endpoint, $uid);
         $stmt->execute();
