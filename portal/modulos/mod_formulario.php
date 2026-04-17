@@ -246,6 +246,8 @@ if ($ejecutarBusqueda) {
 
     $query .= " ORDER BY f.fechaInicio DESC, f.id DESC";
 
+    $formularios = ejecutarConsulta($query, $params, $param_types);
+
     $formularios = cacheRemember(
         'form_listado_formularios_v1',
         [
@@ -1265,14 +1267,13 @@ $(document).on('error.dt', function (e, settings, techNote, message) {
 
 <script>
 let tablaFormulariosDT = null;
+let formularioAbortController = null;
 
 function getFiltrosFormulario() {
     const form = document.getElementById('filterForm');
 
     if (!form) {
-        return {
-            buscar: 1
-        };
+        return new URLSearchParams({ buscar: 1 });
     }
 
     const formData = new FormData(form);
@@ -1319,48 +1320,6 @@ function inicializarDataTableFormularios() {
     });
 }
 
-function cargarTablaFormularios(pushUrl = false) {
-    const container = document.getElementById('formularioTableContainer');
-    const params = getFiltrosFormulario();
-
-    if (!container) return;
-
-    container.innerHTML = `
-        <div class="table-loading-state text-center py-5">
-            <div class="spinner-border text-success mb-3" role="status">
-                <span class="sr-only">Cargando...</span>
-            </div>
-            <div class="text-muted">Cargando formularios...</div>
-        </div>
-    `;
-
-    fetch('mod_formulario/ajax_listado_formularios.php?' + params.toString(), {
-        method: 'GET',
-        credentials: 'same-origin'
-    })
-    .then(response => response.text())
-    .then(html => {
-        container.innerHTML = html;
-        inicializarDataTableFormularios();
-
-        if (pushUrl) {
-            const newUrl = window.location.pathname + '?' + params.toString();
-            window.history.replaceState({}, '', newUrl);
-        }
-
-        actualizarContadorFormularios();
-        enlazarBotonesConSpinner();
-    })
-    .catch(error => {
-        console.error('Error cargando formularios:', error);
-        container.innerHTML = `
-            <div class="alert alert-danger mb-0">
-                No fue posible cargar los formularios.
-            </div>
-        `;
-    });
-}
-
 function actualizarContadorFormularios() {
     const countElement = document.querySelector('.count-pill .count');
     const filas = document.querySelectorAll('#tablaFormularios tbody tr');
@@ -1392,6 +1351,100 @@ function enlazarBotonesConSpinner() {
             }
         });
     });
+}
+
+function esperar(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchConReintento(url, options = {}, maxIntentos = 3) {
+    let ultimoError = null;
+
+    for (let intento = 1; intento <= maxIntentos; intento++) {
+        try {
+            const response = await fetch(url, options);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            return await response.text();
+        } catch (error) {
+            ultimoError = error;
+
+            if (error.name === 'AbortError') {
+                throw error;
+            }
+
+            if (intento < maxIntentos) {
+                await esperar(500 * intento);
+            }
+        }
+    }
+
+    throw ultimoError;
+}
+
+async function cargarTablaFormularios(pushUrl = false) {
+    const container = document.getElementById('formularioTableContainer');
+    const params = getFiltrosFormulario();
+
+    if (!container) return;
+
+    if (formularioAbortController) {
+        formularioAbortController.abort();
+    }
+
+    formularioAbortController = new AbortController();
+
+    container.innerHTML = `
+        <div class="table-loading-state text-center py-5">
+            <div class="spinner-border text-success mb-3" role="status">
+                <span class="sr-only">Cargando...</span>
+            </div>
+            <div class="text-muted">Cargando formularios...</div>
+        </div>
+    `;
+
+    try {
+        const html = await fetchConReintento(
+            'mod_formulario/ajax_listado_formularios.php?' + params.toString(),
+            {
+                method: 'GET',
+                credentials: 'same-origin',
+                cache: 'no-store',
+                signal: formularioAbortController.signal,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            },
+            3
+        );
+
+        destruirDataTableFormularios();
+        container.innerHTML = html;
+        inicializarDataTableFormularios();
+
+        if (pushUrl) {
+            const newUrl = window.location.pathname + '?' + params.toString();
+            window.history.replaceState({}, '', newUrl);
+        }
+
+        actualizarContadorFormularios();
+        enlazarBotonesConSpinner();
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            return;
+        }
+
+        console.error('Error cargando formularios:', error);
+
+        container.innerHTML = `
+            <div class="alert alert-danger mb-0">
+                No fue posible cargar los formularios. Intenta nuevamente.
+            </div>
+        `;
+    }
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -1483,7 +1536,6 @@ $('#contenidoExternoModal').on('hidden.bs.modal', function () {
         frame.src = 'about:blank';
     }
 });
-
 
 </script>
 </body>

@@ -10,6 +10,7 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
+
 if (!$conn || !($conn instanceof mysqli)) {
     die("No hay conexión válida a la base de datos.");
 }

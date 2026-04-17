@@ -164,7 +164,7 @@ $sql = "
         UPPER(CONCAT(COALESCE(u.nombre, ''), ' ', COALESCE(u.apellido, ''))) AS nombre_operador,
         COALESCE(u.telefono, '') AS contacto,
 
-        UPPER(TRIM(CONCAT(fq.material, ' - ', fq.marca))) AS material,
+        UPPER(TRIM(CONCAT(fq.material, ' ', fq.marca))) AS material,
         COALESCE(fq.valor_propuesto, 0) AS cantidad_material
 
     FROM formularioQuestion fq
@@ -198,8 +198,45 @@ $stmt->execute();
 $res = $stmt->get_result();
 
 $detalleRows = [];
+$totemExtrasAgregadosPorLocal = [];
+
 while ($row = $res->fetch_assoc()) {
-    $detalleRows[] = $row;
+
+    $materialActual = strtoupper(trim((string)($row['material'] ?? '')));
+    $codigoLocal    = trim((string)($row['codigo_local'] ?? ''));
+
+    // Detectar si el material contiene TOTEM 80X50
+    if ($codigoLocal !== '' && stripos($materialActual, 'TOTEM 80X50') !== false) {
+
+        // Agregar prefijo GRAFICA solo si aún no existe
+        if (stripos($materialActual, 'GRAFICA') === false) {
+            $row['material'] = 'GRAFICA ' . trim((string)$row['material']);
+        }
+
+        // Agregar siempre la fila original del tótem
+        $detalleRows[] = $row;
+
+        // Agregar extras solo una vez por código de local
+        if (!isset($totemExtrasAgregadosPorLocal[$codigoLocal])) {
+            $totemExtrasAgregadosPorLocal[$codigoLocal] = true;
+
+            $extras = [
+                ['material' => 'PATAS',    'cantidad_material' => 4],
+                ['material' => 'PILARES',  'cantidad_material' => 12],
+                ['material' => 'BANDEJAS', 'cantidad_material' => 4],
+            ];
+
+            foreach ($extras as $extra) {
+                $nuevo = $row;
+                $nuevo['material'] = $extra['material'];
+                $nuevo['cantidad_material'] = $extra['cantidad_material'];
+                $detalleRows[] = $nuevo;
+            }
+        }
+
+    } else {
+        $detalleRows[] = $row;
+    }
 }
 $stmt->close();
 

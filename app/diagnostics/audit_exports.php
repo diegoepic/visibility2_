@@ -1,7 +1,6 @@
 <?php
 declare(strict_types=1);
 
-
 $baseDir = __DIR__ . '/../exports';
 $output  = null;
 $asJson  = false;

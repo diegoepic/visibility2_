@@ -160,7 +160,7 @@ if ($buscar === '1') {
     }
 
     $query .= " ORDER BY f.fechaInicio DESC, f.id DESC";
-
+/*
     $formularios = cacheRemember(
         'form_listado_formularios_v1',
         [
@@ -177,7 +177,8 @@ if ($buscar === '1') {
         function () use ($query, $params, $param_types) {
             return ejecutarConsulta($query, $params, $param_types);
         }
-    );
+    );*/
+    $formularios = ejecutarConsulta($query, $params, $param_types);
 }
 ?>
 

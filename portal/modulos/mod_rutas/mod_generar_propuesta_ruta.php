@@ -1214,6 +1214,37 @@ foreach ($locales as &$local) {
 }
 unset($local);
 
+$localesExcluidosPorFecha = [];
+$localesFiltradosPorFecha = [];
+
+$fechaFiltro = clone $dtFechaInicio;
+$fechaFiltro->setTime(0, 0, 0);
+
+foreach ($locales as $local) {
+    $ultimaSql = trim((string)($local['ultima_fecha_propuesta_sql'] ?? ''));
+    $local['dias_diferencia_fecha_seleccionada'] = null;
+
+    if ($ultimaSql !== '') {
+        $dtUltima = new DateTime($ultimaSql);
+        $dtUltima->setTime(0, 0, 0);
+
+        $diasDiff = (int)$dtUltima->diff($fechaFiltro)->days;
+        $local['dias_diferencia_fecha_seleccionada'] = $diasDiff;
+
+        // Excluir si la diferencia con la fecha seleccionada es menor a 7 días
+        if ($diasDiff < 7) {
+            $local['motivo_exclusion_fecha'] = 'Última fechaPropuesta con menos de 7 días de diferencia respecto a la fecha seleccionada';
+            $localesExcluidosPorFecha[] = $local;
+            continue;
+        }
+    }
+
+    $localesFiltradosPorFecha[] = $local;
+}
+
+$locales = $localesFiltradosPorFecha;
+$totalLocalesExcluidosPorFecha = count($localesExcluidosPorFecha);
+
 $localesSinCoords = [];
 $localesConCoords = [];
 
@@ -1496,6 +1527,7 @@ $sheet->fromArray([
     ['KM totales estimados', round($totalKmEstimado, 2)],
     ['Promedio KM por ruta', $totalRutasGeneradas > 0 ? round($totalKmEstimado / $totalRutasGeneradas, 2) : 0],
     ['Criterio de agrupación', 'Prioridad por comuna, proximidad geográfica y compactación real de ruta por usuario'],
+    ['Locales excluidos por cercanía de fechaPropuesta', $totalLocalesExcluidosPorFecha],    
 ], null, 'A1');
 
 styleHeader($sheet, 'A1:B1');

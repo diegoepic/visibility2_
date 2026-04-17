@@ -12,16 +12,6 @@ function refValues($arr) {
     }
     return $arr;
 }
-function fixUrl($url, $base_url) {
-    if (preg_match('#^https?://#i', $url)) return $url;
-    $prefixes = ['/visibility2/app/','../app/'];
-    foreach ($prefixes as $p) {
-        if (strncmp($url,$p,strlen($p))===0) { $url = substr($url, strlen($p)); break; }
-    }
-    $url = ltrim($url,'/');
-    return rtrim($base_url,'/').'/'.$url;
-}
-function formatearFecha($f) { return $f ? date('d/m/Y H:i:s', strtotime($f)) : ''; }
 
 /* =========================================
  * Includes / seguridad
@@ -32,825 +22,993 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/session_da
 if (!isset($_GET['id']) || !ctype_digit($_GET['id'])) {
     die("<div class='alert alert-danger'>ID de campaña inválido.</div>");
 }
+
 $formulario_id = (int)$_GET['id'];
 
 $empresa_id = intval($_SESSION['empresa_id'] ?? 0);
-if ($empresa_id <= 0) die("<div class='alert alert-danger'>Acceso inválido (empresa).</div>");
+if ($empresa_id <= 0) {
+    die("<div class='alert alert-danger'>Acceso inválido (empresa).</div>");
+}
 
 $stmt = $conn->prepare("
-  SELECT tipo,
-         COALESCE(nombre, CONCAT('Campaña #',id)) AS campanaNombre,
-         COALESCE(iw_requiere_local,0) AS requiereLocal
-  FROM formulario
-  WHERE id=? AND id_empresa=? LIMIT 1
+    SELECT 
+        tipo,
+        COALESCE(nombre, CONCAT('Campaña #', id)) AS campanaNombre,
+        COALESCE(iw_requiere_local, 0) AS requiereLocal
+    FROM formulario
+    WHERE id = ? AND id_empresa = ?
+    LIMIT 1
 ");
 $stmt->bind_param("ii", $formulario_id, $empresa_id);
 $stmt->execute();
 $stmt->bind_result($tipoForm, $campanaNombre, $requiereLocal);
-if (!$stmt->fetch()) die("<div class='alert alert-danger'>Formulario no encontrado o no pertenece a tu empresa.</div>");
+
+if (!$stmt->fetch()) {
+    die("<div class='alert alert-danger'>Formulario no encontrado o no pertenece a tu empresa.</div>");
+}
 $stmt->close();
 
-$requiereLocal = (int)$requiereLocal === 1;
+$requiereLocal = ((int)$requiereLocal === 1);
 
 if ((int)$tipoForm !== 2) {
     die("<div class='alert alert-warning'>Este módulo es sólo para campañas complementarias (tipo 2).</div>");
 }
 
 /* =========================================
- * Filtros / paginación
+ * Valores iniciales UI
  * ======================================= */
-$start_date  = $_GET['start_date']   ?? '';
-$end_date    = $_GET['end_date']     ?? '';
-$user_id     = intval($_GET['user_id'] ?? 0);
-$id_question = $_GET['id_question']  ?? '';
-$limit       = max(1, intval($_GET['limit'] ?? 25));
-$page        = max(1, intval($_GET['page']  ?? 1));
-$offset      = ($page - 1) * $limit;
-
-/* Gap de sesión en minutos (default 2) */
-$gap = max(1, intval($_GET['gap'] ?? 2));
-
-/* Modo de vista: galería normal vs duplicados (incidentes) */
-$view_mode = $_GET['view_mode'] ?? 'galeria';
-if (!in_array($view_mode, ['galeria','duplicados'], true)) {
+$view_mode   = $_GET['view_mode'] ?? 'galeria';
+if (!in_array($view_mode, ['galeria', 'duplicados'], true)) {
     $view_mode = 'galeria';
 }
 
+$user_id     = intval($_GET['user_id'] ?? 0);
+$id_question = $_GET['id_question'] ?? '';
+$local_codigo = trim($_GET['local_codigo'] ?? '');
+$gap         = max(1, intval($_GET['gap'] ?? 2));
+$start_date  = $_GET['start_date'] ?? '';
+$end_date    = $_GET['end_date'] ?? '';
+$limit       = max(1, intval($_GET['limit'] ?? 25));
+
 $base_url = "https://visibility.cl/visibility2/app/";
 
-function buildPaginationUrl(int $page): string {
-    $params = $_GET;
-    $params['page']=$page;
-    return '?'.http_build_query($params);
-}
-function buildViewModeUrl(string $mode): string {
-    $params = $_GET;
-    $params['view_mode'] = $mode;
-    $params['page'] = 1; // al cambiar de vista, vuelve a página 1
-    return '?'.http_build_query($params);
-}
-
 /* =========================================
- * Listas para filtros (usuarios / preguntas)
- *  (Eliminado el filtro rígido id_local = 0)
+ * Filtros disponibles
  * ======================================= */
 $usuarios = [];
 $stmtU = $conn->prepare("
     SELECT DISTINCT u.id, u.usuario
     FROM form_question_responses fqr
     JOIN form_questions fq ON fq.id = fqr.id_form_question
-    JOIN usuario u        ON u.id = fqr.id_usuario
-   WHERE fq.id_formulario = ?
-     AND fq.id_question_type = 7
-   ORDER BY u.usuario
+    JOIN usuario u ON u.id = fqr.id_usuario
+    WHERE fq.id_formulario = ?
+      AND fq.id_question_type = 7
+    ORDER BY u.usuario
 ");
 $stmtU->bind_param("i", $formulario_id);
 $stmtU->execute();
 $resU = $stmtU->get_result();
-while ($r = $resU->fetch_assoc()) $usuarios[] = $r;
+while ($r = $resU->fetch_assoc()) {
+    $usuarios[] = $r;
+}
 $stmtU->close();
 
 $preguntasDisponibles = [];
 $stmtP = $conn->prepare("
-  SELECT id, question_text
-  FROM form_questions
-  WHERE id_formulario = ?
-    AND id_question_type = 7
-  ORDER BY sort_order
+    SELECT id, question_text
+    FROM form_questions
+    WHERE id_formulario = ?
+      AND id_question_type = 7
+    ORDER BY sort_order
 ");
 $stmtP->bind_param("i", $formulario_id);
 $stmtP->execute();
-$rsP = $stmtP->get_result();
-while ($r = $rsP->fetch_assoc()) $preguntasDisponibles[] = $r;
+$resP = $stmtP->get_result();
+while ($r = $resP->fetch_assoc()) {
+    $preguntasDisponibles[] = $r;
+}
 $stmtP->close();
-
-/* =========================================
- * Export CSV de fotos duplicadas (solo modo duplicados)
- * ======================================= */
-if ($view_mode === 'duplicados' && isset($_GET['export']) && $_GET['export'] === 'csv') {
-    $csvParams = [$formulario_id];
-    $csvTypes  = "i";
-
-    $csvSql = "
-      SELECT
-        v.id_formulario,
-        r.id_usuario,
-        u.usuario AS usuario,
-        COALESCE(v.id_local, m.id_local, r.id_local) AS local_id_effective,
-        l.codigo AS local_codigo,
-        l.nombre AS local_nombre,
-        JSON_UNQUOTE(JSON_EXTRACT(m.meta_json,'$.sha1')) AS sha1,
-        COUNT(*) AS total_subidas,
-        COUNT(DISTINCT DATE(m.created_at)) AS dias_distintos,
-        GROUP_CONCAT(DISTINCT DATE(m.created_at) ORDER BY DATE(m.created_at) SEPARATOR ', ') AS fechas,
-        MIN(m.created_at) AS primera_subida,
-        MAX(m.created_at) AS ultima_subida
-      FROM form_question_photo_meta m
-      JOIN form_question_responses r ON r.id = m.resp_id
-      JOIN visita v                  ON v.id = r.visita_id
-      JOIN form_questions fq         ON fq.id = r.id_form_question
-      LEFT JOIN usuario u            ON u.id = r.id_usuario
-      LEFT JOIN local   l            ON l.id = COALESCE(v.id_local, m.id_local, r.id_local)
-      WHERE v.id_formulario = ?
-        AND fq.id_question_type = 7
-        AND JSON_EXTRACT(m.meta_json,'$.sha1') IS NOT NULL
-    ";
-
-    if ($start_date !== '') { $csvSql .= " AND DATE(m.created_at) >= ?"; $csvTypes.="s"; $csvParams[]=$start_date; }
-    if ($end_date   !== '') { $csvSql .= " AND DATE(m.created_at) <= ?"; $csvTypes.="s"; $csvParams[]=$end_date; }
-    if ($user_id > 0)       { $csvSql .= " AND r.id_usuario = ?";       $csvTypes.="i"; $csvParams[]=$user_id; }
-    if ($id_question !== ''){ $csvSql .= " AND fq.id = ?";              $csvTypes.="i"; $csvParams[]=(int)$id_question; }
-
-    $csvSql .= "
-      GROUP BY
-        v.id_formulario,
-        r.id_usuario,
-        JSON_UNQUOTE(JSON_EXTRACT(m.meta_json,'$.sha1')),
-        COALESCE(v.id_local, m.id_local, r.id_local)
-      HAVING COUNT(DISTINCT DATE(m.created_at)) > 1
-      ORDER BY ultima_subida DESC
-    ";
-
-    $stmtCsv = $conn->prepare($csvSql);
-    if (!$stmtCsv) {
-        die("<div class='alert alert-danger'>Error preparación CSV (duplicados): ".htmlspecialchars($conn->error)."</div>");
-    }
-    $bindCsv = array_merge([$csvTypes], $csvParams);
-    $bindCsv = refValues($bindCsv);
-    call_user_func_array([$stmtCsv,'bind_param'],$bindCsv);
-    $stmtCsv->execute();
-    $resCsv = $stmtCsv->get_result();
-
-    header('Content-Type: text/csv; charset=UTF-8');
-    header('Content-Disposition: attachment; filename="duplicados_campana_'.$formulario_id.'.csv"');
-
-    // BOM para Excel
-    echo "\xEF\xBB\xBF";
-    $fh = fopen('php://output', 'w');
-
-    // Encabezados CSV
-    fputcsv($fh, [
-        'ID Formulario',
-        'ID Usuario',
-        'Usuario',
-        'ID Local',
-        'Local Código',
-        'Local Nombre',
-        'Total subidas',
-        'Días distintos',
-        'Fechas',
-        'Primera subida (fecha/hora)',
-        'Última subida (fecha/hora)'
-    ]);
-
-    while ($row = $resCsv->fetch_assoc()) {
-        $local_id   = (int)($row['local_id_effective'] ?? 0);
-        $local_cod  = $row['local_codigo'] ?? '';
-        $local_nom  = $row['local_nombre'] ?? '';
-
-        fputcsv($fh, [
-            $row['id_formulario'],
-            $row['id_usuario'],
-            $row['usuario'],
-            $local_id,
-            $local_cod,
-            $local_nom,
-            $row['total_subidas'],
-            $row['dias_distintos'],
-            $row['fechas'],
-            $row['primera_subida'],
-            $row['ultima_subida']
-        ]);
-    }
-
-    fclose($fh);
-    $stmtCsv->close();
-    $conn->close();
-    exit;
-}
-
-/* =========================================
- * Consulta principal:
- *   - Modo "galeria": lógica original por sesiones (visita/gap)
- *   - Modo "duplicados": grupos por sha1 (incidentes)
- * ======================================= */
-
-$data      = [];
-$localIds  = [];
-$totalRows = 0;
-
-if ($view_mode === 'duplicados') {
-    /* --------- VISTA DUPLICADOS (incidentes por SHA1) --------- */
-    $params = [$formulario_id];
-    $types  = "i";
-
-    $sql = "
-      SELECT
-        v.id_formulario,
-        r.id_usuario,
-        u.usuario AS usuario,
-        COALESCE(v.id_local, m.id_local, r.id_local) AS local_id_effective,
-        JSON_UNQUOTE(JSON_EXTRACT(m.meta_json,'$.sha1')) AS sha1,
-        COUNT(*) AS total_subidas,
-        COUNT(DISTINCT DATE(m.created_at)) AS dias_distintos,
-        GROUP_CONCAT(DISTINCT DATE(m.created_at) ORDER BY DATE(m.created_at) SEPARATOR ', ') AS fechas,
-        MIN(m.created_at) AS primera_subida,
-        MAX(m.created_at) AS ultima_subida,
-        GROUP_CONCAT(DISTINCT m.foto_url ORDER BY m.created_at SEPARATOR '||') AS urls
-      FROM form_question_photo_meta m
-      JOIN form_question_responses r ON r.id = m.resp_id
-      JOIN visita v                  ON v.id = r.visita_id
-      JOIN form_questions fq         ON fq.id = r.id_form_question
-      LEFT JOIN usuario u            ON u.id = r.id_usuario
-      WHERE v.id_formulario = ?
-        AND fq.id_question_type = 7
-        AND JSON_EXTRACT(m.meta_json,'$.sha1') IS NOT NULL
-    ";
-
-    if ($start_date !== '') { $sql.=" AND DATE(m.created_at) >= ?"; $types.="s"; $params[]=$start_date; }
-    if ($end_date   !== '') { $sql.=" AND DATE(m.created_at) <= ?"; $types.="s"; $params[]=$end_date; }
-    if ($user_id > 0)       { $sql.=" AND r.id_usuario = ?";       $types.="i"; $params[]=$user_id; }
-    if ($id_question !== ''){ $sql.=" AND fq.id = ?";              $types.="i"; $params[]=(int)$id_question; }
-
-    $sql .= "
-      GROUP BY
-        v.id_formulario,
-        r.id_usuario,
-        JSON_UNQUOTE(JSON_EXTRACT(m.meta_json,'$.sha1')),
-        COALESCE(v.id_local, m.id_local, r.id_local)
-      HAVING COUNT(DISTINCT DATE(m.created_at)) > 1
-      ORDER BY ultima_subida DESC
-      LIMIT ? OFFSET ?
-    ";
-
-    $types .= "ii";
-    $params[] = $limit;
-    $params[] = $offset;
-
-    $stmtMain = $conn->prepare($sql);
-    if (!$stmtMain) die("<div class='alert alert-danger'>Error preparación (duplicados): ".htmlspecialchars($conn->error)."</div>");
-    $bindParams = array_merge([$types], $params);
-    $bindParams = refValues($bindParams);
-    call_user_func_array([$stmtMain,'bind_param'],$bindParams);
-    $stmtMain->execute();
-    $result = $stmtMain->get_result();
-
-    while ($row = $result->fetch_assoc()) {
-        $raw = explode('||',$row['urls'] ?? '');
-        $fixed=[];
-        foreach ($raw as $u) {
-            if ($u==='') continue;
-            $fixed[] = fixUrl($u,$base_url);
-        }
-        $row['urls']         = implode('||',$fixed);
-        $row['photos']       = $fixed;
-        $row['photos_count'] = count($fixed);
-        $row['thumbnail']    = $fixed[0] ?? $base_url.'assets/images/placeholder.png';
-
-        $row['local_id_effective'] = (int)($row['local_id_effective'] ?? 0);
-        if ($requiereLocal && $row['local_id_effective'] > 0) {
-            $localIds[$row['local_id_effective']] = true;
-        }
-
-        $data[] = $row;
-    }
-    $stmtMain->close();
-
-    // Conteo total de grupos de duplicados (para paginación)
-    $countParams = [$formulario_id];
-    $countTypes  = "i";
-
-    $countSql = "
-      SELECT COUNT(*) AS total
-      FROM (
-        SELECT
-          v.id_formulario,
-          r.id_usuario,
-          JSON_UNQUOTE(JSON_EXTRACT(m.meta_json,'$.sha1')) AS sha1,
-          COALESCE(v.id_local, m.id_local, r.id_local) AS local_id_effective,
-          COUNT(DISTINCT DATE(m.created_at)) AS dias_distintos
-        FROM form_question_photo_meta m
-        JOIN form_question_responses r ON r.id = m.resp_id
-        JOIN visita v                  ON v.id = r.visita_id
-        JOIN form_questions fq         ON fq.id = r.id_form_question
-        WHERE v.id_formulario = ?
-          AND fq.id_question_type = 7
-          AND JSON_EXTRACT(m.meta_json,'$.sha1') IS NOT NULL
-    ";
-
-    if ($start_date !== '') { $countSql.=" AND DATE(m.created_at) >= ?"; $countTypes.="s"; $countParams[]=$start_date; }
-    if ($end_date   !== '') { $countSql.=" AND DATE(m.created_at) <= ?"; $countTypes.="s"; $countParams[]=$end_date; }
-    if ($user_id > 0)       { $countSql.=" AND r.id_usuario = ?";       $countTypes.="i"; $countParams[]=$user_id; }
-    if ($id_question !== ''){ $countSql.=" AND fq.id = ?";              $countTypes.="i"; $countParams[]=(int)$id_question; }
-
-    $countSql .= "
-        GROUP BY
-          v.id_formulario,
-          r.id_usuario,
-          JSON_UNQUOTE(JSON_EXTRACT(m.meta_json,'$.sha1')),
-          COALESCE(v.id_local, m.id_local, r.id_local)
-        HAVING COUNT(DISTINCT DATE(m.created_at)) > 1
-      ) AS x
-    ";
-
-    $stmtCount = $conn->prepare($countSql);
-    if (!$stmtCount) die("<div class='alert alert-danger'>Error conteo (duplicados): ".htmlspecialchars($conn->error)."</div>");
-    $bindCount = array_merge([$countTypes], $countParams);
-    $bindCount = refValues($bindCount);
-    call_user_func_array([$stmtCount,'bind_param'],$bindCount);
-    $stmtCount->execute();
-    $stmtCount->bind_result($totalRows);
-    $stmtCount->fetch();
-    $stmtCount->close();
-
-} else {
-    /* --------- VISTA NORMAL (galería por sesiones, código original) --------- */
-    $params = [$gap, $empresa_id, $formulario_id];
-    $types  = "iii";
-
-    $sql = "
-      SELECT
-        MIN(s.id) AS foto_id,
-        GROUP_CONCAT(s.answer_text SEPARATOR '||') AS urls,
-        MAX(s.created_at) AS fechaSubida,
-        fq.question_text AS pregunta,
-        u.usuario AS usuario,
-        MAX(s.visita_id) AS visita_id,
-        MAX(s.local_id_effective) AS local_id_effective
-      FROM (
-        SELECT t.*,
-          @grp := (
-            CASE
-              WHEN (t.visita_id IS NOT NULL AND t.visita_id > 0) THEN
-                IF(@prev_visita = t.visita_id AND @prev_q = t.id_form_question, @grp, @grp + 1)
-              ELSE
-                IF(
-                  @prev_user = t.id_usuario
-                  AND @prev_q = t.id_form_question
-                  AND TIMESTAMPDIFF(MINUTE, @prev_time, t.created_at) <= ?
-                  AND DATE(@prev_time) = DATE(t.created_at),
-                  @grp, @grp + 1
-                )
-            END
-          ) AS session_id,
-          @prev_visita := t.visita_id,
-          @prev_user := t.id_usuario,
-          @prev_q := t.id_form_question,
-          @prev_time := t.created_at
-        FROM (
-          SELECT
-            fqr.id,
-            fqr.answer_text,
-            fqr.created_at,
-            fqr.id_usuario,
-            fqr.id_form_question,
-            fqr.visita_id,
-            COALESCE(fqr.id_local, v.id_local, 0) AS local_id_effective
-          FROM form_question_responses fqr
-          JOIN form_questions fq ON fq.id = fqr.id_form_question
-          JOIN formulario f      ON f.id  = fq.id_formulario AND f.id_empresa = ?
-          LEFT JOIN visita v     ON v.id  = fqr.visita_id
-          WHERE fq.id_formulario = ?
-            AND fq.id_question_type = 7
-            AND fqr.answer_text REGEXP '\\\\.(jpe?g|png|gif|webp)(\\\\?.*)?$'
-    ";
-
-    if ($start_date !== '') { $sql.=" AND DATE(fqr.created_at) >= ?"; $types.="s"; $params[]=$start_date; }
-    if ($end_date   !== '') { $sql.=" AND DATE(fqr.created_at) <= ?"; $types.="s"; $params[]=$end_date; }
-    if ($user_id > 0)       { $sql.=" AND fqr.id_usuario = ?";       $types.="i"; $params[]=$user_id; }
-    if ($id_question !== ''){ $sql.=" AND fq.id = ?";                 $types.="i"; $params[]=(int)$id_question; }
-
-    $sql .= "
-          ORDER BY COALESCE(fqr.visita_id,0), fqr.id_usuario, fqr.id_form_question, fqr.created_at
-        ) AS t
-        JOIN (SELECT @grp := 0, @prev_visita := NULL, @prev_user := NULL, @prev_q := NULL, @prev_time := NULL) vars
-      ) AS s
-      JOIN form_questions fq ON fq.id = s.id_form_question
-      JOIN usuario u         ON u.id = s.id_usuario
-      GROUP BY s.id_usuario, s.id_form_question, s.session_id
-      ORDER BY MAX(s.created_at) DESC
-      LIMIT ? OFFSET ?
-    ";
-    $types.="ii"; $params[]=$limit; $params[]=$offset;
-
-    $stmtMain = $conn->prepare($sql);
-    if (!$stmtMain) die("<div class='alert alert-danger'>Error preparación: ".htmlspecialchars($conn->error)."</div>");
-    $bindParams = array_merge([$types], $params);
-    $bindParams = refValues($bindParams);
-    call_user_func_array([$stmtMain,'bind_param'],$bindParams);
-    $stmtMain->execute();
-    $result = $stmtMain->get_result();
-
-    while ($row = $result->fetch_assoc()) {
-        $raw = explode('||',$row['urls'] ?? '');
-        $fixed=[];
-        foreach ($raw as $u) { if ($u==='') continue; $fixed[] = fixUrl($u,$base_url); }
-        $row['urls']         = implode('||',$fixed);
-        $row['photos']       = $fixed;
-        $row['photos_count'] = count($fixed);
-        $row['thumbnail']    = $fixed[0] ?? $base_url.'assets/images/placeholder.png';
-
-        $row['local_id_effective'] = (int)($row['local_id_effective'] ?? 0);
-        if ($requiereLocal && $row['local_id_effective'] > 0) {
-            $localIds[$row['local_id_effective']] = true;
-        }
-
-        $data[] = $row;
-    }
-    $stmtMain->close();
-
-    /* =========================================
-     * Conteo total para paginación (misma lógica visita/gap)
-     * ======================================= */
-    $countParams = [$gap, $empresa_id, $formulario_id];
-    $countTypes  = "iii";
-
-    $countSql = "
-      SELECT COUNT(*) AS total
-      FROM (
-        SELECT s.id_usuario, s.id_form_question, s.session_id
-        FROM (
-          SELECT t.*,
-            @grp := (
-              CASE
-                WHEN (t.visita_id IS NOT NULL AND t.visita_id > 0) THEN
-                  IF(@prev_visita = t.visita_id AND @prev_q = t.id_form_question, @grp, @grp + 1)
-                ELSE
-                  IF(
-                    @prev_user = t.id_usuario
-                    AND @prev_q = t.id_form_question
-                    AND TIMESTAMPDIFF(MINUTE, @prev_time, t.created_at) <= ?
-                    AND DATE(@prev_time) = DATE(t.created_at),
-                    @grp, @grp + 1
-                  )
-              END
-            ) AS session_id,
-            @prev_visita := t.visita_id,
-            @prev_user := t.id_usuario,
-            @prev_q := t.id_form_question,
-            @prev_time := t.created_at
-          FROM (
-            SELECT
-              fqr.id,
-              fqr.created_at,
-              fqr.id_usuario,
-              fqr.id_form_question,
-              fqr.visita_id
-            FROM form_question_responses fqr
-            JOIN form_questions fq ON fq.id = fqr.id_form_question
-            JOIN formulario f      ON f.id  = fq.id_formulario AND f.id_empresa = ?
-            WHERE fq.id_formulario = ?
-              AND fq.id_question_type = 7
-              AND fqr.answer_text REGEXP '\\\\.(jpe?g|png|gif|webp)(\\\\?.*)?$'
-    ";
-
-    if ($start_date !== '') { $countSql.=" AND DATE(fqr.created_at) >= ?"; $countTypes.="s"; $countParams[]=$start_date; }
-    if ($end_date   !== '') { $countSql.=" AND DATE(fqr.created_at) <= ?"; $countTypes.="s"; $countParams[]=$end_date; }
-    if ($user_id > 0)       { $countSql.=" AND fqr.id_usuario = ?";       $countTypes.="i"; $countParams[]=$user_id; }
-    if ($id_question !== ''){ $countSql.=" AND fq.id = ?";                 $countTypes.="i"; $countParams[]=(int)$id_question; }
-
-    $countSql .= "
-            ORDER BY COALESCE(fqr.visita_id,0), fqr.id_usuario, fqr.id_form_question, fqr.created_at
-          ) AS t
-          JOIN (SELECT @grp := 0, @prev_visita := NULL, @prev_user := NULL, @prev_q := NULL, @prev_time := NULL) vars
-        ) AS s
-        GROUP BY s.id_usuario, s.id_form_question, s.session_id
-      ) z
-    ";
-
-    $stmtCount = $conn->prepare($countSql);
-    if (!$stmtCount) die("<div class='alert alert-danger'>Error conteo: ".htmlspecialchars($conn->error)."</div>");
-    $bindCount = array_merge([$countTypes], $countParams);
-    $bindCount = refValues($bindCount);
-    call_user_func_array([$stmtCount,'bind_param'],$bindCount);
-    $stmtCount->execute();
-    $stmtCount->bind_result($totalRows);
-    $stmtCount->fetch();
-    $stmtCount->close();
-}
-
-$totalPages = max(1, (int)ceil($totalRows / $limit));
-
-/* =========================================
- * Mapa de locales (solo si la campaña requiere local)
- * ======================================= */
-$localMap = [];
-if ($requiereLocal && !empty($localIds)) {
-    $ids = array_keys($localIds);
-    $inPlaceholders = implode(',', array_fill(0, count($ids), '?'));
-    $typesLoc = str_repeat('i', count($ids));
-    $sqlLoc = "SELECT id, codigo, nombre, direccion FROM local WHERE id IN ($inPlaceholders)";
-    $stmtLoc = $conn->prepare($sqlLoc);
-    $bind = array_merge([$typesLoc], $ids);
-    $bind = refValues($bind);
-    call_user_func_array([$stmtLoc,'bind_param'], $bind);
-    $stmtLoc->execute();
-    $resLoc = $stmtLoc->get_result();
-    while ($l = $resLoc->fetch_assoc()) {
-        $localMap[(int)$l['id']] = [
-            'codigo'    => (string)($l['codigo'] ?? ''),
-            'nombre'    => (string)($l['nombre'] ?? ''),
-            'direccion' => (string)($l['direccion'] ?? '')
-        ];
-    }
-    $stmtLoc->close();
-}
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Galería Complementaria — <?= htmlspecialchars($campanaNombre,ENT_QUOTES) ?></title>
-  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-  <style>
-    .thumbnail { width:100px; height:100px; object-fit:cover; border-radius:5px; }
-    .custom-img-cell { width:130px; position:relative; }
-    .badge-count { position:absolute; top:5px; right:5px; background:rgba(0,0,0,.6); color:#fff; font-size:.8rem; padding:.2rem .4rem; border-radius:50%; }
-    .pagination { flex-wrap:wrap; justify-content:center; gap:5px; }
-  </style>
+    <meta charset="UTF-8">
+    <title>Galería Complementaria — <?= htmlspecialchars($campanaNombre, ENT_QUOTES) ?></title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+
+    <style>
+        :root{
+            --bg:#f4f6f9;
+            --card:#ffffff;
+            --text:#233142;
+            --muted:#6b7280;
+            --border:#d9e0e7;
+            --primary:#1677ff;
+            --primary-dark:#0f5fd4;
+            --dark-head:#4c5661;
+            --success:#198754;
+            --warning:#f0ad4e;
+            --info:#17a2b8;
+            --shadow:0 6px 18px rgba(24,39,75,.08);
+            --radius:16px;
+        }
+
+        body{
+            background:var(--bg);
+            color:var(--text);
+            font-size:14px;
+        }
+
+        .gallery-shell{
+            max-width:1660px;
+            margin:24px auto;
+            padding:0 14px 30px;
+        }
+
+        .gallery-header,
+        .gallery-tabs-wrap,
+        .filters-card,
+        .table-card{
+            background:var(--card);
+            border:1px solid var(--border);
+            border-radius:18px;
+            box-shadow:var(--shadow);
+        }
+
+        .gallery-header{
+            padding:22px 24px;
+            margin-bottom:16px;
+        }
+
+        .gallery-kicker{
+            font-size:12px;
+            font-weight:700;
+            letter-spacing:.08em;
+            text-transform:uppercase;
+            color:var(--primary);
+            margin-bottom:6px;
+        }
+
+        .gallery-title-row{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:16px;
+            flex-wrap:wrap;
+        }
+
+        .gallery-title{
+            margin:0;
+            font-size:28px;
+            font-weight:700;
+            color:var(--text);
+        }
+
+        .gallery-subtitle{
+            margin:6px 0 0;
+            color:var(--muted);
+            font-size:14px;
+        }
+
+        .gallery-id-badge{
+            background:#eef4ff;
+            color:var(--primary-dark);
+            border:1px solid #cfe0ff;
+            border-radius:999px;
+            padding:8px 14px;
+            font-weight:700;
+            white-space:nowrap;
+        }
+
+        .gallery-tabs-wrap{
+            padding:12px 14px 0;
+            margin-bottom:16px;
+        }
+
+        .gallery-tabs-wrap .nav-tabs{
+            border-bottom:none;
+            gap:10px;
+        }
+
+        .gallery-tabs-wrap .nav-link{
+            border:none;
+            border-radius:12px 12px 0 0;
+            background:transparent;
+            color:#4b5563;
+            font-weight:600;
+            padding:12px 18px;
+        }
+
+        .gallery-tabs-wrap .nav-link.active{
+            background:#fff;
+            color:var(--primary);
+            box-shadow:0 -1px 0 var(--border), 1px 0 0 var(--border), -1px 0 0 var(--border);
+        }
+
+        .filters-card{
+            padding:20px;
+            margin-bottom:16px;
+        }
+
+        .filters-grid{
+            display:grid;
+            grid-template-columns:repeat(4,minmax(220px,1fr));
+            gap:18px 22px;
+        }
+
+        .filter-field label{
+            display:block;
+            margin-bottom:7px;
+            font-weight:700;
+            color:#334155;
+        }
+
+        .filter-field .form-control{
+            height:42px;
+            border-radius:10px;
+            border:1px solid #bfc7d1;
+            box-shadow:none;
+        }
+
+        .filter-actions{
+            display:flex;
+            align-items:flex-end;
+            gap:12px;
+            flex-wrap:wrap;
+        }
+
+        .btn-modern{
+            min-width:180px;
+            height:42px;
+            border-radius:10px;
+            font-weight:600;
+        }
+
+        .btn-apply{
+            background:var(--primary);
+            border-color:var(--primary);
+            color:#fff;
+        }
+
+        .btn-apply:hover{
+            background:var(--primary-dark);
+            border-color:var(--primary-dark);
+            color:#fff;
+        }
+
+        .btn-soft{
+            background:#fff;
+            border:1px solid #7d8896;
+            color:#46515f;
+        }
+
+        .toolbar-card{
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            gap:16px;
+            flex-wrap:wrap;
+            margin-bottom:14px;
+        }
+
+        .toolbar-left,
+        .toolbar-right{
+            display:flex;
+            gap:10px;
+            align-items:center;
+            flex-wrap:wrap;
+        }
+
+        .table-card{
+            overflow:hidden;
+            min-height:180px;
+        }
+
+        .table-card .table{
+            margin-bottom:0;
+        }
+
+        .table-card thead th{
+            background:var(--dark-head);
+            color:#fff;
+            border-color:#69727d;
+            font-size:12px;
+            font-weight:700;
+            text-transform:uppercase;
+            white-space:nowrap;
+            vertical-align:middle;
+            padding:16px 12px;
+        }
+
+        .table-card tbody td{
+            vertical-align:middle;
+            padding:14px 12px;
+            border-top:1px solid #e9eef3;
+        }
+
+        .table-card tbody tr:hover{
+            background:#f8fbff;
+        }
+
+        .thumbnail{
+            width:92px;
+            height:92px;
+            object-fit:cover;
+            border-radius:12px;
+            border:1px solid #d7dee7;
+            cursor:pointer;
+            transition:.2s ease;
+        }
+
+        .thumbnail:hover{
+            transform:scale(1.03);
+        }
+
+        .custom-img-cell{
+            width:118px;
+            position:relative;
+        }
+
+        .badge-count{
+            position:absolute;
+            top:8px;
+            right:8px;
+            background:rgba(15,23,42,.78);
+            color:#fff;
+            font-size:12px;
+            font-weight:700;
+            padding:3px 8px;
+            border-radius:999px;
+        }
+
+        .meta-note{
+            color:var(--muted);
+            font-size:12px;
+        }
+
+        .pagination-wrap{
+            padding:16px 18px 20px;
+            background:#fff;
+        }
+
+        .pagination{
+            flex-wrap:wrap;
+            justify-content:center;
+            gap:6px;
+            margin-bottom:0;
+        }
+
+        .page-link{
+            border-radius:10px !important;
+            color:#4b5563;
+            border:1px solid #d4dde7;
+        }
+
+        .page-item.active .page-link{
+            background:var(--primary);
+            border-color:var(--primary);
+        }
+
+        .empty-state{
+            padding:40px 18px;
+            text-align:center;
+            color:var(--muted);
+            font-weight:600;
+        }
+
+        .ajax-loading{
+            padding:40px 18px;
+            text-align:center;
+        }
+
+        .modal-gallery{
+            border-radius:16px;
+            background:#0b1624;
+            border:1px solid rgba(0,194,255,.15);
+        }
+
+        .gallery-main-container{
+            width:100%;
+            height:70vh;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            background:#020b18;
+            border-radius:12px;
+            overflow:hidden;
+            margin-bottom:12px;
+        }
+
+        .gallery-main-img{
+            max-width:100%;
+            max-height:100%;
+            object-fit:contain;
+            border-radius:10px;
+        }
+
+        .gallery-thumbs{
+            display:flex;
+            gap:10px;
+            overflow-x:auto;
+            padding:6px 2px;
+        }
+
+        .gallery-thumbs::-webkit-scrollbar{
+            height:6px;
+        }
+
+        .gallery-thumbs::-webkit-scrollbar-thumb{
+            background:rgba(0,194,255,.4);
+            border-radius:999px;
+        }
+
+        .gallery-thumb{
+            width:90px;
+            height:90px;
+            flex-shrink:0;
+            border-radius:10px;
+            overflow:hidden;
+            cursor:pointer;
+            border:2px solid transparent;
+            transition:all .2s ease;
+        }
+
+        .gallery-thumb img{
+            width:100%;
+            height:100%;
+            object-fit:cover;
+        }
+
+        .gallery-thumb.active{
+            border-color:#19d4ff;
+            box-shadow:0 0 10px rgba(0,194,255,.4);
+        }
+
+        .gallery-thumb:hover{
+            transform:scale(1.05);
+        }
+
+        @media (max-width: 1200px){
+            .filters-grid{
+                grid-template-columns:repeat(3,minmax(220px,1fr));
+            }
+        }
+
+        @media (max-width: 992px){
+            .filters-grid{
+                grid-template-columns:repeat(2,minmax(220px,1fr));
+            }
+        }
+
+        @media (max-width: 576px){
+            .filters-grid{
+                grid-template-columns:1fr;
+            }
+
+            .gallery-title{
+                font-size:22px;
+            }
+
+            .btn-modern{
+                width:100%;
+            }
+        }
+    </style>
 </head>
 <body class="bg-light">
-<div class="container mt-4">
-  <h2>Galería Complementaria</h2>
-  <p class="text-muted mb-3"><?= htmlspecialchars($campanaNombre,ENT_QUOTES) ?> (ID <?= (int)$formulario_id ?>)</p>
 
-  <ul class="nav nav-tabs mb-3">
-    <li class="nav-item">
-      <a class="nav-link <?= $view_mode === 'galeria' ? 'active' : '' ?>"
-         href="<?= htmlspecialchars(buildViewModeUrl('galeria'), ENT_QUOTES) ?>">
-        Todas las fotos
-      </a>
-    </li>
-    <li class="nav-item">
-      <a class="nav-link <?= $view_mode === 'duplicados' ? 'active' : '' ?>"
-         href="<?= htmlspecialchars(buildViewModeUrl('duplicados'), ENT_QUOTES) ?>">
-        Casos duplicados (fotos repetidas)
-      </a>
-    </li>
-  </ul>
+<div class="gallery-shell">
+    <div class="gallery-header">
+        <div class="gallery-kicker">Galería fotográfica</div>
+        <div class="gallery-title-row">
+            <div>
+                <h1 class="gallery-title">Galería Complementaria</h1>
+                <p class="gallery-subtitle"><?= htmlspecialchars($campanaNombre, ENT_QUOTES) ?></p>
+            </div>
+            <div class="gallery-id-badge">Campaña #<?= (int)$formulario_id ?></div>
+        </div>
+    </div>
 
-  <form id="filterForm" method="GET" class="form-inline mb-3">
-    <input type="hidden" name="id" value="<?= $formulario_id ?>">
-    <input type="hidden" name="view_mode" value="<?= htmlspecialchars($view_mode, ENT_QUOTES) ?>">
+    <div class="gallery-tabs-wrap">
+        <ul class="nav nav-tabs">
+            <li class="nav-item">
+                <a class="nav-link js-view-mode <?= $view_mode === 'galeria' ? 'active' : '' ?>" href="#" data-mode="galeria">
+                    Fotos Complementarias
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link js-view-mode <?= $view_mode === 'duplicados' ? 'active' : '' ?>" href="#" data-mode="duplicados">
+                    Fotos Duplicadas
+                </a>
+            </li>
+        </ul>
+    </div>
 
-    <label class="mr-2">Desde:</label>
-    <input type="date" name="start_date" class="form-control mr-2" value="<?= htmlspecialchars($start_date) ?>">
-    <label class="mr-2">Hasta:</label>
-    <input type="date" name="end_date" class="form-control mr-2" value="<?= htmlspecialchars($end_date) ?>">
+    <form id="filterForm" class="filters-card" onsubmit="return false;">
+        <input type="hidden" name="id" value="<?= (int)$formulario_id ?>">
+        <input type="hidden" name="view_mode" value="<?= htmlspecialchars($view_mode, ENT_QUOTES) ?>">
+        <input type="hidden" name="page" value="1">
+        <input type="hidden" name="limit" value="<?= (int)$limit ?>">
 
-    <label class="mr-2">Usuario:</label>
-    <select name="user_id" class="form-control mr-2">
-      <option value="0">-- Todos --</option>
-      <?php foreach ($usuarios as $u): ?>
-        <option value="<?= $u['id']?>" <?= $u['id']==$user_id?'selected':'' ?>>
-          <?= htmlspecialchars($u['usuario']) ?>
-        </option>
-      <?php endforeach; ?>
-    </select>
+        <div class="filters-grid">
+            <div class="filter-field">
+                <label>Usuario</label>
+                <select name="user_id" class="form-control">
+                    <option value="0">-- Todos --</option>
+                    <?php foreach ($usuarios as $u): ?>
+                        <option value="<?= (int)$u['id'] ?>" <?= ((int)$u['id'] === $user_id ? 'selected' : '') ?>>
+                            <?= htmlspecialchars($u['usuario']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
 
-    <label class="mr-2">Pregunta:</label>
-    <select name="id_question" class="form-control mr-2">
-      <option value="">-- Todas --</option>
-      <?php foreach ($preguntasDisponibles as $p): ?>
-        <option value="<?= $p['id']?>" <?= $p['id']==$id_question?'selected':'' ?>>
-          <?= htmlspecialchars($p['question_text']) ?>
-        </option>
-      <?php endforeach; ?>
-    </select>
+            <div class="filter-field">
+                <label>Pregunta</label>
+                <select name="id_question" class="form-control">
+                    <option value="">-- Todas --</option>
+                    <?php foreach ($preguntasDisponibles as $p): ?>
+                        <option value="<?= (int)$p['id'] ?>" <?= ((string)$p['id'] === (string)$id_question ? 'selected' : '') ?>>
+                            <?= htmlspecialchars($p['question_text']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
 
-    <!-- Opcional: ajustar lapso (min) sin tocar código (solo afecta modo galería) -->
-    <label class="mr-2">Lapso visita (min):</label>
-    <input type="number" min="1" name="gap" class="form-control mr-2" style="width:90px"
-           value="<?= htmlspecialchars($gap) ?>">
-
-    <button type="submit" class="btn btn-primary d-none">Filtrar</button>
-  </form>
-
-  <div class="d-flex align-items-center mb-2">
-    <label class="mr-2">Mostrar:</label>
-    <select id="limitSelect" class="form-control" style="width:auto">
-      <?php foreach ([10,25,50,100] as $n): ?>
-        <option value="<?= $n ?>" <?= $n==$limit?'selected':'' ?>><?= $n ?></option>
-      <?php endforeach; ?>
-    </select>
-    <span class="ml-2">registros</span>
-  </div>
-
-  <button id="btnDownloadSelected" class="btn btn-success mb-3">Descargar seleccionadas</button>
-  <button id="btnDownloadAll" class="btn btn-warning mb-3 ml-2">Descargar todas las fotos</button>
-  <?php if ($view_mode === 'duplicados'): ?>
-    <button id="btnExportCsv" class="btn btn-info mb-3 ml-2">Exportar CSV duplicados</button>
-  <?php endif; ?>
-
-  <form id="zipForm" method="POST" action="download_zip.php" style="display:none">
-    <input type="hidden" name="jsonFotos" id="jsonFotos">
-  </form>
-
-  <table class="table table-bordered table-hover">
-    <thead class="thead-light">
-      <tr>
-        <th><input type="checkbox" id="selectAll"></th>
-        <th>#</th>
-        <th>Imagen</th>
-        <th>Pregunta / Nota</th>
-        <th>Usuario</th>
-        <?php if ($requiereLocal): ?>
-          <th>Local</th>
-          <th>Dirección</th>
-        <?php endif; ?>
-
-        <?php if ($view_mode === 'duplicados'): ?>
-          <th>Veces</th>
-          <th>Días distintos</th>
-          <th>Fechas</th>
-          <th>Primera / Última subida</th>
-        <?php else: ?>
-          <th>Fecha Subida</th>
-        <?php endif; ?>
-      </tr>
-    </thead>
-    <tbody>
-    <?php if (empty($data)): ?>
-      <tr><td colspan="<?= $requiereLocal ? ($view_mode === 'duplicados' ? 11 : 8) : ($view_mode === 'duplicados' ? 9 : 6) ?>" class="text-center">Sin fotos</td></tr>
-    <?php else: ?>
-      <?php $i=$offset+1; foreach ($data as $row): ?>
-        <?php
-          $safeUsuario  = preg_replace('/[^a-zA-Z0-9]/','_', $row['usuario']);
-          $safePregunta = preg_replace('/[^a-zA-Z0-9]/','_', $row['pregunta'] ?? 'encuesta');
-          $phpPrefix    = "{$safeUsuario}_{$safePregunta}";
-          $thumb        = htmlspecialchars($row['thumbnail'], ENT_QUOTES);
-          $badge        = (int)$row['photos_count'];
-          $fecha        = isset($row['fechaSubida']) ? formatearFecha($row['fechaSubida']) : '';
-
-          // Local (si aplica)
-          $localLabel = 'N/A';
-          $localDir   = 'N/A';
-          if ($requiereLocal) {
-              $lid = (int)($row['local_id_effective'] ?? 0);
-              if ($lid > 0 && isset($localMap[$lid])) {
-                  $codigo = trim($localMap[$lid]['codigo']);
-                  $nombre = trim($localMap[$lid]['nombre']);
-                  $direccion = trim($localMap[$lid]['direccion']);
-                  $localLabel = $codigo !== '' ? ($codigo.' - '.$nombre) : $nombre;
-                  $localDir   = $direccion !== '' ? $direccion : '—';
-              }
-          }
-        ?>
-        <tr>
-          <td>
-            <input type="checkbox" class="imgCheckbox"
-                   data-urls="<?= htmlspecialchars($row['urls'], ENT_QUOTES) ?>"
-                   data-prefix="<?= $phpPrefix ?>">
-          </td>
-          <td><?= $i ?></td>
-          <td class="custom-img-cell">
-            <span class="badge-count"><?= $badge ?></span>
-            <img src="<?= $thumb ?>" class="thumbnail img-click" loading="lazy" decoding="async"
-                 data-urls="<?= htmlspecialchars($row['urls'], ENT_QUOTES) ?>">
-          </td>
-          <td>
-            <?php if ($view_mode === 'duplicados'): ?>
-              <strong>SHA1:</strong> <?= htmlspecialchars($row['sha1'] ?? '', ENT_QUOTES) ?><br>
-              <small>Imagen usada múltiples días en esta campaña.</small>
-            <?php else: ?>
-              <?= htmlspecialchars($row['pregunta'], ENT_QUOTES) ?>
+            <?php if ($requiereLocal): ?>
+                <div class="filter-field">
+                    <label>Código local</label>
+                    <input type="text"
+                           name="local_codigo"
+                           class="form-control"
+                           placeholder="Ej: LOC001"
+                           value="<?= htmlspecialchars($local_codigo, ENT_QUOTES) ?>">
+                </div>
             <?php endif; ?>
-          </td>
-          <td><?= htmlspecialchars($row['usuario'], ENT_QUOTES) ?></td>
-          <?php if ($requiereLocal): ?>
-            <td><?= htmlspecialchars($localLabel, ENT_QUOTES) ?></td>
-            <td><?= htmlspecialchars($localDir,   ENT_QUOTES) ?></td>
-          <?php endif; ?>
 
-          <?php if ($view_mode === 'duplicados'): ?>
-            <td><?= (int)($row['total_subidas'] ?? 0) ?></td>
-            <td><?= (int)($row['dias_distintos'] ?? 0) ?></td>
-            <td><?= htmlspecialchars($row['fechas'] ?? '', ENT_QUOTES) ?></td>
-            <td>
-              <?= formatearFecha($row['primera_subida'] ?? null) ?>
-              <br>
-              <?= formatearFecha($row['ultima_subida'] ?? null) ?>
-            </td>
-          <?php else: ?>
-            <td><?= $fecha ?></td>
-          <?php endif; ?>
-        </tr>
-      <?php $i++; endforeach; ?>
-    <?php endif; ?>
-    </tbody>
-  </table>
+            <div class="filter-field">
+                <label>Lapso visita (min)</label>
+                <input type="number"
+                       min="1"
+                       max="60"
+                       name="gap"
+                       class="form-control"
+                       value="<?= (int)$gap ?>">
+            </div>
 
-  <?php if ($totalPages>1): ?>
-    <nav><ul class="pagination">
-      <?php if ($page>1): ?>
-        <li class="page-item"><a class="page-link" href="<?= buildPaginationUrl($page-1) ?>">Anterior</a></li>
-      <?php else: ?>
-        <li class="page-item disabled"><span class="page-link">Anterior</span></li>
-      <?php endif; ?>
-      <?php for($p=1;$p<=$totalPages;$p++): ?>
-        <?php if ($p==$page): ?>
-          <li class="page-item active"><span class="page-link"><?= $p ?></span></li>
-        <?php else: ?>
-          <li class="page-item"><a class="page-link" href="<?= buildPaginationUrl($p) ?>"><?= $p ?></a></li>
-        <?php endif; ?>
-      <?php endfor; ?>
-      <?php if ($page<$totalPages): ?>
-        <li class="page-item"><a class="page-link" href="<?= buildPaginationUrl($page+1) ?>">Siguiente</a></li>
-      <?php else: ?>
-        <li class="page-item disabled"><span class="page-link">Siguiente</span></li>
-      <?php endif; ?>
-    </ul></nav>
-  <?php endif; ?>
+            <div class="filter-field">
+                <label>Desde</label>
+                <input type="date" name="start_date" class="form-control" value="<?= htmlspecialchars($start_date, ENT_QUOTES) ?>">
+            </div>
+
+            <div class="filter-field">
+                <label>Hasta</label>
+                <input type="date" name="end_date" class="form-control" value="<?= htmlspecialchars($end_date, ENT_QUOTES) ?>">
+            </div>
+
+            <div class="filter-actions">
+                <button type="button" id="btnApplyFilters" class="btn btn-modern btn-apply">
+                    Aplicar filtros
+                </button>
+                <button type="button" id="btnClearFilters" class="btn btn-modern btn-soft">
+                    Limpiar filtros
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <div class="toolbar-card">
+        <div class="toolbar-left">
+            <button id="btnDownloadSelected" class="btn btn-success btn-modern" type="button">Descargar seleccionadas</button>
+            <button id="btnDownloadAll" class="btn btn-warning btn-modern" type="button">Descargar todas</button>
+            <button id="btnExportCsv" class="btn btn-info btn-modern" type="button" style="display:none;">Exportar CSV duplicados</button>
+        </div>
+
+        <div class="toolbar-right">
+            <label class="mb-0 font-weight-bold">Mostrar</label>
+            <select id="limitSelect" class="form-control" style="width:90px">
+                <?php foreach ([10,25,50,100] as $n): ?>
+                    <option value="<?= $n ?>" <?= ($n == $limit ? 'selected' : '') ?>><?= $n ?></option>
+                <?php endforeach; ?>
+            </select>
+            <span>registros</span>
+        </div>
+    </div>
+
+    <div id="galleryAjaxContainer" class="table-card">
+        <div class="empty-state">
+            Aplica filtros para visualizar fotos y datos.
+        </div>
+    </div>
 </div>
 
 <!-- Modal imágenes -->
 <div class="modal fade" id="fullSizeModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-body p-0 text-center" id="modalBodyImgs"></div>
-      <div class="modal-footer"><button class="btn btn-secondary" data-dismiss="modal">Cerrar</button></div>
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content modal-gallery">
+            <div class="modal-body p-3">
+                <div class="gallery-main-container">
+                    <img id="galleryMainImage" src="" class="gallery-main-img" alt="Imagen">
+                </div>
+                <div class="gallery-thumbs" id="galleryThumbs"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-dismiss="modal" type="button">Cerrar</button>
+            </div>
+        </div>
     </div>
-  </div>
 </div>
+
+<form id="zipForm" method="POST" action="download_zip.php" style="display:none">
+    <input type="hidden" name="jsonFotos" id="jsonFotos">
+</form>
 
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
-  // Modal con todas las fotos de la fila
-  $(document).on('click', '.thumbnail.img-click', function(){
-    var base = '<?= $base_url ?>';
-    var urls = $(this).data('urls').split('||');
-    var $body = $('#modalBodyImgs').empty();
-    urls.forEach(function(u){
-      if(!u) return;
-      var src = /^https?:\/\//.test(u) ? u : base + u.replace(/^\/+/, '');
-      $body.append('<img src="'+src+'" class="img-fluid mb-2" style="max-height:80vh" loading="lazy" decoding="async">');
-    });
-    $('#fullSizeModal').modal('show');
-  });
+$(function () {
+    const baseUrl = '<?= $base_url ?>';
+    let galleryXhr = null;
+    let lastRequestData = null;
+    let retryTimer = null;
+    const autoRetryMax = 2;
 
-  // Select all
-  $('#selectAll').on('change', function(){ $('.imgCheckbox').prop('checked', $(this).prop('checked')); });
+    function serializeFilters() {
+        const data = {};
+        $('#filterForm').serializeArray().forEach(function(item) {
+            data[item.name] = item.value;
+        });
 
-  // Descargar seleccionadas (usa download_zip.php existente)
-  $('#btnDownloadSelected').click(function(){
-    var toZip = [];
-    $('.imgCheckbox:checked').each(function(){
-      var urls=$(this).data('urls').split('||'); var prefix=$(this).data('prefix');
-      urls.forEach(function(u){ if(!u) return; var name = prefix + '_' + u.split('/').pop(); toZip.push({url:u, filename:name}); });
-    });
-    if (!toZip.length) return alert('Selecciona al menos una fila.');
-    $.ajax({
-      url: 'download_zip.php', method: 'POST',
-      data: { jsonFotos: JSON.stringify(toZip) }, xhrFields:{responseType:'blob'},
-      success: function(data,status,xhr){
-        var disp = xhr.getResponseHeader('Content-Disposition')||'';
-        var fname = (disp.match(/filename[^;=\n]*=\s*([\'\"]?)([^\'\"\n]*)/)||[])[2] || 'fotos.zip';
-        var blob = new Blob([data],{type:'application/zip'}), link=document.createElement('a');
-        link.href = URL.createObjectURL(blob); link.download=fname; document.body.appendChild(link);
-        link.click(); link.remove();
-      },
-      error: function(_,__,e){ alert('Error al crear ZIP: '+e); }
-    });
-  });
+        data.limit = $('#limitSelect').val() || data.limit || 25;
+        data.page = data.page || 1;
 
-  // Descargar todas con filtros actuales (GET ?action=all&view=complementaria)
-  $('#btnDownloadAll').click(function(){
-    const params = new URLSearchParams(window.location.search);
-    params.set('action','all');
-    params.set('view','complementaria');
-    const url = 'download_zip.php?' + params.toString();
-    $.ajax({
-      url, method:'GET', xhrFields:{responseType:'blob'},
-      success(data,status,xhr){
-        let fname='fotos_todas.zip';
-        const disp = xhr.getResponseHeader('Content-Disposition')||'';
-        const m = disp.match(/filename[^;=\n]*=\s*([\'\"]?)([^\'\"\n]*)/); if (m && m[2]) fname=m[2];
-        const blob=new Blob([data],{type:'application/zip'}); const link=document.createElement('a');
-        link.href = URL.createObjectURL(blob); link.download=fname; document.body.appendChild(link);
-        link.click(); link.remove();
-      },
-      error(_,__,e){ alert('Error al crear ZIP completo: '+e); }
-    });
-  });
+        return data;
+    }
 
-  // Exportar CSV de duplicados
-  $('#btnExportCsv').click(function(){
-    const url = new URL(window.location.href);
-    url.searchParams.set('export','csv');
-    window.location.href = url.toString();
-  });
+    function hasMeaningfulFilters(data) {
+        return !!(
+            parseInt(data.user_id || 0, 10) > 0 ||
+            (data.id_question || '') !== '' ||
+            (data.local_codigo || '').trim() !== '' ||
+            (data.start_date || '') !== '' ||
+            (data.end_date || '') !== ''
+        );
+    }
 
-  // Selector de límite + auto-submit filtros
-  (function(){
-    $('#limitSelect').val('<?= $limit ?>').on('change', function(){
-      var url = new URL(window.location.href);
-      url.searchParams.set('limit', $(this).val());
-      url.searchParams.set('page', 1);
-      window.location.href = url.toString();
+    function updateCsvButton() {
+        const mode = $('[name="view_mode"]').val();
+        if (mode === 'duplicados') {
+            $('#btnExportCsv').show();
+        } else {
+            $('#btnExportCsv').hide();
+        }
+    }
+
+    function showInitialState() {
+        $('#galleryAjaxContainer').html(`
+            <div class="empty-state">
+                Aplica filtros para visualizar fotos y datos.
+            </div>
+        `);
+    }
+
+    function showLoading() {
+        $('#galleryAjaxContainer').html(`
+            <div class="ajax-loading">
+                <div class="spinner-border text-primary mb-3" role="status"></div>
+                <div class="font-weight-bold">Cargando galería...</div>
+                <div class="text-muted small">Obteniendo datos filtrados</div>
+            </div>
+        `);
+    }
+
+    function showRetryMessage(attempt) {
+        $('#galleryAjaxContainer').html(`
+            <div class="ajax-loading">
+                <div class="spinner-border text-warning mb-3" role="status"></div>
+                <div class="font-weight-bold">Reintentando carga...</div>
+                <div class="text-muted small">Intento ${attempt} de ${autoRetryMax}</div>
+            </div>
+        `);
+    }
+
+    function showError() {
+        $('#galleryAjaxContainer').html(`
+            <div class="empty-state">
+                <div class="text-danger font-weight-bold mb-2">No fue posible cargar la galería.</div>
+                <div class="text-muted small mb-3">Hubo un problema al consultar el servidor.</div>
+                <button type="button" id="btnRetryGallery" class="btn btn-primary">Reintentar</button>
+            </div>
+        `);
+    }
+
+    function updateUrl(data) {
+        const url = new URL(window.location.href);
+        url.search = '';
+
+        Object.keys(data).forEach(function(key) {
+            if (data[key] !== null && data[key] !== undefined && data[key] !== '') {
+                url.searchParams.set(key, data[key]);
+            }
+        });
+
+        history.replaceState({}, '', url.toString());
+    }
+
+    function loadGallery(customData = null, retryCount = 0) {
+        const data = customData || serializeFilters();
+
+        updateCsvButton();
+
+        if (!hasMeaningfulFilters(data)) {
+            if (galleryXhr) galleryXhr.abort();
+            showInitialState();
+            return;
+        }
+
+        lastRequestData = { ...data };
+
+        if (galleryXhr) {
+            galleryXhr.abort();
+        }
+
+        if (retryCount === 0) {
+            showLoading();
+        } else {
+            showRetryMessage(retryCount);
+        }
+
+        galleryXhr = $.ajax({
+            url: 'ajax_galeria_complementaria.php',
+            type: 'GET',
+            data: data,
+            cache: false,
+            timeout: 25000,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            success: function (html) {
+                $('#galleryAjaxContainer').html(html);
+                updateUrl(data);
+            },
+            error: function (xhr, status) {
+                if (status === 'abort') return;
+
+                if (retryCount < autoRetryMax) {
+                    clearTimeout(retryTimer);
+                    retryTimer = setTimeout(function () {
+                        loadGallery(data, retryCount + 1);
+                    }, 1200);
+                    return;
+                }
+
+                showError();
+            }
+        });
+    }
+
+    $('#btnApplyFilters').on('click', function () {
+        $('[name="page"]').val(1);
+        loadGallery();
     });
-    $('#filterForm').on('change','input,select', function(){ $('#filterForm').submit(); });
-  })();
+
+    $('#filterForm').on('submit', function (e) {
+        e.preventDefault();
+        $('[name="page"]').val(1);
+        loadGallery();
+    });
+
+    $('#btnClearFilters').on('click', function () {
+        $('#filterForm')[0].reset();
+        $('[name="user_id"]').val('0');
+        $('[name="id_question"]').val('');
+        $('[name="local_codigo"]').val('');
+        $('[name="start_date"]').val('');
+        $('[name="end_date"]').val('');
+        $('[name="gap"]').val('2');
+        $('[name="page"]').val('1');
+        $('[name="view_mode"]').val('galeria');
+        $('#limitSelect').val('25');
+        $('[name="limit"]').val('25');
+
+        $('.js-view-mode').removeClass('active');
+        $('.js-view-mode[data-mode="galeria"]').addClass('active');
+
+        updateCsvButton();
+        showInitialState();
+
+        const url = new URL(window.location.href);
+        url.search = '';
+        url.searchParams.set('id', $('input[name="id"]').val());
+        url.searchParams.set('view_mode', 'galeria');
+        history.replaceState({}, '', url.toString());
+    });
+
+    $('#limitSelect').on('change', function () {
+        $('[name="limit"]').val($(this).val());
+        $('[name="page"]').val(1);
+        loadGallery();
+    });
+
+    $(document).on('click', '.js-gallery-page', function (e) {
+        e.preventDefault();
+        const page = $(this).data('page') || 1;
+        $('[name="page"]').val(page);
+        loadGallery();
+    });
+
+    $(document).on('click', '.js-view-mode', function (e) {
+        e.preventDefault();
+        const mode = $(this).data('mode');
+
+        $('.js-view-mode').removeClass('active');
+        $(this).addClass('active');
+
+        $('[name="view_mode"]').val(mode);
+        $('[name="page"]').val(1);
+        updateCsvButton();
+        loadGallery();
+    });
+
+    $(document).on('click', '#btnRetryGallery', function () {
+        if (lastRequestData) {
+            loadGallery(lastRequestData, 0);
+        } else {
+            loadGallery();
+        }
+    });
+
+    $(document).on('click', '.thumbnail.img-click', function () {
+        const urls = ($(this).data('urls') || '').split('||');
+        const mainImg = $('#galleryMainImage');
+        const thumbsContainer = $('#galleryThumbs');
+
+        thumbsContainer.empty();
+
+        let first = true;
+
+        urls.forEach((u, index) => {
+            if (!u) return;
+
+            const src = /^https?:\/\//.test(u)
+                ? u
+                : baseUrl + u.replace(/^\/+/, '');
+
+            if (first) {
+                mainImg.attr('src', src);
+                first = false;
+            }
+
+            const thumb = $(`
+                <div class="gallery-thumb ${index === 0 ? 'active' : ''}">
+                    <img src="${src}" alt="thumb">
+                </div>
+            `);
+
+            thumb.on('click', function () {
+                $('#galleryMainImage').attr('src', src);
+                $('.gallery-thumb').removeClass('active');
+                $(this).addClass('active');
+            });
+
+            thumbsContainer.append(thumb);
+        });
+
+        $('#fullSizeModal').modal('show');
+    });
+
+    $(document).on('change', '#selectAll', function () {
+        $('.imgCheckbox').prop('checked', $(this).prop('checked'));
+    });
+
+    $('#btnDownloadSelected').on('click', function () {
+        let toZip = [];
+
+        $('.imgCheckbox:checked').each(function () {
+            const urls = ($(this).data('urls') || '').split('||');
+            const prefix = $(this).data('prefix') || 'foto';
+
+            urls.forEach(function (u) {
+                if (!u) return;
+                const name = prefix + '_' + u.split('/').pop();
+                toZip.push({ url: u, filename: name });
+            });
+        });
+
+        if (!toZip.length) {
+            alert('Selecciona al menos una fila.');
+            return;
+        }
+
+        $.ajax({
+            url: 'download_zip.php',
+            method: 'POST',
+            data: { jsonFotos: JSON.stringify(toZip) },
+            xhrFields: { responseType: 'blob' },
+            success: function (data, status, xhr) {
+                const disp = xhr.getResponseHeader('Content-Disposition') || '';
+                const match = disp.match(/filename[^;=\n]*=\s*([\'\"]?)([^\'\"\n]*)/);
+                const fname = (match && match[2]) ? match[2] : 'fotos.zip';
+
+                const blob = new Blob([data], { type: 'application/zip' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = fname;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            },
+            error: function (_, __, e) {
+                alert('Error al crear ZIP: ' + e);
+            }
+        });
+    });
+
+    $('#btnDownloadAll').on('click', function () {
+        const data = serializeFilters();
+
+        if (!hasMeaningfulFilters(data)) {
+            alert('Primero aplica filtros para descargar resultados.');
+            return;
+        }
+
+        const params = new URLSearchParams(data);
+        params.set('action', 'all');
+        params.set('view', 'complementaria');
+
+        const url = 'download_zip.php?' + params.toString();
+
+        $.ajax({
+            url: url,
+            method: 'GET',
+            xhrFields: { responseType: 'blob' },
+            success: function (data, status, xhr) {
+                let fname = 'fotos_todas.zip';
+                const disp = xhr.getResponseHeader('Content-Disposition') || '';
+                const match = disp.match(/filename[^;=\n]*=\s*([\'\"]?)([^\'\"\n]*)/);
+                if (match && match[2]) fname = match[2];
+
+                const blob = new Blob([data], { type: 'application/zip' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = fname;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            },
+            error: function (_, __, e) {
+                alert('Error al crear ZIP completo: ' + e);
+            }
+        });
+    });
+
+    $('#btnExportCsv').on('click', function () {
+        const data = serializeFilters();
+
+        if ((data.view_mode || 'galeria') !== 'duplicados') {
+            alert('La exportación CSV aplica sólo para la vista de duplicados.');
+            return;
+        }
+
+        if (!hasMeaningfulFilters(data)) {
+            alert('Primero aplica filtros para exportar.');
+            return;
+        }
+
+        const url = new URL(window.location.origin + window.location.pathname.replace('galeria_complementaria.php', 'ajax_galeria_complementaria.php'));
+        Object.keys(data).forEach(function(key) {
+            if (data[key] !== null && data[key] !== undefined) {
+                url.searchParams.set(key, data[key]);
+            }
+        });
+        url.searchParams.set('export', 'csv');
+
+        window.location.href = url.toString();
+    });
+
+    updateCsvButton();
+});
 </script>
 </body>
 </html>
