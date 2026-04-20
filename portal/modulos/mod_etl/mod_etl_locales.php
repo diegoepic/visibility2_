@@ -35,8 +35,6 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
         --radius-xl: 22px;
         --radius-lg: 18px;
         --radius-md: 14px;
-
-        /* tamaño general máximo 85% */
         --ui-font: 0.85rem;
     }
 
@@ -53,7 +51,6 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
         max-width: 1320px;
     }
 
-    /* -------- TITULOS PRINCIPALES: sí pueden ser mayores -------- */
     .text-center.mb-4 h2,
     .module-title {
         font-size: 1.85rem !important;
@@ -177,41 +174,6 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
         font-weight: 600;
     }
 
-    .table-responsive {
-        max-height: 430px;
-        overflow: auto;
-        border-radius: 16px;
-    }
-
-    .table {
-        margin-bottom: 0;
-    }
-
-    .table thead th {
-        background: linear-gradient(135deg, #163d86 0%, #0f2f6b 100%);
-        color: #fff;
-        position: sticky;
-        top: 0;
-        z-index: 2;
-        border: none;
-        padding: 14px 12px;
-        font-weight: 700;
-        white-space: nowrap;
-        box-shadow: inset 0 -1px 0 rgba(255,255,255,.08);
-    }
-
-    .table tbody td {
-        padding: 12px;
-        vertical-align: middle;
-        border-color: #eef2f7;
-        color: #334155;
-        background: #fff;
-    }
-
-    .table-hover tbody tr:hover td {
-        background: #f8fbff;
-    }
-
     .alert {
         border: 0;
         border-radius: 16px;
@@ -243,6 +205,21 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
         font-weight: 800;
     }
 
+    .progress {
+        background: #e9eef6;
+        border-radius: 999px;
+        overflow: hidden;
+    }
+
+    .progress-bar {
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    #etlProgressText strong {
+        font-weight: 800;
+    }
+
     @media (max-width: 768px) {
         .container {
             margin-top: 22px;
@@ -267,14 +244,14 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
 <body>
 
 <div class="container">
-<div class="text-center mb-4">
-    <h2 class="module-title">
-        <i class="fa-solid fa-location-dot"></i> ETL Locales
-    </h2>
-    <p class="module-subtitle mb-0">
-        Actualiza nombre, dirección, comuna, distrito, zona, región, cadena y cuenta, recalculando latitud y longitud.
-    </p>
-</div>
+    <div class="text-center mb-4">
+        <h2 class="module-title">
+            <i class="fa-solid fa-location-dot"></i> ETL Locales
+        </h2>
+        <p class="module-subtitle mb-0">
+            Actualiza nombre, dirección, comuna, distrito, zona, región, cadena y cuenta, recalculando latitud y longitud.
+        </p>
+    </div>
 
     <div class="row g-4 mb-4">
         <div class="col-lg-7">
@@ -295,6 +272,7 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
                             <label class="form-label fw-semibold">Encabezados esperados</label>
                             <div class="sample-code">codigo;nombre local;direccion;comuna;distrito;zona;region;cadena;cuenta</div>
                         </div>
+
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Plantilla de carga</label>
                             <div class="d-flex flex-wrap gap-2 align-items-center">
@@ -309,6 +287,7 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
                                 </small>
                             </div>
                         </div>
+
                         <div class="d-grid">
                             <button type="submit" class="btn btn-success" id="btnProcesar">
                                 <i class="fa-solid fa-gears"></i> Procesar ETL
@@ -328,8 +307,10 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
                     <ul class="mb-0">
                         <li>Busca el local por <strong>código</strong>.</li>
                         <li>Actualiza <strong>nombre</strong>, <strong>dirección</strong> y <strong>comuna</strong>.</li>
-                        <li>Recalcula <strong>latitud</strong> y <strong>longitud</strong>.</li>
+                        <li>Actualiza opcionalmente <strong>distrito</strong>, <strong>zona</strong>, <strong>región</strong>, <strong>cadena</strong> y <strong>cuenta</strong>.</li>
+                        <li>Recalcula <strong>latitud</strong> y <strong>longitud</strong> solo cuando corresponde.</li>
                         <li>No inserta locales nuevos.</li>
+                        <li>Procesa el archivo en <strong>lotes de 1.000</strong>.</li>
                         <li>Genera reporte CSV con los fallidos.</li>
                     </ul>
                 </div>
@@ -338,6 +319,29 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
     </div>
 
     <div id="resultadoBox" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <i class="fa-solid fa-bars-progress"></i> Estado del procesamiento
+            </div>
+            <div class="card-body">
+                <div class="progress" style="height: 26px;">
+                    <div id="etlProgressBar"
+                         class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                         role="progressbar"
+                         style="width: 0%;"
+                         aria-valuemin="0"
+                         aria-valuemax="100"
+                         aria-valuenow="0">0%</div>
+                </div>
+
+                <div id="etlProgressText" class="mt-3 text-muted">
+                    Esperando inicio...
+                </div>
+
+                <div id="etlJobText" class="small text-muted mt-1"></div>
+            </div>
+        </div>
+
         <div class="row g-3 mb-4">
             <div class="col-md-4">
                 <div class="stat-box">
@@ -361,151 +365,264 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
 
         <div id="reportLinkBox" class="mb-4" style="display:none;"></div>
 
-        <div class="row g-4">
-            <div class="col-lg-6">
-                <div class="card">
-                    <div class="card-header bg-success text-white">
-                        <i class="fa-solid fa-check"></i> Actualizados
-                    </div>
-                    <div class="card-body table-responsive">
-                        <table class="table table-sm table-hover mb-0" id="tablaSuccess">
-                            <thead>
-                                <tr>
-                                    <th>Línea</th>
-                                    <th>Código</th>
-                                    <th>Nombre nuevo</th>
-                                    <th>Direccion nueva</th>                                    
-                                    <th>Comuna nueva</th>
-                                    <th>Lat</th>
-                                    <th>Lng</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-lg-6">
-                <div class="card">
-                    <div class="card-header bg-danger text-white">
-                        <i class="fa-solid fa-triangle-exclamation"></i> Fallidos
-                    </div>
-                    <div class="card-body table-responsive">
-                        <table class="table table-sm table-hover mb-0" id="tablaFail">
-                            <thead>
-                                <tr>
-                                    <th>Línea</th>
-                                    <th>Código</th>
-                                    <th>Nombre</th>
-                                    <th>Motivo</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+        <div class="alert alert-light border" id="etlResumenBox">
+            El detalle masivo ya no se carga en pantalla. Los fallidos se descargan desde el reporte CSV.
         </div>
     </div>
 </div>
 
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script>
-function escapeHtml(text) {
-    return String(text ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
+(function () {
+    const $form = $('#formEtlLocales');
+    const $btn = $('#btnProcesar');
+    const originalBtnHtml = $btn.html();
 
-$('#formEtlLocales').on('submit', function(e) {
-    e.preventDefault();
+    let currentJobId = null;
+    let isRunning = false;
+    const MAX_RETRIES = 3;
+    const LOTE_SIZE = 1000;
 
-    const formData = new FormData(this);
-    const btn = $('#btnProcesar');
-    const originalText = btn.html();
+    function escapeHtml(text) {
+        return String(text ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
 
-    btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> Procesando...');
+    function setLoading(running) {
+        isRunning = running;
+        $btn.prop('disabled', running);
 
-    $.ajax({
-        url: 'mod_etl_locales_procesar.php',
-        type: 'POST',
-        data: formData,
-        processData: false,
-        contentType: false,
-        dataType: 'json',
-        success: function(resp) {
-            btn.prop('disabled', false).html(originalText);
-
-            if (!resp || resp.success === false && !resp.updated && !resp.failed) {
-                alert(resp?.message || 'No fue posible procesar el archivo.');
-                return;
-            }
-
-            $('#resultadoBox').show();
-
-            $('#statUpdated').text(resp.updated || 0);
-            $('#statFailed').text(resp.failed || 0);
-            $('#statTotal').text((Number(resp.updated || 0) + Number(resp.failed || 0)));
-
-            const tbodySuccess = $('#tablaSuccess tbody').empty();
-            const tbodyFail = $('#tablaFail tbody').empty();
-
-            (resp.successes || []).forEach(row => {
-                tbodySuccess.append(`
-                    <tr>
-                        <td>${escapeHtml(row.line)}</td>
-                        <td>${escapeHtml(row.codigo)}</td>
-                        <td>${escapeHtml(row.nombre_nuevo)}</td>
-                        <td>${escapeHtml(row.direccion_nueva)}</td>                        
-                        <td>${escapeHtml(row.comuna_nueva)}</td>
-                        <td>${escapeHtml(row.lat)}</td>
-                        <td>${escapeHtml(row.lng)}</td>
-                    </tr>
-                `);
-            });
-
-            (resp.failures || []).forEach(row => {
-                tbodyFail.append(`
-                    <tr>
-                        <td>${escapeHtml(row.line)}</td>
-                        <td>${escapeHtml(row.codigo)}</td>
-                        <td>${escapeHtml(row.nombre)}</td>
-                        <td>${escapeHtml(row.reason)}</td>
-                    </tr>
-                `);
-            });
-
-            if (resp.reportUrl) {
-                $('#reportLinkBox')
-                    .show()
-                    .html(`
-                        <div class="alert alert-warning mb-0">
-                            Se generó un reporte de fallidos:
-                            <a href="${escapeHtml(resp.reportUrl)}" target="_blank" class="fw-bold ms-1">Descargar reporte CSV</a>
-                        </div>
-                    `);
-            } else {
-                $('#reportLinkBox').hide().empty();
-            }
-        },
-        error: function(xhr) {
-            btn.prop('disabled', false).html(originalText);
-
-            let msg = 'Ocurrió un error al procesar el ETL.';
-            if (xhr.responseJSON?.message) {
-                msg = xhr.responseJSON.message;
-            } else if (xhr.responseText) {
-                msg = xhr.responseText;
-            }
-
-            alert(msg);
+        if (running) {
+            $btn.html('<i class="fa-solid fa-spinner fa-spin"></i> Procesando...');
+        } else {
+            $btn.html(originalBtnHtml);
         }
+    }
+
+    function setProgress(percent, text) {
+        const value = Math.max(0, Math.min(100, Number(percent || 0)));
+        $('#etlProgressBar')
+            .css('width', value + '%')
+            .attr('aria-valuenow', value)
+            .text(value.toFixed(0) + '%');
+
+        $('#etlProgressText').html(text || '');
+    }
+
+    function updateStats(updated, failed) {
+        updated = Number(updated || 0);
+        failed = Number(failed || 0);
+
+        $('#statUpdated').text(updated);
+        $('#statFailed').text(failed);
+        $('#statTotal').text(updated + failed);
+    }
+
+    function showResultBox() {
+        $('#resultadoBox').show();
+    }
+
+    function showReport(url) {
+        if (url) {
+            $('#reportLinkBox')
+                .show()
+                .html(`
+                    <div class="alert alert-warning mb-0">
+                        <i class="fa-solid fa-file-circle-exclamation me-2"></i>
+                        Se generó un reporte de fallidos:
+                        <a href="${escapeHtml(url)}" target="_blank" class="fw-bold ms-1">
+                            Descargar reporte CSV
+                        </a>
+                    </div>
+                `);
+        } else {
+            $('#reportLinkBox').hide().empty();
+        }
+    }
+
+    function showError(message) {
+        $('#etlResumenBox')
+            .removeClass('alert-light alert-info alert-success alert-warning')
+            .addClass('alert-danger')
+            .html('<strong>Error:</strong> ' + escapeHtml(message || 'Ocurrió un problema.'));
+    }
+
+    function showInfo(message, type) {
+        const klass = type || 'info';
+
+        $('#etlResumenBox')
+            .removeClass('alert-light alert-info alert-success alert-danger alert-warning')
+            .addClass('alert-' + klass)
+            .html(message);
+    }
+
+    function createJob(formData) {
+        return $.ajax({
+            url: 'mod_etl_locales_subir_job.php',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            dataType: 'json',
+            cache: false
+        });
+    }
+
+    function processBatch(jobId, retryCount) {
+        retryCount = retryCount || 0;
+
+        const fd = new FormData();
+        fd.append('csrf_token', $('input[name="csrf_token"]').val());
+        fd.append('job_id', jobId);
+        fd.append('limit', LOTE_SIZE);
+
+        $.ajax({
+            url: 'mod_etl_locales_procesar_lote.php',
+            type: 'POST',
+            data: fd,
+            processData: false,
+            contentType: false,
+            dataType: 'json',
+            cache: false,
+            timeout: 0,
+            success: function (resp) {
+                if (!resp || resp.success !== true) {
+                    showError(resp && resp.message ? resp.message : 'No fue posible procesar el lote.');
+                    setLoading(false);
+                    return;
+                }
+
+                showResultBox();
+
+                $('#etlJobText').html(
+                    'Job ID: <strong>' + escapeHtml(resp.job_id) + '</strong>'
+                );
+
+                setProgress(
+                    resp.progress || 0,
+                    `Procesados <strong>${resp.processed_rows || 0}</strong> de <strong>${resp.total_rows || 0}</strong>
+                    | Actualizados: <strong>${resp.updated_rows || 0}</strong>
+                    | Fallidos: <strong>${resp.failed_rows || 0}</strong>`
+                );
+
+                updateStats(resp.updated_rows || 0, resp.failed_rows || 0);
+
+                if (resp.reportUrl) {
+                    showReport(resp.reportUrl);
+                }
+
+                if (resp.done) {
+                    setLoading(false);
+                    showInfo(
+                        `<strong>Proceso finalizado correctamente.</strong><br>
+                        Total filas: ${escapeHtml(resp.total_rows)}<br>
+                        Procesadas: ${escapeHtml(resp.processed_rows)}<br>
+                        Actualizadas: ${escapeHtml(resp.updated_rows)}<br>
+                        Fallidas: ${escapeHtml(resp.failed_rows)}`,
+                        (Number(resp.failed_rows || 0) > 0 ? 'warning' : 'success')
+                    );
+                    return;
+                }
+
+                setTimeout(function () {
+                    processBatch(jobId, 0);
+                }, 250);
+            },
+            error: function (xhr) {
+                if (retryCount < MAX_RETRIES) {
+                    const currentProgress = Number($('#etlProgressBar').attr('aria-valuenow') || 0);
+
+                    setProgress(
+                        currentProgress,
+                        `Se detectó un corte en el lote. Reintentando ${retryCount + 1} de ${MAX_RETRIES}...`
+                    );
+
+                    setTimeout(function () {
+                        processBatch(jobId, retryCount + 1);
+                    }, 1200 * (retryCount + 1));
+
+                    return;
+                }
+
+                let msg = 'Ocurrió un error al procesar el lote.';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    msg = xhr.responseJSON.message;
+                } else if (xhr.responseText) {
+                    msg = xhr.responseText;
+                }
+
+                showError(msg);
+                setLoading(false);
+            }
+        });
+    }
+
+    $form.on('submit', function (e) {
+        e.preventDefault();
+
+        if (isRunning) {
+            return;
+        }
+
+        const fileInput = $('#csvFile')[0];
+        if (!fileInput || !fileInput.files || !fileInput.files.length) {
+            alert('Debes seleccionar un archivo CSV.');
+            return;
+        }
+
+        const formData = new FormData(this);
+
+        setLoading(true);
+        showResultBox();
+        updateStats(0, 0);
+        setProgress(0, 'Subiendo archivo y creando job...');
+        $('#etlJobText').empty();
+        $('#reportLinkBox').hide().empty();
+        showInfo('Preparando archivo para procesamiento por lotes...', 'info');
+
+        createJob(formData)
+            .done(function (resp) {
+                if (!resp || resp.success !== true) {
+                    showError(resp && resp.message ? resp.message : 'No fue posible crear el job.');
+                    setLoading(false);
+                    return;
+                }
+
+                currentJobId = resp.job_id;
+
+                $('#etlJobText').html(
+                    'Job ID: <strong>' + escapeHtml(currentJobId) + '</strong>'
+                );
+
+                setProgress(
+                    0,
+                    `Archivo cargado correctamente. Total de filas detectadas: <strong>${resp.total_rows || 0}</strong>`
+                );
+
+                showInfo(
+                    `Job creado correctamente. Se iniciará el procesamiento en lotes de <strong>${LOTE_SIZE}</strong> registros.`,
+                    'info'
+                );
+
+                processBatch(currentJobId, 0);
+            })
+            .fail(function (xhr) {
+                let msg = 'No fue posible crear el job.';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    msg = xhr.responseJSON.message;
+                } else if (xhr.responseText) {
+                    msg = xhr.responseText;
+                }
+
+                showError(msg);
+                setLoading(false);
+            });
     });
-});
+})();
 </script>
 
 </body>

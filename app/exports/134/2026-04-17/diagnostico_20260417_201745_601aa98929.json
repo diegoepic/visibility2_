@@ -1,0 +1,102 @@
+{
+    "exported_at": "2026-04-18T00:17:46.323Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Mobile Safari/537.36",
+    "sw_version": "v6.0.6",
+    "stats": {
+        "today": {
+            "ymd": "2026-04-17",
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        },
+        "overall": {
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        }
+    },
+    "queue": {
+        "total_records": 0,
+        "last_created_at": null,
+        "last_updated_at": null
+    },
+    "recent_events": [
+        {
+            "id": "cd9000c4-8f2c-4b3a-adf0-c944edfeda41:1776444452525:58a44af4583fb",
+            "job_id": "cd9000c4-8f2c-4b3a-adf0-c944edfeda41",
+            "created": 1776444452525,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "cd9000c4-8f2c-4b3a-adf0-c944edfeda41:1776444452305:872a7c048a868",
+            "job_id": "cd9000c4-8f2c-4b3a-adf0-c944edfeda41",
+            "created": 1776444452305,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        }
+    ],
+    "storage_estimate": {
+        "usage": 3046687,
+        "quota": 10740464927,
+        "percent_used": 0
+    },
+    "connection_info": {
+        "effectiveType": "4g",
+        "downlink": 10,
+        "rtt": 50,
+        "saveData": false
+    },
+    "service_worker": {
+        "active": "active",
+        "installing": null,
+        "waiting": null,
+        "scope": "https://visibility.cl/visibility2/app/"
+    },
+    "idb_databases": [
+        {
+            "name": "v2_journal",
+            "version": 9
+        },
+        {
+            "name": "v2_mappings",
+            "version": 1
+        },
+        {
+            "name": "v2_offline",
+            "version": 9
+        },
+        {
+            "name": "v2_route_cache",
+            "version": 1
+        },
+        {
+            "name": "visibility2-v2",
+            "version": 9
+        }
+    ],
+    "recent_errors": [],
+    "client_time": {
+        "local": "Fri Apr 17 2026 20:17:46 GMT-0400 (hora estándar de Chile)",
+        "timezone": "America/Santiago",
+        "offset_minutes": 240
+    },
+    "csrf_token": "8026d3437e583fad2a6802b68e92d7627a53836a084ee48b5e7bfe28e21d1039"
+}
