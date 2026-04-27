@@ -353,12 +353,64 @@ $stmt->close();
 
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
 
 <script>
   let uploadsInProgress = 0;
   let visitReady = false;
   let creatingVisit = false;
   let qids = new Set();
+
+  /* ── Helpers EXIF ── */
+  function toMySQLDateTime(d) {
+    if (!d) return '';
+    const dt = d instanceof Date ? d : new Date(d);
+    if (isNaN(dt)) return '';
+    const pad = n => String(n).padStart(2,'0');
+    return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`;
+  }
+  function toFixedOrEmpty(v, dec) {
+    return (v !== undefined && v !== null && !isNaN(v)) ? parseFloat(v).toFixed(dec) : '';
+  }
+  function exposureToStr(v) {
+    if (v === undefined || v === null) return '';
+    if (v >= 1) return String(Math.round(v));
+    const d = Math.round(1 / v);
+    return `1/${d}`;
+  }
+  async function readExifMeta(file) {
+    try {
+      const ex = await exifr.parse(file, { gps:true, tiff:true, ifd0:true, exif:true, xmp:true, jfif:true, iptc:true }) || {};
+      const exifDate = ex.DateTimeOriginal || ex.CreateDate || ex.ModifyDate || null;
+      return {
+        exif_datetime      : toMySQLDateTime(exifDate),
+        exif_lat           : toFixedOrEmpty(ex.latitude, 7),
+        exif_lng           : toFixedOrEmpty(ex.longitude, 7),
+        exif_altitude      : toFixedOrEmpty(ex.altitude, 2),
+        exif_img_direction : toFixedOrEmpty(ex.GPSImgDirection, 2),
+        exif_make          : ex.Make      || '',
+        exif_model         : ex.Model     || '',
+        exif_software      : ex.Software  || '',
+        exif_lens_model    : ex.LensModel || '',
+        exif_fnumber       : toFixedOrEmpty(ex.FNumber, 2),
+        exif_exposure_time : exposureToStr(ex.ExposureTime),
+        exif_iso           : (ex.ISO && !isNaN(ex.ISO)) ? parseInt(ex.ISO, 10) : '',
+        exif_focal_length  : toFixedOrEmpty(ex.FocalLength, 1),
+        exif_orientation   : (ex.Orientation && !isNaN(ex.Orientation)) ? parseInt(ex.Orientation, 10) : '',
+        meta_json          : JSON.stringify({
+          CreateDate        : exifDate ? toMySQLDateTime(exifDate) : null,
+          DateTimeOriginal  : exifDate ? toMySQLDateTime(exifDate) : null,
+          GPSImgDirectionRef: ex.GPSImgDirectionRef || null,
+          SubSecTimeOriginal: ex.SubSecTimeOriginal  || null,
+        }),
+      };
+    } catch(e) {
+      return { exif_datetime:'', exif_lat:'', exif_lng:'', exif_altitude:'', exif_img_direction:'',
+               exif_make:'', exif_model:'', exif_software:'', exif_lens_model:'',
+               exif_fnumber:'', exif_exposure_time:'', exif_iso:'', exif_focal_length:'',
+               exif_orientation:'', meta_json:'{}' };
+    }
+  }
 
   window.CSRF_TOKEN = '<?= $_SESSION['csrf_token'] ?>';
   window.IW_TOKEN   = '<?= htmlspecialchars($iw_token, ENT_QUOTES) ?>';
@@ -383,15 +435,20 @@ function verImagenGrande(url){
   function compressImage(file, maxW, maxH, callback) {
     const img = new Image();
     const reader = new FileReader();
-    reader.onload = e => img.src = e.target.result;
+    reader.onload = e => { img.src = e.target.result; };
+    reader.onerror = () => callback(file); // fallback: usar archivo original
     img.onload = () => {
-      const scale = Math.min(maxW/img.width, maxH/img.height, 1);
-      const w = img.width * scale, h = img.height * scale;
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      canvas.toBlob(callback, 'image/jpeg', 0.8);
+      try {
+        const scale = Math.min(maxW/img.width, maxH/img.height, 1);
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob(blob => callback(blob || file), 'image/jpeg', 0.8);
+      } catch(_) { callback(file); }
     };
+    img.onerror = () => callback(file); // fallback: usar archivo original
     reader.readAsDataURL(file);
   }
 
@@ -646,7 +703,7 @@ function verImagenGrande(url){
                        file.type === 'image/heic' ||
                        file.type === 'image/heif';
 
-        const doProcess = blob => {
+        const doProcess = async blob => {
           const wrap  = document.getElementById(`previewFoto_${qid}`);
           const objUrl = URL.createObjectURL(blob);
 
@@ -661,53 +718,92 @@ function verImagenGrande(url){
 
           temp.querySelector('img').addEventListener('click', ()=> verImagenGrande(objUrl));
 
+          // Leer EXIF del archivo original ANTES de comprimir (la compresión destruye el EXIF)
+          const captureSource = input === camera ? 'camera' : 'gallery';
+          const meta = await readExifMeta(blob);
+
           compressImage(blob, 1024, 1024, compressedBlob => {
+            if (!compressedBlob) {
+              if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
+              resetFileInputs(qid);
+              showToast('No se pudo procesar la imagen. Intenta con otra foto.', 'Error');
+              finishUpload();
+              return;
+            }
             const fd = new FormData();
-            
+
             fd.append('csrf_token', window.CSRF_TOKEN);
             fd.append('id_form_question', qid);
             fd.append('fotoPregunta', compressedBlob, file.name.replace(/\.[^/.]+$/,'.jpg'));
             fd.append('iw_token', window.IW_TOKEN);
             fd.append('visita_id', window.VISITA_ID);
-            fd.append('capture_source', input === camera ? 'camera' : 'gallery');
-
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST','procesar_pregunta_fotoIW.php',true);
-
-            xhr.upload.onprogress = e => {
-              if (!e.lengthComputable) return;
-              const pct = Math.round(e.loaded/e.total*100);
-              const bar = temp.querySelector('.iw-progress > div');
-              const lbl = temp.querySelector('.iw-pct');
-              if (bar) bar.style.width = pct + '%';
-              if (lbl) lbl.textContent = pct + '%';
-            };
+            fd.append('capture_source', captureSource);
+            fd.append('exif_datetime',       meta.exif_datetime);
+            fd.append('exif_lat',            meta.exif_lat);
+            fd.append('exif_lng',            meta.exif_lng);
+            fd.append('exif_altitude',       meta.exif_altitude);
+            fd.append('exif_img_direction',  meta.exif_img_direction);
+            fd.append('exif_make',           meta.exif_make);
+            fd.append('exif_model',          meta.exif_model);
+            fd.append('exif_software',       meta.exif_software);
+            fd.append('exif_lens_model',     meta.exif_lens_model);
+            fd.append('exif_fnumber',        meta.exif_fnumber);
+            fd.append('exif_exposure_time',  meta.exif_exposure_time);
+            fd.append('exif_iso',            meta.exif_iso);
+            fd.append('exif_focal_length',   meta.exif_focal_length);
+            fd.append('exif_orientation',    meta.exif_orientation);
+            fd.append('meta_json',           meta.meta_json);
 
             const finishUpload = () => { uploadsInProgress--; checkUploads(); };
 
-            xhr.onload = () => {
-              let res;
-              try { res = JSON.parse(xhr.responseText); } catch { res = {status:'error'}; }
+            try {
+              const xhr = new XMLHttpRequest();
+              xhr.open('POST','procesar_pregunta_fotoIW.php',true);
+
+              xhr.upload.onprogress = e => {
+                if (!e.lengthComputable) return;
+                const pct = Math.round(e.loaded/e.total*100);
+                const bar = temp.querySelector('.iw-progress > div');
+                const lbl = temp.querySelector('.iw-pct');
+                if (bar) bar.style.width = pct + '%';
+                if (lbl) lbl.textContent = pct + '%';
+              };
+
+              xhr.onload = () => {
+                let res;
+                try { res = JSON.parse(xhr.responseText); } catch { res = {status:'error'}; }
+                if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
+                resetFileInputs(qid);
+                if (res.status==='success'){
+                  const wrap2 = document.getElementById(`previewFoto_${qid}`);
+                  wrap2.appendChild(buildPreviewItem(qid, res.resp_id, res.fotoUrl));
+                } else {
+                  showToast(res.message || 'Error al subir la foto', 'Error');
+                }
+                finishUpload();
+              };
+
+              xhr.onerror = () => {
+                if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
+                resetFileInputs(qid);
+                showToast('Error de red al subir la foto','Error');
+                finishUpload();
+              };
+
+              xhr.ontimeout = () => {
+                if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
+                resetFileInputs(qid);
+                showToast('Tiempo de espera agotado al subir la foto','Error');
+                finishUpload();
+              };
+
+              xhr.send(fd);
+            } catch(err) {
               if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
               resetFileInputs(qid);
-
-              if (res.status==='success'){
-                const wrap2 = document.getElementById(`previewFoto_${qid}`);
-                wrap2.appendChild(buildPreviewItem(qid, res.resp_id, res.fotoUrl));
-              } else {
-                showToast(res.message || 'Error al subir la foto', 'Error');
-              }
+              showToast('Error inesperado al subir la foto','Error');
               finishUpload();
-            };
-
-            xhr.onerror = () => {
-              if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
-              resetFileInputs(qid);
-              showToast('Error de red al subir la foto','Error');
-              finishUpload();
-            };
-
-            xhr.send(fd);
+            }
           });
         };
 

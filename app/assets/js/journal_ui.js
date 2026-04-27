@@ -18,6 +18,10 @@
   let GROUPS_WEEK    = {};
   let OFFLINE_GUIDS  = new Set();
 
+  let _calYear        = null;
+  let _calMonth       = null;
+  let _calSelectedYmd = null;
+
   // ========== MEJORA: Debounce para evitar race conditions en renderizado ==========
   const RENDER_DEBOUNCE_MS = 150;
   const PROGRESS_DEBOUNCE_MS = 50; // Más rápido para actualizaciones de progreso
@@ -1486,6 +1490,180 @@
     return _renderWeekInternal();
   }
 
+  // ---------- Calendario mensual ----------
+
+  async function renderMonth(year, month) {
+    const grid  = document.getElementById('jr-cal-grid');
+    const title = document.getElementById('jr-cal-title');
+    if (!grid || !title) return;
+
+    const firstDay = new Date(year, month, 1);
+    const lastDay  = new Date(year, month + 1, 0);
+    const pad      = n => String(n).padStart(2, '0');
+    const fromYmd  = `${year}-${pad(month + 1)}-01`;
+    const toYmd    = `${year}-${pad(month + 1)}-${pad(lastDay.getDate())}`;
+    const todayYmd = JournalDB.ymdLocal(new Date());
+
+    let localRows = [], serverItems = [];
+    try {
+      [localRows, serverItems] = await Promise.all([
+        JournalDB.listRange(fromYmd, toYmd),
+        fetchServerJournal(fromYmd, toYmd).catch(() => [])
+      ]);
+    } catch(_) {}
+
+    const localByDay = {};
+    localRows.forEach(r => { (localByDay[r.ymd] = localByDay[r.ymd] || []).push(r); });
+
+    const serverByDay = {};
+    if (Array.isArray(serverItems)) {
+      serverItems.filter(hasEndDate).forEach(it => {
+        let ymd = null;
+        if (it.tiempos && it.tiempos.fecha_inicio) ymd = String(it.tiempos.fecha_inicio).slice(0, 10);
+        else if (it.tiempos && it.tiempos.ultima_gestion_at) ymd = String(it.tiempos.ultima_gestion_at).slice(0, 10);
+        else if (it.ymd) ymd = String(it.ymd);
+        if (ymd) (serverByDay[ymd] = serverByDay[ymd] || []).push(it);
+      });
+    }
+
+    title.textContent = firstDay.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
+
+    const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+    let html = DAYS.map(d =>
+      `<div style="text-align:center;font-weight:bold;font-size:11px;color:#888;padding:2px 0;">${d}</div>`
+    ).join('');
+
+    const startDow = (firstDay.getDay() + 6) % 7;
+    for (let i = 0; i < startDow; i++) html += '<div></div>';
+
+    for (let d = 1; d <= lastDay.getDate(); d++) {
+      const ymd        = `${year}-${pad(month + 1)}-${pad(d)}`;
+      const srv        = serverByDay[ymd] || [];
+      const loc        = localByDay[ymd]  || [];
+      const isFuture   = ymd > todayYmd;
+      const isToday    = ymd === todayYmd;
+      const isSelected = ymd === _calSelectedYmd;
+      const hasSrv     = srv.length > 0;
+      const hasPending = loc.some(r => r.status !== 'success');
+      const hasError   = loc.some(r => r.status === 'error');
+      const hasActivity = hasSrv || hasPending || hasError;
+
+      let dots = '';
+      if (hasSrv)     dots += '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#3c763d;margin:0 1px;"></span>';
+      if (hasPending) dots += '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f0ad4e;margin:0 1px;"></span>';
+      if (hasError)   dots += '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#a94442;margin:0 1px;"></span>';
+
+      const bg     = isSelected ? '#d0e8ff' : (isToday ? '#fffbe6' : '#fff');
+      const border = isSelected ? '2px solid #337ab7' : (isToday ? '2px solid #f0ad4e' : '1px solid #ddd');
+      const cursor = (!isFuture && hasActivity) ? 'pointer' : 'default';
+
+      html += `<div class="jr-cal-cell" data-ymd="${ymd}"
+        style="padding:4px 2px;min-height:46px;background:${bg};border:${border};border-radius:4px;
+               text-align:center;opacity:${isFuture ? '0.4' : '1'};cursor:${cursor};">
+        <div style="font-size:12px;font-weight:${isToday ? 'bold' : 'normal'};">${d}</div>
+        <div style="margin-top:3px;">${dots}</div>
+      </div>`;
+    }
+
+    grid.innerHTML = html;
+  }
+
+  async function _showDayDetail(ymd) {
+    const detail = document.getElementById('jr-cal-detail');
+    if (!detail) return;
+
+    if (!_calSelectedYmd) {
+      detail.style.display = 'none';
+      detail.innerHTML = '';
+      return;
+    }
+
+    detail.style.display = 'block';
+    detail.innerHTML = '<div class="jr-empty"><i class="fa fa-spinner fa-spin"></i> Cargando...</div>';
+
+    let rows = [], serverItems = [];
+    try {
+      [rows, serverItems] = await Promise.all([
+        JournalDB.listByYMD(ymd),
+        fetchServerJournal(ymd, ymd).catch(() => [])
+      ]);
+    } catch(_) {}
+
+    await Promise.all(rows.map(r => JournalDB.resolveNamesIfPossible(r)));
+    collectOfflineGuids(rows);
+
+    const f     = new Date(ymd + 'T00:00:00');
+    const label = f.toLocaleDateString('es-CL', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+
+    let serverHtml = '';
+    if (Array.isArray(serverItems)) {
+      const srvForDay = serverItems.filter(hasEndDate);
+      if (srvForDay.length) {
+        serverHtml = `<div class="jr-section jr-section--server">
+          <h5 class="jr-section-title">Gestiones subidas <span class="label label-success" style="font-size:11px;vertical-align:middle;">${srvForDay.length}</span></h5>
+          ${srvForDay.map(serverItemHTML).join('')}
+        </div>`;
+      }
+    }
+
+    let offlineHtml = '';
+    if (rows.length) {
+      const g = groupFromRows(rows);
+      const pendingGroups = Object.values(g).filter(gr => gr.status !== 'success');
+      if (pendingGroups.length) {
+        offlineHtml = `<div class="jr-section jr-section--local">
+          <h5 class="jr-section-title">Pendiente por subir</h5>
+          ${pendingGroups.sort((a, b) => (a.created || 0) - (b.created || 0)).map(groupHTML).join('')}
+        </div>`;
+      }
+    }
+
+    let dayContent = serverHtml + offlineHtml;
+    if (!dayContent) {
+      dayContent = '<div class="jr-empty"><i class="fa fa-calendar-o"></i> Sin registros para este día</div>';
+    }
+
+    detail.innerHTML = `<h4 class="jr-date" style="text-transform:capitalize;">${label}</h4>${dayContent}`;
+    initPopovers();
+  }
+
+  // Click en celda del calendario
+  document.addEventListener('click', async (e) => {
+    const cell = e.target.closest('.jr-cal-cell');
+    if (!cell) return;
+    const ymd      = cell.getAttribute('data-ymd');
+    const todayYmd = JournalDB.ymdLocal(new Date());
+    if (ymd > todayYmd) return;
+
+    _calSelectedYmd = (_calSelectedYmd === ymd) ? null : ymd;
+    renderMonth(_calYear, _calMonth);
+    await _showDayDetail(_calSelectedYmd);
+  });
+
+  // Flechas prev/next mes
+  const $calPrev = document.getElementById('jr-cal-prev');
+  const $calNext = document.getElementById('jr-cal-next');
+
+  $calPrev && $calPrev.addEventListener('click', () => {
+    _calMonth--;
+    if (_calMonth < 0) { _calMonth = 11; _calYear--; }
+    _calSelectedYmd = null;
+    const det = document.getElementById('jr-cal-detail');
+    if (det) { det.style.display = 'none'; det.innerHTML = ''; }
+    renderMonth(_calYear, _calMonth);
+  });
+
+  $calNext && $calNext.addEventListener('click', () => {
+    const now = new Date();
+    if (_calYear > now.getFullYear() || (_calYear === now.getFullYear() && _calMonth >= now.getMonth())) return;
+    _calMonth++;
+    if (_calMonth > 11) { _calMonth = 0; _calYear++; }
+    _calSelectedYmd = null;
+    const det = document.getElementById('jr-cal-detail');
+    if (det) { det.style.display = 'none'; det.innerHTML = ''; }
+    renderMonth(_calYear, _calMonth);
+  });
+
   // ---------- Interacciones ----------
 
   // Reintentar grupo (cola local)
@@ -1620,6 +1798,7 @@
     await JournalDB.clearUploadedFor(ymd);
     await renderToday();
     await renderWeek();
+    if (_calYear !== null) await renderMonth(_calYear, _calMonth);
   });
 
   $btnExport && $btnExport.addEventListener('click', async () => {
@@ -1741,6 +1920,7 @@
     setTimeout(async () => {
       await renderToday();
       await renderWeek();
+      if (_calYear !== null) await renderMonth(_calYear, _calMonth);
     }, 300);
 
     // Mensaje cuando una gestión (procesar_gestion) se sube correctamente
@@ -1777,7 +1957,7 @@
     }
   }
 
-  // tabs → render diferido
+  // tabs → render diferido (legacy, mantenido por compatibilidad)
   qsa('a[href="#jr-semana"]').forEach(a =>
     a.addEventListener('shown.bs.tab', renderWeek)
   );
@@ -1789,9 +1969,15 @@
     updateOfflineIndicator();
 
     await JournalDB.openDB();
-    await JournalDB.cleanup({ maxDays: 7, maxEvents: 1000, maxSuccessDays: 3 });
+    await JournalDB.cleanup({ maxDays: 90, maxEvents: 1000, maxSuccessDays: 90 });
 
-    // Usar versiones inmediatas en init (no debounced)
+    // Inicializar calendario del mes actual
+    const now = new Date();
+    _calYear  = now.getFullYear();
+    _calMonth = now.getMonth();
+    await renderMonth(_calYear, _calMonth);
+
+    // Render legacy (contenedores ocultos, necesarios para eventos de cola)
     await renderTodayImmediate();
     await renderWeekImmediate();
   })();

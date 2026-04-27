@@ -158,56 +158,78 @@ function exifToMysql(?string $s): ?string {
 /* =========================
    5) EXIF / medidas / hash
    ========================= */
-$sha1   = @sha1_file($tmp) ?: '';
-$dim    = @getimagesize($tmp);
+$sha1 = @sha1_file($tmp) ?: '';
+$dim  = @getimagesize($tmp);
 $w = $dim ? $dim[0] : null;
 $h = $dim ? $dim[1] : null;
 
-$exifMake = $exifModel = $exifDateTime = $exifSoft = $exifLens = null;
-$exifLat = $exifLng = $exifAlt = $exifDir = null;
-$exifFNum = $exifExp = $exifIso = $exifFocal = null;
-$exifOrient = null;
+// Helpers para leer POST
+function post_str(string $k, $def = null): ?string {
+  $v = isset($_POST[$k]) ? trim((string)$_POST[$k]) : null;
+  return ($v !== null && $v !== '') ? $v : $def;
+}
+function post_float(string $k, $def = null): ?float {
+  $v = post_str($k);
+  return ($v !== null && is_numeric($v)) ? (float)$v : $def;
+}
+function post_int(string $k, $def = null): ?int {
+  $v = post_str($k);
+  return ($v !== null && is_numeric($v)) ? (int)$v : $def;
+}
 
-$ext = strtolower(pathinfo($_FILES['fotoPregunta']['name'], PATHINFO_EXTENSION));
-if (function_exists('exif_read_data') && in_array($ext, ['jpg','jpeg','tif','tiff'])) {
-  try {
-    $exif = @exif_read_data($tmp, 'IFD0,EXIF,GPS', true, false);
-    if ($exif) {
-      $exifMake     = $exif['IFD0']['Make']              ?? null;
-      $exifModel    = $exif['IFD0']['Model']             ?? null;
-      $exifSoft     = $exif['IFD0']['Software']          ?? null;
-      $exifLens     = $exif['EXIF']['LensModel']         ?? null;
-      $exifDateTime = $exif['EXIF']['DateTimeOriginal']  ?? ($exif['IFD0']['DateTime'] ?? null);
-      $exifOrient   = isset($exif['IFD0']['Orientation']) ? (int)$exif['IFD0']['Orientation'] : null;
+// Preferencia: POST params enviados por el frontend (via exifr.js)
+// Fallback: exif_read_data del servidor (solo para JPEGs sin compresión JS previa)
+$hasFrontendExif = isset($_POST['exif_make']) || isset($_POST['exif_lat']) || isset($_POST['meta_json']);
 
-      if (!empty($exif['EXIF']['FNumber'])) {
-        $f = $exif['EXIF']['FNumber'];
-        $exifFNum = is_array($f)? $f[0]/max($f[1],1) : (float)$f;
-      }
-      if (!empty($exif['EXIF']['ExposureTime']))   { $exifExp = (string)$exif['EXIF']['ExposureTime']; }
-      if (!empty($exif['EXIF']['ISOSpeedRatings'])){
-        $iso = $exif['EXIF']['ISOSpeedRatings']; $exifIso = is_array($iso)? (int)reset($iso) : (int)$iso;
-      }
-      if (!empty($exif['EXIF']['FocalLength']))    {
-        $fl = $exif['EXIF']['FocalLength']; $exifFocal = is_array($fl)? $fl[0]/max($fl[1],1) : (float)$fl;
-      }
+if ($hasFrontendExif) {
+  $exifDateTime = post_str('exif_datetime');
+  $exifLat      = post_float('exif_lat');
+  $exifLng      = post_float('exif_lng');
+  $exifAlt      = post_float('exif_altitude');
+  $exifDir      = post_float('exif_img_direction');
+  $exifMake     = post_str('exif_make');
+  $exifModel    = post_str('exif_model');
+  $exifSoft     = post_str('exif_software');
+  $exifLens     = post_str('exif_lens_model');
+  $exifFNum     = post_float('exif_fnumber');
+  $exifExp      = post_str('exif_exposure_time');
+  $exifIso      = post_int('exif_iso');
+  $exifFocal    = post_float('exif_focal_length');
+  $exifOrient   = post_int('exif_orientation');
+  $capture      = post_str('capture_source') ?? $capture;
 
-      if (!empty($exif['GPS']['GPSLatitude']) && !empty($exif['GPS']['GPSLatitudeRef'])) {
-        $exifLat = gpsToFloat($exif['GPS']['GPSLatitudeRef'], $exif['GPS']['GPSLatitude']);
+  $meta_json_raw = post_str('meta_json');
+  // se usará $meta_json_raw al construir $metaJson más abajo
+} else {
+  // Fallback: intentar leer del archivo subido
+  $exifMake = $exifModel = $exifDateTime = $exifSoft = $exifLens = null;
+  $exifLat = $exifLng = $exifAlt = $exifDir = null;
+  $exifFNum = $exifExp = $exifIso = $exifFocal = null;
+  $exifOrient = null;
+  $meta_json_raw = null;
+
+  $ext = strtolower(pathinfo($_FILES['fotoPregunta']['name'], PATHINFO_EXTENSION));
+  if (function_exists('exif_read_data') && in_array($ext, ['jpg','jpeg','tif','tiff'])) {
+    try {
+      $exif = @exif_read_data($tmp, 'IFD0,EXIF,GPS', true, false);
+      if ($exif) {
+        $exifMake     = $exif['IFD0']['Make']             ?? null;
+        $exifModel    = $exif['IFD0']['Model']            ?? null;
+        $exifSoft     = $exif['IFD0']['Software']         ?? null;
+        $exifLens     = $exif['EXIF']['LensModel']        ?? null;
+        $exifDateTime = $exif['EXIF']['DateTimeOriginal'] ?? ($exif['IFD0']['DateTime'] ?? null);
+        $exifOrient   = isset($exif['IFD0']['Orientation']) ? (int)$exif['IFD0']['Orientation'] : null;
+        if (!empty($exif['EXIF']['FNumber']))      { $f = $exif['EXIF']['FNumber'];      $exifFNum = is_array($f) ? $f[0]/max($f[1],1) : (float)$f; }
+        if (!empty($exif['EXIF']['ExposureTime'])) { $exifExp = (string)$exif['EXIF']['ExposureTime']; }
+        if (!empty($exif['EXIF']['ISOSpeedRatings'])) { $iso = $exif['EXIF']['ISOSpeedRatings']; $exifIso = is_array($iso) ? (int)reset($iso) : (int)$iso; }
+        if (!empty($exif['EXIF']['FocalLength']))  { $fl = $exif['EXIF']['FocalLength']; $exifFocal = is_array($fl) ? $fl[0]/max($fl[1],1) : (float)$fl; }
+        if (!empty($exif['GPS']['GPSLatitude'])  && !empty($exif['GPS']['GPSLatitudeRef']))  { $exifLat = gpsToFloat($exif['GPS']['GPSLatitudeRef'],  $exif['GPS']['GPSLatitude']); }
+        if (!empty($exif['GPS']['GPSLongitude']) && !empty($exif['GPS']['GPSLongitudeRef'])) { $exifLng = gpsToFloat($exif['GPS']['GPSLongitudeRef'], $exif['GPS']['GPSLongitude']); }
+        if (!empty($exif['GPS']['GPSAltitude']))    { $a = $exif['GPS']['GPSAltitude'];    $exifAlt = is_array($a) ? $a[0]/max($a[1],1) : (float)$a; }
+        if (!empty($exif['GPS']['GPSImgDirection'])) { $d = $exif['GPS']['GPSImgDirection']; $exifDir = is_array($d) ? $d[0]/max($d[1],1) : (float)$d; }
       }
-      if (!empty($exif['GPS']['GPSLongitude']) && !empty($exif['GPS']['GPSLongitudeRef'])) {
-        $exifLng = gpsToFloat($exif['GPS']['GPSLongitudeRef'], $exif['GPS']['GPSLongitude']);
-      }
-      if (!empty($exif['GPS']['GPSAltitude'])) {
-        $a = $exif['GPS']['GPSAltitude'];
-        $exifAlt = is_array($a) ? $a[0]/max($a[1],1) : (float)$a;
-      }
-      if (!empty($exif['GPS']['GPSImgDirection'])) {
-        $d = $exif['GPS']['GPSImgDirection'];
-        $exifDir = is_array($d) ? $d[0]/max($d[1],1) : (float)$d;
-      }
-    }
-  } catch (Throwable $t) { /* silencioso */ }
+    } catch (Throwable $t) { /* silencioso */ }
+  }
 }
 
 /* =========================
@@ -251,16 +273,27 @@ $stIns->close();
 try {
   $exifDT = exifToMysql($exifDateTime);
 
-  $metaJson = json_encode([
-    'mime'            => $mime,
-    'bytes'           => $size,
-    'width'           => $w,
-    'height'          => $h,
-    'sha1'            => $sha1,
-    'id_form_question'=> $qid,
-    'id_formulario'   => $idCampana,
-    'user_agent'      => $_SERVER['HTTP_USER_AGENT'] ?? null
-  ], JSON_UNESCAPED_UNICODE);
+  // Si el frontend envió meta_json (via exifr.js), usarlo; si no, construir básico
+  if (!empty($meta_json_raw)) {
+    $decoded = json_decode($meta_json_raw, true);
+    if (json_last_error() === JSON_ERROR_NONE) {
+      $decoded['sha1'] = $sha1;
+      $metaJson = json_encode($decoded, JSON_UNESCAPED_UNICODE);
+    } else {
+      $metaJson = null;
+    }
+  } else {
+    $metaJson = json_encode([
+      'mime'             => $mime,
+      'bytes'            => $size,
+      'width'            => $w,
+      'height'           => $h,
+      'sha1'             => $sha1,
+      'id_form_question' => $qid,
+      'id_formulario'    => $idCampana,
+      'user_agent'       => $_SERVER['HTTP_USER_AGENT'] ?? null,
+    ], JSON_UNESCAPED_UNICODE);
+  }
 
   $sqlMeta = "INSERT INTO form_question_photo_meta
   (resp_id, visita_id, id_local, id_usuario, foto_url,

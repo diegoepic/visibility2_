@@ -325,7 +325,8 @@ if ($view_mode === 'duplicados') {
     $sql = "
         SELECT
             MIN(s.id) AS foto_id,
-            GROUP_CONCAT(s.answer_text SEPARATOR '||') AS urls,
+            GROUP_CONCAT(s.answer_text ORDER BY s.created_at SEPARATOR '||') AS urls,
+            GROUP_CONCAT(s.id          ORDER BY s.created_at SEPARATOR '||') AS resp_ids,
             MAX(s.created_at) AS fechaSubida,
             fq.question_text AS pregunta,
             u.usuario AS usuario,
@@ -649,7 +650,8 @@ if ($requiereLocal && !empty($localIds)) {
                                  class="thumbnail img-click"
                                  loading="lazy"
                                  decoding="async"
-                                 data-urls="<?= htmlspecialchars($row['urls'] ?? '', ENT_QUOTES) ?>">
+                                 data-urls="<?= htmlspecialchars($row['urls'] ?? '', ENT_QUOTES) ?>"
+                                 data-resp-ids="<?= htmlspecialchars($row['resp_ids'] ?? '', ENT_QUOTES) ?>">
                         </td>
 
                         <td>

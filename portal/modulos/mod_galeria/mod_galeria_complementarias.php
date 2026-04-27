@@ -468,6 +468,43 @@ $stmtP->close();
             transform:scale(1.05);
         }
 
+        /* ── Panel metadata foto ── */
+        #galleryMetaPane{
+            flex:0 0 30%;
+            min-width:220px;
+            background:#0d1e30;
+            border-left:1px solid rgba(0,194,255,.12);
+            border-radius:0 16px 16px 0;
+            padding:18px 16px;
+            overflow-y:auto;
+            max-height:calc(70vh + 120px);
+        }
+        #galleryPhotoPane{
+            flex:1 1 70%;
+            min-width:0;
+            padding:16px;
+        }
+        .meta-row{
+            display:flex;
+            gap:8px;
+            margin-bottom:9px;
+            font-size:12.5px;
+            color:#cdd6e0;
+            align-items:flex-start;
+        }
+        .meta-icon{ font-size:13px; color:#19d4ff; flex-shrink:0; margin-top:1px; }
+        .meta-label{ color:#7a9ab5; font-size:11px; display:block; }
+        .meta-val{ color:#e2eaf0; }
+        .meta-divider{ border:none; border-top:1px solid rgba(0,194,255,.1); margin:10px 0; }
+        .meta-loading, .meta-empty{
+            color:#6b8aad; font-size:12px; text-align:center;
+            padding:20px 0;
+        }
+        @media (max-width:768px){
+            #fullSizeModal .modal-body.d-flex{ flex-direction:column !important; }
+            #galleryMetaPane{ flex:none; border-left:none; border-top:1px solid rgba(0,194,255,.12); border-radius:0 0 16px 16px; max-height:260px; }
+        }
+
         @media (max-width: 1200px){
             .filters-grid{
                 grid-template-columns:repeat(3,minmax(220px,1fr));
@@ -492,6 +529,64 @@ $stmtP->close();
             .btn-modern{
                 width:100%;
             }
+        }
+
+        /* ── Modal Kilometrajes ── */
+        .km-week-card{
+            border:1px solid #dee2e6;
+            border-radius:10px;
+            padding:12px 14px;
+            background:#fafbfd;
+        }
+        .km-week-header{
+            margin-bottom:8px;
+            font-size:13px;
+        }
+        .km-week-days{
+            display:flex;
+            flex-wrap:wrap;
+            gap:8px;
+            margin-bottom:8px;
+        }
+        .km-day-label{
+            display:flex;
+            align-items:center;
+            gap:5px;
+            cursor:pointer;
+            font-size:12px;
+            margin:0;
+            padding:6px 11px;
+            border-radius:8px;
+            border:1px solid #ced4da;
+            background:#fff;
+            transition:.15s;
+            user-select:none;
+        }
+        .km-day-label.active{
+            background:#e8f5e9;
+            border-color:#66bb6a;
+            color:#2e7d32;
+        }
+        .km-day-label.feriado{
+            background:#fbe9e7;
+            border-color:#ef9a9a;
+            color:#b71c1c;
+            text-decoration:line-through;
+        }
+        .km-day-check{ display:none; }
+        .km-day-text{
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            line-height:1.2;
+        }
+        .km-day-name{ font-weight:700; }
+        .km-day-num{ font-size:11px; opacity:.8; }
+        .km-week-preview{
+            font-size:12px;
+            padding-top:6px;
+            border-top:1px solid #e9ecef;
+            color:#555;
         }
     </style>
 </head>
@@ -602,6 +697,13 @@ $stmtP->close();
             <button id="btnDownloadSelected" class="btn btn-success btn-modern" type="button">Descargar seleccionadas</button>
             <button id="btnDownloadAll" class="btn btn-warning btn-modern" type="button">Descargar todas</button>
             <button id="btnExportCsv" class="btn btn-info btn-modern" type="button" style="display:none;">Exportar CSV duplicados</button>
+            <?php if ($formulario_id === 138): ?>
+            <button type="button" class="btn btn-modern" id="btnKilometrajes"
+                    style="background:#217346;border-color:#217346;color:#fff;"
+                    data-toggle="modal" data-target="#modalKilometrajes">
+                <i class="fas fa-file-excel mr-1"></i>Informe Kilometrajes
+            </button>
+            <?php endif; ?>
         </div>
 
         <div class="toolbar-right">
@@ -625,19 +727,81 @@ $stmtP->close();
 <!-- Modal imágenes -->
 <div class="modal fade" id="fullSizeModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-xl">
-        <div class="modal-content modal-gallery">
-            <div class="modal-body p-3">
-                <div class="gallery-main-container">
-                    <img id="galleryMainImage" src="" class="gallery-main-img" alt="Imagen">
+        <div class="modal-content modal-gallery" style="overflow:hidden;">
+            <div class="modal-body p-0 d-flex" style="min-height:520px;">
+                <div id="galleryPhotoPane">
+                    <div class="gallery-main-container">
+                        <img id="galleryMainImage" src="" class="gallery-main-img" alt="Imagen">
+                    </div>
+                    <div class="gallery-thumbs" id="galleryThumbs"></div>
                 </div>
-                <div class="gallery-thumbs" id="galleryThumbs"></div>
+                <div id="galleryMetaPane">
+                    <div id="galleryMetaContent">
+                        <p class="meta-empty">Selecciona una foto para ver su metadata.</p>
+                    </div>
+                </div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer" style="background:#0b1624;border-top:1px solid rgba(0,194,255,.1);">
                 <button class="btn btn-secondary" data-dismiss="modal" type="button">Cerrar</button>
             </div>
         </div>
     </div>
 </div>
+
+<?php if ($formulario_id === 138): ?>
+<!-- ── Modal Informe Kilometrajes ── -->
+<div class="modal fade" id="modalKilometrajes" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header" style="background:#217346;color:#fff;">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-excel mr-2"></i>Informe Kilometrajes
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" style="color:#fff;opacity:1;">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    Selecciona el período a analizar y <strong>desmarca los días feriados</strong> de cada semana.
+                    El sistema calculará automáticamente cuándo debieron subirse los kilometrajes.
+                </p>
+                <div class="form-row mb-3">
+                    <div class="col">
+                        <label class="font-weight-bold small mb-1">Desde</label>
+                        <input type="date" id="kmInputStart" class="form-control form-control-sm"
+                               value="<?= htmlspecialchars($start_date, ENT_QUOTES) ?>">
+                    </div>
+                    <div class="col">
+                        <label class="font-weight-bold small mb-1">Hasta</label>
+                        <input type="date" id="kmInputEnd" class="form-control form-control-sm"
+                               value="<?= htmlspecialchars($end_date, ENT_QUOTES) ?>">
+                    </div>
+                </div>
+                <div id="kmWeeksContainer"></div>
+                <div class="mt-3 p-2 rounded" style="background:#f0f9f0;border:1px solid #c3e6cb;">
+                    <span class="font-weight-bold small">Total días de subida esperados: </span>
+                    <span id="kmTotalExpected" class="font-weight-bold" style="color:#217346;font-size:16px;">0</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm" id="btnGenKmExcel"
+                        style="background:#217346;border-color:#217346;color:#fff;">
+                    <i class="fas fa-download mr-1"></i>Generar Excel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<form id="formKilometrajes" method="POST"
+      action="../../informes/descargar_excel_kilometrajes.php"
+      target="_blank" style="display:none;">
+    <input type="hidden" name="start_date" id="kmFormStart">
+    <input type="hidden" name="end_date"   id="kmFormEnd">
+</form>
+<?php endif; ?>
 
 <form id="zipForm" method="POST" action="download_zip.php" style="display:none">
     <input type="hidden" name="jsonFotos" id="jsonFotos">
@@ -648,7 +812,8 @@ $stmtP->close();
 
 <script>
 $(function () {
-    const baseUrl = '<?= $base_url ?>';
+    const baseUrl     = '<?= $base_url ?>';
+    const formularioId = <?= (int)$formulario_id ?>;
     let galleryXhr = null;
     let lastRequestData = null;
     let retryTimer = null;
@@ -859,42 +1024,112 @@ $(function () {
         }
     });
 
+    function loadMeta(respId) {
+        const $pane = $('#galleryMetaContent');
+        if (!respId) {
+            $pane.html('<p class="meta-empty">Sin metadata disponible.</p>');
+            return;
+        }
+        $pane.html('<p class="meta-loading"><i class="fa fa-spinner fa-spin"></i> Cargando…</p>');
+        $.get('modulos/mod_galeria/ajax_foto_meta.php', { resp_id: respId, id: formularioId })
+            .done(function (data) {
+                if (data && data.ok) renderMeta(data.meta);
+                else $pane.html('<p class="meta-empty">Metadata no disponible.</p>');
+            })
+            .fail(function () {
+                $pane.html('<p class="meta-empty">Error al cargar metadata.</p>');
+            });
+    }
+
+    function renderMeta(m) {
+        const rows = [];
+
+        function row(icon, label, val) {
+            if (val === null || val === undefined || val === '' || val === '0' || val === 0) return;
+            rows.push(`<div class="meta-row"><span class="meta-icon"><i class="fa ${icon}"></i></span><div><span class="meta-label">${label}</span><span class="meta-val">${val}</span></div></div>`);
+        }
+
+        const sourceMap = { camera: 'Cámara', gallery: 'Galería', unknown: 'Desconocido' };
+        row('fa-camera', 'Origen', sourceMap[m.capture_source] || m.capture_source);
+
+        if (m.subida_at) {
+            const d = new Date(m.subida_at.replace(' ', 'T'));
+            row('fa-upload', 'Subida', d.toLocaleString('es-CL', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }));
+        }
+        if (m.exif_datetime) {
+            row('fa-calendar', 'EXIF fecha', m.exif_datetime.replace('T', ' ').slice(0, 16));
+        }
+
+        rows.push('<hr class="meta-divider">');
+
+        if (m.exif_lat && m.exif_lng && parseFloat(m.exif_lat) !== 0) {
+            const lat = parseFloat(m.exif_lat).toFixed(6);
+            const lng = parseFloat(m.exif_lng).toFixed(6);
+            const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+            rows.push(`<div class="meta-row"><span class="meta-icon"><i class="fa fa-map-marker"></i></span><div><span class="meta-label">GPS</span><span class="meta-val">${lat}, ${lng} <a href="${mapUrl}" target="_blank" style="color:#19d4ff;font-size:11px;">Ver mapa</a></span></div></div>`);
+        }
+        if (m.exif_altitude && parseFloat(m.exif_altitude) !== 0) {
+            row('fa-arrow-up', 'Altitud', parseFloat(m.exif_altitude).toFixed(1) + ' m');
+        }
+        if (m.exif_img_direction && parseFloat(m.exif_img_direction) !== 0) {
+            row('fa-compass', 'Dirección', parseFloat(m.exif_img_direction).toFixed(1) + '°');
+        }
+
+        rows.push('<hr class="meta-divider">');
+
+        const makeModel = [m.exif_make, m.exif_model].filter(Boolean).join(' / ');
+        row('fa-mobile', 'Dispositivo', makeModel);
+        row('fa-code', 'Software', m.exif_software);
+        row('fa-search', 'Lente', m.exif_lens_model);
+
+        const aperture = m.exif_fnumber  ? 'f/' + parseFloat(m.exif_fnumber).toFixed(1)  : '';
+        const shutter  = m.exif_exposure_time ? m.exif_exposure_time + 's'                 : '';
+        const iso      = m.exif_iso      ? 'ISO ' + m.exif_iso                             : '';
+        const exposure = [aperture, shutter, iso].filter(Boolean).join(' · ');
+        row('fa-sliders', 'Exposición', exposure);
+
+        if (m.exif_focal_length && parseFloat(m.exif_focal_length) !== 0) {
+            row('fa-dot-circle-o', 'Focal', parseFloat(m.exif_focal_length).toFixed(0) + ' mm');
+        }
+
+        if (m.sha1 && m.sha1.length >= 7) {
+            rows.push('<hr class="meta-divider">');
+            row('fa-lock', 'SHA1', '<span title="' + m.sha1 + '" style="font-family:monospace;">' + m.sha1.slice(0, 7) + '…</span>');
+        }
+
+        // Remove trailing dividers
+        while (rows.length && rows[rows.length - 1].includes('meta-divider')) rows.pop();
+
+        $('#galleryMetaContent').html(rows.join('') || '<p class="meta-empty">Sin metadata disponible.</p>');
+    }
+
     $(document).on('click', '.thumbnail.img-click', function () {
-        const urls = ($(this).data('urls') || '').split('||');
+        const urls    = ($(this).data('urls')     || '').split('||').filter(Boolean);
+        const respIds = ($(this).attr('data-resp-ids') || '').split('||');
         const mainImg = $('#galleryMainImage');
         const thumbsContainer = $('#galleryThumbs');
 
         thumbsContainer.empty();
 
-        let first = true;
+        function showPhoto(index) {
+            const u = urls[index];
+            if (!u) return;
+            const src = /^https?:\/\//.test(u) ? u : baseUrl + u.replace(/^\/+/, '');
+            mainImg.attr('src', src);
+            $('.gallery-thumb').removeClass('active');
+            thumbsContainer.children().eq(index).addClass('active');
+            loadMeta(respIds[index] || '');
+        }
 
         urls.forEach((u, index) => {
             if (!u) return;
-
-            const src = /^https?:\/\//.test(u)
-                ? u
-                : baseUrl + u.replace(/^\/+/, '');
-
-            if (first) {
-                mainImg.attr('src', src);
-                first = false;
-            }
-
-            const thumb = $(`
-                <div class="gallery-thumb ${index === 0 ? 'active' : ''}">
-                    <img src="${src}" alt="thumb">
-                </div>
-            `);
-
-            thumb.on('click', function () {
-                $('#galleryMainImage').attr('src', src);
-                $('.gallery-thumb').removeClass('active');
-                $(this).addClass('active');
-            });
-
+            const src = /^https?:\/\//.test(u) ? u : baseUrl + u.replace(/^\/+/, '');
+            const thumb = $(`<div class="gallery-thumb"><img src="${src}" alt="thumb"></div>`);
+            thumb.on('click', function () { showPhoto(index); });
             thumbsContainer.append(thumb);
         });
 
+        showPhoto(0);
         $('#fullSizeModal').modal('show');
     });
 
@@ -1010,6 +1245,242 @@ $(function () {
     updateCsvButton();
 });
 </script>
+
+<?php if ($formulario_id === 138): ?>
+<script>
+/* ── Informe Kilometrajes — lógica del modal ── */
+(function () {
+    'use strict';
+
+    var DAY_SHORT  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+    var MONTHS_ABR = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    var TIPO_LBL   = { inicio: 'mañana', termino: 'tarde' };
+
+    /* Devuelve "YYYY-W##" (clave de semana ISO) para una fecha string "YYYY-MM-DD" */
+    function isoWeekKey(dateStr) {
+        var d   = new Date(dateStr + 'T12:00:00');
+        var tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        var dn  = tmp.getUTCDay() || 7;
+        tmp.setUTCDate(tmp.getUTCDate() + 4 - dn);
+        var ys  = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+        var wk  = Math.ceil((((tmp - ys) / 86400000) + 1) / 7);
+        return tmp.getUTCFullYear() + '-W' + String(wk).padStart(2, '0');
+    }
+
+    /* Suma n días a una fecha string y devuelve "YYYY-MM-DD" */
+    function addDays(dateStr, n) {
+        var d = new Date(dateStr + 'T12:00:00');
+        d.setDate(d.getDate() + n);
+        return d.toISOString().slice(0, 10);
+    }
+
+    /* Diferencia en días entre dos fechas string */
+    function diffDays(a, b) {
+        return Math.round(
+            (new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000
+        );
+    }
+
+    /* Agrupa un array de fechas en bloques consecutivos [[d1,d2],[d4,d5,d6],...] */
+    function consecutiveBlocks(dates) {
+        if (!dates.length) return [];
+        var sorted  = dates.slice().sort();
+        var blocks  = [[sorted[0]]];
+        for (var i = 1; i < sorted.length; i++) {
+            if (diffDays(sorted[i - 1], sorted[i]) === 1) {
+                blocks[blocks.length - 1].push(sorted[i]);
+            } else {
+                blocks.push([sorted[i]]);
+            }
+        }
+        return blocks;
+    }
+
+    /* Lee los checks activos de una tarjeta de semana y devuelve
+       [{date, tipo:'inicio'|'termino'}] deduplicados */
+    function calcExpectedForCard(card) {
+        var checked = Array.from(card.querySelectorAll('.km-day-check:checked'))
+                           .map(function (c) { return c.dataset.date; });
+        if (!checked.length) return [];
+
+        var blocks  = consecutiveBlocks(checked);
+        var result  = [];
+        var seen    = {};
+
+        blocks.forEach(function (block) {
+            var first = block[0];
+            var last  = block[block.length - 1];
+
+            function push(date, tipo) {
+                var k = date + '|' + tipo;
+                if (!seen[k]) { seen[k] = true; result.push({ date: date, tipo: tipo }); }
+            }
+
+            push(first, 'inicio');
+            push(last,  'termino');
+        });
+
+        return result;
+    }
+
+    /* Formatea "YYYY-MM-DD" → "14/abr" */
+    function fmtShort(dateStr) {
+        var d = new Date(dateStr + 'T12:00:00');
+        return d.getDate() + '/' + MONTHS_ABR[d.getMonth()];
+    }
+
+    /* Actualiza la línea de preview dentro de una tarjeta */
+    function updatePreview(card) {
+        var preview  = card.querySelector('.km-week-preview');
+        var expected = calcExpectedForCard(card);
+
+        if (!expected.length) {
+            preview.innerHTML = '<span class="text-danger">⚠ Semana sin días hábiles — no aplica</span>';
+        } else {
+            var parts = expected.map(function (e) {
+                var d = new Date(e.date + 'T12:00:00');
+                return '<strong>' + DAY_SHORT[d.getDay()] + ' ' + fmtShort(e.date) + '</strong> ' + TIPO_LBL[e.tipo];
+            });
+            preview.innerHTML = '<span style="color:#217346">→ ' + parts.join(' &nbsp;·&nbsp; ') + '</span>';
+        }
+
+        updateTotal();
+    }
+
+    /* Actualiza el contador global de días esperados */
+    function updateTotal() {
+        var total = 0;
+        document.querySelectorAll('#kmWeeksContainer .km-week-card').forEach(function (card) {
+            total += calcExpectedForCard(card).length;
+        });
+        var el = document.getElementById('kmTotalExpected');
+        if (el) el.textContent = total;
+    }
+
+    /* Construye (o reconstruye) la grilla de semanas */
+    function buildGrid() {
+        var start     = document.getElementById('kmInputStart').value;
+        var end       = document.getElementById('kmInputEnd').value;
+        var container = document.getElementById('kmWeeksContainer');
+        container.innerHTML = '';
+
+        if (!start || !end || start > end) {
+            container.innerHTML = '<p class="text-muted small mt-1">Selecciona un rango de fechas válido.</p>';
+            updateTotal();
+            return;
+        }
+
+        /* Agrupar días laborales por semana ISO */
+        var byWeek    = {};
+        var weekOrder = [];
+        var cur       = start;
+
+        while (cur <= end) {
+            var d   = new Date(cur + 'T12:00:00');
+            var dow = d.getDay();                    // 0=Dom…6=Sáb
+            if (dow >= 1 && dow <= 5) {              // Lun–Vie
+                var key = isoWeekKey(cur);
+                if (!byWeek[key]) { byWeek[key] = []; weekOrder.push(key); }
+                byWeek[key].push(cur);
+            }
+            cur = addDays(cur, 1);
+        }
+
+        if (!weekOrder.length) {
+            container.innerHTML = '<p class="text-muted small mt-1">No hay días hábiles en el rango.</p>';
+            updateTotal();
+            return;
+        }
+
+        /* Crear una tarjeta por semana */
+        weekOrder.forEach(function (key) {
+            var days = byWeek[key];
+            var wNum = parseInt(key.split('-W')[1], 10);
+            var card = document.createElement('div');
+            card.className = 'km-week-card mb-2';
+
+            var html  = '<div class="km-week-header">';
+            html     += '<strong>Semana ' + wNum + '</strong>';
+            html     += '<span class="text-muted ml-2 small">(' + fmtShort(days[0]) + ' – ' + fmtShort(days[days.length - 1]) + ')</span>';
+            html     += '</div><div class="km-week-days">';
+
+            days.forEach(function (dateStr) {
+                var d   = new Date(dateStr + 'T12:00:00');
+                var id  = 'km-day-' + dateStr;
+                html   += '<label class="km-day-label active" for="' + id + '">'
+                        + '<input type="checkbox" class="km-day-check" id="' + id + '"'
+                        + ' data-date="' + dateStr + '" checked>'
+                        + '<span class="km-day-text">'
+                        + '<span class="km-day-name">' + DAY_SHORT[d.getDay()] + '</span>'
+                        + '<span class="km-day-num">' + d.getDate() + '</span>'
+                        + '</span></label>';
+            });
+
+            html += '</div><div class="km-week-preview"></div>';
+            card.innerHTML = html;
+
+            /* Evento: toggle feriado al hacer clic en un día */
+            card.addEventListener('change', function (e) {
+                if (!e.target.classList.contains('km-day-check')) return;
+                var lbl = e.target.closest('label');
+                if (e.target.checked) {
+                    lbl.classList.remove('feriado');
+                    lbl.classList.add('active');
+                } else {
+                    lbl.classList.remove('active');
+                    lbl.classList.add('feriado');
+                }
+                updatePreview(card);
+            });
+
+            container.appendChild(card);
+            updatePreview(card);
+        });
+    }
+
+    /* Wiring */
+    document.getElementById('kmInputStart').addEventListener('change', buildGrid);
+    document.getElementById('kmInputEnd').addEventListener('change', buildGrid);
+
+    $('#modalKilometrajes').on('show.bs.modal', function () {
+        buildGrid();
+    });
+
+    document.getElementById('btnGenKmExcel').addEventListener('click', function () {
+        var start = document.getElementById('kmInputStart').value;
+        var end   = document.getElementById('kmInputEnd').value;
+
+        if (!start || !end || start > end) {
+            alert('Selecciona un rango de fechas válido.');
+            return;
+        }
+        if (parseInt(document.getElementById('kmTotalExpected').textContent || '0', 10) === 0) {
+            alert('No hay días de subida esperados en el rango seleccionado.');
+            return;
+        }
+
+        var form = document.getElementById('formKilometrajes');
+
+        /* Limpiar feriados anteriores */
+        form.querySelectorAll('input[name="feriados[]"]').forEach(function (el) { el.remove(); });
+
+        document.getElementById('kmFormStart').value = start;
+        document.getElementById('kmFormEnd').value   = end;
+
+        /* Agregar un input hidden por cada día desmarcado (feriado) */
+        document.querySelectorAll('#kmWeeksContainer .km-day-check:not(:checked)').forEach(function (cb) {
+            var inp  = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = 'feriados[]';
+            inp.value = cb.dataset.date;
+            form.appendChild(inp);
+        });
+
+        form.submit();
+    });
+})();
+</script>
+<?php endif; ?>
 </body>
 </html>
 <?php $conn->close(); ?>

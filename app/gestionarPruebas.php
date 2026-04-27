@@ -244,20 +244,21 @@ $mensaje = isset($_GET['mensaje']) ? htmlspecialchars($_GET['mensaje'], ENT_QUOT
    Materiales
    ========================= */
 $sql_materiales = "
-    SELECT 
+    SELECT
       fq.id,
       fq.material,
+      fq.categoria,
       fq.valor_propuesto,
-      MAX(fq.valor) AS valor, 
+      MAX(fq.valor) AS valor,
       MAX(fq.fechaVisita) AS fechaVisita,
       MAX(fq.observacion) AS observacion,
       MAX(m.ref_image) AS ref_image
     FROM formularioQuestion fq
     LEFT JOIN material m ON fq.material = m.nombre
-    WHERE fq.id_local = ? 
-      AND fq.id_formulario = ? 
+    WHERE fq.id_local = ?
+      AND fq.id_formulario = ?
       AND fq.id_usuario = ?
-    GROUP BY fq.id, fq.material, fq.valor_propuesto
+    GROUP BY fq.id, fq.material, fq.categoria, fq.valor_propuesto
 ";
 
 $rowsMateriales = dbFetchAllAssoc(
@@ -269,9 +270,14 @@ $rowsMateriales = dbFetchAllAssoc(
 
 $materiales = [];
 foreach ($rowsMateriales as $mat) {
+    $matNombre   = trim($mat['material']  ?? '');
+    $matCategoria= trim($mat['categoria'] ?? '');
+    $matLabel    = $matCategoria !== '' ? $matNombre . ' - ' . $matCategoria : $matNombre;
     $materiales[] = [
         'id'              => intval($mat['id']),
-        'material'        => htmlspecialchars($mat['material'] ?? '', ENT_QUOTES, 'UTF-8'),
+        'material'        => htmlspecialchars($matNombre,    ENT_QUOTES, 'UTF-8'),
+        'material_label'  => htmlspecialchars($matLabel,     ENT_QUOTES, 'UTF-8'),
+        'categoria'       => htmlspecialchars($matCategoria, ENT_QUOTES, 'UTF-8'),
         'valor_propuesto' => htmlspecialchars($mat['valor_propuesto'] ?? '', ENT_QUOTES, 'UTF-8'),
         'valor'           => htmlspecialchars($mat['valor'] ?? '', ENT_QUOTES, 'UTF-8'),
         'fechaVisita'     => htmlspecialchars($mat['fechaVisita'] ?? '', ENT_QUOTES, 'UTF-8'),
@@ -560,7 +566,7 @@ input[type=file][id^="fotoPregunta_"] {
                         } elseif (!empty($materiales)) {
                             foreach ($materiales as $m) {
                                 $idFQ       = $m['id'];
-                                $matName    = ucfirst(mb_strtolower($m['material'], 'UTF-8'));
+                                $matName    = ucfirst(mb_strtolower($m['material_label'], 'UTF-8'));
                                 $valorProp  = $m['valor_propuesto'];
                                 $valorAct   = $m['valor'];
                                 $fechaImp   = $m['fechaVisita'];
@@ -1474,6 +1480,9 @@ async function subirFotoPregunta(id_form_question, id_local) {
     const img = document.createElement('img');
     img.src = url;                    // en cola: blob URL, online: URL servidor
     img.className = 'thumbnail';
+    img.style.cursor = 'pointer';
+    img.title = 'Clic para ampliar';
+    img.addEventListener('click', () => verImagenGrande(img.src));
     wrapper.appendChild(img);
 
     if (queuedId) {
@@ -1831,10 +1840,11 @@ async function extractPhotoMeta(file){
 
 async function compressFile(file) {
   if (typeof imageCompression !== 'function') return file;
-  const options = { maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true };
+  const options = { maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true, fileType: 'image/jpeg' };
   try {
     const blob = await imageCompression(file, options);
-    return new File([blob], file.name, { type: blob.type, lastModified: Date.now() });
+    const safeName = file.name.replace(/\.[^.]+$/, '.jpg');
+    return new File([blob], safeName, { type: 'image/jpeg', lastModified: Date.now() });
   } catch (_) { return file; }
 }
 
@@ -1970,6 +1980,9 @@ function setupFileInput(inputElem) {
       const img = document.createElement('img');
       img.src = URL.createObjectURL(compressed);
       img.classList.add('thumbnail');
+      img.style.cursor = 'pointer';
+      img.title = 'Clic para ampliar';
+      img.addEventListener('click', () => verImagenGrande(img.src));
       previewContainer.appendChild(img);
       const bar = document.createElement('div');
       bar.classList.add('upload-bar');
@@ -2248,12 +2261,14 @@ $(document).ready(function(){
   let motivosPendiente = [
       {value:'local_cerrado', text:'Local cerrado'},
       {value:'no_permitieron', text:'No permitieron'},
+      {value:'no_permitieron_por_robo', text:'No permitieron por robo'},
       {value:'sin_material', text:'Sin material'},
       {value:'sin_productos', text:'Sin productos'},
       {value:'local_no_existe', text:'Local no existe'}
   ];
   let motivosCancelado = [
       {value:'no_permitieron', text:'No permitieron'},
+      {value:'no_permitieron_por_robo', text:'No permitieron por robo'},
       {value:'local_no_existe', text:'Local no existe'},
       {value:'mueble_no_esta_en_sala', text:'Mueble no está en la sala'},
       {value:'sin_productos', text:'Sin productos'},
@@ -2492,11 +2507,13 @@ function onAddMaterialSuccess(ev){
 
   const newMaterial = {
     id:              resp.idNuevo,
-    material:        resp.nombre || 'Material',
+    material:        resp.nombre     || 'Material',
+    categoria:       resp.categoria  || '',
+    material_label:  resp.categoria  ? (resp.nombre || '') + ' - ' + resp.categoria : (resp.nombre || 'Material'),
     valor_propuesto: String(resp.valor_prop ?? ''),
     valor:           '',
     observacion:     '',
-    ref_image:       resp.ref_image || ''
+    ref_image:       resp.ref_image  || ''
   };
 
   if ($cont.find('p').length) { $cont.empty(); }
@@ -2590,7 +2607,8 @@ const SECTION_LABEL = <?php echo json_encode($sectionLabel, JSON_UNESCAPED_UNICO
 
 function construirBloqueMaterial(material) {
   const idFQ      = material.id;
-  const matName   = material.material.charAt(0).toUpperCase() + material.material.slice(1).toLowerCase();
+  const rawLabel  = material.material_label || (material.material + (material.categoria ? ' - ' + material.categoria : ''));
+  const matName   = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1).toLowerCase();
   const valorProp = material.valor_propuesto;
   const refImage  = material.ref_image || "";
   const imgTag    = refImage ? `<img src="${refImage}" style="max-width:50px; max-height:50px; cursor:pointer;" onclick="verImagenGrande('${refImage}')" title="Ver referencia">` : "";
@@ -2688,6 +2706,9 @@ function inicializarFileInput(idFQ) {
               let img = document.createElement('img');
               img.src = e.target.result;
               img.classList.add('thumbnail');
+              img.style.cursor = 'pointer';
+              img.title = 'Clic para ampliar';
+              img.addEventListener('click', () => verImagenGrande(img.src));
               let deleteBtn = document.createElement('button');
               deleteBtn.innerText = 'X';
               deleteBtn.classList.add('delete-button');

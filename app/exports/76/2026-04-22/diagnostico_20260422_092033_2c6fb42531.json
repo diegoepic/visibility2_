@@ -1,0 +1,346 @@
+{
+    "exported_at": "2026-04-22T13:20:34.117Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Mobile Safari/537.36",
+    "sw_version": "v6.0.7",
+    "stats": {
+        "today": {
+            "ymd": "2026-04-22",
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        },
+        "overall": {
+            "pending": 3,
+            "running": 0,
+            "success": 5,
+            "error": 0,
+            "blocked": 0,
+            "total": 8
+        }
+    },
+    "queue": {
+        "total_records": 8,
+        "last_created_at": 1776795767293,
+        "last_updated_at": 1776795772757
+    },
+    "recent_events": [
+        {
+            "id": "4c956f8e-b0ce-4831-8b2f-0c3cf3986f46:1776795772725:6bfb9993ac5ca8",
+            "job_id": "4c956f8e-b0ce-4831-8b2f-0c3cf3986f46",
+            "created": 1776795772725,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "4c956f8e-b0ce-4831-8b2f-0c3cf3986f46:1776795771610:ea25aa1a26e1b8",
+            "job_id": "4c956f8e-b0ce-4831-8b2f-0c3cf3986f46",
+            "created": 1776795771610,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "idemp-1776792335866-316d85f39be83:1776792357933:20d2d607c5912",
+            "job_id": "idemp-1776792335866-316d85f39be83",
+            "created": 1776792357933,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1776792335866-316d85f39be83:1776792348561:4e5b5cd48b4f88",
+            "job_id": "idemp-1776792335866-316d85f39be83",
+            "created": 1776792348561,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "4a23f674-1499-4278-ab46-2d89d1467564:1776787086893:349a43589757a8",
+            "job_id": "4a23f674-1499-4278-ab46-2d89d1467564",
+            "created": 1776787086893,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Error: Network error calling /visibility2/app/procesar_pregunta_foto_pruebas.php: Failed to fetch",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "4a23f674-1499-4278-ab46-2d89d1467564:1776787086826:404bcb6845e378",
+            "job_id": "4a23f674-1499-4278-ab46-2d89d1467564",
+            "created": 1776787086826,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "idemp-1776785084983-376c6455b0b45:1776785095677:3a6afbb1831ba8",
+            "job_id": "idemp-1776785084983-376c6455b0b45",
+            "created": 1776785095677,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1776785084983-376c6455b0b45:1776785095274:9b96dc565074c8",
+            "job_id": "idemp-1776785084983-376c6455b0b45",
+            "created": 1776785095274,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1776714356038-49f3c9dcae5ef8:1776714371516:bee280bfb99b68",
+            "job_id": "idemp-1776714356038-49f3c9dcae5ef8",
+            "created": 1776714371516,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1776714356038-49f3c9dcae5ef8:1776714371115:92e26fe9c6e9e",
+            "job_id": "idemp-1776714356038-49f3c9dcae5ef8",
+            "created": 1776714371115,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "d8d45386-675d-4f5f-8f02-b9debc15ab85:1776707296903:3a817c016149",
+            "job_id": "d8d45386-675d-4f5f-8f02-b9debc15ab85",
+            "created": 1776707296903,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "d8d45386-675d-4f5f-8f02-b9debc15ab85:1776707295697:13a3f21c595388",
+            "job_id": "d8d45386-675d-4f5f-8f02-b9debc15ab85",
+            "created": 1776707295697,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "idemp-1776448613988-4fb31767a66708:1776448653078:7f8dd0f98b5e1",
+            "job_id": "idemp-1776448613988-4fb31767a66708",
+            "created": 1776448653078,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1776448613988-4fb31767a66708:1776448652565:2a05be17f152a8",
+            "job_id": "idemp-1776448613988-4fb31767a66708",
+            "created": 1776448652565,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "78be7f3e-e384-472f-a4af-c71de3536b1f:1776439410752:f274d63689c2a",
+            "job_id": "78be7f3e-e384-472f-a4af-c71de3536b1f",
+            "created": 1776439410752,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Error: Network error calling /visibility2/app/procesar_pregunta_foto_pruebas.php: Failed to fetch",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "78be7f3e-e384-472f-a4af-c71de3536b1f:1776439410700:fab388a6b31ab8",
+            "job_id": "78be7f3e-e384-472f-a4af-c71de3536b1f",
+            "created": 1776439410700,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "idemp-1776439387430-750c108d9cfd08:1776439409539:e17fd1a853ba5",
+            "job_id": "idemp-1776439387430-750c108d9cfd08",
+            "created": 1776439409539,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1776439387430-750c108d9cfd08:1776439408893:1a71f200f371c8",
+            "job_id": "idemp-1776439387430-750c108d9cfd08",
+            "created": 1776439408893,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "62166bfd-8df3-4db7-b80f-cd669544707e:1776281741049:55d842752c7cf8",
+            "job_id": "62166bfd-8df3-4db7-b80f-cd669544707e",
+            "created": 1776281741049,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "62166bfd-8df3-4db7-b80f-cd669544707e:1776281740558:65d1e43f46f68",
+            "job_id": "62166bfd-8df3-4db7-b80f-cd669544707e",
+            "created": 1776281740558,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "idemp-1776271091832-f43eb332f35458:1776271092862:10c975104c1d98",
+            "job_id": "idemp-1776271091832-f43eb332f35458",
+            "created": 1776271092862,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1776271091832-f43eb332f35458:1776271092477:8cd1c674d17478",
+            "job_id": "idemp-1776271091832-f43eb332f35458",
+            "created": 1776271092477,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        }
+    ],
+    "storage_estimate": {
+        "usage": 6907959,
+        "quota": 10744326199,
+        "percent_used": 0
+    },
+    "connection_info": {
+        "effectiveType": "4g",
+        "downlink": 9.449999999999999289457264239899814128875732421875,
+        "rtt": 100,
+        "saveData": false
+    },
+    "service_worker": {
+        "active": "active",
+        "installing": null,
+        "waiting": null,
+        "scope": "https://visibility.cl/visibility2/app/"
+    },
+    "idb_databases": [
+        {
+            "name": "v2_journal",
+            "version": 9
+        },
+        {
+            "name": "v2_mappings",
+            "version": 1
+        },
+        {
+            "name": "v2_offline",
+            "version": 9
+        },
+        {
+            "name": "v2_route_cache",
+            "version": 1
+        },
+        {
+            "name": "visibility2-v2",
+            "version": 9
+        }
+    ],
+    "recent_errors": [],
+    "client_time": {
+        "local": "Wed Apr 22 2026 09:20:34 GMT-0400 (hora estándar de Chile)",
+        "timezone": "America/Santiago",
+        "offset_minutes": 240
+    },
+    "csrf_token": "a690c3d8688295840ca120d8d59796ef6394586c386ad943c33da797ead2cccd"
+}

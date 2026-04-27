@@ -20,352 +20,803 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
 
 <style>
     :root{
-        --bg: #f4f7fb;
-        --card: #ffffff;
-        --text: #1f2937;
-        --muted: #6b7280;
-        --line: #e5e7eb;
-        --primary: #0d6efd;
-        --primary-dark: #0b5ed7;
-        --success: #198754;
-        --danger: #dc3545;
-        --dark: #111827;
-        --shadow-soft: 0 10px 30px rgba(15, 23, 42, 0.07);
-        --shadow-card: 0 12px 32px rgba(15, 23, 42, 0.08);
-        --radius-xl: 22px;
-        --radius-lg: 18px;
-        --radius-md: 14px;
-        --ui-font: 0.85rem;
+        --etl-bg: #f5f7fc;
+        --etl-card: #ffffff;
+        --etl-text: #16213e;
+        --etl-muted: #6d7890;
+        --etl-line: #e7ecf5;
+
+        --etl-primary-1: #1f57e7;
+        --etl-primary-2: #2e7df1;
+        --etl-primary-3: #eaf2ff;
+
+        --etl-dark-1: #1c2f59;
+        --etl-dark-2: #16284a;
+
+        --etl-success-1: #20c172;
+        --etl-success-2: #18ad66;
+
+        --etl-radius-xl: 28px;
+        --etl-radius-lg: 22px;
+        --etl-radius-md: 16px;
+        --etl-radius-sm: 12px;
+
+        --etl-shadow-card: 0 18px 45px rgba(15, 23, 42, 0.08);
+        --etl-shadow-soft: 0 10px 28px rgba(15, 23, 42, 0.05);
+        --etl-font-size: 0.72rem;
     }
 
-    body {
-        background: linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
+    body{
+        background:
+            radial-gradient(circle at top left, rgba(71, 121, 255, 0.08) 0, rgba(71, 121, 255, 0) 220px),
+            radial-gradient(circle at top right, rgba(120, 154, 255, 0.10) 0, rgba(120, 154, 255, 0) 260px),
+            linear-gradient(180deg, #f9fbff 0%, var(--etl-bg) 100%);
         font-family: 'Segoe UI', Tahoma, sans-serif;
-        color: var(--text);
-        font-size: var(--ui-font);
+        color: var(--etl-text);
+        font-size: var(--etl-font-size);
     }
 
-    .container {
-        margin-top: 36px;
-        margin-bottom: 36px;
-        max-width: 1320px;
-    }
-
-    .text-center.mb-4 h2,
-    .module-title {
-        font-size: 1.85rem !important;
-        font-weight: 800 !important;
-        letter-spacing: -.02em;
-        color: #0f3d91 !important;
-        margin-bottom: 10px;
-    }
-
-    .text-center.mb-4 p,
-    .module-subtitle {
-        font-size: 0.98rem !important;
-        color: var(--muted) !important;
-        max-width: 760px;
+    .etl-page{
+        position: relative;
+        max-width: 1480px;
         margin: 0 auto;
+        padding: 36px 20px 40px;
     }
 
-    .card {
+    .etl-page::before{
+        content: "";
+        position: absolute;
+        top: 12px;
+        left: 10px;
+        width: 90px;
+        height: 90px;
+        background-image: radial-gradient(#d8e4ff 1.5px, transparent 1.5px);
+        background-size: 14px 14px;
+        opacity: .85;
+        pointer-events: none;
+    }
+
+    .etl-page::after{
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 250px;
+        height: 180px;
+        border-bottom-left-radius: 120px;
+        background: radial-gradient(circle at top right, rgba(117, 146, 255, 0.10), rgba(117, 146, 255, 0.02) 60%, transparent 70%);
+        pointer-events: none;
+    }
+
+    .etl-hero{
+        text-align: center;
+        margin-bottom: 28px;
+        position: relative;
+        z-index: 2;
+    }
+
+    .etl-hero-icon{
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        margin: 0 auto 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #1f57e7;
+        background: linear-gradient(180deg, #f0f5ff 0%, #e2ecff 100%);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
+        font-size: 1.9rem;
+    }
+
+    .etl-hero h2{
+        margin: 0 0 8px;
+        font-size: 1rem;
+        line-height: 1.05;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        color: #19315f;
+    }
+
+    .etl-hero p{
+        max-width: 920px;
+        margin: 0 auto;
+        font-size: 0.95rem;
+        color: #667089;
+        font-weight: 500;
+    }
+
+    .etl-grid{
+        display: grid;
+        grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr);
+        gap: 34px;
+        align-items: start;
+        position: relative;
+        z-index: 2;
+    }
+
+    .etl-card{
+        background: var(--etl-card);
         border: 1px solid rgba(226, 232, 240, 0.9);
-        border-radius: var(--radius-xl);
-        background: rgba(255, 255, 255, 0.95);
-        box-shadow: var(--shadow-card);
-        backdrop-filter: blur(8px);
+        border-radius: var(--etl-radius-xl);
+        box-shadow: var(--etl-shadow-card);
         overflow: hidden;
     }
 
-    .card-header {
-        border: 0;
-        padding: 16px 20px;
-        font-size: 1rem;
-        font-weight: 700;
-        letter-spacing: .01em;
-    }
-
-    .card-body {
-        padding: 22px;
-        font-size: var(--ui-font);
-    }
-
-    .form-label,
-    .form-control,
-    .btn,
-    .table,
-    .table td,
-    .table th,
-    .stat-label,
-    .sample-code,
-    .alert,
-    .text-muted,
-    .small,
-    small,
-    ul,
-    li {
-        font-size: var(--ui-font) !important;
-    }
-
-    .form-control {
-        border-radius: 14px;
-        border: 1px solid #dbe3ee;
-        padding: 12px 14px;
-        box-shadow: none;
-        transition: .2s ease;
-    }
-
-    .form-control:focus {
-        border-color: rgba(13, 110, 253, 0.35);
-        box-shadow: 0 0 0 0.18rem rgba(13, 110, 253, 0.12);
-    }
-
-    .btn {
-        border-radius: 14px;
-        font-weight: 700;
-        padding: 12px 16px;
-        box-shadow: none;
-    }
-
-    .btn-success {
-        background: linear-gradient(135deg, #1fa971 0%, #198754 100%);
-        border: none;
-    }
-
-    .btn-success:hover {
-        background: linear-gradient(135deg, #1c9966 0%, #157347 100%);
-    }
-
-    .btn-outline-primary {
-        border-radius: 12px;
-        font-weight: 700;
-    }
-
-    .sample-code {
-        background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
-        border: 1px solid #dbe3ee;
-        border-radius: 16px;
-        padding: 14px 16px;
-        font-family: Consolas, monospace;
-        white-space: pre-wrap;
-        color: #334155;
-    }
-
-    .stat-box {
-        border-radius: 20px;
-        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-        border: 1px solid #e5e7eb;
-        box-shadow: var(--shadow-soft);
-        padding: 22px 18px;
-        text-align: center;
-        height: 100%;
-    }
-
-    .stat-number {
-        font-size: 1.7rem;
+    .etl-card-header{
+        padding: 10px 30px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        color: #fff;
+        font-size: 0.9rem;
         font-weight: 800;
-        line-height: 1;
-        letter-spacing: -.02em;
-        margin-bottom: 8px;
+        letter-spacing: -0.02em;
     }
 
-    .stat-label {
-        color: var(--muted);
-        font-weight: 600;
+    .etl-card-header.primary{
+        background: linear-gradient(90deg, var(--etl-primary-1) 0%, var(--etl-primary-2) 100%);
     }
 
-    .alert {
-        border: 0;
-        border-radius: 16px;
-        padding: 14px 16px;
-        box-shadow: var(--shadow-soft);
+    .etl-card-header.dark{
+        background: linear-gradient(90deg, var(--etl-dark-1) 0%, var(--etl-dark-2) 100%);
     }
 
-    .row.g-4,
-    .row.g-3 {
-        --bs-gutter-y: 1.25rem;
+    .etl-card-header .header-icon{
+        width: 40px;
+        height: 40px;
+        border-radius: 18px;
+        background: rgba(255,255,255,0.15);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.95rem;
+        flex: 0 0 auto;
+        box-shadow: inset 0 1px 1px rgba(255,255,255,.16);
     }
 
-    ul.mb-0 {
-        padding-left: 1.15rem;
+    .etl-card-body{
+        padding: 30px;
     }
 
-    ul.mb-0 li {
-        margin-bottom: 10px;
-        color: #334155;
+    .etl-section{
+        margin-bottom: 28px;
     }
 
-    ul.mb-0 li:last-child {
+    .etl-section:last-child{
         margin-bottom: 0;
     }
 
-    .text-success,
-    .text-danger,
-    .text-primary {
+    .etl-section-title{
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+        font-size: 0.85rem;
+        font-weight: 800;
+        color: #1f3564;
+        letter-spacing: -0.02em;
+    }
+
+    .etl-section-title .icon{
+        color: #2a68f0;
+        font-size: 1.35rem;
+        width: 28px;
+        text-align: center;
+    }
+
+    .etl-upload-box{
+        border: 2px solid #dfe7f4;
+        border-radius: 18px;
+        background: #fff;
+        padding: 8px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        transition: .22s ease;
+        min-height: 50px;
+    }
+
+    .etl-upload-box:hover{
+        border-color: #cdd9ee;
+        box-shadow: var(--etl-shadow-soft);
+    }
+
+    .etl-upload-btn{
+        border: 1px solid #d8e4fb;
+        background: #fff;
+        color: #1f57e7;
+        font-weight: 800;
+        border-radius: 14px;
+        min-width: 260px;
+        min-height: 30px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        cursor: pointer;
+        padding: 0 20px;
+        margin: 0;
+        transition: .18s ease;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.85);
+    }
+
+    .etl-upload-btn:hover{
+        background: #f8fbff;
+        border-color: #c8d8fa;
+    }
+
+    .etl-upload-btn i{
+        font-size: 1.25rem;
+    }
+
+    .etl-file-name{
+        font-size: 0.82rem;
+        color: #677189;
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+        min-width: 0;
+        padding-right: 10px;
+    }
+
+    .etl-help{
+        margin-top: 10px;
+        color: #7a859c;
+        font-size: 0.92rem;
+    }
+
+    .etl-chip-box{
+        border: 1px solid #d7e4fb;
+        background: linear-gradient(180deg, #f8fbff 0%, #f2f7ff 100%);
+        border-radius: 18px;
+        padding: 10px;
+    }
+
+    .etl-chip{
+        display: inline-block;
+        background: #dfeafb;
+        color: #334d86;
+        font-family: Consolas, monospace;
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-size: 0.8rem;
+        line-height: 1.4;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+        word-break: break-word;
+    }
+
+    .etl-template-box{
+        border: 1px solid #dfe7f4;
+        border-radius: 18px;
+        background: #fff;
+        padding: 14px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        min-height: 60px;
+    }
+
+    .etl-template-btn{
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        text-decoration: none !important;
+        border: 1px solid #c9d9fb;
+        border-radius: 14px;
+        color: #1f57e7;
+        font-weight: 800;
+        background: #fff;
+        padding: 7px 22px;
+        white-space: nowrap;
+        transition: .18s ease;
+    }
+
+    .etl-template-btn:hover{
+        background: #f7fbff;
+        border-color: #afc8fb;
+        color: #164bd1;
+    }
+
+    .etl-template-text{
+        color: #6f7890;
+        font-size: 0.88rem;
+        line-height: 1.45;
+    }
+
+    .etl-submit{
+        margin-top: 22px;
+    }
+
+    .etl-submit .btn{
+        width: 100%;
+        border: 0;
+        min-height: 44px;
+        border-radius: 18px;
+        font-size: 0.9rem;
+        font-weight: 800;
+        background: linear-gradient(90deg, var(--etl-success-1) 0%, var(--etl-success-2) 100%);
+        box-shadow: 0 14px 28px rgba(32, 193, 114, 0.18);
+    }
+
+    .etl-submit .btn:hover{
+        filter: brightness(.98);
+    }
+
+    .etl-note{
+        margin-top: 14px;
+        text-align: center;
+        color: #7a859c;
+        font-size: 0.82rem;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .etl-note i{
+        color: #6a7691;
+    }
+
+    .etl-info-list{
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .etl-info-list li{
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        padding: 18px 0;
+        border-bottom: 1px solid #e9edf5;
+        color: #50607f;
+        font-size: 0.88rem;
+        line-height: 1.4;
+    }
+
+    .etl-info-list li:last-child{
+        border-bottom: 0;
+        padding-bottom: 0;
+    }
+
+    .etl-info-list .bullet{
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(180deg, #f1f5ff 0%, #e7eefc 100%);
+        color: #1f57e7;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        font-size: 0.95rem;
+    }
+
+    .etl-info-list strong{
+        color: #243b6a;
         font-weight: 800;
     }
 
-    .progress {
-        background: #e9eef6;
+    .etl-result-wrap{
+        margin-top: 30px;
+    }
+
+    .etl-status-card{
+        margin-bottom: 22px;
+    }
+
+    .etl-status-header{
+        background: linear-gradient(90deg, #2490f3 0%, #4dacef 100%);
+    }
+
+    .etl-progress{
+        width: 100%;
+        height: 26px;
+        background: #e8eef9;
         border-radius: 999px;
         overflow: hidden;
     }
 
-    .progress-bar {
-        font-weight: 700;
+    .etl-progress-bar{
+        height: 100%;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-weight: 800;
+        background: linear-gradient(90deg, #1f57e7 0%, #35a0ff 100%);
+        transition: width .25s ease;
         white-space: nowrap;
     }
 
-    #etlProgressText strong {
-        font-weight: 800;
+    .etl-progress-text,
+    .etl-job-text{
+        margin-top: 14px;
+        color: #667089;
+        font-size: 1rem;
     }
 
-    @media (max-width: 768px) {
-        .container {
-            margin-top: 22px;
-            margin-bottom: 22px;
+    .etl-stats{
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+        margin-bottom: 20px;
+    }
+
+    .etl-stat{
+        background: linear-gradient(180deg, #fff 0%, #f8fbff 100%);
+        border: 1px solid #e7ecf5;
+        border-radius: 20px;
+        box-shadow: var(--etl-shadow-soft);
+        text-align: center;
+        padding: 24px 18px;
+    }
+
+    .etl-stat-number{
+        font-size: 2rem;
+        line-height: 1;
+        font-weight: 800;
+        margin-bottom: 8px;
+        letter-spacing: -0.03em;
+    }
+
+    .etl-stat-label{
+        color: #73809a;
+        font-weight: 700;
+        font-size: 1rem;
+    }
+
+    .etl-stat-updated{ color: #18ad66; }
+    .etl-stat-failed{ color: #dc3545; }
+    .etl-stat-total{ color: #1f57e7; }
+
+    .etl-alert{
+        border-radius: 18px;
+        padding: 16px 18px;
+        box-shadow: var(--etl-shadow-soft);
+        font-size: 1rem;
+        border: 0;
+    }
+
+    .etl-report-box .alert{
+        border-radius: 18px;
+    }
+
+    .hidden-file-input{
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+        width: 1px;
+        height: 1px;
+    }
+
+    @media (max-width: 1400px){
+        .etl-hero h2{
+            font-size: 2.55rem;
         }
 
-        .card-body {
-            padding: 18px;
+        .etl-hero p{
+            font-size: 1.22rem;
         }
 
-        .text-center.mb-4 h2,
-        .module-title {
-            font-size: 1.45rem !important;
+        .etl-card-header{
+            font-size: 1.65rem;
         }
 
-        .stat-number {
+        .etl-section-title{
+            font-size: 1.45rem;
+        }
+
+        .etl-info-list li{
+            font-size: 1.08rem;
+        }
+
+        .etl-submit .btn{
             font-size: 1.45rem;
         }
     }
-</style>
-</head>
-<body>
 
-<div class="container">
-    <div class="text-center mb-4">
-        <h2 class="module-title">
-            <i class="fa-solid fa-location-dot"></i> ETL Locales
+    @media (max-width: 991.98px){
+        .etl-grid{
+            grid-template-columns: 1fr;
+        }
+
+        .etl-hero h2{
+            font-size: 2.15rem;
+        }
+
+        .etl-hero p{
+            font-size: 1.08rem;
+        }
+
+        .etl-upload-box,
+        .etl-template-box{
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .etl-upload-btn{
+            min-width: 100%;
+        }
+
+        .etl-file-name{
+            white-space: normal;
+            padding-right: 0;
+        }
+
+        .etl-stats{
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 575.98px){
+        .etl-page{
+            padding: 24px 14px 30px;
+        }
+
+        .etl-card-header{
+            padding: 18px 20px;
+            font-size: 1.3rem;
+        }
+
+        .etl-card-header .header-icon{
+            width: 46px;
+            height: 46px;
+            font-size: 1.15rem;
+        }
+
+        .etl-card-body{
+            padding: 20px;
+        }
+
+        .etl-hero h2{
+            font-size: 1.1rem;
+        }
+
+        .etl-hero p{
+            font-size: 0.98rem;
+        }
+
+        .etl-section-title{
+            font-size: 1.2rem;
+        }
+
+        .etl-submit .btn{
+            min-height: 62px;
+            font-size: 1.22rem;
+        }
+
+        .etl-info-list li{
+            font-size: 1rem;
+        }
+
+        .etl-info-list .bullet{
+            width: 48px;
+            height: 48px;
+            font-size: 1.1rem;
+        }
+    }
+.etl-title-image{
+    margin: 0 0 8px;
+    text-align: center;
+}
+
+.etl-title-image img{
+    max-width: 100%;
+    width: 420px; /* ajusta el tamaño si quieres */
+    height: auto;
+    display: inline-block;
+}
+</style>
+
+<div class="etl-page">
+    <div class="etl-hero">
+        <h2 class="etl-title-image">
+            <img src="/visibility2/portal/images/logo/etl_head.webp" alt="ETL Locales">
         </h2>
-        <p class="module-subtitle mb-0">
+        <p>
             Actualiza nombre, dirección, comuna, distrito, zona, región, cadena y cuenta, recalculando latitud y longitud.
         </p>
     </div>
 
-    <div class="row g-4 mb-4">
-        <div class="col-lg-7">
-            <div class="card">
-                <div class="card-header bg-primary text-white">
-                    <i class="fa-solid fa-file-arrow-up"></i> Carga de archivo
-                </div>
-                <div class="card-body">
-                    <form id="formEtlLocales" enctype="multipart/form-data">
-                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
+    <div class="etl-grid">
+        <!-- IZQUIERDA -->
+        <div class="etl-card">
+            <div class="etl-card-header primary">
+                <span class="header-icon">
+                    <i class="fa-solid fa-arrow-up-from-bracket"></i>
+                </span>
+                <span>Carga de archivo</span>
+            </div>
 
-                        <div class="mb-3">
-                            <label for="csvFile" class="form-label fw-semibold">Archivo CSV</label>
-                            <input type="file" class="form-control" id="csvFile" name="csvFile" accept=".csv" required>
+            <div class="etl-card-body">
+                <form id="formEtlLocales" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
+
+                    <div class="etl-section">
+                        <div class="etl-section-title">
+                            <span class="icon"><i class="fa-regular fa-file-lines"></i></span>
+                            <span>Archivo CSV</span>
                         </div>
 
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Encabezados esperados</label>
-                            <div class="sample-code">codigo;nombre local;direccion;comuna;distrito;zona;region;cadena;cuenta</div>
-                        </div>
+                        <div class="etl-upload-box">
+                            <input
+                                type="file"
+                                id="csvFile"
+                                name="csvFile"
+                                class="hidden-file-input"
+                                accept=".csv"
+                                required
+                            >
 
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Plantilla de carga</label>
-                            <div class="d-flex flex-wrap gap-2 align-items-center">
-                                <a href="<?= htmlspecialchars($templateUrl, ENT_QUOTES, 'UTF-8'); ?>"
-                                   class="btn btn-outline-primary"
-                                   target="_blank"
-                                   download>
-                                    <i class="fa-solid fa-download"></i> Descargar template CSV
-                                </a>
-                                <small class="text-muted">
-                                    Descarga este archivo como base para respetar la estructura requerida.
-                                </small>
+                            <label for="csvFile" class="etl-upload-btn">
+                                <i class="fa-solid fa-arrow-up-from-bracket"></i>
+                                <span>Seleccionar archivo</span>
+                            </label>
+
+                            <div class="etl-file-name" id="fileNameLabel">
+                                Sin archivos seleccionados
                             </div>
                         </div>
 
-                        <div class="d-grid">
-                            <button type="submit" class="btn btn-success" id="btnProcesar">
-                                <i class="fa-solid fa-gears"></i> Procesar ETL
-                            </button>
+                        <div class="etl-help">
+                            Selecciona un archivo CSV con la información de locales.
                         </div>
-                    </form>
-                </div>
+                    </div>
+
+                    <div class="etl-section">
+                        <div class="etl-section-title">
+                            <span class="icon"><i class="fa-regular fa-rectangle-list"></i></span>
+                            <span>Encabezados esperados</span>
+                        </div>
+
+                        <div class="etl-chip-box">
+                            <span class="etl-chip">
+                                codigo;nombre local;direccion;comuna;distrito;zona;region;cadena;cuenta
+                            </span>
+                        </div>
+
+                        <div class="etl-help">
+                            El archivo debe contener exactamente estos encabezados y en este orden.
+                        </div>
+                    </div>
+
+                    <div class="etl-section">
+                        <div class="etl-section-title">
+                            <span class="icon"><i class="fa-regular fa-file-arrow-down"></i></span>
+                            <span>Plantilla de carga</span>
+                        </div>
+
+                        <div class="etl-template-box">
+                            <a
+                                href="<?= htmlspecialchars($templateUrl, ENT_QUOTES, 'UTF-8'); ?>"
+                                class="etl-template-btn"
+                                target="_blank"
+                                download
+                            >
+                                <i class="fa-solid fa-download"></i>
+                                <span>Descargar template CSV</span>
+                            </a>
+
+                            <div class="etl-template-text">
+                                Descarga este archivo como base para respetar la estructura requerida.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="etl-submit">
+                        <button type="submit" class="btn btn-success" id="btnProcesar">
+                            <i class="fa-solid fa-gears me-2"></i> Procesar ETL
+                        </button>
+                    </div>
+
+                    <div class="etl-note">
+                        <i class="fa-regular fa-shield-check"></i>
+                        <span>El procesamiento puede tardar algunos minutos según el tamaño del archivo.</span>
+                    </div>
+                </form>
             </div>
         </div>
 
-        <div class="col-lg-5">
-            <div class="card">
-                <div class="card-header bg-dark text-white">
-                    <i class="fa-solid fa-circle-info"></i> Qué hace este módulo
-                </div>
-                <div class="card-body">
-                    <ul class="mb-0">
-                        <li>Busca el local por <strong>código</strong>.</li>
-                        <li>Actualiza <strong>nombre</strong>, <strong>dirección</strong> y <strong>comuna</strong>.</li>
-                        <li>Actualiza opcionalmente <strong>distrito</strong>, <strong>zona</strong>, <strong>región</strong>, <strong>cadena</strong> y <strong>cuenta</strong>.</li>
-                        <li>Recalcula <strong>latitud</strong> y <strong>longitud</strong> solo cuando corresponde.</li>
-                        <li>No inserta locales nuevos.</li>
-                        <li>Procesa el archivo en <strong>lotes de 1.000</strong>.</li>
-                        <li>Genera reporte CSV con los fallidos.</li>
-                    </ul>
-                </div>
+        <!-- DERECHA -->
+        <div class="etl-card">
+            <div class="etl-card-header dark">
+                <span class="header-icon">
+                    <i class="fa-solid fa-circle-info"></i>
+                </span>
+                <span>Qué hace este módulo</span>
+            </div>
+
+            <div class="etl-card-body">
+                <ul class="etl-info-list">
+                    <li>
+                        <span class="bullet"><i class="fa-solid fa-magnifying-glass"></i></span>
+                        <span>Busca el local por <strong>código</strong>.</span>
+                    </li>
+                    <li>
+                        <span class="bullet"><i class="fa-solid fa-pen"></i></span>
+                        <span>Actualiza <strong>nombre, dirección y comuna</strong>.</span>
+                    </li>
+                    <li>
+                        <span class="bullet"><i class="fa-solid fa-sliders"></i></span>
+                        <span>Actualiza opcionalmente <strong>distrito, zona, región, cadena y cuenta</strong>.</span>
+                    </li>
+                    <li>
+                        <span class="bullet"><i class="fa-solid fa-crosshairs"></i></span>
+                        <span>Recalcula <strong>latitud y longitud</strong> solo cuando corresponde.</span>
+                    </li>
+                    <li>
+                        <span class="bullet"><i class="fa-regular fa-circle-xmark"></i></span>
+                        <span><strong>No inserta</strong> locales nuevos.</span>
+                    </li>
+                    <li>
+                        <span class="bullet"><i class="fa-solid fa-layer-group"></i></span>
+                        <span>Procesa el archivo en <strong>lotes de 1.000</strong>.</span>
+                    </li>
+                    <li>
+                        <span class="bullet"><i class="fa-regular fa-file-lines"></i></span>
+                        <span>Genera <strong>reporte CSV</strong> con los fallidos.</span>
+                    </li>
+                </ul>
             </div>
         </div>
     </div>
 
-    <div id="resultadoBox" style="display:none;">
-        <div class="card mb-4">
-            <div class="card-header bg-info text-white">
-                <i class="fa-solid fa-bars-progress"></i> Estado del procesamiento
+    <!-- RESULTADOS -->
+    <div id="resultadoBox" class="etl-result-wrap" style="display:none;">
+        <div class="etl-card etl-status-card">
+            <div class="etl-card-header etl-status-header">
+                <span class="header-icon">
+                    <i class="fa-solid fa-bars-progress"></i>
+                </span>
+                <span>Estado del procesamiento</span>
             </div>
-            <div class="card-body">
-                <div class="progress" style="height: 26px;">
-                    <div id="etlProgressBar"
-                         class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
-                         role="progressbar"
-                         style="width: 0%;"
-                         aria-valuemin="0"
-                         aria-valuemax="100"
-                         aria-valuenow="0">0%</div>
+
+            <div class="etl-card-body">
+                <div class="etl-progress">
+                    <div
+                        id="etlProgressBar"
+                        class="etl-progress-bar"
+                        role="progressbar"
+                        style="width:0%;"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        aria-valuenow="0"
+                    >0%</div>
                 </div>
 
-                <div id="etlProgressText" class="mt-3 text-muted">
+                <div id="etlProgressText" class="etl-progress-text">
                     Esperando inicio...
                 </div>
 
-                <div id="etlJobText" class="small text-muted mt-1"></div>
+                <div id="etlJobText" class="etl-job-text"></div>
             </div>
         </div>
 
-        <div class="row g-3 mb-4">
-            <div class="col-md-4">
-                <div class="stat-box">
-                    <div class="stat-number text-success" id="statUpdated">0</div>
-                    <div class="stat-label">Locales actualizados</div>
-                </div>
+        <div class="etl-stats">
+            <div class="etl-stat">
+                <div class="etl-stat-number etl-stat-updated" id="statUpdated">0</div>
+                <div class="etl-stat-label">Locales actualizados</div>
             </div>
-            <div class="col-md-4">
-                <div class="stat-box">
-                    <div class="stat-number text-danger" id="statFailed">0</div>
-                    <div class="stat-label">Fallidos</div>
-                </div>
+
+            <div class="etl-stat">
+                <div class="etl-stat-number etl-stat-failed" id="statFailed">0</div>
+                <div class="etl-stat-label">Fallidos</div>
             </div>
-            <div class="col-md-4">
-                <div class="stat-box">
-                    <div class="stat-number text-primary" id="statTotal">0</div>
-                    <div class="stat-label">Total procesados</div>
-                </div>
+
+            <div class="etl-stat">
+                <div class="etl-stat-number etl-stat-total" id="statTotal">0</div>
+                <div class="etl-stat-label">Total procesados</div>
             </div>
         </div>
 
-        <div id="reportLinkBox" class="mb-4" style="display:none;"></div>
+        <div id="reportLinkBox" class="etl-report-box mb-3" style="display:none;"></div>
 
-        <div class="alert alert-light border" id="etlResumenBox">
+        <div class="alert alert-light etl-alert" id="etlResumenBox">
             El detalle masivo ya no se carga en pantalla. Los fallidos se descargan desde el reporte CSV.
         </div>
     </div>
@@ -376,6 +827,8 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
 (function () {
     const $form = $('#formEtlLocales');
     const $btn = $('#btnProcesar');
+    const $fileInput = $('#csvFile');
+    const $fileNameLabel = $('#fileNameLabel');
     const originalBtnHtml = $btn.html();
 
     let currentJobId = null;
@@ -392,12 +845,21 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
             .replace(/'/g, '&#039;');
     }
 
+    function updateFileName() {
+        const input = $fileInput[0];
+        if (input && input.files && input.files.length > 0) {
+            $fileNameLabel.text(input.files[0].name);
+        } else {
+            $fileNameLabel.text('Sin archivos seleccionados');
+        }
+    }
+
     function setLoading(running) {
         isRunning = running;
         $btn.prop('disabled', running);
 
         if (running) {
-            $btn.html('<i class="fa-solid fa-spinner fa-spin"></i> Procesando...');
+            $btn.html('<i class="fa-solid fa-spinner fa-spin me-2"></i> Procesando...');
         } else {
             $btn.html(originalBtnHtml);
         }
@@ -405,6 +867,7 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
 
     function setProgress(percent, text) {
         const value = Math.max(0, Math.min(100, Number(percent || 0)));
+
         $('#etlProgressBar')
             .css('width', value + '%')
             .attr('aria-valuenow', value)
@@ -431,7 +894,7 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
             $('#reportLinkBox')
                 .show()
                 .html(`
-                    <div class="alert alert-warning mb-0">
+                    <div class="alert alert-warning etl-alert mb-0">
                         <i class="fa-solid fa-file-circle-exclamation me-2"></i>
                         Se generó un reporte de fallidos:
                         <a href="${escapeHtml(url)}" target="_blank" class="fw-bold ms-1">
@@ -462,7 +925,7 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
 
     function createJob(formData) {
         return $.ajax({
-            url: 'mod_etl_locales_subir_job.php',
+            url: '/visibility2/portal/modulos/mod_etl/subir_etl_locales_job.php',
             type: 'POST',
             data: formData,
             processData: false,
@@ -481,7 +944,7 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
         fd.append('limit', LOTE_SIZE);
 
         $.ajax({
-            url: 'mod_etl_locales_procesar_lote.php',
+            url: '/visibility2/portal/modulos/mod_etl/procesar_etl_locales_lote.php',
             type: 'POST',
             data: fd,
             processData: false,
@@ -561,6 +1024,8 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
         });
     }
 
+    $fileInput.on('change', updateFileName);
+
     $form.on('submit', function (e) {
         e.preventDefault();
 
@@ -568,7 +1033,7 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
             return;
         }
 
-        const fileInput = $('#csvFile')[0];
+        const fileInput = $fileInput[0];
         if (!fileInput || !fileInput.files || !fileInput.files.length) {
             alert('Debes seleccionar un archivo CSV.');
             return;
@@ -622,6 +1087,8 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
                 setLoading(false);
             });
     });
+
+    updateFileName();
 })();
 </script>
 

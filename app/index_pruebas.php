@@ -5,6 +5,9 @@ if (!isset($_SESSION['usuario_id'])) {
     exit();
 }
 
+require_once __DIR__ . '/lib/security_headers.php';
+emit_security_headers();
+
 $nombre         = htmlspecialchars($_SESSION['usuario_nombre'], ENT_QUOTES, 'UTF-8');
 $apellido       = htmlspecialchars($_SESSION['usuario_apellido'], ENT_QUOTES, 'UTF-8');
 $empresa_id     = intval($_SESSION['empresa_id']);
@@ -359,10 +362,11 @@ if (isset($_SESSION['success'])) {
     unset($_SESSION['success']);
 }
 ?>
-<div id="queuePanel" class="queue-panel" aria-live="polite">
+<div id="queuePanel" class="queue-panel collapsed" aria-live="polite">
   <div class="queue-panel__row">
     <span id="netBadge" class="net-badge">-</span>
     <span id="queueCount" class="queue-muted">Cola: -</span>
+    <button type="button" id="queueToggle" class="queue-panel__toggle" title="Expandir / contraer">&#9650;</button>
   </div>
   <div id="queueDetail" class="queue-panel__detail">Estado de sincronizacion: -</div>
   <div class="queue-panel__actions">
@@ -766,24 +770,34 @@ if (isset($_SESSION['success'])) {
                 </div>
               </div>
               <div class="panel-body">
-                <ul class="nav nav-tabs" role="tablist">
-                  <li class="active"><a href="#jr-hoy" aria-controls="jr-hoy" role="tab" data-toggle="tab">Hoy</a></li>
-                  <li><a href="#jr-semana" aria-controls="jr-semana" role="tab" data-toggle="tab">Semana</a></li>
-                </ul>
-        
                 <!-- Progreso global -->
-                <div class="progress" style="margin:10px 0 15px;">
+                <div class="progress" style="margin:6px 0 10px;">
                   <div id="jr-global-progress" class="progress-bar" role="progressbar" style="width:0%;">0%</div>
                 </div>
-        
-                <div class="tab-content">
-                  <div role="tabpanel" class="tab-pane active" id="jr-hoy">
-                    <div id="jr-list-today" class="jr-list"></div>
-                  </div>
-                  <div role="tabpanel" class="tab-pane" id="jr-semana">
-                    <div id="jr-list-week" class="jr-list"></div>
-                  </div>
+
+                <!-- Cabecera del mes con flechas de navegación -->
+                <div style="display:flex; align-items:center; justify-content:space-between; margin:0 0 6px;">
+                  <button class="btn btn-xs btn-default" id="jr-cal-prev"><i class="fa fa-chevron-left"></i></button>
+                  <strong id="jr-cal-title" style="font-size:15px; text-transform:capitalize;"></strong>
+                  <button class="btn btn-xs btn-default" id="jr-cal-next"><i class="fa fa-chevron-right"></i></button>
                 </div>
+
+                <!-- Grilla del calendario -->
+                <div id="jr-cal-grid" style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin-bottom:6px;"></div>
+
+                <!-- Leyenda -->
+                <div style="font-size:11px; color:#888; margin-bottom:8px;">
+                  <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#3c763d;vertical-align:middle;"></span> Subidas al servidor &nbsp;
+                  <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#f0ad4e;vertical-align:middle;"></span> Pendientes &nbsp;
+                  <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#a94442;vertical-align:middle;"></span> Error
+                </div>
+
+                <!-- Detalle del día seleccionado -->
+                <div id="jr-cal-detail" class="jr-list" style="display:none;"></div>
+
+                <!-- Contenedores legacy (ocultos, requeridos por journal_ui.js) -->
+                <div id="jr-list-today" class="jr-list" style="display:none;"></div>
+                <div id="jr-list-week"  class="jr-list" style="display:none;"></div>
               </div>
             </div>
           </div>
@@ -1947,6 +1961,30 @@ function localYmd(d){
   window.addEventListener('online', setNetBadge);
   window.addEventListener('offline', setNetBadge);
   setNetBadge();
+
+  // --- Toggle colapso del queue panel ---
+  (function(){
+    var panel  = document.getElementById('queuePanel');
+    var toggle = document.getElementById('queueToggle');
+    if (!panel || !toggle) return;
+    function applyState(collapsed){
+      panel.classList.toggle('collapsed', collapsed);
+      toggle.innerHTML = collapsed ? '&#9650;' : '&#9660;';
+      toggle.title = collapsed ? 'Expandir' : 'Contraer';
+    }
+    // Arrancar colapsado por defecto
+    applyState(true);
+    toggle.addEventListener('click', function(e){
+      e.stopPropagation();
+      var isNowCollapsed = !panel.classList.contains('collapsed');
+      applyState(isNowCollapsed);
+    });
+    // Click en el panel (fuera del toggle) también expande
+    panel.addEventListener('click', function(e){
+      if (e.target === toggle || toggle.contains(e.target)) return;
+      if (panel.classList.contains('collapsed')) applyState(false);
+    });
+  })();
 
   async function updateQueuePanel(){
   const panel = document.getElementById('queuePanel');

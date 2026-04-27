@@ -264,7 +264,17 @@ function convertirAWebP($sourcePath, $destPath, $quality = 80) {
     }
 
     $info = @getimagesize($sourcePath);
-    if (!$info) throw new Exception('Archivo no es una imagen válida.');
+    if (!$info) {
+        // Fallback: verificar MIME real con finfo (cubre HEIC, AVIF, WebP en versiones antiguas de PHP)
+        $finfo = function_exists('finfo_open') ? @finfo_open(FILEINFO_MIME_TYPE) : null;
+        $detectedMime = $finfo ? @finfo_file($finfo, $sourcePath) : @mime_content_type($sourcePath);
+        if ($finfo) @finfo_close($finfo);
+        if (!$detectedMime || strpos($detectedMime, 'image/') !== 0) {
+            throw new Exception('Archivo no es una imagen válida.');
+        }
+        // Construir $info mínimo para continuar; dimensiones se verificarán con Imagick si disponible
+        $info = [0 => 0, 1 => 0, 'mime' => $detectedMime];
+    }
     $maxWidth = 8000; $maxHeight = 8000;
     if ($info[0] > $maxWidth || $info[1] > $maxHeight) {
         throw new Exception('Dimensiones muy grandes (máx 8000x8000).');
