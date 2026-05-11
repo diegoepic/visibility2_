@@ -1923,6 +1923,181 @@ function syncOfflineMetaInputs(container, idFQ, metas = []) {
   });
 }
 
+/* === Encola una foto de material individualmente (upload durante la visita) === */
+async function enqueueMaterialFoto({ idFQ, compressed, meta, coords, captureSource,
+                                     wrapper, imgContainer, bar, blobUrl,
+                                     hiddenContainer, inputElem }) {
+  const QueueObj =
+    (window.Queue && typeof window.Queue.smartPost === 'function') ? window.Queue :
+    (window.OfflineQueue && typeof window.OfflineQueue.smartPost === 'function') ? window.OfflineQueue :
+    null;
+  if (!QueueObj) {
+    bar.classList.add('error');
+    mcToast('danger', 'Queue no disponible', 'No se puede encolar la foto.');
+    return;
+  }
+
+  const localId    = crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36));
+  const idempo     = crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36));
+  const clientGuid = document.getElementById('client_guid')?.value || ensureClientGuid();
+  const dependsOn  = `create:${clientGuid}`;
+
+  wrapper.dataset.localId = localId;
+  bar.style.width = '100%';
+
+  const qfd = new FormData();
+  qfd.append('foto', compressed, compressed.name || 'material.jpg');
+  qfd.append('idFQ', idFQ);
+  qfd.append('idCampana', document.querySelector('input[name="idCampana"]').value);
+  qfd.append('idLocal', document.querySelector('input[name="idLocal"]').value);
+  qfd.append('division_id', window.campaignDivision || 0);
+  qfd.append('visita_id', document.getElementById('visita_id')?.value || '');
+  qfd.append('client_guid', clientGuid);
+  qfd.append('lat', coords?.lat || '');
+  qfd.append('lng', coords?.lng || '');
+  qfd.append('csrf_token', window.CSRF_TOKEN || '');
+  qfd.append('capture_source', captureSource || 'gallery');
+  qfd.append('exif_datetime',      meta.exif_datetime      || '');
+  qfd.append('exif_lat',           meta.exif_lat           || '');
+  qfd.append('exif_lng',           meta.exif_lng           || '');
+  qfd.append('exif_altitude',      meta.exif_altitude      || '');
+  qfd.append('exif_img_direction', meta.exif_img_direction || '');
+  qfd.append('exif_make',          meta.exif_make          || '');
+  qfd.append('exif_model',         meta.exif_model         || '');
+  qfd.append('exif_software',      meta.exif_software      || '');
+  qfd.append('exif_lens_model',    meta.exif_lens_model    || '');
+  qfd.append('exif_fnumber',       meta.exif_fnumber       || '');
+  qfd.append('exif_exposure_time', meta.exif_exposure_time || '');
+  qfd.append('exif_iso',           meta.exif_iso           || '');
+  qfd.append('exif_focal_length',  meta.exif_focal_length  || '');
+  qfd.append('exif_orientation',   meta.exif_orientation   || '');
+  qfd.append('meta_json',          meta.meta_json          || '{}');
+
+  let taskRef;
+  try {
+    taskRef = await QueueObj.smartPost(
+      '/visibility2/app/upload_material_foto_pruebas.php',
+      qfd,
+      { type: 'material_foto', sendCSRF: true, dependsOn, client_guid: clientGuid,
+        idempotencyKey: idempo, timeoutMs: 60000,
+        enqueueOnFail: true, enqueueOnBlocked: true }
+    );
+  } catch (qErr) {
+    console.error('[material_foto] Error al encolar:', qErr);
+    bar.classList.add('error');
+    mcToast('danger', 'Error', 'No se pudo encolar la foto.');
+    return;
+  }
+
+  if (!inputElem._queuedPhotos) inputElem._queuedPhotos = [];
+  inputElem._queuedPhotos.push({ localId, taskId: taskRef.id });
+
+  const badge = document.createElement('span');
+  badge.className = 'badge badge-warning';
+  badge.dataset.queueBadge = taskRef.id;
+  badge.style.cssText = 'position:absolute;top:4px;left:4px;font-size:10px;';
+  badge.textContent = 'En cola';
+  wrapper.style.position = 'relative';
+  wrapper.appendChild(badge);
+
+  const delBtnQueue = document.createElement('button');
+  delBtnQueue.className   = 'delete-button';
+  delBtnQueue.type        = 'button';
+  delBtnQueue.title       = 'Cancelar y eliminar foto';
+  delBtnQueue.textContent = '×';
+  delBtnQueue.onclick = async function () {
+    const ok = await mcConfirm({
+      title: 'Eliminar foto',
+      message: `<div class="text-center"><p>¿Seguro que desea eliminar <strong>esta foto</strong> del material?</p><img src="${blobUrl}" class="img-thumbnail" style="max-height:220px;max-width:100%;margin-top:8px;object-fit:contain;"></div>`,
+      confirmText: 'Sí, eliminar', confirmClass: 'btn-danger'
+    });
+    if (!ok) return;
+    if (taskRef?.id) {
+      try { await QueueObj.cancel(taskRef.id, { reason: 'user_delete' }); } catch(_) {}
+    }
+    window.removeEventListener('queue:done', onDone);
+    if (inputElem._queuedPhotos) {
+      inputElem._queuedPhotos = inputElem._queuedPhotos.filter(p => p.taskId !== taskRef?.id);
+    }
+    URL.revokeObjectURL(blobUrl);
+    $(wrapper).fadeOut(150, () => wrapper.remove());
+  };
+  imgContainer.appendChild(delBtnQueue);
+
+  const onDone = (ev) => {
+    if (!ev?.detail || ev.detail.id !== taskRef.id || ev.detail.type !== 'material_foto') return;
+    window.removeEventListener('queue:done', onDone);
+    const resp = ev.detail.response;
+    if (!resp?.url) return;
+
+    const thumb = wrapper.querySelector('img.thumbnail');
+    if (thumb) thumb.src = normalizeAppUrl(resp.url);
+
+    const h = document.createElement('input');
+    h.type  = 'hidden';
+    h.name  = `fotos[${idFQ}][]`;
+    h.value = resp.url;
+    if (resp.id_foto) h.dataset.idFoto = String(resp.id_foto);
+    hiddenContainer.appendChild(h);
+    wrapper.dataset.idFoto = resp.id_foto || '';
+
+    const b = wrapper.querySelector(`[data-queue-badge="${taskRef.id}"]`);
+    if (b) b.remove();
+    bar.remove();
+
+    if (inputElem._queuedPhotos) {
+      inputElem._queuedPhotos = inputElem._queuedPhotos.filter(p => p.taskId !== taskRef.id);
+    }
+
+    delBtnQueue.remove();
+    const delBtnOnline = document.createElement('button');
+    delBtnOnline.className   = 'delete-button';
+    delBtnOnline.type        = 'button';
+    delBtnOnline.title       = 'Eliminar foto';
+    delBtnOnline.textContent = '×';
+    delBtnOnline.onclick = async function () {
+      const ok2 = await mcConfirm({
+        title: 'Eliminar foto',
+        message: `<div class="text-center"><p>¿Seguro que desea eliminar <strong>esta foto</strong> del material?</p><img src="${blobUrl}" class="img-thumbnail" style="max-height:220px;max-width:100%;margin-top:8px;object-fit:contain;"></div>`,
+        confirmText: 'Sí, eliminar', confirmClass: 'btn-danger'
+      });
+      if (!ok2) return;
+      delBtnOnline.disabled = true;
+      try {
+        const form = new FormData();
+        form.append('csrf_token', window.CSRF_TOKEN || getCSRF());
+        form.append('id_foto', wrapper.dataset.idFoto);
+        form.append('id_formularioQuestion', idFQ);
+        form.append('visita_id', document.getElementById('visita_id').value);
+        const _idem2 = crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random());
+        form.append('X_Idempotency_Key', _idem2);
+        const r  = await fetch('/visibility2/app/eliminar_material_foto_pruebas.php', { method: 'POST', body: form });
+        const js = await r.json();
+        if (js.status === 'success') {
+          const matching = hiddenContainer.querySelector(`input[data-id-foto="${wrapper.dataset.idFoto}"]`);
+          if (matching) matching.remove();
+          URL.revokeObjectURL(blobUrl);
+          $(wrapper).fadeOut(150, () => wrapper.remove());
+          mcToast('success', 'Foto eliminada', 'La foto fue eliminada correctamente.');
+        } else {
+          mcToast('danger', 'No se pudo eliminar', js.message || 'Intente nuevamente.');
+          delBtnOnline.disabled = false;
+        }
+      } catch (e) {
+        console.error(e);
+        mcToast('danger', 'Error de red', 'No se pudo eliminar la foto.');
+        delBtnOnline.disabled = false;
+      }
+    };
+    imgContainer.appendChild(delBtnOnline);
+
+    mcToast('success', 'Foto sincronizada', 'La foto de material se subió correctamente.');
+  };
+  window.addEventListener('queue:done', onDone);
+
+  mcToast('info', 'Offline', 'La foto se subirá al recuperar conexión.');
+}
+
 /* === FileInput materiales con soporte OFFLINE === */
 function setupFileInput(inputElem) {
   const idFQ = inputElem.id.split('_').pop();
@@ -1953,9 +2128,9 @@ function setupFileInput(inputElem) {
       `#hiddenUploadContainer_${idFQ} input[type="hidden"][name^="fotos[${idFQ}]"]`
     ).length;
 
-    const offlineCount = (inputElem._retainedFilesDT && inputElem._retainedFilesDT.files)
-      ? inputElem._retainedFilesDT.files.length
-      : 0;
+    const offlineCount = (inputElem._queuedPhotos ? inputElem._queuedPhotos.length : 0)
+      + ((inputElem._retainedFilesDT && inputElem._retainedFilesDT.files)
+          ? inputElem._retainedFilesDT.files.length : 0);
 
     if (yaSubidas + offlineCount + files.length > MAX_FOTOS_POR_MATERIAL) {
       alert(`Máximo ${MAX_FOTOS_POR_MATERIAL} fotos por material. Ya tienes ${yaSubidas + offlineCount}.`);
@@ -2098,64 +2273,14 @@ function setupFileInput(inputElem) {
           wrapper.appendChild(okMsg);
           setTimeout(() => { $(okMsg).fadeOut(300, () => okMsg.remove()); }, 2000);
         } catch (err) {
-          bar.classList.add('error');
-          console.error('Upload error', err);
-          alert('Error al subir la foto: ' + err);
+          console.warn('[material_foto] upload online falló, encolando:', err);
+          await enqueueMaterialFoto({ idFQ, compressed, meta, coords, captureSource,
+            wrapper, imgContainer, bar, blobUrl, hiddenContainer, inputElem });
         }
       } else {
-        // ── Offline: retener en DataTransfer; delete elimina solo ese input (sin rebuild completo)
-        const localId = (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36)));
-        wrapper.dataset.localId = localId;
-        bar.style.width = '100%';
-        mcToast('info', 'Offline', 'La foto se subirá al recuperar conexión.');
-
-        retainedDT.items.add(compressed);
-        retainedMeta.push({
-          localId,
-          capture_source: captureSource,
-          lat: coords.lat || '',
-          lng: coords.lng || ''
-        });
-
-        // ── Delete button (offline: sin llamada al servidor)
-        const delBtn = document.createElement('button');
-        delBtn.className = 'delete-button';
-        delBtn.type = 'button';
-        delBtn.title = 'Eliminar foto';
-        delBtn.textContent = '×';
-        delBtn.onclick = async function () {
-          const ok = await mcConfirm({
-            title: 'Eliminar foto',
-            message: `
-              <div class="text-center">
-                <p>¿Seguro que desea eliminar <strong>esta foto</strong> del material?</p>
-                <img src="${blobUrl}" alt="Foto a eliminar"
-                     class="img-thumbnail"
-                     style="max-height:220px;max-width:100%;margin-top:8px;object-fit:contain;">
-              </div>
-            `,
-            confirmText: 'Sí, eliminar',
-            confirmClass: 'btn-danger'
-          });
-          if (!ok) return;
-
-          const idx = inputElem._retainedMeta.findIndex(m => m.localId === localId);
-          if (idx !== -1) {
-            const newDT = new DataTransfer();
-            Array.from(inputElem._retainedFilesDT.files || []).forEach((f, i) => {
-              if (i !== idx) newDT.items.add(f);
-            });
-            inputElem._retainedFilesDT = newDT;
-            inputElem._retainedMeta.splice(idx, 1);
-            inputElem.files = newDT.files;
-            // Problema 3: eliminación quirúrgica del input, sin rebuild completo
-            const metaToRemove = metaContainer.querySelector(`input[data-local-id="${localId}"]`);
-            if (metaToRemove) metaToRemove.remove();
-          }
-          URL.revokeObjectURL(blobUrl);
-          $(wrapper).fadeOut(150, () => wrapper.remove());
-        };
-        imgContainer.appendChild(delBtn);
+        // ── Offline: encolar foto individualmente (se sube al recuperar red)
+        await enqueueMaterialFoto({ idFQ, compressed, meta, coords, captureSource,
+          wrapper, imgContainer, bar, blobUrl, hiddenContainer, inputElem });
       }
     }));
 
@@ -2163,12 +2288,7 @@ function setupFileInput(inputElem) {
       const onlineAgain = await isReallyOnline();
       if (onlineAgain) inputElem.value = '';
     } else {
-      inputElem._retainedFilesDT = retainedDT;
-      inputElem._retainedMeta = retainedMeta;
-      const mergedDT = new DataTransfer();
-      Array.from(retainedDT.files || []).forEach(f => mergedDT.items.add(f));
-      inputElem.files = mergedDT.files;
-      syncOfflineMetaInputs(metaContainer, idFQ, retainedMeta);
+      inputElem.value = '';
     }
   });
 }
@@ -2621,8 +2741,9 @@ $(document).ready(function(){
         const hiddenUrls = document.querySelectorAll(`#hiddenUploadContainer_${idFQ} input[type="hidden"][name^="fotos[${idFQ}]"]`);
         const fileInput  = document.getElementById(`fotos_input_${idFQ}`);
         const haveLocalFiles = fileInput && fileInput.files && fileInput.files.length > 0;
+        const haveQueued = fileInput && fileInput._queuedPhotos && fileInput._queuedPhotos.length > 0;
 
-        if (hiddenUrls.length === 0 && !haveLocalFiles) {
+        if (hiddenUrls.length === 0 && !haveLocalFiles && !haveQueued) {
           alert("Debes adjuntar al menos una foto para el material implementado (ID " + idFQ + ").\
  Si estás offline, basta con dejar los archivos cargados (se subirán cuando haya red).");
           valido = false; return false;
