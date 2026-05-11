@@ -346,6 +346,53 @@ document.addEventListener("DOMContentLoaded", function () {
   const $distrito = document.getElementById('id_distrito');
 const $empresa = document.getElementById('empresa_id') || { value: '<?= (int)$id_empresa ?>' };
 
+const $nuevoUsuario = document.getElementById('nuevoUsuario');
+
+function cargarUsuariosReasignar() {
+  if (!$nuevoUsuario) return;
+
+  const empresa = $empresa?.value || 0;
+  const division = $division ? ($division.value || 0) : divisionUsuario;
+  const subdivision = $subdivision?.value || 0;
+
+  $nuevoUsuario.innerHTML = '<option value="">Cargando usuarios...</option>';
+  $nuevoUsuario.disabled = true;
+
+  const params = new URLSearchParams({
+    id_empresa: empresa,
+    id_division: division,
+    id_subdivision: subdivision
+  });
+
+  fetch(`ajax_admin_cargar_usuarios_reasignar.php?${params.toString()}`)
+    .then(r => r.json())
+    .then(data => {
+      console.log('Usuarios para reasignar:', data);
+
+      $nuevoUsuario.innerHTML = '<option value="">Seleccione usuario</option>';
+
+      if (data.ok && Array.isArray(data.usuarios) && data.usuarios.length > 0) {
+        data.usuarios.forEach(u => {
+          const nombre = `${u.nombre || ''} ${u.apellido || ''}`.trim();
+          const usuario = u.usuario ? ` (${u.usuario})` : '';
+          const opt = new Option(`${nombre}${usuario}`, u.id);
+          $nuevoUsuario.add(opt);
+        });
+      } else {
+        const opt = new Option('SIN USUARIOS DISPONIBLES', '');
+        opt.disabled = true;
+        $nuevoUsuario.add(opt);
+      }
+
+      $nuevoUsuario.disabled = false;
+    })
+    .catch(err => {
+      console.error('Error cargando usuarios para reasignar:', err);
+      $nuevoUsuario.innerHTML = '<option value="">ERROR AL CARGAR</option>';
+      $nuevoUsuario.disabled = false;
+    });
+}
+
   // Valores guardados desde PHP
   const val_division = document.getElementById('val_division')?.value || 0;
   const val_subdivision = document.getElementById('val_subdivision')?.value || 0;
@@ -562,6 +609,7 @@ if (!puedeCambiarDivision || divisionIsHidden) {
           }
         
           recargarEjecutoresMapa(false);
+          cargarUsuariosReasignar();
         }, 300);
     });
 
@@ -594,6 +642,7 @@ if (!puedeCambiarDivision || divisionIsHidden) {
       }
 
       recargarEjecutoresMapa(false);
+      cargarUsuariosReasignar();
     });
   }
 
@@ -708,8 +757,10 @@ if (!puedeCambiarDivision || divisionIsHidden) {
       }, 250);
     }
   }
-
+  
+  
   restaurarEstadoInicial();
+  cargarUsuariosReasignar();
 });
 
 const panel = document.getElementById('panel-filtros');

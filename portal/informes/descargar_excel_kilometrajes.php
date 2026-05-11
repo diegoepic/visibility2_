@@ -264,7 +264,7 @@ $stmtD = $conn->prepare("
     FROM form_question_photo_meta m
     JOIN form_question_responses r ON r.id = m.resp_id
     JOIN form_questions fq ON fq.id = r.id_form_question
-    LEFT JOIN usuario u ON u.id = r.id_usuario
+    JOIN usuario u ON u.id = r.id_usuario AND u.activo = 1
     WHERE fq.id_formulario = 138
       AND fq.id_question_type = 7
       AND JSON_EXTRACT(m.meta_json,'$.sha1') IS NOT NULL
@@ -674,8 +674,9 @@ $ws3->getRowDimension($hdrRow3)->setRowHeight(20);
 $r3 = $hdrRow3 + 1;
 foreach ($allUploadRows as $urow) {
     $uid   = $urow['id_usuario'];
+    if (!isset($users[$uid])) continue;
     $date  = $urow['fecha'];
-    $udata = $users[$uid] ?? ['usuario' => 'ID:' . $uid, 'nombre_completo' => '—'];
+    $udata = $users[$uid];
 
     $d     = new DateTime($date);
     $dowN  = (int)$d->format('N');

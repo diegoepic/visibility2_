@@ -307,26 +307,37 @@ if ($accionBuscar === 1) {
             $types .= 'i';
         }
 
-        if ($id_ejecutor > 0) {
+        $modoMerchan = ($id_ejecutor > 0);
+        
+        if ($modoMerchan) {
+            /*
+              Si selecciono un merchan, quiero ver TODO lo asignado a Ã©l,
+              aunque pertenezca a otra divisiÃ³n o subdivisiÃ³n.
+            */
             $sql .= " AND fq.id_usuario = ? ";
             $params[] = $id_ejecutor;
             $types .= 'i';
-        }
-
-        if ($filter_division > 0) {
-            $sql .= " AND f.id_division = ? ";
-            $params[] = $filter_division;
-            $types .= 'i';
-        }
-
-        if ($filter_subdivision > 0) {
-            $sql .= " AND f.id_subdivision = ? ";
-            $params[] = $filter_subdivision;
-            $types .= 'i';
-        }
-
-        if ($filter_subdivision === -1) {
-            $sql .= " AND (f.id_subdivision IS NULL OR f.id_subdivision = 0) ";
+        
+        } else {
+            /*
+              Si NO selecciono merchan, sÃ­ aplico filtros normales
+              por divisiÃ³n y subdivisiÃ³n para no cargar todo.
+            */
+            if ($filter_division > 0) {
+                $sql .= " AND f.id_division = ? ";
+                $params[] = $filter_division;
+                $types .= 'i';
+            }
+        
+            if ($filter_subdivision > 0) {
+                $sql .= " AND f.id_subdivision = ? ";
+                $params[] = $filter_subdivision;
+                $types .= 'i';
+            }
+        
+            if ($filter_subdivision === -1) {
+                $sql .= " AND (f.id_subdivision IS NULL OR f.id_subdivision = 0) ";
+            }
         }
 
         if (in_array($filter_estado, [1, 3], true)) {
@@ -419,7 +430,7 @@ foreach ($infoLocales as $loc) {
         'id_formulario'   => $loc['id_formulario'],
         'id_local'        => $loc['id_local'],
 
-        // Compatibilidad por si alg¨²n JS antiguo a¨²n lo usa
+        // Compatibilidad por si algè¿†n JS antiguo aè¿†n lo usa
         'idLocal'         => $loc['id_local'],
 
         'codigo'          => $loc['codigo'],
@@ -450,5 +461,5 @@ foreach ($infoLocales as $loc) {
     ];
 }
 
-// No cerrar $conn aqu¨ª, porque el m¨®dulo y AJAX pueden seguir usando conexi¨®n.
+// No cerrar $conn aquèµ¤, porque el mè»Šdulo y AJAX pueden seguir usando conexiè»Šn.
 ?>
