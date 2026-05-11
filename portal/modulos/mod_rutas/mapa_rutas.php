@@ -709,7 +709,23 @@ if (isset($con) && $con instanceof mysqli) {
     }
     .btn-cargar{
     margin-bottom: 10%;    
-    }    
+    }   
+    
+.btn-modern-circuito{
+    border:none;
+    border-radius: 16px;
+    padding: 16px 22px;
+    font-weight: 700;
+    font-size: 1.05rem;
+    background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+    color:#fff;
+    transition: .2s ease;
+}
+
+.btn-modern-circuito:hover{
+    transform: translateY(-1px);
+    color:#fff;
+}    
 </style>
 </head>
 <body>
@@ -855,6 +871,15 @@ if (isset($con) && $con instanceof mysqli) {
                                 <button type="button" class="btn btn-modern-success w-100" id="btnProcesarPlanificacion">
                                     <i class="fa-solid fa-file-excel"></i> Generar Excel
                                 </button>
+                            </div>
+                            <div class="col-12">
+                                <button type="button" class="btn btn-modern-circuito w-100" id="btnProcesarCircuito">
+                                    <i class="fa-solid fa-arrows-spin"></i> Generar propuesta circuito
+                                </button>
+                                <div class="planner-help">
+                                    Genera una ruta continua sin excluir locales por comuna, radio, di¨¢metro o m¨ªnimo de cobertura.
+                                    Solo separa el circuito cuando un salto entre puntos supera el l¨ªmite definido.
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1475,7 +1500,7 @@ $('#cantidadPorDia, #maxKmRuta').on('input change', function() {
     renderRoutePreview();
 });
 
-$('#btnProcesarPlanificacion').on('click', function() {
+function enviarPlanificacion(modo, boton) {
     const stats = getPlanStats();
     const fechaInicio = $('#fechaInicioRuta').val();
 
@@ -1494,6 +1519,15 @@ $('#btnProcesarPlanificacion').on('click', function() {
         return;
     }
 
+    const cantidadPorDia = Math.max(parseInt($('#cantidadPorDia').val(), 10) || 1, 1);
+    const minLocalesRuta = Math.max(parseInt($('#minLocalesRuta').val(), 10) || 7, 1);
+
+    let maxKmRuta = Math.max(parseFloat($('#maxKmRuta').val()) || 80, 1);
+
+    if (modo === 'circuito') {
+        maxKmRuta = 120;
+    }
+
     const registrosPlanificar = stats.localesObjetivo.map(local => ({
         codigo: local.codigo,
         usuario_input: local.usuario_input || '',
@@ -1502,9 +1536,14 @@ $('#btnProcesarPlanificacion').on('click', function() {
         usuario_nombre: local.usuario_nombre || ''
     }));
 
-    const btn = $(this);
+    const btn = $(boton);
     const originalText = btn.html();
-    btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> Generando...');
+
+    const textoGenerando = modo === 'circuito'
+        ? '<i class="fa-solid fa-spinner fa-spin"></i> Generando circuito...'
+        : '<i class="fa-solid fa-spinner fa-spin"></i> Generando...';
+
+    btn.prop('disabled', true).html(textoGenerando);
 
     const form = document.createElement('form');
     form.method = 'POST';
@@ -1519,8 +1558,10 @@ $('#btnProcesarPlanificacion').on('click', function() {
         form.appendChild(input);
     };
 
-    appendHidden('cantidad_por_dia', stats.cantidadPorDia);
-    appendHidden('max_km_ruta', stats.maxKmRuta);
+    appendHidden('modo_planificacion', modo);
+    appendHidden('cantidad_por_dia', cantidadPorDia);
+    appendHidden('min_locales_ruta', minLocalesRuta);
+    appendHidden('max_km_ruta', maxKmRuta);
     appendHidden('fecha_inicio', fechaInicio);
     appendHidden('registros_json', JSON.stringify(registrosPlanificar));
 
@@ -1531,6 +1572,14 @@ $('#btnProcesarPlanificacion').on('click', function() {
     setTimeout(() => {
         btn.prop('disabled', false).html(originalText);
     }, 2000);
+}
+
+$('#btnProcesarPlanificacion').on('click', function() {
+    enviarPlanificacion('estandar', this);
+});
+
+$('#btnProcesarCircuito').on('click', function() {
+    enviarPlanificacion('circuito', this);
 });
 </script>
 

@@ -1,6 +1,10 @@
 <?php
 include $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+error_reporting(E_ALL);
+
 // Recoger parámetros
 $formato   = isset($_GET['formato']) ? $_GET['formato'] : 'csv';
 $canal     = isset($_GET['id_canal']) ? intval($_GET['id_canal']) : '';
@@ -46,11 +50,6 @@ $query = "
             UPPER(e.nombre)                    AS 'EMPRESA',
             UPPER(f.nombre)                    AS 'CAMPAÑA',            
             l.codigo                           AS 'CODIGO',
-            CASE
-              WHEN l.nombre REGEXP '^[0-9]+' 
-              THEN SUBSTRING_INDEX(l.nombre, ' ', 1)
-              ELSE CAST(l.codigo AS UNSIGNED)
-            END                                AS 'N° LOCAL',
             DATE(fq.fechaPropuesta)            AS 'FECHA CREACION',
             DATE(fq.fechaPropuesta)            AS 'FECHA INICIO IMPLEMENTACION',  
             DATE(fq.fechaPropuesta)            AS 'FECHA FIN IMPLEMENTACION',  
@@ -104,6 +103,8 @@ $query = "
               , '_', ' ')
             ) AS MOTIVO,
             UPPER(fq.material)                 AS MATERIAL,
+            UPPER(fq.categoria)                AS CATEGORIAM,
+            UPPER(fq.marca)                    AS MARCA,             
             fq.valor                           AS 'CANTIDAD MATERIAL EJECUTADO',            
             fq.valor_propuesto                 AS 'MATERIAL PROPUESTO',
             UPPER(fq.observacion)              AS OBSERVACION        
@@ -131,10 +132,17 @@ if ($result->num_rows > 0) {
     }
 
     // Función para transformar caracteres
-    function transformarCaracteres($string) {
+    function transformarCaracteres($valor) {
+        if ($valor === null) {
+            return '';
+        }
+    
+        $valor = (string)$valor;
+    
         $buscar = array('á', 'é', 'í', 'ó', 'ú', 'Á', 'É', 'Í', 'Ó', 'Ú', 'ñ', 'Ñ');
         $reemplazar = array('a', 'e', 'i', 'o', 'u', 'A', 'E', 'I', 'O', 'U', 'n', 'N');
-        return str_replace($buscar, $reemplazar, $string);
+    
+        return str_replace($buscar, $reemplazar, $valor);
     }
 
     // Generar nombre del archivo con fecha y hora

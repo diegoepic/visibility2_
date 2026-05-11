@@ -281,6 +281,61 @@ while ($row = $resD->fetch_assoc()) {
     $dupsByUser[(int)$row['id_usuario']] = true;
 }
 $stmtD->close();
+
+/* ─────────────────────────────────────────────────────────────
+ * Query 4: Respuestas texto/numéricas del formulario 138
+ * (ej. "Ingrese Kilometraje Camioneta", "INGRESE PATENTE…")
+ * ───────────────────────────────────────────────────────────── */
+$nonPhotoQuestions = []; // [qid => ['text'=>..., 'type'=>...]]
+$textNumAnswers    = []; // [uid][date][qid] => ['answer_text'=>..., 'valor'=>...]
+
+$stmtNPQ = $conn->prepare("
+    SELECT id, question_text, id_question_type
+    FROM form_questions
+    WHERE id_formulario = 138
+      AND id_question_type IN (4, 5)
+      AND deleted_at IS NULL
+    ORDER BY sort_order ASC
+");
+$stmtNPQ->execute();
+$resNPQ = $stmtNPQ->get_result();
+while ($row = $resNPQ->fetch_assoc()) {
+    $nonPhotoQuestions[(int)$row['id']] = [
+        'text' => trim($row['question_text']),
+        'type' => (int)$row['id_question_type'],
+    ];
+}
+$stmtNPQ->close();
+
+if (!empty($nonPhotoQuestions)) {
+    $qidList = implode(',', array_map('intval', array_keys($nonPhotoQuestions)));
+    $stmtNPR = $conn->prepare("
+        SELECT
+            r.id_usuario,
+            DATE(r.created_at) AS fecha,
+            r.id_form_question,
+            r.answer_text,
+            r.valor
+        FROM form_question_responses r
+        WHERE r.id_form_question IN ($qidList)
+          AND r.created_at BETWEEN ? AND ?
+        ORDER BY r.id_usuario, fecha
+    ");
+    $stmtNPR->bind_param('ss', $startDt, $endDt);
+    $stmtNPR->execute();
+    $resNPR = $stmtNPR->get_result();
+    while ($row = $resNPR->fetch_assoc()) {
+        $uid  = (int)$row['id_usuario'];
+        $date = (string)$row['fecha'];
+        $qid  = (int)$row['id_form_question'];
+        $textNumAnswers[$uid][$date][$qid] = [
+            'answer_text' => (string)($row['answer_text'] ?? ''),
+            'valor'       => $row['valor'],
+        ];
+    }
+    $stmtNPR->close();
+}
+
 $conn->close();
 
 /* ─────────────────────────────────────────────────────────────
@@ -588,7 +643,11 @@ $ws3 = $spreadsheet->createSheet()->setTitle('Detalle Subidas');
 /** @var Worksheet $ws3 */
 $ws3 = $spreadsheet->getSheetByName('Detalle Subidas');
 
-$ws3->mergeCells('A1:I1');
+/* Calcular número total de columnas en Hoja 3 (9 fijas + extra por cada pregunta) */
+$ws3TotalCols  = 9 + count($nonPhotoQuestions);
+$ws3LastLetter = Coordinate::stringFromColumnIndex($ws3TotalCols);
+
+$ws3->mergeCells('A1:' . $ws3LastLetter . '1');
 setVal($ws3, 1, 1, $title . ' — Detalle de Subidas');
 $ws3->getStyle('A1')->applyFromArray([
     'font'      => ['bold' => true, 'size' => 13, 'color' => ['argb' => 'FFFFFFFF']],
@@ -601,11 +660,15 @@ $ws3->getRowDimension(1)->setRowHeight(26);
 $hdr3 = ['Usuario', 'Nombre', 'Fecha', 'Día semana',
           'Primera subida', 'Última subida',
           '# Fotos', '¿Día esperado?', 'Tipo'];
+foreach ($nonPhotoQuestions as $qdef) {
+    $hdr3[] = $qdef['text'];
+}
+
 $hdrRow3 = 3;
 foreach ($hdr3 as $i => $h) {
     setVal($ws3, $i + 1, $hdrRow3, $h);
 }
-applyHeaderStyle($ws3, 'A' . $hdrRow3 . ':I' . $hdrRow3);
+applyHeaderStyle($ws3, 'A' . $hdrRow3 . ':' . $ws3LastLetter . $hdrRow3);
 $ws3->getRowDimension($hdrRow3)->setRowHeight(20);
 
 $r3 = $hdrRow3 + 1;
@@ -631,10 +694,33 @@ foreach ($allUploadRows as $urow) {
     setStr($ws3, 8, $r3, $isExpected ? 'Sí' : 'No');
     setStr($ws3, 9, $r3, $tipos ?: '—');
 
-    applyDataBorders($ws3, 'A' . $r3 . ':I' . $r3);
+    /* Columnas extra: respuestas texto/numéricas */
+    $extraCol = 10;
+    foreach ($nonPhotoQuestions as $qid => $qdef) {
+        $ans = $textNumAnswers[$uid][$date][$qid] ?? null;
+        if ($ans === null) {
+            setStr($ws3, $extraCol, $r3, '—');
+        } elseif ($qdef['type'] === 5) {
+            $txt = trim($ans['answer_text']);
+            if ($txt !== '') {
+                is_numeric($txt)
+                    ? setVal($ws3, $extraCol, $r3, (float)$txt)
+                    : setStr($ws3, $extraCol, $r3, $txt);
+            } elseif ($ans['valor'] !== null && (float)$ans['valor'] !== 0.0) {
+                setVal($ws3, $extraCol, $r3, (float)$ans['valor']);
+            } else {
+                setStr($ws3, $extraCol, $r3, '—');
+            }
+        } else {
+            setStr($ws3, $extraCol, $r3, trim($ans['answer_text']) ?: '—');
+        }
+        $extraCol++;
+    }
+
+    applyDataBorders($ws3, 'A' . $r3 . ':' . $ws3LastLetter . $r3);
 
     if (!$isExpected) {
-        $ws3->getStyle('A' . $r3 . ':I' . $r3)->applyFromArray([
+        $ws3->getStyle('A' . $r3 . ':' . $ws3LastLetter . $r3)->applyFromArray([
             'fill' => ['fillType' => Fill::FILL_SOLID,
                        'startColor' => ['argb' => 'FFFFFF99']],
         ]);
@@ -644,7 +730,7 @@ foreach ($allUploadRows as $urow) {
 }
 
 if ($r3 === $hdrRow3 + 1) {
-    $ws3->mergeCells('A' . $r3 . ':I' . $r3);
+    $ws3->mergeCells('A' . $r3 . ':' . $ws3LastLetter . $r3);
     setVal($ws3, 1, $r3, 'Sin subidas registradas en el período.');
     $ws3->getStyle('A' . $r3)->getAlignment()
         ->setHorizontal(Alignment::HORIZONTAL_CENTER);
@@ -654,6 +740,10 @@ foreach (['A' => 18, 'B' => 26, 'C' => 12, 'D' => 12,
           'E' => 18, 'F' => 18, 'G' => 9,
           'H' => 14, 'I' => 14] as $col => $w) {
     $ws3->getColumnDimension($col)->setWidth($w);
+}
+/* Anchos para columnas de preguntas extra */
+for ($c = 10; $c <= $ws3TotalCols; $c++) {
+    $ws3->getColumnDimension(Coordinate::stringFromColumnIndex($c))->setWidth(22);
 }
 $ws3->freezePane('A' . ($hdrRow3 + 1));
 

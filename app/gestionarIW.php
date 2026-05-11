@@ -142,6 +142,7 @@ $stmt->close();
 </head>
 <body>
 <div class="container mt-5">
+  <a href="index_pruebas.php" class="btn btn-secondary btn-sm mb-3">← Volver</a>
   <h2 class="mb-3">Encuesta Complementaria: <?= htmlspecialchars($campana['nombre'], ENT_QUOTES) ?></h2>
 
   <?php if ($requiereLocal): ?>

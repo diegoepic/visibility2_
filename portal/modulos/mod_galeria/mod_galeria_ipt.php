@@ -57,9 +57,36 @@ if ($resJV) {
     $resJV->close();
 }
 
-// Si quieres mantener el filtro Pregunta en el principal, aquí dejas tu lógica actual.
-// Si no, puedes sacar también eso y dejarlo para una segunda etapa.
 $preguntasEncuesta = [];
+if ($puedeVerFiltroPregunta) {
+    $sqlPreg = "
+        SELECT DISTINCT UPPER(TRIM(fq.question_text)) AS question_text
+        FROM form_questions fq
+        INNER JOIN formulario f   ON f.id  = fq.id_formulario
+        INNER JOIN form_question_responses fqr ON fqr.id_form_question = fq.id
+        WHERE fq.id_question_type = 7
+          AND COALESCE(TRIM(fqr.answer_text), '') <> ''
+          AND fq.deleted_at IS NULL
+          AND f.deleted_at  IS NULL
+    ";
+    if ($division > 0) {
+        $sqlPreg .= " AND f.id_division = ?";
+    }
+    $sqlPreg .= " ORDER BY question_text ASC";
+
+    $stmtPreg = $conn->prepare($sqlPreg);
+    if ($stmtPreg) {
+        if ($division > 0) {
+            $stmtPreg->bind_param("i", $division);
+        }
+        $stmtPreg->execute();
+        $resPreg = $stmtPreg->get_result();
+        while ($r = $resPreg->fetch_assoc()) {
+            $preguntasEncuesta[] = $r['question_text'];
+        }
+        $stmtPreg->close();
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -364,6 +391,54 @@ $(function () {
     allowClear: true,
     width: '100%'
   });
+
+  <?php if ($puedeVerFiltroPregunta): ?>
+  var _preguntaTimer = null;
+
+  function actualizarFiltroPreguntas() {
+    clearTimeout(_preguntaTimer);
+    _preguntaTimer = setTimeout(function () {
+      var params = {
+        division:     parseInt($('#divisionSelect').val())     || 0,
+        subdivision:  parseInt($('#subdivisionSelect').val())  || 0,
+        region:       parseInt($('#regionSelect').val())       || 0,
+        comuna:       parseInt($('#comunaSelect').val())       || 0,
+        zona:         parseInt($('#zonaSelect').val())         || 0,
+        distrito:     parseInt($('#distritoSelect').val())     || 0,
+        usuario:      parseInt($('#usuarioSelect').val())      || 0,
+        jefe_venta:   parseInt($('#jefe_ventaSelect').val())   || 0,
+        codigo_local: $('#codigoLocalInput').val().trim(),
+        start_date:   $('input[name="start_date"]').val()  || '',
+        end_date:     $('input[name="end_date"]').val()    || ''
+      };
+
+      $.getJSON('/visibility2/portal/modulos/mod_galeria/ajax_preguntas_encuesta.php',
+        params,
+        function (preguntas) {
+          var sel    = $('#preguntaSelect');
+          var actual = sel.val();
+          sel.empty().append('<option value="">-- Todas --</option>');
+          preguntas.forEach(function (p) {
+            sel.append($('<option>', { value: p, text: p }));
+          });
+          if (actual && preguntas.indexOf(actual) !== -1) {
+            sel.val(actual);
+          } else {
+            sel.val('');
+          }
+          sel.trigger('change.select2');
+        }
+      );
+    }, 400);
+  }
+
+  $('#divisionSelect, #subdivisionSelect, #regionSelect, #comunaSelect, ' +
+    '#zonaSelect, #distritoSelect, #usuarioSelect, #jefe_ventaSelect')
+    .on('change', actualizarFiltroPreguntas);
+
+  $('#codigoLocalInput').on('input', actualizarFiltroPreguntas);
+  $('input[name="start_date"], input[name="end_date"]').on('change', actualizarFiltroPreguntas);
+  <?php endif; ?>
 
 });
     

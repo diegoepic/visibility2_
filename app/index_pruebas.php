@@ -13,6 +13,36 @@ $apellido       = htmlspecialchars($_SESSION['usuario_apellido'], ENT_QUOTES, 'U
 $empresa_id     = intval($_SESSION['empresa_id']);
 $usuario_id     = intval($_SESSION['usuario_id']);
 $division_id    = intval($_SESSION['division_id']);
+$clasificacion_usuario = '';
+
+$sqlClasificacionUsuario = "
+    SELECT clasificacion_usuario
+    FROM usuario
+    WHERE id = ?
+    LIMIT 1
+";
+
+$stmtClasificacion = $conn->prepare($sqlClasificacionUsuario);
+$stmtClasificacion->bind_param('i', $usuario_id);
+$stmtClasificacion->execute();
+$resClasificacion = $stmtClasificacion->get_result();
+
+if ($rowClasificacion = $resClasificacion->fetch_assoc()) {
+    $clasificacion_usuario = $rowClasificacion['clasificacion_usuario'] ?? '';
+}
+
+$stmtClasificacion->close();
+
+if (!in_array($clasificacion_usuario, ['interno', 'externo'], true)) {
+    $clasificacion_usuario = '__sin_clasificacion__';
+}
+
+$_SESSION['clasificacion_usuario'] = $clasificacion_usuario;
+
+if (!in_array($clasificacion_usuario, ['interno', 'externo'], true)) {
+    $clasificacion_usuario = 'interno';
+}
+
 $appScope       = '/visibility2/app';
 $precacheLimit  = isset($_ENV['GESTIONAR_PRECACHE_LIMIT']) ? (int)$_ENV['GESTIONAR_PRECACHE_LIMIT'] : 10;
 $precacheLimit  = $precacheLimit > 0 ? $precacheLimit : 10;
@@ -115,48 +145,30 @@ while ($row = $result_campaigns->fetch_assoc()) {
 $stmt_campaigns->close();
 
 
-if ($usuario_id === 2) {
-    $sql_comp = "
-        SELECT 
-            f.id AS id_campana,
-            f.nombre AS nombre_campana,
-            f.estado
-        FROM formulario f
-        WHERE f.tipo = 2
-          AND f.estado = 1
-          AND f.deleted_at IS NULL
-          AND EXISTS (
-                SELECT 1
-                FROM formulario_division_habilitada fdh
-                WHERE fdh.id_formulario = f.id
-                  AND fdh.id_division = ?
-          )
-        ORDER BY f.nombre ASC
-    ";
-    $stmt_comp = $conn->prepare($sql_comp);
-    $stmt_comp->bind_param('i', $division_id);
-} else {
-    $sql_comp = "
-        SELECT 
-            f.id AS id_campana,
-            f.nombre AS nombre_campana,
-            f.estado
-        FROM formulario f
-        WHERE f.tipo = 2
-          AND f.estado = 1
-          AND f.deleted_at IS NULL
-          AND f.id <> 2037
-          AND EXISTS (
-                SELECT 1
-                FROM formulario_division_habilitada fdh
-                WHERE fdh.id_formulario = f.id
-                  AND fdh.id_division = ?
-          )
-        ORDER BY f.nombre ASC
-    ";
-    $stmt_comp = $conn->prepare($sql_comp);
-    $stmt_comp->bind_param('i', $division_id);
-}
+$condicionExclusionEspecial = ($usuario_id === 2) ? "" : "AND f.id <> 2037";
+
+$sql_comp = "
+    SELECT DISTINCT
+        f.id AS id_campana,
+        f.nombre AS nombre_campana,
+        f.estado
+    FROM formulario f
+    WHERE f.tipo = 2
+      AND f.estado = 1
+      AND f.deleted_at IS NULL
+      {$condicionExclusionEspecial}
+      AND EXISTS (
+            SELECT 1
+            FROM formulario_division_habilitada fdh
+            WHERE fdh.id_formulario = f.id
+              AND fdh.id_division = ?
+              AND fdh.clasificacion_usuario = ?
+      )
+    ORDER BY f.nombre ASC
+";
+
+$stmt_comp = $conn->prepare($sql_comp);
+$stmt_comp->bind_param('is', $division_id, $clasificacion_usuario);
 
 $stmt_comp->execute();
 $result_comp = $stmt_comp->get_result();

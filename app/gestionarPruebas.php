@@ -25,46 +25,18 @@ function dbFetchAllAssoc(mysqli $conn, string $sql, string $types = '', array $p
     if (!$stmt) {
         die("Error al preparar consulta: " . htmlspecialchars($conn->error, ENT_QUOTES, 'UTF-8'));
     }
-
     if ($types !== '' && !empty($params)) {
         $stmt->bind_param($types, ...$params);
     }
-
     if (!$stmt->execute()) {
         $err = $stmt->error;
         $stmt->close();
         die("Error al ejecutar consulta: " . htmlspecialchars($err, ENT_QUOTES, 'UTF-8'));
     }
-
-    $meta = $stmt->result_metadata();
-    if (!$meta) {
-        $stmt->close();
-        return [];
-    }
-
-    $row = [];
-    $binds = [];
-    $fields = [];
-
-    while ($field = $meta->fetch_field()) {
-        $fields[] = $field->name;
-        $row[$field->name] = null;
-        $binds[] = &$row[$field->name];
-    }
-
-    call_user_func_array([$stmt, 'bind_result'], $binds);
-
-    $results = [];
-    while ($stmt->fetch()) {
-        $tmp = [];
-        foreach ($fields as $f) {
-            $tmp[$f] = $row[$f];
-        }
-        $results[] = $tmp;
-    }
-
+    $result = $stmt->get_result();
+    $rows   = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
     $stmt->close();
-    return $results;
+    return $rows;
 }
 
 function dbFetchOneAssoc(mysqli $conn, string $sql, string $types = '', array $params = []): ?array {
@@ -301,6 +273,7 @@ $totalSteps = $encuestaPendiente ? 3 : 2;
     <link rel="stylesheet" href="assets/css/main.css">
     <link rel="stylesheet" href="assets/css/main-responsive.css">
     <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@latest/dist/browser-image-compression.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
     <!-- Offline libs -->
     <script src="/visibility2/app/assets/js/db.js"></script>
@@ -550,6 +523,12 @@ input[type=file][id^="fotoPregunta_"] {
                          <option value="" disabled selected>Seleccione una opción</option>
                        </select>
                      </div>
+                     <div class="form-group" id="otroTipoExhibicionContainer" style="display:none;">
+                       <label for="otroTipoExhibicionDetalle">Especifica el tipo de exhibición: <span class="text-danger">*</span></label>
+                       <input type="text" class="form-control" id="otroTipoExhibicionDetalle"
+                              name="otroTipoExhibicionDetalle"
+                              placeholder="Ej: exhibidor de competencia, góndola especial...">
+                     </div>
                      <br>
                     <button type="button" class="btn btn-primary" id="btnNext1" >Siguiente &raquo;</button>
                     <a href="index_pruebas.php">&laquo; Volver al inicio</a>
@@ -685,10 +664,12 @@ input[type=file][id^="fotoPregunta_"] {
                     <div class="form-group" id="fotoLocalCerradoContainer" style="display: none;">
                         <label for="fotoLocalCerrado">Subir foto de fachada (Local Cerrado):</label>
                         <input type="file" class="form-control" id="fotoLocalCerrado" name="fotoLocalCerrado" accept="image/*">
+                        <div id="evPreview_fotoLocalCerrado" style="display:none; margin-top:8px;"></div>
                     </div>
                     <div class="form-group" id="fotoLocalNoExisteContainer" style="display: none;">
                         <label for="fotoLocalNoExiste">Subir foto del lugar (Local no existe):</label>
                         <input type="file" class="form-control" id="fotoLocalNoExiste" name="fotoLocalNoExiste" accept="image/*">
+                        <div id="evPreview_fotoLocalNoExiste" style="display:none; margin-top:8px;"></div>
                     </div>
                     <div class="form-group" id="fotoMuebleNoSalaContainer" style="display: none;">
                       <label for="fotoMuebleNoSala">Subir foto del mueble (no está en la sala):</label>
@@ -697,14 +678,17 @@ input[type=file][id^="fotoPregunta_"] {
                              id="fotoMuebleNoSala"
                              name="fotoMuebleNoSala"
                              accept="image/*">
+                      <div id="evPreview_fotoMuebleNoSala" style="display:none; margin-top:8px;"></div>
                     </div>
                     <div class="form-group" id="fotoPendienteGenericaContainer" style="display: none;">
                       <label for="fotoPendienteGenerica">Subir foto (Evidencia estado Pendiente):</label>
                       <input type="file" class="form-control" id="fotoPendienteGenerica" name="fotoPendienteGenerica" accept="image/*">
+                      <div id="evPreview_fotoPendienteGenerica" style="display:none; margin-top:8px;"></div>
                     </div>
                     <div class="form-group" id="fotoCanceladoGenericaContainer" style="display: none;">
                       <label for="fotoCanceladoGenerica">Subir foto (Evidencia estado Cancelado):</label>
                       <input type="file" class="form-control" id="fotoCanceladoGenerica" name="fotoCanceladoGenerica" accept="image/*">
+                      <div id="evPreview_fotoCanceladoGenerica" style="display:none; margin-top:8px;"></div>
                     </div>
 
                      <br>
@@ -1839,6 +1823,25 @@ async function extractPhotoMeta(file){
 }
 
 async function compressFile(file) {
+  // Convertir HEIC/HEIF a JPEG antes de comprimir — Chrome/Android no soporta HEIC en Canvas
+  const isHeic = file.type === 'image/heic' || file.type === 'image/heif' ||
+                 /\.(heic|heif)$/i.test(file.name);
+  if (isHeic) {
+    if (typeof heic2any === 'function') {
+      try {
+        const jpegBlob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 });
+        const blob = Array.isArray(jpegBlob) ? jpegBlob[0] : jpegBlob;
+        file = new File([blob], file.name.replace(/\.(heic|heif)$/i, '.jpg'),
+                        { type: 'image/jpeg', lastModified: Date.now() });
+      } catch (e) {
+        console.warn('heic2any falló, enviando original al servidor:', e);
+        return file;
+      }
+    } else {
+      return file; // sin librería: el servidor lo convierte, thumbnail quedará roto
+    }
+  }
+
   if (typeof imageCompression !== 'function') return file;
   const options = { maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true, fileType: 'image/jpeg' };
   try {
@@ -1915,6 +1918,7 @@ function syncOfflineMetaInputs(container, idFQ, metas = []) {
       lat: meta.lat || '',
       lng: meta.lng || ''
     });
+    if (meta.localId) metaInput.dataset.localId = meta.localId;
     container.appendChild(metaInput);
   });
 }
@@ -1938,11 +1942,11 @@ function setupFileInput(inputElem) {
   inputElem._retainedMeta = inputElem._retainedMeta || [];
 
   inputElem.addEventListener('change', async () => {
-    ensureClientGuid(); // asegura que exista el GUID antes de procesar
+    ensureClientGuid();
 
     const previousSelection = new DataTransfer();
     Array.from(inputElem.files || []).forEach(f => previousSelection.items.add(f));
-    let files = Array.from(previousSelection.files || []);
+    const files = Array.from(previousSelection.files || []);
     if (files.length === 0) return;
 
     const yaSubidas = document.querySelectorAll(
@@ -1962,7 +1966,7 @@ function setupFileInput(inputElem) {
     const captureSource = (sourceSelect && sourceSelect.value) || 'gallery';
 
     const tieneVisita = !!$('#visita_id').val();
-    const online = await isReallyOnline();
+    const online = await isReallyOnline();   // ← una sola vez para todo el batch
     const cg = document.getElementById('client_guid')?.value || '';
     const allowOnline = online && (tieneVisita || cg);
 
@@ -1972,21 +1976,48 @@ function setupFileInput(inputElem) {
     const retainedDT = inputElem._retainedFilesDT || new DataTransfer();
     const retainedMeta = Array.isArray(inputElem._retainedMeta) ? inputElem._retainedMeta : [];
 
-    for (const rawFile of files) {
-      const meta = await extractPhotoMeta(rawFile);
-      meta.capture_source = captureSource;
-      const compressed = await compressFile(rawFile);
+    // ── Fase 1: crear wrappers DOM en orden (sync) para que aparezcan de inmediato
+    const fileData = files.map(rawFile => {
+      const wrapper = document.createElement('div');
+      wrapper.classList.add('upload-instance');
+
+      const imgContainer = document.createElement('div');
+      imgContainer.classList.add('img-container');
 
       const img = document.createElement('img');
-      img.src = URL.createObjectURL(compressed);
       img.classList.add('thumbnail');
       img.style.cursor = 'pointer';
       img.title = 'Clic para ampliar';
-      img.addEventListener('click', () => verImagenGrande(img.src));
-      previewContainer.appendChild(img);
+
       const bar = document.createElement('div');
       bar.classList.add('upload-bar');
-      previewContainer.appendChild(bar);
+
+      imgContainer.appendChild(img);
+      wrapper.appendChild(imgContainer);
+      wrapper.appendChild(bar);
+      previewContainer.appendChild(wrapper);
+
+      return { rawFile, wrapper, imgContainer, img, bar, blobUrl: null, meta: null, compressed: null };
+    });
+
+    // ── Fase 2: comprimir + extraer meta en paralelo; thumbnail aparece en cuanto comprime
+    await Promise.all(fileData.map(async fd => {
+      const [meta, compressed] = await Promise.all([
+        extractPhotoMeta(fd.rawFile),
+        compressFile(fd.rawFile)
+      ]);
+      meta.capture_source = captureSource;
+      fd.meta       = meta;
+      fd.compressed = compressed;
+      fd.blobUrl    = URL.createObjectURL(compressed);
+      fd.img.src    = fd.blobUrl;
+      fd.img.addEventListener('click', () => verImagenGrande(fd.blobUrl));
+    }));
+
+    // ── Fase 3: subir (online) u offline en paralelo
+    await Promise.all(fileData.map(async fd => {
+      const { compressed, meta, wrapper, imgContainer, bar } = fd;
+      const blobUrl = fd.blobUrl;
 
       if (allowOnline) {
         try {
@@ -1998,35 +2029,135 @@ function setupFileInput(inputElem) {
             meta,
             coords
           );
+
+          bar.remove();
+          wrapper.dataset.idFoto = resp.id_foto || '';
+
           const hiddenInput = document.createElement('input');
           hiddenInput.type = 'hidden';
           hiddenInput.name = `fotos[${idFQ}][]`;
           hiddenInput.value = resp.url;
+          hiddenInput.dataset.idFoto = resp.id_foto || '';
           hiddenContainer.appendChild(hiddenInput);
 
-          const ok = document.createElement('div');
-          ok.className = 'alert alert-success';
-          ok.style.marginTop = '8px';
-          ok.textContent = '¡Foto subida exitosamente!';
-          previewContainer.appendChild(ok);
-          setTimeout(() => { $(ok).fadeOut(300, () => ok.remove()); }, 2000);
+          // ── Delete button (online: llama endpoint servidor)
+          const delBtn = document.createElement('button');
+          delBtn.className = 'delete-button';
+          delBtn.type = 'button';
+          delBtn.title = 'Eliminar foto';
+          delBtn.textContent = '×';
+          delBtn.onclick = async function () {
+            const ok = await mcConfirm({
+              title: 'Eliminar foto',
+              message: `
+                <div class="text-center">
+                  <p>¿Seguro que desea eliminar <strong>esta foto</strong> del material?</p>
+                  <img src="${blobUrl}" alt="Foto a eliminar"
+                       class="img-thumbnail"
+                       style="max-height:220px;max-width:100%;margin-top:8px;object-fit:contain;">
+                </div>
+              `,
+              confirmText: 'Sí, eliminar',
+              confirmClass: 'btn-danger'
+            });
+            if (!ok) return;
+
+            delBtn.disabled = true;
+            try {
+              const form = new FormData();
+              form.append('csrf_token', window.CSRF_TOKEN || getCSRF());  // Bug 3: fallback al hidden input
+              form.append('id_foto', wrapper.dataset.idFoto);
+              form.append('id_formularioQuestion', idFQ);
+              form.append('visita_id', document.getElementById('visita_id').value);
+              const _idem = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random());
+              form.append('X_Idempotency_Key', _idem);  // Bug 2: idempotencia en delete
+              const r  = await fetch('/visibility2/app/eliminar_material_foto_pruebas.php', { method: 'POST', body: form });
+              const js = await r.json();
+              if (js.status === 'success') {
+                const matching = hiddenContainer.querySelector(`input[data-id-foto="${wrapper.dataset.idFoto}"]`);
+                if (matching) matching.remove();
+                URL.revokeObjectURL(blobUrl);
+                $(wrapper).fadeOut(150, () => wrapper.remove());
+                mcToast('success', 'Foto eliminada', 'La foto fue eliminada correctamente.');
+              } else {
+                mcToast('danger', 'No se pudo eliminar', js.message || 'Intente nuevamente.');
+                delBtn.disabled = false;
+              }
+            } catch (e) {
+              console.error(e);
+              mcToast('danger', 'Error de red', 'No se pudo eliminar la foto.');
+              delBtn.disabled = false;
+            }
+          };
+          imgContainer.appendChild(delBtn);
+
+          const okMsg = document.createElement('div');
+          okMsg.className = 'alert alert-success';
+          okMsg.style.marginTop = '8px';
+          okMsg.textContent = '¡Foto subida exitosamente!';
+          wrapper.appendChild(okMsg);
+          setTimeout(() => { $(okMsg).fadeOut(300, () => okMsg.remove()); }, 2000);
         } catch (err) {
           bar.classList.add('error');
           console.error('Upload error', err);
           alert('Error al subir la foto: ' + err);
         }
       } else {
-        mcToast('info', 'Offline', 'La foto se subirá al recuperar conexión.');
+        // ── Offline: retener en DataTransfer; delete elimina solo ese input (sin rebuild completo)
+        const localId = (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36)));
+        wrapper.dataset.localId = localId;
         bar.style.width = '100%';
+        mcToast('info', 'Offline', 'La foto se subirá al recuperar conexión.');
+
         retainedDT.items.add(compressed);
         retainedMeta.push({
+          localId,
           capture_source: captureSource,
           lat: coords.lat || '',
           lng: coords.lng || ''
         });
-        // Importante: NO limpiamos el input; mantenemos los files para que viajen con el form en la cola
+
+        // ── Delete button (offline: sin llamada al servidor)
+        const delBtn = document.createElement('button');
+        delBtn.className = 'delete-button';
+        delBtn.type = 'button';
+        delBtn.title = 'Eliminar foto';
+        delBtn.textContent = '×';
+        delBtn.onclick = async function () {
+          const ok = await mcConfirm({
+            title: 'Eliminar foto',
+            message: `
+              <div class="text-center">
+                <p>¿Seguro que desea eliminar <strong>esta foto</strong> del material?</p>
+                <img src="${blobUrl}" alt="Foto a eliminar"
+                     class="img-thumbnail"
+                     style="max-height:220px;max-width:100%;margin-top:8px;object-fit:contain;">
+              </div>
+            `,
+            confirmText: 'Sí, eliminar',
+            confirmClass: 'btn-danger'
+          });
+          if (!ok) return;
+
+          const idx = inputElem._retainedMeta.findIndex(m => m.localId === localId);
+          if (idx !== -1) {
+            const newDT = new DataTransfer();
+            Array.from(inputElem._retainedFilesDT.files || []).forEach((f, i) => {
+              if (i !== idx) newDT.items.add(f);
+            });
+            inputElem._retainedFilesDT = newDT;
+            inputElem._retainedMeta.splice(idx, 1);
+            inputElem.files = newDT.files;
+            // Problema 3: eliminación quirúrgica del input, sin rebuild completo
+            const metaToRemove = metaContainer.querySelector(`input[data-local-id="${localId}"]`);
+            if (metaToRemove) metaToRemove.remove();
+          }
+          URL.revokeObjectURL(blobUrl);
+          $(wrapper).fadeOut(150, () => wrapper.remove());
+        };
+        imgContainer.appendChild(delBtn);
       }
-    }
+    }));
 
     if (allowOnline) {
       const onlineAgain = await isReallyOnline();
@@ -2053,6 +2184,62 @@ function bindCompressionTo(inputElem) {
   });
 }
 
+function setupEvidencePreview(inputId) {
+  const input = document.getElementById(inputId);
+  const preview = document.getElementById('evPreview_' + inputId);
+  if (!input || !preview) return;
+
+  let _evBlobUrl = null;
+  input.addEventListener('change', function () {
+    if (_evBlobUrl) { URL.revokeObjectURL(_evBlobUrl); _evBlobUrl = null; }
+    preview.innerHTML = '';
+    if (!this.files || !this.files.length) { preview.style.display = 'none'; return; }
+
+    _evBlobUrl = URL.createObjectURL(this.files[0]);
+    preview.style.cssText = 'display:block; margin-top:8px;';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'img-container';
+
+    const img = document.createElement('img');
+    img.src = _evBlobUrl;
+    img.className = 'thumbnail';
+    img.style.cursor = 'pointer';
+    img.title = 'Clic para ampliar';
+    img.addEventListener('click', () => verImagenGrande(_evBlobUrl));
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'delete-button';
+    delBtn.title = 'Eliminar foto';
+    delBtn.textContent = '×';
+    delBtn.onclick = function () {
+      if (_evBlobUrl) { URL.revokeObjectURL(_evBlobUrl); _evBlobUrl = null; }
+      resetFileInput(input);
+      preview.innerHTML = '';
+      preview.style.display = 'none';
+    };
+
+    wrapper.appendChild(img);
+    wrapper.appendChild(delBtn);
+    preview.appendChild(wrapper);
+  });
+}
+
+async function compressEvidenceInputs() {
+  const ids = ['fotoLocalCerrado','fotoLocalNoExiste','fotoMuebleNoSala','fotoPendienteGenerica','fotoCanceladoGenerica'];
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (!el || !el.files || !el.files.length) continue;
+    try {
+      const compressed = await Promise.all(Array.from(el.files).map(f => compressFile(f)));
+      const dt = new DataTransfer();
+      compressed.forEach(f => dt.items.add(f));
+      el.files = dt.files;
+    } catch(_) {}
+  }
+}
+
 /* === DOM Ready inicializaciones === */
 document.addEventListener('DOMContentLoaded', ()=>{
   window.CSRF_TOKEN = document.querySelector('input[name="csrf_token"]').value;
@@ -2062,7 +2249,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.querySelectorAll('.file-input').forEach(input=>{ setupFileInput(input); });
   // Comprimir fotos de evidencia genérica antes del submit del form
   ['fotoLocalCerrado','fotoLocalNoExiste','fotoMuebleNoSala','fotoPendienteGenerica','fotoCanceladoGenerica']
-    .forEach(id => { const el = document.getElementById(id); if (el) bindCompressionTo(el); });
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { setupEvidencePreview(id); }
+    });
 });
 
 $(document).ready(function(){
@@ -2102,6 +2292,12 @@ $(document).ready(function(){
     return;
   }
 
+  if (motivo === 'otro_tipo_exhibicion' && !$('#otroTipoExhibicionDetalle').val().trim()) {
+    alert('Debes especificar el tipo de exhibición.');
+    $btn.prop('disabled', false).text('Siguiente »');
+    return;
+  }
+
   try {
     await ensureFreshGeo();
   } catch (err) {
@@ -2124,7 +2320,14 @@ $(document).ready(function(){
     client_guid: String(client_guid || '')
   };
 
-  updateVisitSession({ startPayload: { lat: payload.lat, lng: payload.lng } });
+  updateVisitSession({
+    startPayload: { lat: payload.lat, lng: payload.lng },
+    formState: {
+      estado: $('#estadoGestion').val() || '',
+      motivo: $('#motivo').val() || '',
+      otroTipoExhibicionDetalle: $('#otroTipoExhibicionDetalle').val() || ''
+    }
+  });
 
   $btn.text('Iniciando visita…');
 
@@ -2172,6 +2375,14 @@ $(document).ready(function(){
 
     if (r.ok && js && (js.status === 'success' || js.status === 'ok') && js.visita_id) {
       $('#visita_id').val(js.visita_id);
+
+      try {
+        const _cdKey = 'v2_completed_deps';
+        const _cdRaw = localStorage.getItem(_cdKey);
+        const _cdArr = Array.isArray(JSON.parse(_cdRaw || '[]')) ? JSON.parse(_cdRaw || '[]') : [];
+        const _cdTag = `create:${client_guid}`;
+        if (!_cdArr.includes(_cdTag)) { _cdArr.push(_cdTag); localStorage.setItem(_cdKey, JSON.stringify(_cdArr)); }
+      } catch (_) {}
 
       if (window.Queue && window.Queue.CompletedDeps) {
         await window.Queue.CompletedDeps.add(`create:${client_guid}`);
@@ -2264,7 +2475,8 @@ $(document).ready(function(){
       {value:'no_permitieron_por_robo', text:'No permitieron por robo'},
       {value:'sin_material', text:'Sin material'},
       {value:'sin_productos', text:'Sin productos'},
-      {value:'local_no_existe', text:'Local no existe'}
+      {value:'local_no_existe', text:'Local no existe'},
+      {value:'otro_tipo_exhibicion', text:'No, hay otro tipo de exhibicion'}
   ];
   let motivosCancelado = [
       {value:'no_permitieron', text:'No permitieron'},
@@ -2272,15 +2484,19 @@ $(document).ready(function(){
       {value:'local_no_existe', text:'Local no existe'},
       {value:'mueble_no_esta_en_sala', text:'Mueble no está en la sala'},
       {value:'sin_productos', text:'Sin productos'},
-      {value:'local_cerrado', text:'Local cerrado'}
+      {value:'local_cerrado', text:'Local cerrado'},
+      {value:'otro_tipo_exhibicion', text:'No, hay otro tipo de exhibicion'}
   ];
 
   function resetFotoContainers() {
-    $('#fotoLocalCerradoContainer').hide(); $('#fotoLocalCerrado').val('');
-    $('#fotoLocalNoExisteContainer').hide(); $('#fotoLocalNoExiste').val('');
-    $('#fotoMuebleNoSalaContainer').hide(); $('#fotoMuebleNoSala').val('');
-    $('#fotoPendienteGenericaContainer').hide(); $('#fotoPendienteGenerica').val('');
-    $('#fotoCanceladoGenericaContainer').hide(); $('#fotoCanceladoGenerica').val('');
+    ['fotoLocalCerrado','fotoLocalNoExiste','fotoMuebleNoSala','fotoPendienteGenerica','fotoCanceladoGenerica'].forEach(id => {
+      $('#' + id + 'Container').hide();
+      const el = document.getElementById(id);
+      if (el) resetFileInput(el);
+      const prev = document.getElementById('evPreview_' + id);
+      if (prev) { prev.innerHTML = ''; prev.style.display = 'none'; }
+    });
+    $('#otroTipoExhibicionContainer').hide(); $('#otroTipoExhibicionDetalle').val('').removeAttr('required');
   }
 
    estadoSelect.on('change', function(){
@@ -2422,6 +2638,11 @@ $(document).ready(function(){
       let estado = $('#estadoGestion').val();
       resetFotoContainers();
 
+      if (val === 'otro_tipo_exhibicion') {
+        $('#otroTipoExhibicionContainer').slideDown();
+        $('#otroTipoExhibicionDetalle').attr('required', 'required');
+      }
+
       if (estado === 'pendiente') {
         if (val === 'local_cerrado') { $('#fotoLocalCerradoContainer').slideDown(); }
         else if (val === 'local_no_existe') { $('#fotoLocalNoExisteContainer').slideDown(); }
@@ -2471,7 +2692,21 @@ $(document).ready(function(){
   
   $(document).on('change', '.question-container input[type=radio]', function(){ onDependencyChange($(this), false); });
   $(document).on('change', '.question-container input[type=checkbox]', function(){ onDependencyChange($(this), true); });
-        
+
+  // === Restaurar estado del formulario si hay sesión previa (ej. tras recarga) ===
+  (function restoreFormState() {
+    const _s = readVisitSession();
+    if (!_s || !_s.formState || !_s.formState.estado) return;
+    const fs = _s.formState;
+    $('#estadoGestion').val(fs.estado).trigger('change');
+    if (fs.motivo) {
+      $('#motivo').val(fs.motivo).trigger('change');
+    }
+    if (fs.otroTipoExhibicionDetalle) {
+      $('#otroTipoExhibicionDetalle').val(fs.otroTipoExhibicionDetalle);
+    }
+  })();
+
   updateFinalizeButton();
 });
 
@@ -2673,115 +2908,6 @@ function construirBloqueMaterial(material) {
   return html;
 }
 
-function inicializarFileInput(idFQ) {
-  let fotosInput = document.getElementById('fotos_input_' + idFQ);
-  if (!fotosInput) return;
-  bindCompressionTo(fotosInput);
-  let previewCont = document.getElementById('previewContainer_' + idFQ);
-  let allFiles = [];
-  let maxFotos = 5;
-  fotosInput.addEventListener('change', function() {
-      let newFiles = Array.from(this.files);
-      if (allFiles.length + newFiles.length > maxFotos) {
-          alert("Máximo de " + maxFotos + " fotos permitido.");
-          this.value = '';
-          return;
-      }
-      let pending = newFiles.length;
-      newFiles.forEach((file, index) => {
-          file.lat_foto = cachedPhotoCoords.lat || '';
-          file.lng_foto = cachedPhotoCoords.lng || '';
-          pending--;
-          if (pending === 0) { processNewFiles(newFiles); }
-      });
-  });
-  function processNewFiles(incomingFiles) {
-      allFiles = allFiles.concat(incomingFiles);
-      previewCont.innerHTML = '';
-      allFiles.forEach((file, index) => {
-          let reader = new FileReader();
-          reader.onload = function(e) {
-              let imgContainer = document.createElement('div');
-              imgContainer.classList.add('img-container');
-              let img = document.createElement('img');
-              img.src = e.target.result;
-              img.classList.add('thumbnail');
-              img.style.cursor = 'pointer';
-              img.title = 'Clic para ampliar';
-              img.addEventListener('click', () => verImagenGrande(img.src));
-              let deleteBtn = document.createElement('button');
-              deleteBtn.innerText = 'X';
-              deleteBtn.classList.add('delete-button');
-              deleteBtn.onclick = function() {
-                  allFiles.splice(index, 1);
-                  previewCont.removeChild(imgContainer);
-                  updateFileInput(fotosInput, allFiles);
-              };
-              imgContainer.appendChild(img);
-              imgContainer.appendChild(deleteBtn);
-              let hiddenLat = document.createElement('input');
-              hiddenLat.type = 'hidden';
-              hiddenLat.name = 'coordsFoto[' + idFQ + '][' + index + '][lat]';
-              hiddenLat.value = file.lat_foto;
-              let hiddenLng = document.createElement('input');
-              hiddenLng.name = 'coordsFoto[' + idFQ + '][' + index + '][lng]';
-              hiddenLng.type = 'hidden';
-              hiddenLng.value = file.lng_foto;
-              previewCont.appendChild(hiddenLat);
-              previewCont.appendChild(hiddenLng);
-              if (file.lat_foto && file.lng_foto) {
-                  imgContainer.title = "Lat: " + file.lat_foto + ", Lng: " + file.lng_foto;
-              }
-              previewCont.appendChild(imgContainer);
-          };
-          reader.readAsDataURL(file);
-      });
-      updateFileInput(fotosInput, allFiles);
-  }
-  function updateFileInput(input, files) {
-    const dt = new DataTransfer();
-    files.forEach(raw => {
-      const file = raw instanceof File
-        ? raw
-        : new File([raw], raw.name || 'photo.jpg', { type: raw.type || 'image/jpeg', lastModified: Date.now() });
-      dt.items.add(file);
-    });
-    input.files = dt.files;
-  }
-}
-
-function agregarBloqueMaterial(idFQ, nombreMat, valorImp){
-  let html = `
-    <div class="form-group" data-id-fq="${idFQ}" id="material_block_${idFQ}">
-      <label>Material Agregado: ${nombreMat} (Valor Implementado: ${valorImp})</label>
-      <button type="button" class="btn btn-danger btn-sm" onclick="eliminarMaterial(${idFQ})">Eliminar Material</button>
-      <div style="padding-left:20px;">
-        <div class="form-group">
-          <label>Valor Implementado:</label>
-          <input type="number" class="form-control" name="valor[${idFQ}]" value="${valorImp}" placeholder="Ingrese valor" required readonly>
-        </div>
-        <div class="form-group">
-          <label>Origen de la foto:</label>
-          <select class="photo-source form-control" data-target-input="fotos_input_${idFQ}">
-            <option value="gallery" selected>Elegir de la Galería</option>
-            <option value="camera">Tomar Foto</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Fotos (hasta 10):</label>
-          <input type="file" accept="image/*" multiple name="fotos[${idFQ}][]" class="form-control file-input" id="fotos_input_${idFQ}">
-          <div id="previewContainer_${idFQ}" class="preview-container"></div>
-          <div id="hiddenUploadContainer_${idFQ}"></div>
-        </div>
-        <div class="form-group">
-          <label>Observación Implementación:</label>
-          <textarea class="form-control" name="observacion[${idFQ}]" placeholder="Observación..."></textarea>
-        </div>
-      </div>
-    </div>`;
-  $('#materialesContainer').append(html);
-}
-
 function eliminarMaterial(idFQ){
   if(!confirm('¿Seguro que deseas eliminar este material?')) return;
   $.ajax({
@@ -2873,27 +2999,39 @@ document.getElementById('btnFinalizar')?.addEventListener('click', async functio
 
   if (typeof validarMateriales === 'function' && !validarMateriales()) { return; }
 
-  document.getElementById('loadingOverlay').style.display = 'block';
   this.disabled = true;
-
   try{
     await ensureFreshGeo();
   }catch(err){
     showGeoError(err);
     alert('Para finalizar debes activar el GPS y conceder el permiso de ubicación.');
     this.disabled = false;
-    document.getElementById('loadingOverlay').style.display = 'none';
     return;
   }
+
+  document.getElementById('loadingOverlay').style.display = 'block';
+
+  await compressEvidenceInputs();
+
 const online = await isReallyOnline();
   if (online) {
     const clientGuid = ensureClientGuid();
     try {
+      const _currentVid = ($('#visita_id').val() || '').trim();
+      const visitaIdIsReal = _currentVid !== '' &&
+                             !_currentVid.startsWith('local-') &&
+                             /^\d+$/.test(_currentVid);
+
       const createPending = await hasPendingCreateVisita(clientGuid);
       const visitaCreada  = isCreateVisitaResolved(clientGuid);
 
-      if (createPending || !visitaCreada) {
+      if ((createPending || !visitaCreada) && !visitaIdIsReal) {
         await Queue.flushNow();
+
+        if (!isCreateVisitaResolved(clientGuid)) {
+          const mapped = resolveVisitaIdFromMappings(clientGuid);
+          if (mapped) { $('#visita_id').val(mapped); }
+        }
 
         const stillPending  = await hasPendingCreateVisita(clientGuid);
         const stillUnmarked = !isCreateVisitaResolved(clientGuid);

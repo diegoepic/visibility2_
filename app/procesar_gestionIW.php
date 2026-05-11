@@ -262,7 +262,7 @@ try {
 
     $_SESSION['success'] = "Encuesta enviada correctamente.";
     if (isset($conn)) { $conn->close(); }
-    header("Location: index.php");
+    header("Location: index_pruebas.php");
     exit;
 
 } catch (Exception $e) {

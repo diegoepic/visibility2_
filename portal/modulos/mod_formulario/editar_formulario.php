@@ -489,8 +489,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $modalidad    = trim($_POST['modalidad'] ?? '');
     $url_bi       = trim($_POST['url_bi'] ?? '');
 
-    if ($nombre === '' || $fechaInicio === '' || $fechaTermino === '' || $estado <= 0 || $tipo <= 0) {
-        $error = "Por favor, complete todos los campos obligatorios.";
+    // Tipo 2 (Actividad IW / complementaria): modalidad siempre = 'complementaria',
+    // fechas opcionales.
+    $esComplementaria = ($tipo === 2);
+    if ($esComplementaria) {
+        $modalidad    = 'complementaria';
+        $fechaInicio  = $fechaInicio  !== '' ? $fechaInicio  : null;
+        $fechaTermino = $fechaTermino !== '' ? $fechaTermino : null;
+    }
+
+    $fechasOk = $esComplementaria
+        || ($fechaInicio !== '' && $fechaTermino !== '');
+
+    if ($nombre === '' || $estado <= 0 || $tipo <= 0 || !$fechasOk || $modalidad === '') {
+        $error = "Por favor, complete todos los campos obligatorios" . ($esComplementaria ? '.' : ' (incluyendo Modalidad, Fecha inicio y Fecha término).');
     } else {
         $uploadDir = $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/uploads/reference_images/';
         if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
@@ -1269,13 +1281,15 @@ $sets = getQuestionSets();
                     <label for="nombre">Nombre del formulario:</label>
                     <input type="text" id="nombre" name="nombre" class="form-control" value="<?php echo htmlspecialchars($formulario['nombre'], ENT_QUOTES, 'UTF-8'); ?>" required>
                 </div>
-                <div class="form-group">
-                    <label for="fechaInicio">Fecha de Inicio:</label>
-                    <input type="datetime-local" id="fechaInicio" name="fechaInicio" class="form-control" value="<?php echo date('Y-m-d\TH:i', strtotime($formulario['fechaInicio'])); ?>" required>
+                <div class="form-group" id="fechaInicioGroup">
+                    <label for="fechaInicio">Fecha de Inicio: <span id="fechaInicioReq" class="text-danger">*</span></label>
+                    <input type="datetime-local" id="fechaInicio" name="fechaInicio" class="form-control"
+                           value="<?php echo $formulario['fechaInicio'] ? date('Y-m-d\TH:i', strtotime($formulario['fechaInicio'])) : ''; ?>">
                 </div>
-                <div class="form-group">
-                    <label for="fechaTermino">Fecha de Término:</label>
-                    <input type="datetime-local" id="fechaTermino" name="fechaTermino" class="form-control" value="<?php echo date('Y-m-d\TH:i', strtotime($formulario['fechaTermino'])); ?>" required>
+                <div class="form-group" id="fechaTerminoGroup">
+                    <label for="fechaTermino">Fecha de Término: <span id="fechaTerminoReq" class="text-danger">*</span></label>
+                    <input type="datetime-local" id="fechaTermino" name="fechaTermino" class="form-control"
+                           value="<?php echo $formulario['fechaTermino'] ? date('Y-m-d\TH:i', strtotime($formulario['fechaTermino'])) : ''; ?>">
                 </div>
                 <div class="form-group">
                     <label for="estado">Estado:</label>
@@ -1310,27 +1324,15 @@ $sets = getQuestionSets();
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="modalidadContainer">
                   <label for="modalidad">Modalidad de la encuesta:</label>
                   <select id="modalidad" name="modalidad" class="form-control">
                     <option value="">Seleccione modalidad</option>
-                <option value="implementacion_auditoria"
-                   <?php if($formulario['modalidad'] === 'implementacion_auditoria') echo 'selected'; ?>>
-                   Implementación + Auditoría
-                </option>
-                <option value="solo_implementacion"
-                   <?php if($formulario['modalidad'] === 'solo_implementacion') echo 'selected'; ?>>
-                   Solo Implementación
-                </option>
-                <option value="solo_auditoria"
-                   <?php if($formulario['modalidad'] === 'solo_auditoria') echo 'selected'; ?>>
-                   Solo Auditoría
-                </option>
-                <option value="retiro"
-                   <?php if($formulario['modalidad'] === 'retiro') echo 'selected'; ?>>
-                   Retiro
-                </option>
-                    <!-- Añade aquí las que necesites -->
+                    <option value="implementacion_auditoria" <?php if($formulario['modalidad'] === 'implementacion_auditoria') echo 'selected'; ?>>Implementación + Auditoría</option>
+                    <option value="solo_implementacion"      <?php if($formulario['modalidad'] === 'solo_implementacion')      echo 'selected'; ?>>Solo Implementación</option>
+                    <option value="solo_auditoria"           <?php if($formulario['modalidad'] === 'solo_auditoria')           echo 'selected'; ?>>Solo Auditoría</option>
+                    <option value="retiro"                   <?php if($formulario['modalidad'] === 'retiro')                   echo 'selected'; ?>>Retiro</option>
+                    <option value="complementaria"           <?php if($formulario['modalidad'] === 'complementaria')           echo 'selected'; ?>>Complementaria (IW)</option>
                   </select>
                 </div>
                 
@@ -1674,6 +1676,41 @@ $sets = getQuestionSets();
 
 <script>
 const formularioId = <?= json_encode((int)$formulario_id) ?>;
+
+// Tipo 2 (IW/complementaria): ajustar campos según tipo seleccionado
+(function() {
+    const tipoSelect      = document.getElementById('tipo');
+    const modalidadCont   = document.getElementById('modalidadContainer');
+    const modalidadSelect = document.getElementById('modalidad');
+    const fechaInicioInp  = document.getElementById('fechaInicio');
+    const fechaTerminoInp = document.getElementById('fechaTermino');
+    const reqInicio       = document.getElementById('fechaInicioReq');
+    const reqTermino      = document.getElementById('fechaTerminoReq');
+
+    function applyTipo(val) {
+        const esIW = String(val) === '2';
+        if (esIW) {
+            modalidadSelect.value = 'complementaria';
+            modalidadCont.style.display = 'none';
+            fechaInicioInp.removeAttribute('required');
+            fechaTerminoInp.removeAttribute('required');
+            if (reqInicio)  reqInicio.style.display  = 'none';
+            if (reqTermino) reqTermino.style.display = 'none';
+        } else {
+            modalidadCont.style.display = '';
+            if (modalidadSelect.value === 'complementaria') modalidadSelect.value = '';
+            fechaInicioInp.setAttribute('required', 'required');
+            fechaTerminoInp.setAttribute('required', 'required');
+            if (reqInicio)  reqInicio.style.display  = '';
+            if (reqTermino) reqTermino.style.display = '';
+        }
+    }
+
+    if (tipoSelect) {
+        applyTipo(tipoSelect.value);
+        tipoSelect.addEventListener('change', function() { applyTipo(this.value); });
+    }
+})();
 
 $(document).ready(function () {
     // ---------------------------------------------------------

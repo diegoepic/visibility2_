@@ -14,11 +14,25 @@ $idFormularioSeleccionado = isset($_GET['id_formulario']) ? (int)$_GET['id_formu
 ========================================================= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $idFormularioSeleccionado = isset($_POST['id_formulario']) ? (int)$_POST['id_formulario'] : 0;
-    $divisionesSeleccionadas = isset($_POST['divisiones']) && is_array($_POST['divisiones'])
-        ? array_map('intval', $_POST['divisiones'])
-        : [];
-
-    $divisionesSeleccionadas = array_values(array_unique(array_filter($divisionesSeleccionadas)));
+    $asignacionesSeleccionadas = [];
+    
+    if (isset($_POST['asignaciones']) && is_array($_POST['asignaciones'])) {
+        foreach ($_POST['asignaciones'] as $idDivision => $clasificaciones) {
+            $idDivision = (int)$idDivision;
+    
+            if ($idDivision <= 0 || !is_array($clasificaciones)) {
+                continue;
+            }
+    
+            foreach ($clasificaciones as $clasificacion) {
+                $clasificacion = strtolower(trim($clasificacion));
+    
+                if (in_array($clasificacion, ['interno', 'externo'], true)) {
+                    $asignacionesSeleccionadas[$idDivision][$clasificacion] = true;
+                }
+            }
+        }
+    }
 
     try {
         if ($idFormularioSeleccionado <= 0) {
@@ -51,17 +65,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmtDelete->bind_param("i", $idFormularioSeleccionado);
         $stmtDelete->execute();
 
-        // Insertar nuevas asignaciones
-        if (!empty($divisionesSeleccionadas)) {
+        // Insertar nuevas asignaciones por división y clasificación de usuario
+        if (!empty($asignacionesSeleccionadas)) {
             $sqlInsert = "
-                INSERT INTO formulario_division_habilitada (id_formulario, id_division)
-                VALUES (?, ?)
+                INSERT INTO formulario_division_habilitada 
+                    (id_formulario, id_division, clasificacion_usuario)
+                VALUES (?, ?, ?)
             ";
+        
             $stmtInsert = $conn->prepare($sqlInsert);
-
-            foreach ($divisionesSeleccionadas as $idDivision) {
-                $stmtInsert->bind_param("ii", $idFormularioSeleccionado, $idDivision);
-                $stmtInsert->execute();
+        
+            foreach ($asignacionesSeleccionadas as $idDivision => $clasificaciones) {
+                foreach ($clasificaciones as $clasificacionUsuario => $_activo) {
+                    $stmtInsert->bind_param(
+                        "iis",
+                        $idFormularioSeleccionado,
+                        $idDivision,
+                        $clasificacionUsuario
+                    );
+                    $stmtInsert->execute();
+                }
             }
         }
 
@@ -83,7 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    MENSAJE DE ÉXITO
 ========================================================= */
 if (isset($_GET['guardado']) && $_GET['guardado'] == '1') {
-    $mensaje = 'Las divisiones habilitadas se guardaron correctamente.';
+    $mensaje = 'Las divisiones y clasificaciones habilitadas se guardaron correctamente.';
     $tipoMensaje = 'success';
 }
 
@@ -115,7 +138,7 @@ while ($row = $resFormularios->fetch_assoc()) {
    FORMULARIO SELECCIONADO
 ========================================================= */
 $formularioActual = null;
-$divisionesMarcadas = [];
+$asignacionesMarcadas = [];
 $divisionesAsociadasDetalle = [];
 
 if ($idFormularioSeleccionado > 0) {
@@ -130,12 +153,13 @@ if ($idFormularioSeleccionado > 0) {
         $sqlAsignadas = "
             SELECT 
                 fdh.id_division,
-                de.nombre
+                de.nombre,
+                fdh.clasificacion_usuario
             FROM formulario_division_habilitada fdh
             INNER JOIN division_empresa de 
                 ON de.id = fdh.id_division
             WHERE fdh.id_formulario = ?
-            ORDER BY de.nombre ASC
+            ORDER BY de.nombre ASC, fdh.clasificacion_usuario ASC
         ";
         $stmt = $conn->prepare($sqlAsignadas);
         $stmt->bind_param("i", $idFormularioSeleccionado);
@@ -143,7 +167,10 @@ if ($idFormularioSeleccionado > 0) {
         $resAsignadas = $stmt->get_result();
 
         while ($row = $resAsignadas->fetch_assoc()) {
-            $divisionesMarcadas[] = (int)$row['id_division'];
+            $idDivision = (int)$row['id_division'];
+            $clasificacion = $row['clasificacion_usuario'];
+        
+            $asignacionesMarcadas[$idDivision][$clasificacion] = true;
             $divisionesAsociadasDetalle[] = $row;
         }
     }
@@ -425,7 +452,57 @@ while ($row = $resDivisiones->fetch_assoc()) {
     padding: 5px 10px;
     font-size: .75rem;
     font-weight: 700;
-}        
+} 
+
+.division-main-row{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.clasificacion-options{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.clasificacion-check{
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 6px;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid #dce6f3;
+    background: #f8fbff;
+    font-size: .82rem;
+    font-weight: 600;
+    color: #27415f;
+}
+
+.clasificacion-check input{
+    margin: 0;
+}
+
+.badge-interno{
+    background: #eaf3ff;
+    color: #1b5fc1;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: .75rem;
+    font-weight: 700;
+}
+
+.badge-externo{
+    background: #eef8f0;
+    color: #277a42;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: .75rem;
+    font-weight: 700;
+}
     </style>
 </head>
 <body>
@@ -523,7 +600,7 @@ while ($row = $resDivisiones->fetch_assoc()) {
                                 </button>
 
                                 <span class="ml-auto contador">
-                                    Seleccionadas: <span id="contadorSeleccionadas">0</span>
+                                    Combinaciones seleccionadas: <span id="contadorSeleccionadas">0</span>
                                 </span>
                             </div>
 
@@ -532,22 +609,42 @@ while ($row = $resDivisiones->fetch_assoc()) {
                                     <div class="text-muted">No hay divisiones disponibles.</div>
                                 <?php else: ?>
                                     <?php foreach ($divisiones as $d): ?>
-                                        <?php $checked = in_array((int)$d['id'], $divisionesMarcadas, true); ?>
+                                        <?php
+                                            $idDivision = (int)$d['id'];
+                                            $checkedInterno = isset($asignacionesMarcadas[$idDivision]['interno']);
+                                            $checkedExterno = isset($asignacionesMarcadas[$idDivision]['externo']);
+                                        ?>
+                                    
                                         <div class="division-item division-row" data-name="<?php echo htmlspecialchars(mb_strtolower($d['nombre'])); ?>">
-                                            <label>
+                                            <div class="division-main-row">
                                                 <span class="nombre-division">
                                                     <?php echo htmlspecialchars($d['nombre']); ?>
                                                 </span>
-                                                <span>
+                                            </div>
+                                    
+                                            <div class="clasificacion-options mt-2">
+                                                <label class="clasificacion-check">
                                                     <input
                                                         type="checkbox"
-                                                        class="chk-division"
-                                                        name="divisiones[]"
-                                                        value="<?php echo (int)$d['id']; ?>"
-                                                        <?php echo $checked ? 'checked' : ''; ?>
+                                                        class="chk-clasificacion"
+                                                        name="asignaciones[<?php echo $idDivision; ?>][]"
+                                                        value="interno"
+                                                        <?php echo $checkedInterno ? 'checked' : ''; ?>
                                                     >
-                                                </span>
-                                            </label>
+                                                    <span>Interno</span>
+                                                </label>
+                                    
+                                                <label class="clasificacion-check">
+                                                    <input
+                                                        type="checkbox"
+                                                        class="chk-clasificacion"
+                                                        name="asignaciones[<?php echo $idDivision; ?>][]"
+                                                        value="externo"
+                                                        <?php echo $checkedExterno ? 'checked' : ''; ?>
+                                                    >
+                                                    <span>Externo</span>
+                                                </label>
+                                            </div>
                                         </div>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
@@ -560,7 +657,7 @@ while ($row = $resDivisiones->fetch_assoc()) {
                             </div>
                             <div class="tabla-asociadas-wrap">
                                 <div class="tabla-asociadas-header">
-                                    <span><i class="fas fa-list-check mr-2"></i>Divisiones actualmente habilitadas</span>
+                                    <span><i class="fas fa-list-check mr-2"></i>Divisiones y clasificaciones actualmente habilitadas</span>
                                     <span class="mini-count">
                                         Total: <?php echo count($divisionesAsociadasDetalle); ?>
                                     </span>
@@ -575,16 +672,26 @@ while ($row = $resDivisiones->fetch_assoc()) {
                                         <table class="table table-sm table-hover tabla-asociadas mb-0">
                                             <thead>
                                                 <tr>
-                                                    <th style="width: 90px;">ID</th>
-                                                    <th>División</th>
-                                                    <th style="width: 140px;">Estado</th>
+                                                <th style="width: 90px;">ID</th>
+                                                <th>División</th>
+                                                <th style="width: 160px;">Clasificación</th>
+                                                <th style="width: 140px;">Estado</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 <?php foreach ($divisionesAsociadasDetalle as $divisionAsociada): ?>
+                                                    <?php
+                                                        $clasificacion = $divisionAsociada['clasificacion_usuario'];
+                                                        $badgeClass = $clasificacion === 'interno' ? 'badge-interno' : 'badge-externo';
+                                                    ?>
                                                     <tr>
                                                         <td><?php echo (int)$divisionAsociada['id_division']; ?></td>
                                                         <td><?php echo htmlspecialchars($divisionAsociada['nombre']); ?></td>
+                                                        <td>
+                                                            <span class="<?php echo $badgeClass; ?>">
+                                                                <?php echo ucfirst(htmlspecialchars($clasificacion)); ?>
+                                                            </span>
+                                                        </td>
                                                         <td>
                                                             <span class="badge-asociada">Habilitada</span>
                                                         </td>
@@ -603,23 +710,24 @@ while ($row = $resDivisiones->fetch_assoc()) {
     </div>
 </div>
 
-
-
 <script>
 (function () {
     const buscador = document.getElementById('buscadorDivisiones');
     const filas = document.querySelectorAll('.division-row');
-    const checkboxes = document.querySelectorAll('.chk-division');
+    const checkboxes = document.querySelectorAll('.chk-clasificacion');
     const contador = document.getElementById('contadorSeleccionadas');
     const btnTodas = document.getElementById('btnSeleccionarTodas');
     const btnLimpiar = document.getElementById('btnLimpiar');
 
     function actualizarContador() {
         if (!contador) return;
+
         let total = 0;
+
         checkboxes.forEach(chk => {
             if (chk.checked) total++;
         });
+
         contador.textContent = total;
     }
 

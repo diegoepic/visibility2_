@@ -904,6 +904,33 @@ if ($division_id > 0) {
               </li>              
             </ul>
           </li>
+
+
+          <li class="nav-item">
+            <a href="#" class="nav-link">
+              <i class="nav-icon fas fa-car"></i>
+              <p>
+                Administrar flota
+                <i class="fas fa-angle-left right"></i>
+              </p>
+            </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="modulos/mod_vehiculos/mod_vehiculos.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Crear/Editar vehiculos</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                  <a href="#" class="nav-link" data-toggle="modal" data-target="#">
+                      <i class="far fa-circle nav-icon"></i>
+                      <p>Descargar vehiculos</p>
+                  </a>
+              </li>              
+            </ul>
+          </li>
+
+          
           <?php endif; ?>
           <li class="nav-item">
             <a href="#" class="nav-link">
@@ -1068,12 +1095,28 @@ if ($division_id > 0) {
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-chart-line"></i>
               <p>
+                Administrador
+                <i class="fas fa-angle-left right"></i>
+              </p>
+            </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="modulos/mod_admin_rutas/mod_admin_locales_mapa.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Editor de rutas</p>
+                </a>
+              </li>
+            </ul>
+          </li>          
+          <li class="nav-item">
+            <a href="#" class="nav-link">
+              <i class="nav-icon fas fa-chart-line"></i>
+              <p>
                 Administrador de dashboard
                 <i class="fas fa-angle-left right"></i>
               </p>
             </a>
             <ul class="nav nav-treeview">
-              </li>                
               <li class="nav-item">
                 <a href="UI_crear_dashboard.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
@@ -1132,6 +1175,11 @@ if ($division_id > 0) {
               </p>
             </a>
             <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="modulos/mod_panel/mod_control_carga.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Control de ruta</p>
+                </a>                
               <li class="nav-item">
                 <a href="modulos/mod_rutas/mapa_rutas.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>

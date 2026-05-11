@@ -630,6 +630,90 @@ function orderGroupByBestStart(array $group): array
         : $routeB;
 }
 
+function twoOptImproveRoute(array $route, int $maxPasses = 25): array
+{
+    $n = count($route);
+
+    if ($n < 4) {
+        return $route;
+    }
+
+    $passes = 0;
+    $improved = true;
+
+    while ($improved && $passes < $maxPasses) {
+        $improved = false;
+        $passes++;
+
+        for ($i = 1; $i < $n - 2; $i++) {
+            for ($k = $i + 1; $k < $n - 1; $k++) {
+                $a = $route[$i - 1];
+                $b = $route[$i];
+                $c = $route[$k];
+                $d = $route[$k + 1];
+
+                $before = distanceBetweenPoints($a, $b) + distanceBetweenPoints($c, $d);
+                $after  = distanceBetweenPoints($a, $c) + distanceBetweenPoints($b, $d);
+
+                if ($after + 0.001 < $before) {
+                    $segment = array_reverse(array_slice($route, $i, $k - $i + 1));
+                    array_splice($route, $i, $k - $i + 1, $segment);
+                    $improved = true;
+                }
+            }
+        }
+    }
+
+    return $route;
+}
+
+function buildCircuitGroups(array $locales, int $targetPerDay, float $maxJumpKm = 120.0): array
+{
+    if (empty($locales)) {
+        return [];
+    }
+
+    $targetPerDay = max(1, $targetPerDay);
+
+    $ordered = orderGroupByBestStart($locales);
+    $ordered = twoOptImproveRoute($ordered, 25);
+
+    $groups = [];
+    $current = [];
+
+    foreach ($ordered as $local) {
+        if (empty($current)) {
+            $current[] = $local;
+            continue;
+        }
+
+        $prev = $current[count($current) - 1];
+
+        $jumpKm = haversineKm(
+            (float)$prev['lat'],
+            (float)$prev['lng'],
+            (float)$local['lat'],
+            (float)$local['lng']
+        );
+
+        $breakBySize = count($current) >= $targetPerDay;
+        $breakByJump = $maxJumpKm > 0 && $jumpKm > $maxJumpKm;
+
+        if ($breakBySize || $breakByJump) {
+            $groups[] = $current;
+            $current = [$local];
+        } else {
+            $current[] = $local;
+        }
+    }
+
+    if (!empty($current)) {
+        $groups[] = $current;
+    }
+
+    return $groups;
+}
+
 function buildBalancedDistanceGroups(array $locales, array $capacities, array $opts = []): array
 {
     if (empty($locales) || empty($capacities)) {
@@ -994,6 +1078,16 @@ if ($cantidadPorDia < 1) {
     fail('Cantidad por día inválida.');
 }
 
+$modoPlanificacion = trim((string)($_POST['modo_planificacion'] ?? 'estandar'));
+
+if (!in_array($modoPlanificacion, ['estandar', 'circuito'], true)) {
+    $modoPlanificacion = 'estandar';
+}
+
+$minLocalesRuta = isset($_POST['min_locales_ruta']) && is_numeric($_POST['min_locales_ruta'])
+    ? max(1, (int)$_POST['min_locales_ruta'])
+    : 7;
+
 $fechaInicio = trim((string)($_POST['fecha_inicio'] ?? ''));
 if ($fechaInicio === '') {
     fail('Debes indicar una fecha de inicio.');
@@ -1006,23 +1100,30 @@ if (!$dtFechaInicio || $dtFechaInicio->format('Y-m-d') !== $fechaInicio) {
 
 $maxKmEntrePuntos = isset($_POST['max_km_ruta']) && is_numeric($_POST['max_km_ruta'])
     ? max(1.0, (float)$_POST['max_km_ruta'])
-    : 30.0;
+    : ($modoPlanificacion === 'circuito' ? 120.0 : 80.0);
 
-$maxDiameterKm = isset($_POST['max_diameter_km']) && is_numeric($_POST['max_diameter_km'])
-    ? max(1.0, (float)$_POST['max_diameter_km'])
-    : 20.0;
+if ($modoPlanificacion === 'circuito') {
+    $maxDiameterKm = 0.0;
+    $maxRadiusKm = 0.0;
+    $maxComunasRuta = 0;
+    $outlierKnnKm = 0.0;
+} else {
+    $maxDiameterKm = isset($_POST['max_diameter_km']) && is_numeric($_POST['max_diameter_km'])
+        ? max(1.0, (float)$_POST['max_diameter_km'])
+        : 20.0;
 
-$maxRadiusKm = isset($_POST['max_radius_km']) && is_numeric($_POST['max_radius_km'])
-    ? max(1.0, (float)$_POST['max_radius_km'])
-    : 10.0;
+    $maxRadiusKm = isset($_POST['max_radius_km']) && is_numeric($_POST['max_radius_km'])
+        ? max(1.0, (float)$_POST['max_radius_km'])
+        : 10.0;
 
-$maxComunasRuta = isset($_POST['max_comunas_ruta']) && is_numeric($_POST['max_comunas_ruta'])
-    ? max(1, (int)$_POST['max_comunas_ruta'])
-    : 2;
+    $maxComunasRuta = isset($_POST['max_comunas_ruta']) && is_numeric($_POST['max_comunas_ruta'])
+        ? max(1, (int)$_POST['max_comunas_ruta'])
+        : 2;
 
-$outlierKnnKm = isset($_POST['outlier_knn_km']) && is_numeric($_POST['outlier_knn_km'])
-    ? max(0.0, (float)$_POST['outlier_knn_km'])
-    : 0.0;
+    $outlierKnnKm = isset($_POST['outlier_knn_km']) && is_numeric($_POST['outlier_knn_km'])
+        ? max(0.0, (float)$_POST['outlier_knn_km'])
+        : 0.0;
+}
 
 $routeOptions = [
     'max_jump_km'      => $maxKmEntrePuntos,
@@ -1328,11 +1429,21 @@ if (!isset($rutasValidasPorUsuario[$usuarioId])) {
         continue;
     }
 
-    $groupsUsuario = buildCommuneFirstGroups($usuarioLocalesConCoords, $cantidadPorDia, $routeOptions);
+    if ($modoPlanificacion === 'circuito') {
+        $groupsUsuario = buildCircuitGroups(
+            $usuarioLocalesConCoords,
+            $cantidadPorDia,
+            $maxKmEntrePuntos
+        );
+    } else {
+        $groupsUsuario = buildCommuneFirstGroups(
+            $usuarioLocalesConCoords,
+            $cantidadPorDia,
+            $routeOptions
+        );
     
-    // Mantiene la lógica actual de construcción,
-    // pero la asignación final de fechas prioriza antigüedad real
-    $groupsUsuario = sortGroupsByProposalPriority($groupsUsuario);
+        $groupsUsuario = sortGroupsByProposalPriority($groupsUsuario);
+    }
 
     $diasPlanificadosUsuario = count($groupsUsuario);
 
@@ -1355,8 +1466,9 @@ foreach ($groupsUsuario as $idxRuta => $group) {
 
     $distanciaRutaKm = round(estimateRouteDistanceKm($group), 2);
 
-    // DESCARTAR DEFINITIVAMENTE rutas de 6 locales o menos
-    if ($tamanoRuta <= 6) {
+    // En modo estándar se descartan rutas bajo el mínimo.
+    // En modo circuito no se descarta ningún local con coordenadas.
+    if ($modoPlanificacion !== 'circuito' && $tamanoRuta < $minLocalesRuta) {
         $totalRutasDescartadas++;
         $totalLocalesSinRuta += $tamanoRuta;
 
@@ -1400,8 +1512,8 @@ foreach ($groupsUsuario as $idxRuta => $group) {
                 'distancia_desde_anterior'      => $distAnterior,
                 'distancia_ruta_km'             => $distanciaRutaKm,
 
-                'motivo_descarte'               => 'Ruta descartada por baja cobertura: 6 locales o menos',
-                'observacion'                   => 'Estos locales fueron agrupados geográficamente, pero quedaron fuera de la planificación final por no alcanzar el mínimo requerido de 7 locales.'
+                'motivo_descarte'               => 'Ruta descartada por baja cobertura: menos de ' . $minLocalesRuta . ' locales',
+                'observacion'     => 'Estos locales fueron agrupados geográficamente, pero quedaron fuera de la planificación final por no alcanzar el mínimo requerido de ' . $minLocalesRuta . ' locales.'
             ];
         }
 
@@ -1476,10 +1588,17 @@ $totalKmEstimado += $distanciaRutaKm;
             'distancia_desde_anterior'      => $distAnterior,
             'distancia_ruta_km'             => $distanciaRutaKm,
 
-            'asignacion_recomendada'        => 'ASIGNAR',
-            'motivo_asignacion'             => 'Cobertura suficiente (7 locales o más)',
-
-            'observacion'                   => 'Ruta optimizada por cercanía y comuna para usuario asignado. Priorizada por antigüedad de fechaPropuesta y manteniendo compactación geográfica.'
+            'asignacion_recomendada' => $modoPlanificacion === 'circuito'
+                ? 'ASIGNAR CIRCUITO'
+                : 'ASIGNAR',
+            
+            'motivo_asignacion' => $modoPlanificacion === 'circuito'
+                ? 'Circuito generado sin descarte por comuna, radio, diámetro o mínimo de locales'
+                : 'Cobertura suficiente (' . $minLocalesRuta . ' locales o más)',
+            
+            'observacion' => $modoPlanificacion === 'circuito'
+                ? 'Circuito optimizado por cercanía. Solo se separa cuando se completa la cantidad objetivo diaria o cuando el salto entre puntos supera ' . round($maxKmEntrePuntos, 2) . ' KM.'
+                : 'Ruta optimizada por cercanía y comuna para usuario asignado. Priorizada por antigüedad de fechaPropuesta y manteniendo compactación geográfica.'
         ];
     }
 }
