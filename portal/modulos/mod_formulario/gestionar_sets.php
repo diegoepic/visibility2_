@@ -582,7 +582,8 @@ if ($selectedSet){
           <?php if($selectedSet): ?>
           <div class="btn-group btn-group-sm">
             <a class="btn btn-light" href="clonar_set.php?idSet=<?= $selectedSet['id'] ?>&csrf_token=<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>" title="Clonar set"><i class="fa fa-copy"></i></a>
-            <a class="btn btn-light" href="exportar_set_csv.php?idSet=<?= $selectedSet['id'] ?>" title="Exportar CSV"><i class="fa fa-file-csv"></i></a>
+            <a class="btn btn-light" href="exportar_set_csv.php?idSet=<?= $selectedSet['id'] ?>" title="Exportar Excel"><i class="fa fa-file-excel text-success"></i></a>
+            <a class="btn btn-light" href="#" title="Vista para PDF" data-toggle="modal" data-target="#exportPdfModal" data-idset="<?= $selectedSet['id'] ?>"><i class="fa fa-file-pdf text-danger"></i></a>
           </div>
           <?php endif; ?>
         </div>
@@ -920,6 +921,29 @@ if ($selectedSet){
       </div>
       <div class="modal-body p-0 text-center">
         <img id="refImageModalImg" src="" alt="Imagen de referencia" style="max-width:100%;height:auto;">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Vista para PDF -->
+<div class="modal fade" id="exportPdfModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-xl" role="document" style="max-width:90vw">
+    <div class="modal-content" style="height:90vh;display:flex;flex-direction:column">
+      <div class="modal-header py-2">
+        <h6 class="modal-title"><i class="fa fa-file-pdf mr-1 text-danger"></i> Vista para PDF</h6>
+        <div class="ml-auto mr-3">
+          <button class="btn btn-sm btn-danger" onclick="document.getElementById('exportPdfIframe').contentWindow.print()">
+            <i class="fa fa-print mr-1"></i> Imprimir / Guardar PDF
+          </button>
+          <a id="exportExcelLink" href="#" class="btn btn-sm btn-success ml-1">
+            <i class="fa fa-file-excel mr-1"></i> Descargar Excel
+          </a>
+        </div>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body p-0" style="flex:1;overflow:hidden">
+        <iframe id="exportPdfIframe" src="" style="width:100%;height:100%;border:none"></iframe>
       </div>
     </div>
   </div>
@@ -1392,6 +1416,16 @@ $(document).on('click','.q-actions .btn, .move-up, .move-down, .move-to', markDi
 
 /* ====== Título a HTML seguro ====== */
 function escapeHtml(s){return (s||'').replace(/[&<>"'`=\/]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;','`':'&#x60;','=':'&#x3D;'}[c]});}
+
+/* ====== Modal Vista para PDF ====== */
+$('#exportPdfModal').on('show.bs.modal', function(e) {
+  var idSet = $(e.relatedTarget).data('idset');
+  $('#exportPdfIframe').attr('src', 'exportar_set_csv.php?idSet=' + idSet + '&format=html');
+  $('#exportExcelLink').attr('href', 'exportar_set_csv.php?idSet=' + idSet);
+});
+$('#exportPdfModal').on('hidden.bs.modal', function() {
+  $('#exportPdfIframe').attr('src', '');
+});
 </script>
 </body>
 </html>

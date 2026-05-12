@@ -129,6 +129,41 @@ include 'mapa_data.php';
         </div>
       </div>
 
+<!-- FILA 3: FILTROS GEOGRÁFICOS -->
+<div class="form-row">
+
+  <div class="form-group col-md-3 filter-group">
+    <label for="id_region" class="filter-label">REGIÓN</label>
+    <select class="form-control filter-control" id="id_region" name="id_region">
+      <option value="0">TODAS LAS REGIONES</option>
+
+      <?php foreach ($regiones as $reg): ?>
+        <option value="<?= (int)$reg['id'] ?>"
+          <?= ((int)$reg['id'] === (int)$filter_region) ? 'selected' : '' ?>>
+          <?= htmlspecialchars($reg['nombre']) ?>
+        </option>
+      <?php endforeach; ?>
+    </select>
+    <small class="help">FILTRA LOS LOCALES POR REGIÓN.</small>
+  </div>
+
+  <div class="form-group col-md-3 filter-group">
+    <label for="id_comuna" class="filter-label">COMUNA</label>
+    <select class="form-control filter-control" id="id_comuna" name="id_comuna">
+      <option value="0">TODAS LAS COMUNAS</option>
+
+      <?php foreach ($comunas as $com): ?>
+        <option value="<?= (int)$com['id'] ?>"
+          <?= ((int)$com['id'] === (int)$filter_comuna) ? 'selected' : '' ?>>
+          <?= htmlspecialchars($com['nombre']) ?>
+        </option>
+      <?php endforeach; ?>
+    </select>
+    <small class="help">SI SELECCIONAS REGIÓN, SOLO VERÁS SUS COMUNAS.</small>
+  </div>
+
+</div>
+
       <!-- FILA 3: BOTÓN -->
       <div class="form-row">
         <div class="form-group col-12 filter-search-wrap mb-0">
@@ -146,6 +181,8 @@ include 'mapa_data.php';
 <input type="hidden" id="val_campana" value="<?= (int)$filter_campana ?>">
 <input type="hidden" id="val_ejecutor" value="<?= (int)$id_ejecutor ?>">
 <input type="hidden" id="val_tipo" value="<?= (int)$tipoCampana ?>">
+<input type="hidden" id="val_region" value="<?= (int)$filter_region ?>">
+<input type="hidden" id="val_comuna" value="<?= (int)$filter_comuna ?>">
 <input type="hidden" name="empresa_id" id="empresa_id" value="<?= (int)$id_empresa ?>">
 
         </form>
@@ -341,9 +378,11 @@ document.addEventListener("DOMContentLoaded", function () {
   const $subdivision = document.getElementById('id_subdivision');
   const $campana = document.getElementById('id_campana');
   const $ejecutor = document.getElementById('id_ejecutor');
-  const $estado = document.getElementById('estado');
-  const $tipo = document.getElementById('tipo_gestion');
-  const $distrito = document.getElementById('id_distrito');
+const $estado = document.getElementById('estado');
+const $tipo = document.getElementById('tipo_gestion');
+const $distrito = document.getElementById('id_distrito');
+const $region = document.getElementById('id_region');
+const $comuna = document.getElementById('id_comuna');
 const $empresa = document.getElementById('empresa_id') || { value: '<?= (int)$id_empresa ?>' };
 
 const $nuevoUsuario = document.getElementById('nuevoUsuario');
