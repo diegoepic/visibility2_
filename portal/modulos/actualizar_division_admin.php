@@ -143,6 +143,14 @@ $sqlUpdate = "
 ";
 
 if ($conn->query($sqlUpdate)) {
+    $subdivision_nombre = trim($_POST['subdivision_nombre'] ?? '');
+    if ($subdivision_nombre !== '') {
+        $subNombreEsc = $conn->real_escape_string($subdivision_nombre);
+        $chkSub = $conn->query("SELECT id FROM subdivision WHERE nombre = '$subNombreEsc' AND id_division = $id LIMIT 1");
+        if ($chkSub && $chkSub->num_rows === 0) {
+            $conn->query("INSERT INTO subdivision (nombre, id_division) VALUES ('$subNombreEsc', $id)");
+        }
+    }
     echo json_encode([
         'success' => true,
         'message' => 'División actualizada correctamente.'

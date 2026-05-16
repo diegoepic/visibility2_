@@ -1054,6 +1054,7 @@ $conn->close();
 /* Botones acciones */
 .action-wrap {
     display: flex;
+    flex-direction: column;    
     align-items: center;
     gap: 8px;
 }
@@ -1887,6 +1888,230 @@ $conn->close();
             padding: 7px 10px;
             border-radius: 999px;
         }
+.btn-grid-action.success {
+    background: #ecfdf3;
+    color: #087443;
+    border-color: #abefc6;
+}
+
+.btn-grid-action.success:hover {
+    background: #d1fadf;
+    color: #065f46;
+}    
+
+.btn-grid-action.success {
+    background: #ecfdf3;
+    color: #087443;
+    border-color: #abefc6;
+}
+
+.btn-grid-action.success:hover {
+    background: #d1fadf;
+    color: #065f46;
+}
+
+.modal-rutas-programadas {
+    border: 0;
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, .25);
+}
+
+.modal-rutas-programadas .modal-header {
+    background: #f8fafc;
+    border-bottom: 1px solid #dce4ee;
+    padding: 18px 22px;
+}
+
+.modal-rutas-programadas .modal-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: #16243d;
+}
+
+.rutas-subtitle {
+    font-size: 13px;
+    color: #667085;
+    margin-top: 4px;
+    font-weight: 600;
+}
+
+.rutas-tabs .nav-link {
+    border-radius: 12px;
+    font-weight: 800;
+    color: #667085;
+}
+
+.rutas-tabs .nav-link.active {
+    background: #0f1933;
+    color: #fff;
+}
+
+.ruta-form-card {
+    background: #f8fafc;
+    border: 1px solid #dce4ee;
+    border-radius: 16px;
+    padding: 16px;
+}
+
+.ruta-form-card label {
+    font-size: 12px;
+    font-weight: 800;
+    color: #5d6b81;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+}
+
+.ruta-form-card .form-control {
+    height: 42px;
+    border-radius: 10px;
+    border: 1px solid #cfd8e3;
+    background: #fff;
+    font-size: 14px;
+}
+
+.rutas-loading {
+    min-height: 110px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #667085;
+    font-weight: 700;
+}
+
+.table-rutas-programadas thead th {
+    background: #f1f5f9;
+    color: #607089;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    border-bottom: 1px solid #dce4ee;
+    padding: 12px;
+    white-space: nowrap;
+}
+
+.table-rutas-programadas tbody td {
+    padding: 12px;
+    vertical-align: middle;
+    border-top: 1px solid #edf2f7;
+    font-size: 13px;
+}
+
+.ruta-title {
+    font-weight: 900;
+    color: #1f2937;
+    line-height: 1.25;
+}
+
+.ruta-sub {
+    font-size: 12px;
+    color: #7b8798;
+    margin-top: 2px;
+}
+
+.ruta-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 72px;
+    min-height: 28px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 900;
+    border: 1px solid transparent;
+}
+
+.ruta-chip.validada {
+    background: #e9f3ff;
+    color: #1877f2;
+    border-color: #cfe3ff;
+}
+
+.ruta-chip.aplicada {
+    background: #dff6e8;
+    color: #169460;
+    border-color: #bceaca;
+}
+
+.ruta-chip.anulada {
+    background: #ffe2e2;
+    color: #d92d20;
+    border-color: #f4b6b6;
+}
+
+.ruta-chip.borrador {
+    background: #fff2db;
+    color: #d98800;
+    border-color: #f4d59d;
+}
+
+.ruta-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.btn-ruta-mini {
+    height: 31px;
+    border-radius: 9px;
+    border: 1px solid #d6dee8;
+    background: #fff;
+    color: #344054;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 0 10px;
+}
+
+.btn-ruta-mini:hover {
+    background: #f8fafc;
+}
+
+.btn-ruta-mini.primary {
+    background: #0f1933;
+    color: #fff;
+    border-color: #0f1933;
+}
+
+.btn-ruta-mini.danger {
+    background: #fff5f5;
+    color: #d92d20;
+    border-color: #f4b6b6;
+}
+
+.ruta-detalle-box {
+    border: 1px solid #dce4ee;
+    border-radius: 14px;
+    overflow: auto;
+    max-height: 48vh;
+}
+
+.ruta-alert-list {
+    max-height: 170px;
+    overflow: auto;
+    margin-top: 10px;
+    font-size: 12px;
+}
+
+.set-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.btn-ruta-mini.warning {
+    background: #fff7ed;
+    color: #c2410c;
+    border-color: #fed7aa;
+}
+
+.btn-ruta-mini.warning:hover {
+    background: #ffedd5;
+}
     </style>
 </head>
 
@@ -2035,6 +2260,23 @@ $conn->close();
                         La última fecha propuesta se calcula desde <strong>la ultima planificacion asignada</strong>.
                     </div>
                 </div>
+                    <div>
+                        <button type="button"
+                                class="btn-grid-action success btn-abrir-set-ruta"
+                                data-modo="masivo"
+                                data-id-ejecutor="0"
+                                data-nombre=""
+                                data-usuario="">
+                            <i class="fas fa-file-upload mr-1"></i>
+                            Set masivo
+                        </button>
+                        <button type="button"
+                                id="btnAbrirGenerarRutaSet"
+                                class="btn-grid-action success">
+                            <i class="fas fa-route mr-1"></i>
+                            Generar ruta
+                        </button>                        
+                    </div>                
             </div>
 
             <div class="table-responsive">
@@ -2047,8 +2289,7 @@ $conn->close();
                             <th class="text-center">Activas</th>
                             <th class="text-center">Finalizadas</th>
                             <th class="text-center">Formularios</th>
-                            <th>Primera pendiente</th>
-                            <th>Última planificación</th>
+                            <th>fechas planificación</th>
                             <th class="text-center">Días cobertura</th>
                             <th class="text-center">Estado</th>
                             <th class="text-center">Acciones</th>
@@ -2247,16 +2488,13 @@ $conn->close();
             </span>
         </td>
 
-        <!-- Primera pendiente -->
+        <!-- Última planificación -->
         <td>
             <div class="date-main">
                 <?= $primeraPendiente ? date('d/m/Y', strtotime($primeraPendiente)) : '-' ?>
             </div>
             <div class="date-sub">Primera fecha pendiente</div>
-        </td>
-
-        <!-- Última planificación -->
-        <td>
+            
             <div class="date-main">
                 <?= $ultima ? date('d/m/Y', strtotime($ultima)) : '-' ?>
             </div>
@@ -2295,6 +2533,15 @@ $conn->close();
                         data-usuario="<?= h($t['usuario']) ?>">
                     Detalle
                 </button>
+                
+                <button type="button"
+                        class="btn-grid-action success btn-abrir-set-ruta"
+                        data-modo="individual"
+                        data-id-ejecutor="<?= (int)$t['id_ejecutor'] ?>"
+                        data-nombre="<?= h($t['nombre'] . ' ' . $t['apellido']) ?>"
+                        data-usuario="<?= h($t['usuario']) ?>">
+                    Set ruta
+                </button>          
             </div>
         </td>
 
@@ -2467,6 +2714,375 @@ $conn->close();
     </div>
 </div>
 
+<div class="modal fade" id="modalSubirSetRuta" tabindex="-1" role="dialog" aria-labelledby="modalSubirSetRutaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
+        <div class="modal-content modal-rutas-programadas">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="modalSubirSetRutaLabel">
+                        <i class="fas fa-route mr-2"></i>
+                        Subir set base de ruta
+                    </h5>
+                        <div class="rutas-subtitle" id="subirSetRutaSubtitulo">
+                            Este set solo guarda códigos de local y usuarios. No genera fechas ni planificación todavía.
+                        </div>
+                </div>
+
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+
+            <form id="formSubirSetRuta" enctype="multipart/form-data">
+                <input type="hidden" name="modo_set" id="setRutaModo" value="masivo">
+                <input type="hidden" name="id_usuario_fijo" id="setRutaIdUsuarioFijo" value="0">
+                <input type="hidden" name="id_ruta_set" id="setRutaIdEditar" value="0">
+                <div class="modal-body">
+                    <div id="subirSetRutaAlert" class="alert d-none"></div>
+
+<div class="ruta-form-card">
+    <div class="row">
+
+        <!-- Nombre del set -->
+        <div class="col-lg-4 col-md-6 mb-3">
+            <label>Nombre del set</label>
+            <input type="text"
+                   name="nombre_ruta"
+                   class="form-control"
+                   placeholder="Ej: Set petroleras mayo"
+                   required>
+        </div>
+
+        <!-- División -->
+        <div class="col-lg-3 col-md-6 mb-3">
+            <label>División asociada</label>
+            <select name="id_division" class="form-control" required>
+                <option value="">Seleccione</option>
+                <?php foreach ($divisiones as $d): ?>
+                    <option value="<?= (int)$d['id'] ?>" <?= ((int)$d['id'] === (int)$division_usuario ? 'selected' : '') ?>>
+                        <?= h($d['nombre']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+
+        <!-- Categoría -->
+        <div class="col-lg-3 col-md-6 mb-3">
+            <label>Categoría del set</label>
+
+            <div class="input-group">
+                <select name="id_categoria" id="setRutaCategoria" class="form-control" required>
+                    <option value="">Seleccione categoría</option>
+                </select>
+
+                <div class="input-group-append">
+                    <button type="button"
+                            id="btnMostrarNuevaCategoria"
+                            class="btn btn-outline-success font-weight-bold"
+                            title="Crear nueva categoría">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+            </div>
+
+            <small class="text-muted">
+                Categorías activas de la división.
+            </small>
+        </div>
+
+        <!-- Validación -->
+        <div class="col-lg-2 col-md-6 mb-3">
+            <label>Validación división</label>
+            <select name="validar_division_local" class="form-control">
+                <option value="1" selected>Validar división</option>
+                <option value="0">Solo asociar</option>
+            </select>
+        </div>
+
+        <!-- Crear nueva categoría -->
+        <div class="col-md-12 mb-3 d-none" id="boxNuevaCategoriaSet">
+            <div class="ruta-form-card nueva-categoria-card">
+                <div class="row">
+                    <div class="col-md-5 mb-2">
+                        <label>Nueva categoría</label>
+                        <input type="text"
+                               id="inputNuevaCategoriaSet"
+                               class="form-control"
+                               placeholder="Ej: Petroleras Mayo">
+                    </div>
+
+                    <div class="col-md-5 mb-2">
+                        <label>Descripción</label>
+                        <input type="text"
+                               id="inputNuevaCategoriaDescripcion"
+                               class="form-control"
+                               placeholder="Opcional">
+                    </div>
+
+                    <div class="col-md-2 mb-2 d-flex align-items-end">
+                        <button type="button"
+                                id="btnCrearCategoriaSet"
+                                class="btn btn-success btn-block font-weight-bold">
+                            Crear
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Archivo -->
+        <div class="col-md-12 mb-3">
+            <label>Archivo CSV</label>
+            <input type="file"
+                   name="archivo_ruta"
+                   class="form-control"
+                   accept=".csv,.txt"
+                   required>
+
+            <small class="text-muted" id="ayudaColumnasSetRuta">
+                Columnas obligatorias: <strong>codigo_local</strong> y <strong>usuario</strong>.
+                Separador permitido: punto y coma, coma o tabulación.
+            </small>
+        </div>
+
+    </div>
+</div>
+
+                    <hr>
+
+                    <h6 class="font-weight-bold mb-2">
+                        <i class="fas fa-list mr-1"></i>
+                        Últimos sets cargados
+                    </h6>
+
+                    <div id="setsRutaLoading" class="rutas-loading d-none">
+                        <i class="fas fa-spinner fa-spin mr-2"></i>
+                        Cargando sets...
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm table-rutas-programadas mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Set</th>
+                                    <th>División</th>
+                                    <th class="text-center">Usuarios</th>
+                                    <th class="text-center">Locales</th>
+                                    <th class="text-center">Estado</th>
+                                    <th>Creado</th>
+                                    <th class="text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodySetsRuta">
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">Sin información cargada.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-dismiss="modal">Cerrar</button>
+                    <button type="submit" id="btnGuardarSetRuta" class="btn btn-success font-weight-bold">
+                        <i class="fas fa-save mr-1"></i>
+                        Guardar set
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalGenerarRutaSet" tabindex="-1" role="dialog" aria-labelledby="modalGenerarRutaSetLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-detalle-dialog" role="document">
+        <div class="modal-content modal-rutas-programadas">
+
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="modalGenerarRutaSetLabel">
+                        <i class="fas fa-route mr-2"></i>
+                        Generar ruta desde set
+                    </h5>
+                    <div class="rutas-subtitle">
+                        Previsualiza la generación según categoría, trabajadores filtrados y objetivo diario dinámico.
+                    </div>
+                </div>
+
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+
+            <form id="formPreviewGenerarRutaSet">
+                <div class="modal-body">
+
+                    <div id="generarRutaSetAlert" class="alert d-none"></div>
+
+                    <div class="ruta-form-card mb-3">
+                        <div class="row">
+
+                        <div class="col-lg-2 col-md-6 mb-3">
+                            <label>División</label>
+                            <select name="id_division" id="previewRutaDivision" class="form-control" required>
+                                <?php foreach ($divisiones as $d): ?>
+                                    <option value="<?= (int)$d['id'] ?>" <?= ((int)$d['id'] === (int)$division_usuario ? 'selected' : '') ?>>
+                                        <?= h($d['nombre']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <label>Categoría activa</label>
+                            <select name="id_categoria" id="previewRutaCategoria" class="form-control" required>
+                                <option value="">Seleccione categoría</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-lg-2 col-md-6 mb-3">
+                            <label>Fecha inicio ruta</label>
+                            <input type="date"
+                                   name="fecha_inicio"
+                                   id="previewFechaInicioRuta"
+                                   class="form-control"
+                                   value="<?= h(date('Y-m-d')) ?>"
+                                   required>
+                        </div>
+                        
+                        <div class="col-lg-2 col-md-6 mb-3">
+                            <label>Fecha término ruta</label>
+                            <input type="date"
+                                   name="fecha_termino"
+                                   id="previewFechaTerminoRuta"
+                                   class="form-control"
+                                   value="<?= h(date('Y-m-d')) ?>"
+                                   required>
+                        </div>
+                        
+                        <div class="col-lg-1 col-md-6 mb-3">
+                            <label>Obj.</label>
+                            <input type="number"
+                                   name="objetivo_diario_base"
+                                   class="form-control"
+                                   value="18"
+                                   min="1"
+                                   required>
+                        </div>
+                        
+                        <div class="col-lg-2 col-md-6 mb-3">
+                            <label>Frecuencia días</label>
+                            <input type="number"
+                                   name="dias_frecuencia_objetivo"
+                                   class="form-control"
+                                   value="10"
+                                   min="1"
+                                   required>
+                        </div>
+
+                            <div class="col-lg-3 col-md-6 mb-3">
+                                <label>KM máx. entre locales</label>
+                                <input type="number"
+                                       name="max_km_entre_locales"
+                                       class="form-control"
+                                       value="80"
+                                       min="1"
+                                       step="0.1"
+                                       required>
+                            </div>
+                            
+                            <div class="col-lg-3 col-md-6 mb-3">
+                                <label>Priorizar comunas</label>
+                                <select name="priorizar_comunas" class="form-control">
+                                    <option value="1" selected>Sí, priorizar comunas</option>
+                                    <option value="0">No, solo cercanía</option>
+                                </select>
+                            </div>
+
+                            <input type="hidden" name="subdivision_usuario" value="<?= (int)$subdivision_usuario ?>">
+                            <input type="hidden" name="clasificacion_usuario" value="<?= h($clasificacion_usuario) ?>">
+
+                            <div class="col-lg-3 col-md-6 mb-3 d-flex align-items-end">
+                                <button type="submit" id="btnPreviewGenerarRutaSet" class="btn btn-success btn-block font-weight-bold">
+                                    <i class="fas fa-search mr-1"></i>
+                                    Previsualizar
+                                </button>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <div id="previewRutaLoading" class="rutas-loading d-none">
+                        <i class="fas fa-spinner fa-spin mr-2"></i>
+                        Calculando preview...
+                    </div>
+
+                    <div id="previewRutaContenido" class="d-none">
+
+                        <div class="resumen-kpi-row mb-3">
+                            <div class="resumen-kpi">
+                                <span>Trabajadores filtrados</span>
+                                <strong id="previewTotalTrabajadores">0</strong>
+                            </div>
+
+                            <div class="resumen-kpi">
+                                <span>Con set válido</span>
+                                <strong id="previewConSet">0</strong>
+                            </div>
+
+                            <div class="resumen-kpi">
+                                <span>Sin set</span>
+                                <strong id="previewSinSet">0</strong>
+                            </div>
+
+                            <div class="resumen-kpi">
+                                <span>Locales total</span>
+                                <strong id="previewLocalesTotal">0</strong>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-rutas-programadas mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Trabajador</th>
+                                        <th>Set</th>
+                                        <th class="text-center">Locales</th>
+                                        <th class="text-center">Coords.</th>
+                                        <th class="text-center">Fecha inicio</th>
+                                        <th class="text-center">Objetivo</th>
+                                        <th class="text-center">Ciclo</th>
+                                        <th class="text-center">Periodo</th>
+                                        <th class="text-center">Rutas</th>
+                                        <th class="text-center">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbodyPreviewRutaSet">
+                                    <tr>
+                                        <td colspan="8" class="text-center text-muted py-4">
+                                            Ejecuta una previsualización.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-dismiss="modal">Cerrar</button>
+                    <button type="button" id="btnContinuarAplicarRutaSet" class="btn btn-primary font-weight-bold" disabled>
+                        Continuar
+                    </button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
 <!-- JS -->
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
@@ -2585,23 +3201,23 @@ $(document).ready(function () {
                 }
             },
             {
-                targets: [6, 7],
+                targets: [6],
                 render: function (data, type) {
                     if (type === 'sort' || type === 'type') {
                         return extraerFecha(data);
                     }
-
+            
                     return data;
                 }
             },
             {
                 orderable: false,
                 searchable: false,
-                targets: [10]
+                targets: [9]
             },
             {
                 className: 'text-center',
-                targets: [1, 2, 3, 4, 5, 8, 9, 10]
+                targets: [1, 2, 3, 4, 5, 7, 8, 9]
             }
         ]
     });
@@ -3023,6 +3639,930 @@ function renderDetalle(response) {
 
 });
 </script>
+
+<script>
+$(document).ready(function () {
+
+    function escapeHtml(value) {
+        if (value === null || value === undefined) return '';
+
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function getAjaxError(xhr, defaultMessage) {
+        if (xhr && xhr.responseJSON && xhr.responseJSON.message) {
+            return xhr.responseJSON.message;
+        }
+
+        if (xhr && xhr.responseText) {
+            try {
+                const parsed = JSON.parse(xhr.responseText);
+                if (parsed && parsed.message) {
+                    return parsed.message;
+                }
+            } catch (e) {
+                // No hacemos nada. Puede venir HTML por error PHP.
+            }
+        }
+
+        return defaultMessage;
+    }
+
+    function showSetRutaAlert(type, message, details) {
+        let html = escapeHtml(message || '');
+
+        if (Array.isArray(details) && details.length) {
+            html += '<div class="ruta-alert-list"><ul class="mb-0 pl-3">';
+
+            details.slice(0, 80).forEach(function (item) {
+                html += '<li>' + escapeHtml(item) + '</li>';
+            });
+
+            if (details.length > 80) {
+                html += '<li>Se ocultaron más observaciones para no saturar la vista.</li>';
+            }
+
+            html += '</ul></div>';
+        }
+
+        $('#subirSetRutaAlert')
+            .removeClass('d-none alert-success alert-danger alert-warning alert-info')
+            .addClass('alert-' + type)
+            .html(html);
+    }
+
+    function limpiarSetRutaAlert() {
+        $('#subirSetRutaAlert')
+            .addClass('d-none')
+            .removeClass('alert-success alert-danger alert-warning alert-info')
+            .html('');
+    }
+
+    function estadoChip(estado) {
+        estado = estado || 'borrador';
+
+        return '<span class="ruta-chip ' + escapeHtml(estado) + '">' +
+            escapeHtml(String(estado).toUpperCase()) +
+        '</span>';
+    }
+    
+    function cargarCategoriasSetRuta(selectedId = 0) {
+        const idDivision = $('#formSubirSetRuta [name="id_division"]').val() || '';
+    
+        const $select = $('#setRutaCategoria');
+    
+        $select.html('<option value="">Cargando categorías...</option>');
+    
+        if (!idDivision) {
+            $select.html('<option value="">Seleccione división primero</option>');
+            return;
+        }
+    
+        $.ajax({
+            url: 'ajax_rutas_programadas_categorias_listar.php',
+            type: 'GET',
+            dataType: 'json',
+            data: {
+                id_division: idDivision
+            },
+            success: function (response) {
+                if (!response || response.ok !== true) {
+                    $select.html('<option value="">No fue posible cargar categorías</option>');
+                    return;
+                }
+    
+                const rows = response.data || [];
+                let html = '<option value="">Seleccione categoría</option>';
+    
+                rows.forEach(function (item) {
+                    const selected = parseInt(item.id, 10) === parseInt(selectedId, 10)
+                        ? 'selected'
+                        : '';
+    
+                    html += `<option value="${escapeHtml(item.id)}" ${selected}>${escapeHtml(item.nombre)}</option>`;
+                });
+    
+                if (!rows.length) {
+                    html += '<option value="">Sin categorías activas</option>';
+                }
+    
+                $select.html(html);
+            },
+            error: function () {
+                $select.html('<option value="">Error al cargar categorías</option>');
+            }
+        });
+    }
+    
+    function resetNuevaCategoriaBox() {
+        $('#boxNuevaCategoriaSet').addClass('d-none');
+        $('#inputNuevaCategoriaSet').val('');
+        $('#inputNuevaCategoriaDescripcion').val('');
+    }
+
+    function actualizarBotonGuardar() {
+        const idEditar = parseInt($('#setRutaIdEditar').val(), 10) || 0;
+
+        if (idEditar > 0) {
+            $('#btnGuardarSetRuta').html('<i class="fas fa-sync-alt mr-1"></i> Reemplazar set');
+        } else {
+            $('#btnGuardarSetRuta').html('<i class="fas fa-save mr-1"></i> Guardar set');
+        }
+    }
+
+    function resetModoEdicion() {
+        $('#setRutaIdEditar').val(0);
+        actualizarBotonGuardar();
+    }
+
+    function cargarSetsRuta() {
+        const idDivision = $('#formSubirSetRuta [name="id_division"]').val() || '';
+        const modo = $('#setRutaModo').val() || 'masivo';
+        const idUsuarioFijo = parseInt($('#setRutaIdUsuarioFijo').val(), 10) || 0;
+
+        $('#setsRutaLoading').removeClass('d-none');
+        $('#tbodySetsRuta').html('');
+
+        $.ajax({
+            url: 'ajax_rutas_programadas_sets_listar.php',
+            type: 'GET',
+            dataType: 'json',
+            data: {
+                id_division: idDivision,
+                modo_set: modo,
+                id_usuario_fijo: idUsuarioFijo
+            },
+            success: function (response) {
+                $('#setsRutaLoading').addClass('d-none');
+
+                if (!response || response.ok !== true) {
+                    $('#tbodySetsRuta').html(`
+                        <tr>
+                            <td colspan="7" class="text-center text-warning py-4">
+                                No fue posible cargar los sets.
+                            </td>
+                        </tr>
+                    `);
+                    return;
+                }
+
+                const rows = response.data || [];
+
+                if (!rows.length) {
+                    $('#tbodySetsRuta').html(`
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">
+                                No existen sets para esta división.
+                            </td>
+                        </tr>
+                    `);
+                    return;
+                }
+
+                let html = '';
+
+                rows.forEach(function (item) {
+                    const estado = item.estado || 'borrador';
+                    const esBorrador = estado === 'borrador';
+
+                    html += `
+                        <tr>
+                            <td>
+                                <div class="ruta-title">${escapeHtml(item.nombre)}</div>
+                                <div class="ruta-sub">ID set: ${escapeHtml(item.id)}</div>
+                                <div class="ruta-sub">
+                                    Categoría: ${escapeHtml(item.categoria_nombre || 'Sin categoría')}
+                                </div>                                
+
+                                ${item.tipo_scope === 'individual' ? `
+                                    <div class="ruta-sub">
+                                        Trabajador: ${escapeHtml(item.trabajador_nombre || '-')} / ${escapeHtml(item.trabajador_usuario || '')}
+                                    </div>
+                                ` : ''}
+                            </td>
+
+                            <td>${escapeHtml(item.division_nombre || '-')}</td>
+
+                            <td class="text-center">
+                                <strong>${escapeHtml(item.total_usuarios || 0)}</strong>
+                                <div class="ruta-sub">${escapeHtml(item.tipo_scope || '')}</div>
+                            </td>
+
+                            <td class="text-center">
+                                <strong>${escapeHtml(item.total_locales || 0)}</strong>
+                            </td>
+
+                            <td class="text-center">
+                                ${estadoChip(estado)}
+                            </td>
+
+                            <td>
+                                ${escapeHtml(item.created_at || '-')}
+                                <div class="ruta-sub">
+                                    Creado por: ${escapeHtml(item.creado_por || '-')}
+                                </div>
+                            </td>
+
+                            <td class="text-center">
+                                <div class="set-actions">
+                                    ${esBorrador ? `
+                                        <button type="button"
+                                                class="btn-ruta-mini warning btn-reemplazar-set-ruta"
+                                                data-id="${escapeHtml(item.id)}"
+                                                data-nombre="${escapeHtml(item.nombre)}"
+                                                data-id-division="${escapeHtml(item.id_division)}"
+                                                data-id-categoria="${escapeHtml(item.id_categoria || 0)}"
+                                                data-tipo-scope="${escapeHtml(item.tipo_scope || '')}"
+                                                data-id-usuario="${escapeHtml(item.id_usuario || 0)}">
+                                            Reemplazar
+                                        </button>
+
+                                        <button type="button"
+                                                class="btn-ruta-mini danger btn-eliminar-set-ruta"
+                                                data-id="${escapeHtml(item.id)}"
+                                                data-nombre="${escapeHtml(item.nombre)}">
+                                            Eliminar
+                                        </button>
+                                    ` : `
+                                        <span class="text-muted small">Bloqueado</span>
+                                    `}
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                $('#tbodySetsRuta').html(html);
+            },
+            error: function (xhr) {
+                $('#setsRutaLoading').addClass('d-none');
+
+                $('#tbodySetsRuta').html(`
+                    <tr>
+                        <td colspan="7" class="text-center text-warning py-4">
+                            ${escapeHtml(getAjaxError(xhr, 'Error al consultar los sets.'))}
+                        </td>
+                    </tr>
+                `);
+            }
+        });
+    }
+
+    $(document).on('click', '.btn-abrir-set-ruta', function () {
+        const modo = $(this).data('modo') || 'masivo';
+        const idEjecutor = parseInt($(this).data('id-ejecutor'), 10) || 0;
+        const nombre = $(this).data('nombre') || '';
+        const usuario = $(this).data('usuario') || '';
+
+        limpiarSetRutaAlert();
+
+        const form = $('#formSubirSetRuta')[0];
+
+        if (form) {
+            form.reset();
+        }
+
+        $('#setRutaModo').val(modo);
+        $('#setRutaIdUsuarioFijo').val(modo === 'individual' ? idEjecutor : 0);
+
+        resetModoEdicion();
+        resetNuevaCategoriaBox();
+        cargarCategoriasSetRuta();        
+        
+
+        if (modo === 'individual') {
+            $('#modalSubirSetRutaLabel').html(`
+                <i class="fas fa-route mr-2"></i>
+                Crear set de ruta por trabajador
+            `);
+
+            $('#subirSetRutaSubtitulo').html(`
+                Trabajador: <strong>${escapeHtml(nombre)}</strong> / ${escapeHtml(usuario)}.
+                El archivo se asociará directamente a este trabajador.
+            `);
+
+            $('#ayudaColumnasSetRuta').html(`
+                Para set individual puedes subir columnas: <strong>codigo_local</strong>.
+                Si el archivo también trae <strong>usuario</strong>, se usará solo como referencia.
+            `);
+        } else {
+            $('#modalSubirSetRutaLabel').html(`
+                <i class="fas fa-file-upload mr-2"></i>
+                Subir set masivo de rutas
+            `);
+
+            $('#subirSetRutaSubtitulo').html(`
+                El archivo debe traer <strong>codigo_local</strong> y <strong>usuario</strong>.
+                El sistema asignará cada local al trabajador indicado.
+            `);
+
+            $('#ayudaColumnasSetRuta').html(`
+                Columnas obligatorias: <strong>codigo_local</strong> y <strong>usuario</strong>.
+                Separador permitido: punto y coma, coma o tabulación.
+            `);
+        }
+
+        $('#modalSubirSetRuta').modal('show');
+        cargarSetsRuta();
+    });
+
+        $('#formSubirSetRuta [name="id_division"]').on('change', function () {
+            resetNuevaCategoriaBox();
+            cargarCategoriasSetRuta();
+            cargarSetsRuta();
+        });
+
+    $(document).on('click', '.btn-reemplazar-set-ruta', function () {
+        const idSet = parseInt($(this).data('id'), 10) || 0;
+        const nombre = $(this).data('nombre') || '';
+        const idDivision = parseInt($(this).data('id-division'), 10) || 0;
+        const tipoScope = String($(this).data('tipo-scope') || '');
+        const idUsuarioSet = parseInt($(this).data('id-usuario'), 10) || 0;
+        const idCategoria = parseInt($(this).data('id-categoria'), 10) || 0;
+
+        if (idSet <= 0) {
+            showSetRutaAlert('danger', 'No fue posible identificar el set a reemplazar.');
+            return;
+        }
+
+        limpiarSetRutaAlert();
+
+        $('#setRutaIdEditar').val(idSet);
+
+        if (tipoScope === 'individual') {
+            $('#setRutaModo').val('individual');
+
+            if (idUsuarioSet > 0) {
+                $('#setRutaIdUsuarioFijo').val(idUsuarioSet);
+            }
+        } else if (tipoScope === 'masiva') {
+            $('#setRutaModo').val('masivo');
+            $('#setRutaIdUsuarioFijo').val(0);
+        }
+
+        $('#formSubirSetRuta [name="nombre_ruta"]').val(nombre);
+
+        if (idDivision > 0) {
+            $('#formSubirSetRuta [name="id_division"]').val(idDivision);
+        }
+
+        cargarCategoriasSetRuta(idCategoria);
+
+        $('#formSubirSetRuta [name="archivo_ruta"]').val('');
+
+        $('#modalSubirSetRutaLabel').html(`
+            <i class="fas fa-sync-alt mr-2"></i>
+            Reemplazar set de ruta
+        `);
+
+        $('#subirSetRutaSubtitulo').html(`
+            Estás reemplazando el set <strong>#${escapeHtml(idSet)}</strong>.
+            El nuevo archivo eliminará el detalle anterior y cargará los nuevos locales.
+        `);
+
+        actualizarBotonGuardar();
+
+        showSetRutaAlert(
+            'info',
+            'Selecciona el nuevo archivo CSV. Al guardar, se reemplazará el detalle actual de este set.'
+        );
+
+        setTimeout(function () {
+            $('#formSubirSetRuta [name="archivo_ruta"]').focus();
+        }, 200);
+    });
+
+    $(document).on('click', '.btn-eliminar-set-ruta', function () {
+        const idSet = parseInt($(this).data('id'), 10) || 0;
+        const nombre = $(this).data('nombre') || '';
+
+        if (idSet <= 0) {
+            showSetRutaAlert('danger', 'No fue posible identificar el set a eliminar.');
+            return;
+        }
+
+        if (!confirm('¿Seguro que deseas eliminar el set "' + nombre + '"? Esta acción eliminará también sus locales asociados.')) {
+            return;
+        }
+
+        limpiarSetRutaAlert();
+
+        $.ajax({
+            url: 'ajax_rutas_programadas_eliminar_set.php',
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                id_ruta_set: idSet,
+                modo_set: $('#setRutaModo').val(),
+                id_usuario_fijo: $('#setRutaIdUsuarioFijo').val()
+            },
+            success: function (response) {
+                if (!response || response.ok !== true) {
+                    showSetRutaAlert(
+                        'danger',
+                        response && response.message ? response.message : 'No fue posible eliminar el set.'
+                    );
+                    return;
+                }
+
+                showSetRutaAlert('success', 'Set eliminado correctamente.');
+
+                resetModoEdicion();
+                cargarSetsRuta();
+            },
+            error: function (xhr) {
+                showSetRutaAlert(
+                    'danger',
+                    getAjaxError(xhr, 'Error al eliminar el set.')
+                );
+            }
+        });
+    });
+
+    $('#formSubirSetRuta').on('submit', function (e) {
+        e.preventDefault();
+
+        limpiarSetRutaAlert();
+        if (!$('#setRutaCategoria').val()) {
+            showSetRutaAlert('danger', 'Debes seleccionar una categoría para el set.');
+            return;
+        }        
+
+        const form = this;
+        const formData = new FormData(form);
+        const $btn = $('#btnGuardarSetRuta').length
+            ? $('#btnGuardarSetRuta')
+            : $(form).find('button[type="submit"]');
+
+        const modoActual = $('#setRutaModo').val();
+        const idUsuarioActual = $('#setRutaIdUsuarioFijo').val();
+        const idDivisionActual = $('#formSubirSetRuta [name="id_division"]').val();
+        const idCategoriaActual = $('#setRutaCategoria').val();
+        const idEditarActual = parseInt($('#setRutaIdEditar').val(), 10) || 0;
+
+        const textoCargando = idEditarActual > 0
+            ? '<i class="fas fa-spinner fa-spin mr-1"></i> Reemplazando...'
+            : '<i class="fas fa-spinner fa-spin mr-1"></i> Guardando...';
+
+        $btn.prop('disabled', true).html(textoCargando);
+
+        $.ajax({
+            url: 'ajax_rutas_programadas_subir_set.php',
+            type: 'POST',
+            dataType: 'json',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function (response) {
+                if (!response || response.ok !== true) {
+                    showSetRutaAlert(
+                        'danger',
+                        response && response.message ? response.message : 'No fue posible guardar el set.'
+                    );
+                    return;
+                }
+
+                const r = response.resultado || {};
+                let detalles = [];
+
+                if (Array.isArray(r.errores)) {
+                    detalles = detalles.concat(r.errores);
+                }
+
+                if (Array.isArray(r.advertencias)) {
+                    detalles = detalles.concat(r.advertencias);
+                }
+
+                const mensajeOk = idEditarActual > 0
+                    ? `Set reemplazado correctamente. Usuarios: ${r.total_usuarios || 0}. Locales: ${r.total_locales || 0}. Omitidos: ${r.omitidos || 0}.`
+                    : `Set guardado correctamente. Usuarios: ${r.total_usuarios || 0}. Locales: ${r.total_locales || 0}. Omitidos: ${r.omitidos || 0}.`;
+
+                showSetRutaAlert(
+                    detalles.length ? 'warning' : 'success',
+                    mensajeOk,
+                    detalles
+                );
+
+                form.reset();
+                
+
+                $('#setRutaModo').val(modoActual);
+                $('#setRutaIdUsuarioFijo').val(idUsuarioActual);
+                $('#setRutaIdEditar').val(0);
+                
+                if (idDivisionActual) {
+                    $('#formSubirSetRuta [name="id_division"]').val(idDivisionActual);
+                }
+                
+                cargarCategoriasSetRuta(idCategoriaActual || 0);
+                
+                actualizarBotonGuardar();
+                cargarSetsRuta();
+            },
+            error: function (xhr) {
+                showSetRutaAlert(
+                    'danger',
+                    getAjaxError(xhr, 'Error al guardar el set.')
+                );
+            },
+            complete: function () {
+                $btn.prop('disabled', false);
+                actualizarBotonGuardar();
+            }
+        });
+    });
+    
+    $(document).on('click', '#btnMostrarNuevaCategoria', function () {
+    $('#boxNuevaCategoriaSet').toggleClass('d-none');
+
+    if (!$('#boxNuevaCategoriaSet').hasClass('d-none')) {
+        $('#inputNuevaCategoriaSet').focus();
+    }
+});
+
+$(document).on('click', '#btnCrearCategoriaSet', function () {
+    const idDivision = $('#formSubirSetRuta [name="id_division"]').val() || '';
+    const nombre = $('#inputNuevaCategoriaSet').val() || '';
+    const descripcion = $('#inputNuevaCategoriaDescripcion').val() || '';
+
+    if (!idDivision) {
+        showSetRutaAlert('danger', 'Debes seleccionar una división antes de crear la categoría.');
+        return;
+    }
+
+    if ($.trim(nombre) === '') {
+        showSetRutaAlert('danger', 'Debes ingresar el nombre de la categoría.');
+        return;
+    }
+
+    const $btn = $(this);
+    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+
+    $.ajax({
+        url: 'ajax_rutas_programadas_categoria_crear.php',
+        type: 'POST',
+        dataType: 'json',
+        data: {
+            id_division: idDivision,
+            nombre: nombre,
+            descripcion: descripcion
+        },
+        success: function (response) {
+            if (!response || response.ok !== true) {
+                showSetRutaAlert(
+                    'danger',
+                    response && response.message ? response.message : 'No fue posible crear la categoría.'
+                );
+                return;
+            }
+
+            const categoria = response.data || {};
+
+            showSetRutaAlert('success', 'Categoría creada correctamente.');
+
+            resetNuevaCategoriaBox();
+            cargarCategoriasSetRuta(categoria.id || 0);
+        },
+        error: function (xhr) {
+            let message = 'Error al crear la categoría.';
+
+            if (xhr.responseJSON && xhr.responseJSON.message) {
+                message = xhr.responseJSON.message;
+            }
+
+            showSetRutaAlert('danger', message);
+        },
+        complete: function () {
+            $btn.prop('disabled', false).html('Crear');
+        }
+    });
+});    
+
+});
+</script>
+
+<script>
+$(document).ready(function () {
+
+    function escapeHtmlPreview(value) {
+        if (value === null || value === undefined) return '';
+
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function showPreviewRutaAlert(type, message) {
+        $('#generarRutaSetAlert')
+            .removeClass('d-none alert-success alert-danger alert-warning alert-info')
+            .addClass('alert-' + type)
+            .html(escapeHtmlPreview(message || ''));
+    }
+
+    function limpiarPreviewRutaAlert() {
+        $('#generarRutaSetAlert')
+            .addClass('d-none')
+            .removeClass('alert-success alert-danger alert-warning alert-info')
+            .html('');
+    }
+
+    function getAjaxErrorPreview(xhr, defaultMessage) {
+        if (xhr && xhr.responseJSON && xhr.responseJSON.message) {
+            return xhr.responseJSON.message;
+        }
+
+        return defaultMessage;
+    }
+
+    function cargarCategoriasPreviewRuta(selectedId = 0) {
+        const idDivision = $('#previewRutaDivision').val() || '';
+        const $select = $('#previewRutaCategoria');
+
+        $select.html('<option value="">Cargando categorías...</option>');
+
+        if (!idDivision) {
+            $select.html('<option value="">Seleccione división primero</option>');
+            return;
+        }
+
+        $.ajax({
+            url: 'ajax_rutas_programadas_categorias_listar.php',
+            type: 'GET',
+            dataType: 'json',
+            data: {
+                id_division: idDivision
+            },
+            success: function (response) {
+                if (!response || response.ok !== true) {
+                    $select.html('<option value="">No fue posible cargar categorías</option>');
+                    return;
+                }
+
+                const rows = response.data || [];
+                let html = '<option value="">Seleccione categoría</option>';
+
+                rows.forEach(function (item) {
+                    const selected = parseInt(item.id, 10) === parseInt(selectedId, 10)
+                        ? 'selected'
+                        : '';
+
+                    html += `<option value="${escapeHtmlPreview(item.id)}" ${selected}>${escapeHtmlPreview(item.nombre)}</option>`;
+                });
+
+                if (!rows.length) {
+                    html += '<option value="">Sin categorías activas</option>';
+                }
+
+                $select.html(html);
+            },
+            error: function () {
+                $select.html('<option value="">Error al cargar categorías</option>');
+            }
+        });
+    }
+
+    function estadoPreviewChip(row) {
+        const estado = row.estado_preview || '';
+
+        if (estado === 'ok') {
+            return '<span class="ruta-chip aplicada">OK</span>';
+        }
+
+        if (estado === 'no_cumple_frecuencia') {
+            return '<span class="ruta-chip borrador">No cumple</span>';
+        }
+
+        if (estado === 'sin_coordenadas') {
+            return '<span class="ruta-chip anulada">Sin coords</span>';
+        }
+
+        if (estado === 'conflicto') {
+            return '<span class="ruta-chip anulada">Conflicto</span>';
+        }
+
+        return '<span class="ruta-chip borrador">Sin set</span>';
+    }
+
+    function renderPreviewRutaSet(preview) {
+        const totales = preview.totales || {};
+        const rows = preview.data || [];
+
+        $('#previewTotalTrabajadores').text(totales.trabajadores_filtrados || 0);
+        $('#previewConSet').text(totales.trabajadores_con_set || 0);
+        $('#previewSinSet').text(totales.trabajadores_sin_set || 0);
+        $('#previewLocalesTotal').text(totales.locales_total || 0);
+
+        if (!rows.length) {
+            $('#tbodyPreviewRutaSet').html(`
+                <tr>
+                    <td colspan="8" class="text-center text-muted py-4">
+                        No hay trabajadores para previsualizar.
+                    </td>
+                </tr>
+            `);
+
+            $('#btnContinuarAplicarRutaSet').prop('disabled', true);
+            return;
+        }
+
+        let html = '';
+
+        rows.forEach(function (row) {
+            html += `
+                <tr>
+                    <td>
+                        <div class="ruta-title">${escapeHtmlPreview(row.nombre || '-')}</div>
+                        <div class="ruta-sub">
+                            ${escapeHtmlPreview(row.usuario || '')}
+                            ${row.subdivision_usuario ? ' / ' + escapeHtmlPreview(row.subdivision_usuario) : ''}
+                        </div>
+                    </td>
+
+                    <td>
+                        <div class="ruta-title">${escapeHtmlPreview(row.nombre_set || '-')}</div>
+                        <div class="ruta-sub">
+                            ${escapeHtmlPreview(row.origen_set || '')}
+                            ${row.id_ruta_set ? ' / ID ' + escapeHtmlPreview(row.id_ruta_set) : ''}
+                        </div>
+                    </td>
+
+                    <td class="text-center">
+                        <strong>${escapeHtmlPreview(row.total_locales || 0)}</strong>
+                    </td>
+
+                    <td class="text-center">
+                        <strong>${escapeHtmlPreview(row.locales_con_coordenadas || 0)}</strong>
+                        <div class="ruta-sub">
+                            Sin coords: ${escapeHtmlPreview(row.locales_sin_coordenadas || 0)}
+                        </div>
+                    </td>
+
+                    <td class="text-center">
+                        <strong>${escapeHtmlPreview(row.fecha_inicio || '-')}</strong>
+                        <div class="ruta-sub">
+                            Fin: ${escapeHtmlPreview(row.fecha_termino || '-')}
+                        </div>
+                    </td>
+
+                    <td class="text-center">
+                        <strong>${escapeHtmlPreview(row.objetivo_diario_calculado || 0)}</strong>
+                        <div class="ruta-sub">
+                            Base: ${escapeHtmlPreview(row.objetivo_diario_base || 0)}
+                        </div>
+                    </td>
+
+                    <td class="text-center">
+                        <strong>${escapeHtmlPreview(row.dias_ciclo_estimado || 0)}</strong>
+                        <div class="ruta-sub">
+                            Meta: ${escapeHtmlPreview(row.dias_frecuencia_objetivo || 0)}
+                        </div>
+                    </td>
+
+                    <td class="text-center">
+                        <strong>${escapeHtmlPreview(row.dias_habiles_planificacion || 0)} días</strong>
+                        <div class="ruta-sub">
+                            Prog.: ${escapeHtmlPreview(row.locales_programables_periodo || 0)}
+                        </div>
+                    </td>
+                    
+                    <td class="text-center">
+                        <strong>${escapeHtmlPreview(row.rutas_dentro_periodo || 0)}</strong>
+                        <div class="ruta-sub">
+                            Total req.: ${escapeHtmlPreview(row.rutas_estimadas || 0)}
+                        </div>
+                        <div class="ruta-sub">
+                            Fuera: ${escapeHtmlPreview(row.locales_fuera_periodo || 0)}
+                        </div>
+                    </td>
+
+                    <td class="text-center">
+                        ${estadoPreviewChip(row)}
+                        <div class="ruta-sub mt-1">
+                            ${escapeHtmlPreview(row.motivo || '')}
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+
+        $('#tbodyPreviewRutaSet').html(html);
+        $('#btnContinuarAplicarRutaSet').prop('disabled', preview.ok_para_generar !== true);
+    }
+
+    $('#btnAbrirGenerarRutaSet').on('click', function () {
+        limpiarPreviewRutaAlert();
+
+        $('#formPreviewGenerarRutaSet')[0].reset();
+
+        const divisionActual = $('[name="division_usuario"]').val() || '<?= (int)$division_usuario ?>';
+        $('#previewRutaDivision').val(divisionActual);
+
+        $('#previewRutaContenido').addClass('d-none');
+        $('#tbodyPreviewRutaSet').html(`
+            <tr>
+                <td colspan="8" class="text-center text-muted py-4">
+                    Ejecuta una previsualización.
+                </td>
+            </tr>
+        `);
+
+        $('#btnContinuarAplicarRutaSet').prop('disabled', true);
+
+        $('#modalGenerarRutaSet').modal('show');
+        cargarCategoriasPreviewRuta();
+    });
+
+    $('#previewRutaDivision').on('change', function () {
+        cargarCategoriasPreviewRuta();
+    });
+
+    $('#formPreviewGenerarRutaSet').on('submit', function (e) {
+        e.preventDefault();
+
+        limpiarPreviewRutaAlert();
+
+        if (!$('#previewRutaCategoria').val()) {
+            showPreviewRutaAlert('danger', 'Debes seleccionar una categoría activa.');
+            return;
+        }
+
+        if (!$('#previewFechaInicioRuta').val()) {
+            showPreviewRutaAlert('danger', 'Debes seleccionar la fecha de inicio de la ruta.');
+            return;
+        }
+        if (!$('#previewFechaTerminoRuta').val()) {
+            showPreviewRutaAlert('danger', 'Debes seleccionar la fecha término de la ruta.');
+            return;
+        }
+        
+        if ($('#previewFechaTerminoRuta').val() < $('#previewFechaInicioRuta').val()) {
+            showPreviewRutaAlert('danger', 'La fecha término no puede ser menor que la fecha de inicio.');
+            return;
+        }
+        const form = this;
+        const formData = new FormData(form);
+        const $btn = $('#btnPreviewGenerarRutaSet');
+
+        $('#previewRutaLoading').removeClass('d-none');
+        $('#previewRutaContenido').addClass('d-none');
+        $('#btnContinuarAplicarRutaSet').prop('disabled', true);
+
+        $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Calculando...');
+
+        $.ajax({
+            url: 'ajax_rutas_set_generar_preview.php',
+            type: 'POST',
+            dataType: 'json',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function (response) {
+                $('#previewRutaLoading').addClass('d-none');
+
+                if (!response || response.ok !== true) {
+                    showPreviewRutaAlert(
+                        'danger',
+                        response && response.message ? response.message : 'No fue posible generar el preview.'
+                    );
+                    return;
+                }
+
+                const preview = response.preview || {};
+
+                renderPreviewRutaSet(preview);
+                $('#previewRutaContenido').removeClass('d-none');
+
+                if (preview.ok_para_generar === true) {
+                    showPreviewRutaAlert('success', 'Preview generado correctamente. Puedes continuar con la aplicación en el siguiente paso.');
+                } else {
+                    showPreviewRutaAlert('warning', 'Preview generado, pero existen trabajadores sin set o conflictos que debes revisar.');
+                }
+            },
+            error: function (xhr) {
+                $('#previewRutaLoading').addClass('d-none');
+
+                showPreviewRutaAlert(
+                    'danger',
+                    getAjaxErrorPreview(xhr, 'Error al generar preview.')
+                );
+            },
+            complete: function () {
+                $btn.prop('disabled', false).html('<i class="fas fa-search mr-1"></i> Previsualizar');
+            }
+        });
+    });
+
+});
+</script>
+
 
 </body>
 </html>

@@ -465,18 +465,18 @@ function geocodeAddress($fullAddress, $apiKey, &$errors, $lineNumber) {
 }
 
 function insertLocal($conn, $data, &$errors, $lineNumber) {
-    $stmt = $conn->prepare("SELECT id FROM local WHERE codigo = ? LIMIT 1");
+    $stmt = $conn->prepare("SELECT id FROM local WHERE codigo = ? AND id_division = ? LIMIT 1");
     if (!$stmt) {
         $errors[] = "Error preparando SELECT local en línea $lineNumber: " . $conn->error;
         return false;
     }
-    $stmt->bind_param("s", $data['codigo']);
+    $stmt->bind_param("si", $data['codigo'], $data['id_division']);
     $stmt->execute();
     $stmt->bind_result($local_id);
     $existe = $stmt->fetch();
     $stmt->close();
     if ($existe) {
-        $errors[] = "El código de local '{$data['codigo']}' ya existe (línea $lineNumber).";
+        $errors[] = "El código de local '{$data['codigo']}' ya existe para esta división (línea $lineNumber).";
         return false;
     }
     $sql = "INSERT INTO local (

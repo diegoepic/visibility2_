@@ -34,7 +34,7 @@ try {
             e.nombre AS empresa,
             d.nombre AS division,
             s.nombre AS subdivision,
-            CONCAT(u.nombre, ' ', u.apellido) AS merchan,
+            upper(CONCAT(u.nombre, ' ', u.apellido)) AS merchan,
             u.usuario AS usuario_merchan
 
         FROM vehiculo v

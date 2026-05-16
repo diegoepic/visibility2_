@@ -20,8 +20,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 // ---- Entrada ----
-$idCampana = isset($_GET['idCampana']) ? (int)$_GET['idCampana'] : 0;
-$qRaw      = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
+$idCampana  = isset($_GET['idCampana'])  ? (int)$_GET['idCampana']  : 0;
+$qRaw       = isset($_GET['q'])          ? trim((string)$_GET['q']) : '';
+$divisionId = isset($_GET['division_id']) ? (int)$_GET['division_id'] : 0;
 
 if ($idCampana <= 0) {
   http_response_code(400);
@@ -39,7 +40,7 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';
 
 $empresaId = (int)$_SESSION['empresa_id'];
 
-// ---- Validar campaña IW (solo empresa; ya NO filtramos por división) ----
+// ---- Validar campaña IW ----
 $stmt = $conn->prepare("
   SELECT id_empresa
   FROM formulario
@@ -76,7 +77,7 @@ if (empty($tokens)) {
   exit;
 }
 
-// ---- Consulta: todos los locales de la empresa (sin filtrar por división de campaña) ----
+// ---- Consulta: locales de la empresa, con filtro opcional de división ----
 $sql = "
   SELECT
     l.id,
@@ -92,6 +93,13 @@ $sql = "
 ";
 $types  = "i";
 $params = [$empresaId];
+
+// Filtro de división solo si el usuario lo seleccionó
+if ($divisionId > 0) {
+  $sql   .= " AND l.id_division = ?";
+  $types .= "i";
+  $params[] = $divisionId;
+}
 
 // AND entre tokens; OR entre (codigo, nombre, direccion)
 foreach ($tokens as $tok) {

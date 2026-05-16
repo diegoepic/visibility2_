@@ -52,40 +52,84 @@ function limpiarNombreArchivo(string $texto): string
 }
 
 /* =========================
-   Par¨¢metros
+   Parámetros
    ========================= */
-$canal    = (int)($_GET['canal'] ?? 0);
-$distrito = (int)($_GET['distrito'] ?? 0);
-$division = (int)($_GET['division'] ?? ($_GET['id_division'] ?? 0));
-$formato  = strtolower(trim((string)($_GET['formato'] ?? 'excel'))); // excel | csv
-$debug    = isset($_GET['debug']) && $_GET['debug'] === '1';
+
+function getIntArrayParam(string $key, ?string $fallbackKey = null): array
+{
+    $raw = $_GET[$key] ?? null;
+
+    if ($raw === null && $fallbackKey !== null) {
+        $raw = $_GET[$fallbackKey] ?? null;
+    }
+
+    if ($raw === null || $raw === '') {
+        return [];
+    }
+
+    if (!is_array($raw)) {
+        $raw = [$raw];
+    }
+
+    $values = [];
+
+    foreach ($raw as $value) {
+        if ($value === '' || $value === null) {
+            continue;
+        }
+
+        $intValue = (int)$value;
+
+        if ($intValue > 0) {
+            $values[] = $intValue;
+        }
+    }
+
+    return array_values(array_unique($values));
+}
+
+function addInFilter(
+    string $column,
+    array $values,
+    array &$where,
+    array &$params,
+    string &$types
+): void {
+    if (empty($values)) {
+        return;
+    }
+
+    $placeholders = implode(',', array_fill(0, count($values), '?'));
+
+    $where[] = "$column IN ($placeholders)";
+
+    foreach ($values as $value) {
+        $params[] = $value;
+        $types .= 'i';
+    }
+}
+
+$canales    = getIntArrayParam('canal');
+$distritos  = getIntArrayParam('distrito');
+$divisiones = getIntArrayParam('division', 'id_division');
+
+$formato = strtolower(trim((string)($_GET['formato'] ?? 'excel'))); // excel | csv
+$debug   = isset($_GET['debug']) && $_GET['debug'] === '1';
 
 /* =========================
    Filtros seguros
    ========================= */
-$where = [];
+
+$where  = [];
 $params = [];
-$types = '';
+$types  = '';
 
-if ($canal > 0) {
-    $where[] = 'l.id_canal = ?';
-    $params[] = $canal;
-    $types .= 'i';
-}
-
-if ($distrito > 0) {
-    $where[] = 'l.id_distrito = ?';
-    $params[] = $distrito;
-    $types .= 'i';
-}
-
-if ($division > 0) {
-    $where[] = 'l.id_division = ?';
-    $params[] = $division;
-    $types .= 'i';
-}
+addInFilter('l.id_canal', $canales, $where, $params, $types);
+addInFilter('l.id_distrito', $distritos, $where, $params, $types);
+addInFilter('l.id_division', $divisiones, $where, $params, $types);
 
 $filtrosSql = '';
+
 if (!empty($where)) {
     $filtrosSql = ' AND ' . implode(' AND ', $where);
 }
@@ -94,7 +138,8 @@ if (!empty($where)) {
    SQL
    ========================= */
 $sql = "
-SELECT 
+SELECT
+    l.id AS IDLOCAL,
     COALESCE(d.nombre, 'SIN DIVISION') AS DIVISION,
     l.codigo AS CODIGO,
     SUBSTRING_INDEX(TRIM(l.nombre), ' ', 1) AS NUMERO_LOCAL,

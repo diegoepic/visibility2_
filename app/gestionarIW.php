@@ -35,6 +35,21 @@ $stmt->close();
 
 $requiereLocal = (int)($campana['iw_requiere_local'] ?? 0);
 
+// Divisiones activas para el filtro del buscador de locales
+$divisionesActivas = [];
+if ($requiereLocal) {
+    $stmtDiv = $conn->prepare("
+        SELECT id, nombre
+        FROM division_empresa
+        WHERE id_empresa = ? AND estado = 1
+        ORDER BY nombre ASC
+    ");
+    $stmtDiv->bind_param("i", $campana['id_empresa']);
+    $stmtDiv->execute();
+    $divisionesActivas = $stmtDiv->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmtDiv->close();
+}
+
 // Token IW (opcional, para trazabilidad)
 if (empty($_SESSION['iw_tokens'])) $_SESSION['iw_tokens'] = [];
 if (empty($_SESSION['iw_tokens'][$idCampana])) {
@@ -150,8 +165,19 @@ $stmt->close();
       <div class="card-body">
         <h5 class="mb-3">Selecciona el local</h5>
         <input type="hidden" id="id_local" name="id_local" value="">
+        <?php if (!empty($divisionesActivas)): ?>
         <div class="form-group">
-          <label for="buscarLocal">Buscar por código, nombre o direccion</label>
+          <label for="filtroDivision">Filtrar por división <small class="text-muted">(opcional)</small></label>
+          <select id="filtroDivision" class="form-control">
+            <option value="0">— Todas las divisiones —</option>
+            <?php foreach ($divisionesActivas as $div): ?>
+              <option value="<?= (int)$div['id'] ?>"><?= htmlspecialchars($div['nombre'], ENT_QUOTES, 'UTF-8') ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <?php endif; ?>
+        <div class="form-group">
+          <label for="buscarLocal">Buscar por código, nombre o dirección</label>
           <input type="text" id="buscarLocal" class="form-control" placeholder="Ej: 1234 o Plaza de Armas n° 989">
           <div id="sugerenciasLocales" class="list-group mt-2"></div>
         </div>
@@ -952,24 +978,34 @@ function deleteFotoIW(qid, respId, cardEl) {
     });
   }
 
+  function dispararBusqueda() {
+    if (!window.IW_REQUIRE_LOCAL) return;
+    const q = $('#buscarLocal').val().trim();
+    if (q.length < 2) { $('#sugerenciasLocales').empty(); return; }
+    const division_id = parseInt($('#filtroDivision').val() || '0', 10);
+    $.getJSON('buscar_localesIW.php', {
+      idCampana: <?= (int)$idCampana ?>,
+      q: q,
+      division_id: division_id
+    }).done(resp => {
+      if (resp && resp.status === 'success') {
+        pintarSugerencias(resp.locales || []);
+      } else {
+        $('#sugerenciasLocales').empty();
+      }
+    }).fail(() => $('#sugerenciasLocales').empty());
+  }
+
   let buscarTimeout = null;
   $('#buscarLocal').on('input', function(){
-    if (!window.IW_REQUIRE_LOCAL) return;
-    const q = this.value.trim();
     clearTimeout(buscarTimeout);
-    if (q.length < 2) { $('#sugerenciasLocales').empty(); return; }
-    buscarTimeout = setTimeout(() => {
-      $.getJSON('buscar_localesIW.php', {
-        idCampana: <?= (int)$idCampana ?>,
-        q: q
-      }).done(resp => {
-        if (resp && resp.status === 'success') {
-          pintarSugerencias(resp.locales || []);
-        } else {
-          $('#sugerenciasLocales').empty();
-        }
-      }).fail(() => $('#sugerenciasLocales').empty());
-    }, 250);
+    buscarTimeout = setTimeout(dispararBusqueda, 250);
+  });
+
+  // Al cambiar la división, re-ejecutar la búsqueda actual si hay texto
+  $('#filtroDivision').on('change', function(){
+    clearTimeout(buscarTimeout);
+    dispararBusqueda();
   });
 
   $(document).on('click', '#sugerenciasLocales .item', async function(){

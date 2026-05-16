@@ -775,6 +775,17 @@
       }
 
       broadcastGestionSuccess(payload);
+
+      // Limpiar draft local una vez que procesar_gestion confirma en servidor
+      const cg = task.client_guid || f.client_guid || null;
+      if (cg && window.AppDB && typeof window.AppDB.getDraftByGuid === 'function') {
+        try {
+          const draft = await window.AppDB.getDraftByGuid(cg);
+          if (draft) {
+            await window.AppDB.deleteDraft(draft.user_id, draft.form_id, draft.local_id, cg);
+          }
+        } catch (_) {}
+      }
     } catch(_) {}
   }
 

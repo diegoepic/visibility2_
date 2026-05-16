@@ -397,62 +397,87 @@ if ($division_id > 0) {
 <!-- Iframe oculto para disparar la descarga sin salir de la página -->
 <iframe id="downloadUsuariosFrame" name="downloadUsuariosFrame" style="display:none;"></iframe>
 
-  <!-- Modal para Descargar Data Locales -->
-  <div class="modal fade" id="modalDataLocales" tabindex="-1" role="dialog" aria-labelledby="modalDataLocalesLabel" aria-hidden="true">
-      <div class="modal-dialog" role="document">
-          <div class="modal-content">
-              <div class="modal-header">
-                  <h5 class="modal-title" id="modalDataLocalesLabel">Descargar Data Locales</h5>
-                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                      <span aria-hidden="true">&times;</span>
-                  </button>
-              </div>
-              <div class="modal-body">
-                  <form id="formFiltrosLocales">
-                      <div class="form-group">
-                          <label for="canal" class="t2">Seleccionar Canal:</label>
-                          <select class="form-control" id="canal" name="canal">
-                              <option value="">Todos los Canales</option>
-                          </select>
-                      </div>
-                      <div class="form-group">
-                          <label for="distrito"  class="t2">Seleccionar Distrito:</label>
-                          <select class="form-control" id="distrito" name="distrito">
-                              <option value="">Todos los Distritos</option>
-                          </select>
-                      </div>
-                      <?php if (strtoupper(trim($division_nombre)) == 'MC'): ?>
-                          <div class="form-group">
-                              <label for="division"  class="t2">Seleccionar Divisi&oacute;n:</label>
-                              <select class="form-control" id="division" name="division">
-                                  <option value="">Todas las Divisiones</option>
-                                  <?php 
-                                  // Cargar todas las divisiones disponibles
-                                  $query = "SELECT id, nombre FROM division_empresa where estado = 1 ORDER BY nombre ASC";
-                                  $result = $conn->query($query);
-                                  while ($row = $result->fetch_assoc()) {
-                                      echo '<option value="'.$row['id'].'"'.$sel.'>'.$row['nombre'].'</option>';
-                                  }
-                                  ?>
-                              </select>
-                          </div>
-                      <?php else: ?>
-                          <input type="hidden" id="division_locales" name="division" value="<?php echo (int)$division; ?>">
-                      <?php endif; ?>
-                      <button type="button" class="btn btn-primary" onclick="descargarData('excel')" hidden>Descargar en Excel</button>
-                      <button type="button" class="btn btn-success" onclick="descargarData(this,'csv')">Descargar</button>
-                      <?php if (strtoupper(trim($division_nombre)) == 'MC'): ?>                      
-                      <button type="button" class="btn btn-secondary" onclick="descargarData(this,'csv', true)">Debug</button>
-                      <?php else: ?>  
-                      <?php endif; ?>                      
-                  </form>
-              </div>
-              <div class="modal-footer">
-                  <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
-              </div>
-          </div>
-      </div>
-  </div>
+<!-- Modal para Descargar Data Locales -->
+<div class="modal fade" id="modalDataLocales" tabindex="-1" role="dialog" aria-labelledby="modalDataLocalesLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <form id="formFiltrosLocales">
+            <div class="modal-content">
+
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalDataLocalesLabel">Descargar Data Locales</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+
+                <div class="modal-body">
+
+                    <div class="form-group">
+                        <label for="canal_locales" class="t2">Seleccionar Canal:</label>
+                        <select class="form-control" id="canal_locales" name="canal[]" multiple size="6">
+                            <option value="">Todos los Canales</option>
+                        </select>
+                        <small class="form-text text-muted">
+                            Puedes seleccionar más de uno manteniendo presionada la tecla Ctrl.
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="distrito_locales" class="t2">Seleccionar Distrito:</label>
+                        <select class="form-control" id="distrito_locales" name="distrito[]" multiple size="6">
+                            <option value="">Todos los Distritos</option>
+                        </select>
+                        <small class="form-text text-muted">
+                            Puedes seleccionar más de uno manteniendo presionada la tecla Ctrl.
+                        </small>
+                    </div>
+
+                    <?php if (strtoupper(trim($division_nombre)) == 'MC'): ?>
+                        <div class="form-group">
+                            <label for="division_locales" class="t2">Seleccionar División:</label>
+                            <select class="form-control" id="division_locales" name="division[]" multiple size="6">
+                                <option value="">Todas las Divisiones</option>
+                                <?php 
+                                $query = "SELECT id, nombre FROM division_empresa WHERE estado = 1 ORDER BY nombre ASC";
+                                $result = $conn->query($query);
+
+                                while ($row = $result->fetch_assoc()) {
+                                    echo '<option value="' . (int)$row['id'] . '">'
+                                        . htmlspecialchars($row['nombre'], ENT_QUOTES, 'UTF-8')
+                                        . '</option>';
+                                }
+                                ?>
+                            </select>
+                            <small class="form-text text-muted">
+                                Puedes seleccionar Red Bull, CCU u otras divisiones en una misma descarga.
+                            </small>
+                        </div>
+                    <?php else: ?>
+                        <input type="hidden" id="division_locales" name="division[]" value="<?php echo (int)$division; ?>">
+                    <?php endif; ?>
+
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                        Cerrar
+                    </button>
+
+                    <button type="button" class="btn btn-success" onclick="descargarData(this,'csv')">
+                        <i class="fa fa-download"></i> Descargar
+                    </button>
+
+                    <?php if (strtoupper(trim($division_nombre)) == 'MC'): ?>
+                        <button type="button" class="btn btn-outline-secondary" onclick="descargarData(this,'csv', true)">
+                            Debug
+                        </button>
+                    <?php endif; ?>
+                </div>
+
+            </div>
+        </form>
+    </div>
+</div>
   
   <!-- Modal para Descargar Data Locales Ultima Gestion -->
   <div class="modal fade" id="modalDataLocalesUltimaGestion" tabindex="-1" role="dialog" aria-labelledby="modalDataLocalesLabel" aria-hidden="true">
@@ -1713,8 +1738,31 @@ $('#division_ipt').on('change', function () {
                 $('#distritoug').html(data);
             });
         });
-    });    
+    });
     
+    function descargarDataUltimaGestion(formato) {
+        var canal = $('#canalug').val();
+        var distrito = $('#distritoug').val();
+        var division = $('#division').val(); // Valor del select o input oculto
+        window.location.href = 'modulos/descargar_data_locales_ultimaGestion.php?formato=' + formato + '&canal=' + canal + '&distrito=' + distrito + '&division=' + division;
+    }  
+    
+$(document).ready(function () {
+
+    $('#modalDataLocales').on('show.bs.modal', function () {
+        const $modal = $(this);
+
+        $.get('modulos/cargar_filtros.php', { filtro: 'canal' }, function (data) {
+            $modal.find('#canal_locales').html(data);
+        });
+
+        $.get('modulos/cargar_filtros.php', { filtro: 'distrito' }, function (data) {
+            $modal.find('#distrito_locales').html(data);
+        });
+    });
+
+});    
+            
         function descargarData(btn, formato, debug = false) {
           const $form = $(btn).closest('form');                 // <-- form del botón
           const params = $form.serializeArray();
@@ -1727,13 +1775,7 @@ $('#division_ipt').on('change', function () {
         
           console.log('URL descarga:', url);
           if (debug) window.open(url, '_blank'); else window.location.href = url;
-        }
-    function descargarDataUltimaGestion(formato) {
-        var canal = $('#canalug').val();
-        var distrito = $('#distritoug').val();
-        var division = $('#division').val(); // Valor del select o input oculto
-        window.location.href = 'modulos/descargar_data_locales_ultimaGestion.php?formato=' + formato + '&canal=' + canal + '&distrito=' + distrito + '&division=' + division;
-    }  
+        }    
     
     function modalDataLocalesHistoricoGestion(formato) {
       var $modal    = $('#modalDataLocalesHistoricoGestion');

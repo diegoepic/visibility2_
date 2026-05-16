@@ -3,10 +3,10 @@
  * api_helpers.php - Funciones helper para APIs de Visibility 2
  *
  * Incluye:
- * - Generación de Error IDs únicos para diagnóstico
+ * - Generaci��n de Error IDs ��nicos para diagn��stico
  * - Funciones de respuesta JSON estandarizadas
  * - Logging estructurado de errores
- * - Validación y sanitización común
+ * - Validaci��n y sanitizaci��n com��n
 
  */
  
@@ -89,7 +89,7 @@ if (!function_exists('api_auth_expired')) {
         $payload = [
             'ok'    => false,
             'code'  => 'AUTH_EXPIRED',
-            'error' => $message ?: 'Sesión expirada',
+            'error' => $message ?: 'Sesi��n expirada',
             'trace_id' => $traceId,
             'ts' => api_ts(),
         ];
@@ -112,15 +112,15 @@ if (!function_exists('api_error_response')) {
 }
 
 // ============================================================================
-// NUEVAS FUNCIONES: GENERACIÓN DE ERROR ID ÚNICO
+// NUEVAS FUNCIONES: GENERACI�0�7N DE ERROR ID �0�3NICO
 // ============================================================================
 
 if (!function_exists('generate_error_id')) {
     /**
-     * Genera un ID de error único para trazabilidad
+     * Genera un ID de error ��nico para trazabilidad
      * Formato: ERR-YYYYMMDD-HHMMSS-XXXX donde XXXX es hex aleatorio
      *
-     * @return string Error ID único
+     * @return string Error ID ��nico
      */
     function generate_error_id(): string
     {
@@ -139,7 +139,7 @@ if (!function_exists('generate_request_id')) {
      * Genera un ID de request para tracking
      * Formato: REQ-YYYYMMDD-HHMMSS-XXXX
      *
-     * @return string Request ID único
+     * @return string Request ID ��nico
      */
     function generate_request_id(): string
     {
@@ -159,13 +159,13 @@ if (!function_exists('generate_request_id')) {
 
 if (!function_exists('log_error_to_db')) {
     /**
-     * Registra un error en la tabla error_log con ID único
+     * Registra un error en la tabla error_log con ID ��nico
      *
-     * @param mysqli $conn Conexión a BD
-     * @param string $error_id ID único del error
+     * @param mysqli $conn Conexi��n a BD
+     * @param string $error_id ID ��nico del error
      * @param string $endpoint Nombre del endpoint
      * @param array $details Detalles adicionales del error
-     * @return bool True si se guardó correctamente
+     * @return bool True si se guard�� correctamente
      */
     function log_error_to_db(mysqli $conn, string $error_id, string $endpoint, array $details = []): bool
     {
@@ -241,7 +241,7 @@ if (!function_exists('log_error_to_db')) {
             $result = $stmt->execute();
             $stmt->close();
 
-            // También log a archivo para redundancia
+            // Tambi��n log a archivo para redundancia
             error_log("[{$error_id}] {$endpoint}: " . ($error_message ?? 'Unknown error'));
 
             return $result;
@@ -258,10 +258,10 @@ if (!function_exists('log_error_to_db')) {
 
 if (!function_exists('api_response_ok')) {
     /**
-     * Envía respuesta JSON exitosa y termina ejecución
+     * Env��a respuesta JSON exitosa y termina ejecuci��n
      *
      * @param array $payload Datos a incluir en la respuesta
-     * @param int $status_code Código HTTP (default 200)
+     * @param int $status_code C��digo HTTP (default 200)
      * @return never
      */
     function api_response_ok(array $payload, int $status_code = 200): void
@@ -275,7 +275,7 @@ if (!function_exists('api_response_ok')) {
             'status' => 'success'
         ], $payload);
 
-        // Agregar request_id si está disponible
+        // Agregar request_id si est�� disponible
         if (defined('V2_REQUEST_ID')) {
             $response['request_id'] = V2_REQUEST_ID;
         }
@@ -287,13 +287,13 @@ if (!function_exists('api_response_ok')) {
 
 if (!function_exists('api_response_error_v2')) {
     /**
-     * Envía respuesta JSON de error con error_id para diagnóstico
-     * Versión mejorada con logging a BD
+     * Env��a respuesta JSON de error con error_id para diagn��stico
+     * Versi��n mejorada con logging a BD
      *
-     * @param int $http_status Código HTTP
+     * @param int $http_status C��digo HTTP
      * @param string $message Mensaje de error
      * @param array $extra Datos adicionales
-     * @param mysqli|null $conn Conexión para log a BD (opcional)
+     * @param mysqli|null $conn Conexi��n para log a BD (opcional)
      * @param string|null $endpoint Nombre del endpoint para log
      * @return never
      */
@@ -309,7 +309,7 @@ if (!function_exists('api_response_error_v2')) {
         // Determinar si es retryable
         $retryable = ($http_status >= 500 || in_array($http_status, [408, 429, 502, 503, 504], true));
 
-        // Mapeo de códigos de error
+        // Mapeo de c��digos de error
         $error_code = $extra['error_code'] ?? match($http_status) {
             401 => 'NO_SESSION',
             403 => 'FORBIDDEN',
@@ -326,7 +326,7 @@ if (!function_exists('api_response_error_v2')) {
             default => 'ERROR'
         };
 
-        // Log a BD si hay conexión
+        // Log a BD si hay conexi��n
         if ($conn && $endpoint) {
             log_error_to_db($conn, $error_id, $endpoint, array_merge([
                 'error_code' => $error_code,
@@ -358,7 +358,7 @@ if (!function_exists('api_response_error_v2')) {
             }
         }
 
-        // Agregar request_id si está disponible
+        // Agregar request_id si est�� disponible
         if (defined('V2_REQUEST_ID')) {
             $response['request_id'] = V2_REQUEST_ID;
         }
@@ -369,14 +369,14 @@ if (!function_exists('api_response_error_v2')) {
 }
 
 // ============================================================================
-// FUNCIONES DE VALIDACIÓN
+// FUNCIONES DE VALIDACI�0�7N
 // ============================================================================
 
 if (!function_exists('validate_csrf')) {
     /**
      * Valida CSRF desde headers o POST
      *
-     * @return string|null Token si es válido, null si es inválido
+     * @return string|null Token si es v��lido, null si es inv��lido
      */
     function validate_csrf(): ?string
     {
@@ -388,7 +388,7 @@ if (!function_exists('validate_csrf')) {
             $csrf = trim((string)$_POST['csrf_token']);
         }
 
-        // Validar contra sesión
+        // Validar contra sesi��n
         if (empty($csrf) || empty($_SESSION['csrf_token'])) {
             return null;
         }
@@ -403,16 +403,16 @@ if (!function_exists('validate_csrf')) {
 
 if (!function_exists('require_auth')) {
     /**
-     * Verifica que el usuario esté autenticado
+     * Verifica que el usuario est�� autenticado
      *
-     * @param mysqli|null $conn Conexión para log
+     * @param mysqli|null $conn Conexi��n para log
      * @param string|null $endpoint Endpoint para log
-     * @return int User ID si está autenticado
+     * @return int User ID si est�� autenticado
      */
     function require_auth(?mysqli $conn = null, ?string $endpoint = null): int
     {
         if (!isset($_SESSION['usuario_id'])) {
-            api_response_error_v2(401, 'Sesión no iniciada o expirada', [
+            api_response_error_v2(401, 'Sesi��n no iniciada o expirada', [
                 'error_code' => 'NO_SESSION'
             ], $conn, $endpoint);
         }
@@ -423,17 +423,17 @@ if (!function_exists('require_auth')) {
 
 if (!function_exists('require_csrf')) {
     /**
-     * Verifica CSRF y falla si es inválido
+     * Verifica CSRF y falla si es inv��lido
      *
-     * @param mysqli|null $conn Conexión para log
+     * @param mysqli|null $conn Conexi��n para log
      * @param string|null $endpoint Endpoint para log
-     * @return string Token válido
+     * @return string Token v��lido
      */
     function require_csrf(?mysqli $conn = null, ?string $endpoint = null): string
     {
         $token = validate_csrf();
         if ($token === null) {
-            api_response_error_v2(419, 'Token CSRF inválido o ausente', [
+            api_response_error_v2(419, 'Token CSRF inv��lido o ausente', [
                 'error_code' => 'CSRF_INVALID'
             ], $conn, $endpoint);
         }
@@ -443,9 +443,9 @@ if (!function_exists('require_csrf')) {
 
 if (!function_exists('require_post_method')) {
     /**
-     * Verifica que el método sea POST
+     * Verifica que el m��todo sea POST
      *
-     * @param mysqli|null $conn Conexión para log
+     * @param mysqli|null $conn Conexi��n para log
      * @param string|null $endpoint Endpoint para log
      * @return void
      */
@@ -465,7 +465,7 @@ if (!function_exists('require_post_method')) {
 
         if ($method !== 'POST') {
             header('Allow: POST, OPTIONS');
-            api_response_error_v2(405, 'Método no permitido. Use POST.', [
+            api_response_error_v2(405, 'M��todo no permitido. Use POST.', [
                 'error_code' => 'METHOD_NOT_ALLOWED',
                 'allowed_methods' => ['POST', 'OPTIONS']
             ], $conn, $endpoint);
@@ -565,16 +565,16 @@ if (!function_exists('compute_payload_hash')) {
 
 if (!function_exists('create_gestion_draft')) {
     /**
-     * Crea un draft de gestión para el patrón SAGA
+     * Crea un draft de gesti��n para el patr��n SAGA
      *
-     * @param mysqli $conn Conexión a BD
+     * @param mysqli $conn Conexi��n a BD
      * @param string $client_guid GUID del cliente
      * @param int $user_id ID del usuario
      * @param int $form_id ID del formulario
      * @param int $local_id ID del local
-     * @param string $estado_gestion Estado de gestión solicitado
+     * @param string $estado_gestion Estado de gesti��n solicitado
      * @param array $payload Datos completos del request
-     * @return int|null ID del draft o null si falló
+     * @return int|null ID del draft o null si fall��
      */
     function create_gestion_draft(
         mysqli $conn,
@@ -660,11 +660,11 @@ if (!function_exists('update_gestion_draft')) {
     /**
      * Actualiza el estado de un draft
      *
-     * @param mysqli $conn Conexión a BD
+     * @param mysqli $conn Conexi��n a BD
      * @param string $client_guid GUID del cliente
      * @param string $status Nuevo estado
      * @param array $extra Datos adicionales (visita_id, error_code, etc.)
-     * @return bool True si se actualizó
+     * @return bool True si se actualiz��
      */
     function update_gestion_draft(
         mysqli $conn,
@@ -706,6 +706,38 @@ if (!function_exists('update_gestion_draft')) {
             $values[] = $extra['error_message'];
         }
 
+        if (isset($extra['form_state_json'])) {
+            static $has_form_state_col = null;
+            if ($has_form_state_col === null) {
+                $chk = @$conn->query("SHOW COLUMNS FROM gestion_draft LIKE 'form_state_json'");
+                $has_form_state_col = ($chk && $chk->num_rows > 0);
+                if ($chk) $chk->close();
+            }
+            if ($has_form_state_col) {
+                $fsj = is_string($extra['form_state_json'])
+                    ? $extra['form_state_json']
+                    : json_encode($extra['form_state_json'], JSON_UNESCAPED_UNICODE);
+                $sets[]   = 'form_state_json = ?';
+                $sets[]   = 'form_state_updated_at = NOW()';
+                $types   .= 's';
+                $values[] = $fsj;
+            }
+        }
+
+        if (isset($extra['schema_version'])) {
+            static $has_schema_ver_col = null;
+            if ($has_schema_ver_col === null) {
+                $chk = @$conn->query("SHOW COLUMNS FROM gestion_draft LIKE 'schema_version'");
+                $has_schema_ver_col = ($chk && $chk->num_rows > 0);
+                if ($chk) $chk->close();
+            }
+            if ($has_schema_ver_col) {
+                $sets[]   = 'schema_version = ?';
+                $types   .= 'i';
+                $values[] = (int)$extra['schema_version'];
+            }
+        }
+
         // Agregar client_guid al final para el WHERE
         $types .= 's';
         $values[] = $client_guid;
@@ -729,16 +761,25 @@ if (!function_exists('get_gestion_draft')) {
     /**
      * Obtiene un draft por client_guid
      *
-     * @param mysqli $conn Conexión a BD
+     * @param mysqli $conn Conexi��n a BD
      * @param string $client_guid GUID del cliente
      * @return array|null Draft o null si no existe
      */
     function get_gestion_draft(mysqli $conn, string $client_guid): ?array
     {
+        static $extra_cols = null;
+        if ($extra_cols === null) {
+            $chk = @$conn->query("SHOW COLUMNS FROM gestion_draft LIKE 'form_state_json'");
+            $extra_cols = ($chk && $chk->num_rows > 0)
+                ? ', form_state_json, form_state_updated_at, schema_version'
+                : '';
+            if ($chk) $chk->close();
+        }
         $stmt = $conn->prepare("
             SELECT id, client_guid, idempotency_key, user_id, form_id, local_id, visita_id,
                    estado_gestion, status, payload_json, expected_photos, uploaded_photos,
                    created_at, updated_at, started_at, completed_at, error_code, error_message
+                   {$extra_cols}
             FROM gestion_draft
             WHERE client_guid = ?
             LIMIT 1
@@ -759,10 +800,10 @@ if (!function_exists('get_gestion_draft')) {
 }
 
 // ============================================================================
-// INICIALIZACIÓN
+// INICIALIZACI�0�7N
 // ============================================================================
 
-// Generar request_id para toda la petición si no existe
+// Generar request_id para toda la petici��n si no existe
 if (!defined('V2_REQUEST_ID')) {
     define('V2_REQUEST_ID', generate_request_id());
 }

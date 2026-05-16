@@ -87,8 +87,8 @@ function resolverEstadoMapa(array $preguntas): array
    PERFIL / PERMISOS
 ========================================================= */
 
-$idUsuarioSesion = (int)($_SESSION['usuario_id'] ?? 0);
-$id_empresa      = (int)($_SESSION['empresa_id'] ?? 0);
+$idUsuarioSesion  = (int)($_SESSION['usuario_id'] ?? 0);
+$id_empresa       = (int)($_SESSION['empresa_id'] ?? 0);
 $user_division_id = (int)($_SESSION['division_id'] ?? 0);
 
 $idPerfil = 0;
@@ -100,8 +100,10 @@ try {
         WHERE id = ?
         LIMIT 1
     ");
+
     $stmtPerfil->bind_param("i", $idUsuarioSesion);
     $stmtPerfil->execute();
+
     $resPerfil = $stmtPerfil->get_result();
 
     if ($rowPerfil = $resPerfil->fetch_assoc()) {
@@ -109,6 +111,7 @@ try {
     }
 
     $stmtPerfil->close();
+
 } catch (Throwable $e) {
     error_log('[admin_mapa][perfil] ' . $e->getMessage());
 }
@@ -131,6 +134,8 @@ $filtrosDefault = [
     'id_campana'      => 0,
     'id_ejecutor'     => 0,
     'id_distrito'     => 0,
+    'id_region'       => 0,
+    'id_comuna'       => 0,
     'desde'           => '',
     'hasta'           => '',
     'buscar'          => 0,
@@ -146,6 +151,8 @@ if (isset($_GET['buscar'])) {
         'id_campana'      => (int)($_GET['id_campana'] ?? 0),
         'id_ejecutor'     => (int)($_GET['id_ejecutor'] ?? 0),
         'id_distrito'     => (int)($_GET['id_distrito'] ?? 0),
+        'id_region'       => (int)($_GET['id_region'] ?? 0),
+        'id_comuna'       => (int)($_GET['id_comuna'] ?? 0),
         'desde'           => cleanDate($_GET['desde'] ?? ''),
         'hasta'           => cleanDate($_GET['hasta'] ?? ''),
         'buscar'          => 1,
@@ -156,6 +163,7 @@ if (isset($_GET['buscar'])) {
     }
 
     $_SESSION[$filtroSessionKey] = $filtrosActuales;
+
 } else {
     $filtrosActuales = $_SESSION[$filtroSessionKey] ?? $filtrosDefault;
 }
@@ -168,6 +176,8 @@ $filter_estado       = (int)$filtrosActuales['estado'];
 $filter_campana      = (int)$filtrosActuales['id_campana'];
 $id_ejecutor         = (int)$filtrosActuales['id_ejecutor'];
 $filter_distrito     = (int)$filtrosActuales['id_distrito'];
+$filter_region       = (int)$filtrosActuales['id_region'];
+$filter_comuna       = (int)$filtrosActuales['id_comuna'];
 $fecha_desde         = (string)$filtrosActuales['desde'];
 $fecha_hasta         = (string)$filtrosActuales['hasta'];
 $accionBuscar        = (int)$filtrosActuales['buscar'];
@@ -187,7 +197,7 @@ try {
         ";
 
         $paramsDiv = [];
-        $typesDiv = '';
+        $typesDiv  = '';
 
         if ($id_empresa > 0) {
             $sqlDiv .= " AND id_empresa = ? ";
@@ -199,6 +209,7 @@ try {
 
         $divisiones = fetchAllPrepared($conn, $sqlDiv, $typesDiv, $paramsDiv);
     }
+
 } catch (Throwable $e) {
     error_log('[admin_mapa][divisiones] ' . $e->getMessage());
     $divisiones = [];
@@ -215,7 +226,9 @@ try {
         $distritos = fetchAllPrepared(
             $conn,
             "
-            SELECT DISTINCT d.id, d.nombre_distrito
+            SELECT DISTINCT 
+                d.id, 
+                d.nombre_distrito
             FROM local l
             INNER JOIN distrito d ON l.id_distrito = d.id
             WHERE l.id_empresa = ?
@@ -225,9 +238,77 @@ try {
             [$id_empresa]
         );
     }
+
 } catch (Throwable $e) {
     error_log('[admin_mapa][distritos] ' . $e->getMessage());
     $distritos = [];
+}
+
+/* =========================================================
+   REGIONES
+========================================================= */
+
+$regiones = [];
+
+try {
+    if ($id_empresa > 0) {
+        $regiones = fetchAllPrepared(
+            $conn,
+            "
+            SELECT DISTINCT
+                r.id,
+                r.region AS nombre
+            FROM local l
+            INNER JOIN comuna c ON c.id = l.id_comuna
+            INNER JOIN region r ON r.id = c.id_region
+            WHERE l.id_empresa = ?
+            ORDER BY r.region ASC
+            ",
+            'i',
+            [$id_empresa]
+        );
+    }
+
+} catch (Throwable $e) {
+    error_log('[admin_mapa][regiones] ' . $e->getMessage());
+    $regiones = [];
+}
+/* =========================================================
+   COMUNAS
+========================================================= */
+
+$comunas = [];
+
+try {
+    if ($id_empresa > 0) {
+        $sqlComunas = "
+            SELECT DISTINCT
+                c.id,
+                c.comuna AS nombre,
+                c.id_region
+            FROM local l
+            INNER JOIN comuna c ON c.id = l.id_comuna
+            INNER JOIN region r ON r.id = c.id_region
+            WHERE l.id_empresa = ?
+        ";
+
+        $paramsComunas = [$id_empresa];
+        $typesComunas  = 'i';
+
+        if ($filter_region > 0) {
+            $sqlComunas .= " AND c.id_region = ? ";
+            $paramsComunas[] = $filter_region;
+            $typesComunas .= 'i';
+        }
+
+        $sqlComunas .= " ORDER BY c.comuna ASC ";
+
+        $comunas = fetchAllPrepared($conn, $sqlComunas, $typesComunas, $paramsComunas);
+    }
+
+} catch (Throwable $e) {
+    error_log('[admin_mapa][comunas] ' . $e->getMessage());
+    $comunas = [];
 }
 
 /* =========================================================
@@ -242,6 +323,7 @@ if ($accionBuscar === 1) {
         $sql = "
             SELECT
                 f.id AS id_formulario,
+
                 CASE
                     WHEN f.modalidad = 'solo_auditoria' THEN 'AUDITORIA'
                     WHEN f.modalidad = 'solo_implementacion' THEN 'IMPLEMENTACION'
@@ -253,6 +335,9 @@ if ($accionBuscar === 1) {
                 l.codigo AS codigo,
                 UPPER(l.nombre) AS nombre_local,
                 UPPER(l.direccion) AS direccion_local,
+
+                c.id AS id_comuna,
+                c.id_region AS id_region,
                 UPPER(c.comuna) AS comuna_local,
                 UPPER(r.region) AS region_local,
 
@@ -285,6 +370,7 @@ if ($accionBuscar === 1) {
             INNER JOIN comuna c     ON c.id = l.id_comuna
             INNER JOIN region r     ON r.id = c.id_region
             INNER JOIN formulario f ON f.id = fq.id_formulario
+
             WHERE f.id_empresa = ?
               AND l.lat IS NOT NULL
               AND l.lng IS NOT NULL
@@ -295,50 +381,59 @@ if ($accionBuscar === 1) {
         $params = [$id_empresa];
         $types  = 'i';
 
-        if (in_array($tipoCampana, [1, 3], true)) {
-            $sql .= " AND f.tipo = ? ";
-            $params[] = $tipoCampana;
-            $types .= 'i';
-        }
+$modoMerchan = ($id_ejecutor > 0);
 
-        if ($filter_campana > 0) {
-            $sql .= " AND f.id = ? ";
-            $params[] = $filter_campana;
-            $types .= 'i';
-        }
+if ($modoMerchan) {
+    /*
+      MODO RESCATE / CORRECCIÓN:
+      Si selecciono un merchan, quiero ver TODO lo asignado a él
+      dentro de la empresa, aunque esos locales estén cargados en otra
+      división, subdivisión, canal, campaña o tipo de gestión.
 
-        $modoMerchan = ($id_ejecutor > 0);
-        
-        if ($modoMerchan) {
-            /*
-              Si selecciono un merchan, quiero ver TODO lo asignado a él,
-              aunque pertenezca a otra división o subdivisión.
-            */
-            $sql .= " AND fq.id_usuario = ? ";
-            $params[] = $id_ejecutor;
-            $types .= 'i';
-        
-        } else {
-            /*
-              Si NO selecciono merchan, sí aplico filtros normales
-              por división y subdivisión para no cargar todo.
-            */
-            if ($filter_division > 0) {
-                $sql .= " AND f.id_division = ? ";
-                $params[] = $filter_division;
-                $types .= 'i';
-            }
-        
-            if ($filter_subdivision > 0) {
-                $sql .= " AND f.id_subdivision = ? ";
-                $params[] = $filter_subdivision;
-                $types .= 'i';
-            }
-        
-            if ($filter_subdivision === -1) {
-                $sql .= " AND (f.id_subdivision IS NULL OR f.id_subdivision = 0) ";
-            }
-        }
+      Esto sirve justamente para corregir cargas cruzadas:
+      Ejemplo:
+      Merchan Red Bull / Tradicional con locales cargados por error
+      en Canal Moderno.
+    */
+    $sql .= " AND fq.id_usuario = ? ";
+    $params[] = $id_ejecutor;
+    $types .= 'i';
+
+} else {
+    /*
+      MODO NORMAL:
+      Si NO selecciono merchan, aplico filtros normales para no cargar
+      todo el universo de locales.
+    */
+
+    if (in_array($tipoCampana, [1, 3], true)) {
+        $sql .= " AND f.tipo = ? ";
+        $params[] = $tipoCampana;
+        $types .= 'i';
+    }
+
+    if ($filter_campana > 0) {
+        $sql .= " AND f.id = ? ";
+        $params[] = $filter_campana;
+        $types .= 'i';
+    }
+
+    if ($filter_division > 0) {
+        $sql .= " AND f.id_division = ? ";
+        $params[] = $filter_division;
+        $types .= 'i';
+    }
+
+    if ($filter_subdivision > 0) {
+        $sql .= " AND f.id_subdivision = ? ";
+        $params[] = $filter_subdivision;
+        $types .= 'i';
+    }
+
+    if ($filter_subdivision === -1) {
+        $sql .= " AND (f.id_subdivision IS NULL OR f.id_subdivision = 0) ";
+    }
+}
 
         if (in_array($filter_estado, [1, 3], true)) {
             $sql .= " AND f.estado = ? ";
@@ -349,6 +444,18 @@ if ($accionBuscar === 1) {
         if ($filter_distrito > 0) {
             $sql .= " AND l.id_distrito = ? ";
             $params[] = $filter_distrito;
+            $types .= 'i';
+        }
+
+        if ($filter_region > 0) {
+            $sql .= " AND c.id_region = ? ";
+            $params[] = $filter_region;
+            $types .= 'i';
+        }
+
+        if ($filter_comuna > 0) {
+            $sql .= " AND l.id_comuna = ? ";
+            $params[] = $filter_comuna;
             $types .= 'i';
         }
 
@@ -384,7 +491,7 @@ $infoLocales = [];
 
 foreach ($locales as $fila) {
     $idFormulario = (int)($fila['id_formulario'] ?? 0);
-    $idLocal = (int)($fila['id_local'] ?? 0);
+    $idLocal      = (int)($fila['id_local'] ?? 0);
 
     if ($idFormulario <= 0 || $idLocal <= 0) {
         continue;
@@ -401,6 +508,8 @@ foreach ($locales as $fila) {
             'modalidad'       => $fila['modalidad'] ?? '',
             'nombre_local'    => $fila['nombre_local'] ?? '',
             'direccion_local' => $fila['direccion_local'] ?? '',
+            'id_comuna'       => (int)($fila['id_comuna'] ?? 0),
+            'id_region'       => (int)($fila['id_region'] ?? 0),
             'comuna_local'    => $fila['comuna_local'] ?? '',
             'region_local'    => $fila['region_local'] ?? '',
             'id_usuario'      => (int)($fila['id_usuario'] ?? 0),
@@ -430,7 +539,7 @@ foreach ($infoLocales as $loc) {
         'id_formulario'   => $loc['id_formulario'],
         'id_local'        => $loc['id_local'],
 
-        // Compatibilidad por si alg迆n JS antiguo a迆n lo usa
+        // Compatibilidad por si algún JS antiguo aún lo usa
         'idLocal'         => $loc['id_local'],
 
         'codigo'          => $loc['codigo'],
@@ -438,8 +547,12 @@ foreach ($infoLocales as $loc) {
         'modalidad'       => $loc['modalidad'],
         'nombre_local'    => $loc['nombre_local'],
         'direccion_local' => $loc['direccion_local'],
+
+        'id_comuna'       => $loc['id_comuna'],
+        'id_region'       => $loc['id_region'],
         'comuna_local'    => $loc['comuna_local'],
         'region_local'    => $loc['region_local'],
+
         'id_usuario'      => $loc['id_usuario'],
         'usuario_local'   => $loc['usuario_local'],
         'fechaVisita'     => $loc['fechaVisita'],
@@ -461,5 +574,5 @@ foreach ($infoLocales as $loc) {
     ];
 }
 
-// No cerrar $conn aqu赤, porque el m車dulo y AJAX pueden seguir usando conexi車n.
+// No cerrar $conn aquí, porque el módulo y AJAX pueden seguir usando conexión.
 ?>

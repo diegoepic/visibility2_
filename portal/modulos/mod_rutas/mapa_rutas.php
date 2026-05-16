@@ -8,6 +8,70 @@ header('Content-Type: text/html; charset=UTF-8');
 if (isset($con) && $con instanceof mysqli) {
     mysqli_set_charset($con, 'utf8mb4');
 }
+
+$db = null;
+
+if (isset($conn) && $conn instanceof mysqli) {
+    $db = $conn;
+} elseif (isset($con) && $con instanceof mysqli) {
+    $db = $con;
+}
+
+$divisionSesionId = (int)($_SESSION['division_id'] ?? 0);
+$divisionSesionNombre = '';
+
+if ($db && $divisionSesionId > 0) {
+    $stmtDivSesion = $db->prepare("SELECT nombre FROM division_empresa WHERE id = ? LIMIT 1");
+    if ($stmtDivSesion) {
+        $stmtDivSesion->bind_param("i", $divisionSesionId);
+        $stmtDivSesion->execute();
+        $stmtDivSesion->bind_result($divisionSesionNombre);
+        $stmtDivSesion->fetch();
+        $stmtDivSesion->close();
+    }
+}
+
+$esMC = strtoupper(trim($divisionSesionNombre)) === 'MC';
+
+$divisionesDisponibles = [];
+
+if ($db) {
+    if ($esMC) {
+        $sqlDivisiones = "
+            SELECT id, nombre
+            FROM division_empresa
+            WHERE estado = 1
+            ORDER BY nombre ASC
+        ";
+
+        $resDivisiones = $db->query($sqlDivisiones);
+
+        if ($resDivisiones) {
+            while ($rowDiv = $resDivisiones->fetch_assoc()) {
+                $divisionesDisponibles[] = $rowDiv;
+            }
+        }
+    } elseif ($divisionSesionId > 0) {
+        $stmtDiv = $db->prepare("
+            SELECT id, nombre
+            FROM division_empresa
+            WHERE id = ?
+            LIMIT 1
+        ");
+
+        if ($stmtDiv) {
+            $stmtDiv->bind_param("i", $divisionSesionId);
+            $stmtDiv->execute();
+            $resDiv = $stmtDiv->get_result();
+
+            if ($rowDiv = $resDiv->fetch_assoc()) {
+                $divisionesDisponibles[] = $rowDiv;
+            }
+
+            $stmtDiv->close();
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -741,32 +805,64 @@ if (isset($con) && $con instanceof mysqli) {
         </p>
     </div>
 
-    <!-- FORMULARIO SUPERIOR -->
-    <div class="card-modern upload-card">
-        <form id="formCSV" enctype="multipart/form-data" method="POST">
-            <label for="csvFile" class="upload-label">Archivo CSV</label>
+<!-- FORMULARIO SUPERIOR -->
+<div class="card-modern upload-card">
+    <form id="formCSV" enctype="multipart/form-data" method="POST">
 
-            <div class="upload-row">
-                <div>
-                    <div class="file-field-wrap">
-                        <div class="custom-file-shell">
-                            <i class="fa-solid fa-paperclip"></i>
-                            <input type="file" id="csvFile" name="csvFile" accept=".csv" required>
-                        </div>
-                    </div>
-                    <div class="helper-text">
-                        Debe contener al menos una columna con el codigo del local.
-                    </div>
-                </div>
+        <div class="row g-3 align-items-end">
 
-                <div class="btn-cargar">
-                    <button type="submit" class="btn btn-modern-primary w-100" id="btnSubmitCsv">
-                        <i class="fa-solid fa-upload"></i> Cargar locales
-                    </button>
+            <div class="col-lg-4">
+                <label for="idDivisionRuta" class="upload-label">Division para la ruta</label>
+
+                <?php if ($esMC): ?>
+                    <select class="form-control" id="idDivisionRuta" name="id_division" required>
+                        <option value="">Seleccione una division</option>
+
+                        <?php foreach ($divisionesDisponibles as $div): ?>
+                            <option value="<?php echo (int)$div['id']; ?>">
+                                <?php echo htmlspecialchars($div['nombre'], ENT_QUOTES, 'UTF-8'); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                <?php else: ?>
+                    <input type="hidden" id="idDivisionRuta" name="id_division" value="<?php echo (int)$divisionSesionId; ?>">
+
+                    <input type="text"
+                           class="form-control"
+                           value="<?php echo htmlspecialchars($divisionSesionNombre, ENT_QUOTES, 'UTF-8'); ?>"
+                           readonly>
+                <?php endif; ?>
+
+                <div class="helper-text">
+                    Se usara para validar el codigo del local y tomar la georreferencia correcta.
                 </div>
             </div>
-        </form>
-    </div>
+
+            <div class="col-lg-5">
+                <label for="csvFile" class="upload-label">Archivo CSV</label>
+
+                <div class="file-field-wrap">
+                    <div class="custom-file-shell">
+                        <i class="fa-solid fa-paperclip"></i>
+                        <input type="file" id="csvFile" name="csvFile" accept=".csv" required>
+                    </div>
+                </div>
+
+                <div class="helper-text">
+                    Debe contener al menos una columna con el código del local.
+                </div>
+            </div>
+
+            <div class="col-lg-3">
+                <button type="submit" class="btn btn-modern-primary w-100" id="btnSubmitCsv">
+                    <i class="fa-solid fa-upload"></i> Cargar locales
+                </button>
+            </div>
+
+        </div>
+
+    </form>
+</div>
 
     <!-- RESUMEN -->
     <div class="resumen-grid hidden-soft" id="resumenBloques">
@@ -1444,6 +1540,13 @@ function cargarTablas(data) {
 $('#formCSV').on('submit', function(e) {
     e.preventDefault();
 
+    const idDivisionRuta = $('#idDivisionRuta').val();
+
+    if (!idDivisionRuta || parseInt(idDivisionRuta, 10) <= 0) {
+        alert('⚠️ Debes seleccionar la división para armar la ruta.');
+        return;
+    }
+
     const formData = new FormData(this);
     const btn = $('#btnSubmitCsv');
     const originalText = btn.html();
@@ -1503,6 +1606,12 @@ $('#cantidadPorDia, #maxKmRuta').on('input change', function() {
 function enviarPlanificacion(modo, boton) {
     const stats = getPlanStats();
     const fechaInicio = $('#fechaInicioRuta').val();
+    const idDivisionRuta = $('#idDivisionRuta').val();
+
+    if (!idDivisionRuta || parseInt(idDivisionRuta, 10) <= 0) {
+        alert('⚠️ Debes seleccionar la división para generar la ruta.');
+        return;
+    }
 
     if (!stats.localesObjetivo.length) {
         alert('⚠️ No hay locales para planificar.');
@@ -1528,13 +1637,14 @@ function enviarPlanificacion(modo, boton) {
         maxKmRuta = 120;
     }
 
-    const registrosPlanificar = stats.localesObjetivo.map(local => ({
-        codigo: local.codigo,
-        usuario_input: local.usuario_input || '',
-        usuario_id: local.usuario_id || '',
-        usuario_login: local.usuario_login || '',
-        usuario_nombre: local.usuario_nombre || ''
-    }));
+        const registrosPlanificar = stats.localesObjetivo.map(local => ({
+            codigo: local.codigo,
+            id_division: idDivisionRuta,
+            usuario_input: local.usuario_input || '',
+            usuario_id: local.usuario_id || '',
+            usuario_login: local.usuario_login || '',
+            usuario_nombre: local.usuario_nombre || ''
+        }));
 
     const btn = $(boton);
     const originalText = btn.html();
@@ -1563,6 +1673,7 @@ function enviarPlanificacion(modo, boton) {
     appendHidden('min_locales_ruta', minLocalesRuta);
     appendHidden('max_km_ruta', maxKmRuta);
     appendHidden('fecha_inicio', fechaInicio);
+    appendHidden('id_division', idDivisionRuta);
     appendHidden('registros_json', JSON.stringify(registrosPlanificar));
 
     document.body.appendChild(form);

@@ -64,12 +64,12 @@ if (
     exit();
 }
 
-// 4. Verificar código único
+// 4. Verificar código único por división
 $stmt_check = $conn->prepare("
     SELECT e.nombre
     FROM local l
     JOIN empresa e ON l.id_empresa = e.id
-    WHERE l.codigo = ?
+    WHERE l.codigo = ? AND l.id_division = ?
     LIMIT 1
 ");
 if (!$stmt_check) {
@@ -79,7 +79,7 @@ if (!$stmt_check) {
     ]);
     exit();
 }
-$stmt_check->bind_param("s", $codigoLocal);
+$stmt_check->bind_param("si", $codigoLocal, $division_id);
 $stmt_check->execute();
 $stmt_check->bind_result($nombreEmpresaExistente);
 $existe = $stmt_check->fetch();
@@ -87,7 +87,7 @@ $stmt_check->close();
 if ($existe) {
     echo json_encode([
         'success' => false,
-        'message' => "El local ya existe en la Empresa '$nombreEmpresaExistente' con código '$codigoLocal'."
+        'message' => "El código '$codigoLocal' ya existe para esta división en la Empresa '$nombreEmpresaExistente'."
     ]);
     exit();
 }

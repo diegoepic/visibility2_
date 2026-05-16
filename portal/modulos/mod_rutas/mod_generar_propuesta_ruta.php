@@ -1098,6 +1098,36 @@ if (!$dtFechaInicio || $dtFechaInicio->format('Y-m-d') !== $fechaInicio) {
     fail('La fecha de inicio no es válida.');
 }
 
+$idDivisionRuta = (int)($_POST['id_division'] ?? 0);
+
+if ($idDivisionRuta <= 0) {
+    fail('Debe seleccionar una división para generar la ruta.');
+}
+
+$stmtDivisionRuta = $conn->prepare("
+    SELECT id, nombre
+    FROM division_empresa
+    WHERE id = ?
+      AND estado = 1
+    LIMIT 1
+");
+
+if (!$stmtDivisionRuta) {
+    fail('Error al validar la división: ' . $conn->error);
+}
+
+$stmtDivisionRuta->bind_param('i', $idDivisionRuta);
+$stmtDivisionRuta->execute();
+$resDivisionRuta = $stmtDivisionRuta->get_result();
+$divisionRutaData = $resDivisionRuta ? $resDivisionRuta->fetch_assoc() : null;
+$stmtDivisionRuta->close();
+
+if (!$divisionRutaData) {
+    fail('La división seleccionada no existe o no está activa.');
+}
+
+$divisionNombreRuta = (string)($divisionRutaData['nombre'] ?? '');
+
 $maxKmEntrePuntos = isset($_POST['max_km_ruta']) && is_numeric($_POST['max_km_ruta'])
     ? max(1.0, (float)$_POST['max_km_ruta'])
     : ($modoPlanificacion === 'circuito' ? 120.0 : 80.0);
@@ -1162,13 +1192,15 @@ foreach ($registros as $item) {
         continue;
     }
 
-    $registrosNormalizados[] = [
-        'codigo'         => $codigo,
-        'usuario_id'     => $usuarioId,
-        'usuario_login'  => $usuarioLogin,
-        'usuario_nombre' => $usuarioNombre,
-        'usuario_input'  => $usuarioInput,
-    ];
+$registrosNormalizados[] = [
+    'codigo'         => $codigo,
+    'id_division'    => $idDivisionRuta,
+    'division_nombre'=> $divisionNombreRuta,
+    'usuario_id'     => $usuarioId,
+    'usuario_login'  => $usuarioLogin,
+    'usuario_nombre' => $usuarioNombre,
+    'usuario_input'  => $usuarioInput,
+];
 
     $codigos[] = $codigo;
 }
@@ -1180,7 +1212,10 @@ if (empty($registrosNormalizados) || empty($codigos)) {
 }
 
 $placeholders = implode(',', array_fill(0, count($codigos), '?'));
-$types = str_repeat('s', count($codigos));
+
+$types = str_repeat('s', count($codigos)) . 'i';
+$paramsLocales = $codigos;
+$paramsLocales[] = $idDivisionRuta;
 
 $sql = "
     SELECT
@@ -1190,20 +1225,26 @@ $sql = "
         l.direccion,
         c.comuna,
         l.lat,
-        l.lng
+        l.lng,
+        l.id_division,
+        d.nombre AS division_nombre
     FROM local l
     LEFT JOIN comuna c
         ON c.id = l.id_comuna
+    LEFT JOIN division_empresa d
+        ON d.id = l.id_division
     WHERE l.codigo IN ($placeholders)
+      AND l.id_division = ?
       AND l.deleted_at IS NULL
 ";
 
 $stmt = $conn->prepare($sql);
+
 if (!$stmt) {
     fail('Error al preparar consulta: ' . $conn->error);
 }
 
-$stmt->bind_param($types, ...$codigos);
+$stmt->bind_param($types, ...$paramsLocales);
 
 if (!$stmt->execute()) {
     fail('Error al ejecutar consulta: ' . $stmt->error);
@@ -1212,18 +1253,23 @@ if (!$stmt->execute()) {
 $result = $stmt->get_result();
 
 $localesPorCodigo = [];
+
 while ($row = $result->fetch_assoc()) {
     $codigo = trim((string)$row['codigo']);
+
     $localesPorCodigo[$codigo] = [
-        'id_local'   => (int)$row['id_local'],
-        'codigo'     => $codigo,
-        'nombre'     => $row['nombre'] ?? '',
-        'direccion'  => $row['direccion'] ?? '',
-        'comuna'     => $row['comuna'] ?? '',
-        'lat'        => $row['lat'],
-        'lng'        => $row['lng']
+        'id_local'        => (int)$row['id_local'],
+        'codigo'          => $codigo,
+        'nombre'          => $row['nombre'] ?? '',
+        'direccion'       => $row['direccion'] ?? '',
+        'comuna'          => $row['comuna'] ?? '',
+        'lat'             => $row['lat'],
+        'lng'             => $row['lng'],
+        'id_division'     => (int)$row['id_division'],
+        'division_nombre' => $row['division_nombre'] ?? '',
     ];
 }
+
 $stmt->close();
 
 $locales = [];
@@ -1238,11 +1284,13 @@ foreach ($registrosNormalizados as $registro) {
     }
 
     $local = $localesPorCodigo[$codigo];
+    $local['id_division'] = $idDivisionRuta;
+    $local['division_nombre'] = $divisionNombreRuta;
     $local['usuario_id'] = $registro['usuario_id'];
     $local['usuario_login'] = $registro['usuario_login'];
     $local['usuario_nombre'] = $registro['usuario_nombre'];
     $local['usuario_input'] = $registro['usuario_input'];
-
+    
     $locales[] = $local;
 }
 
@@ -1623,6 +1671,7 @@ $sheet->fromArray([
     ['Campo', 'Valor'],
     ['Fecha generación', date('d-m-Y H:i:s')],
     ['Fecha inicio base', $dtFechaInicio->format('d-m-Y')],
+    ['División seleccionada', $divisionNombreRuta . ' (ID ' . $idDivisionRuta . ')'],
     ['Cantidad objetivo por día', $cantidadPorDia],
     ['Máximo permitido por día', $maximoPorDia],
     ['Rango esperado por ruta', $cantidadPorDia . ' a ' . $maximoPorDia],
@@ -1650,7 +1699,7 @@ $sheet->fromArray([
 ], null, 'A1');
 
 styleHeader($sheet, 'A1:B1');
-styleDataRange($sheet, 'A2:B25');
+styleDataRange($sheet, 'A2:B26');
 $sheet->freezePane('A2');
 setFixedColumnsWidth($sheet, [
     'A' => 35,

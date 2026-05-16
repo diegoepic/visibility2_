@@ -280,6 +280,7 @@ $totalSteps = $encuestaPendiente ? 3 : 2;
     <script src="assets/js/journal_db.js"></script>
     <script src="/visibility2/app/assets/js/v2_cache.js"></script>
     <script src="/visibility2/app/assets/js/offline-queue.js"></script>
+    <script src="/visibility2/app/assets/js/gestion_draft.js"></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
@@ -408,6 +409,32 @@ input[type=file][id^="fotoPregunta_"] {
   background:#f8d7da; color:#721c24;
 }
 .gps-badge.ok{ background:#d4edda; color:#155724; }
+/* ── Thumbnails de draft (fotos ya subidas / pendientes) ─────────── */
+.draft-foto-thumb{
+  position:relative;display:inline-block;margin:4px;vertical-align:top;
+}
+.draft-foto-img{
+  width:80px;height:80px;object-fit:cover;border-radius:4px;
+  border:2px solid #ccc;display:block;
+}
+.draft-foto-badge{
+  display:block;font-size:10px;text-align:center;
+  padding:1px 4px;border-radius:2px;margin-top:2px;
+}
+.badge-uploaded{ background:#d4edda;color:#155724; }
+.badge-pending{  background:#fff3cd;color:#856404; }
+.badge-uploading{background:#cce5ff;color:#004085; }
+.badge-error{    background:#f8d7da;color:#721c24; }
+.draft-foto-del-btn{
+  position:absolute;top:2px;right:2px;background:red;color:#fff;
+  border:none;border-radius:50%;width:18px;height:18px;
+  font-size:12px;line-height:16px;cursor:pointer;padding:0;
+}
+/* ── Indicador de guardado ────────────────────────────────────────── */
+.draft-save-saved   { border-color:#28a745!important;color:#155724!important; }
+.draft-save-saving  { border-color:#007bff!important;color:#004085!important; }
+.draft-save-pending { border-color:#ffc107!important;color:#856404!important; }
+.draft-save-error   { border-color:#dc3545!important;color:#721c24!important; }
 </style>
 </head>
 <body>
@@ -490,6 +517,25 @@ input[type=file][id^="fotoPregunta_"] {
                  <!-- Offline/Idempotencia -->
                  <input type="hidden" id="client_guid" name="client_guid" value="">
                  <input type="hidden" id="idemp_create" value="">
+
+                 <!-- Banner de recuperación de gestión (oculto por defecto, se muestra via JS) -->
+                 <div id="gestion-recovery-banner" style="display:none;"
+                      class="alert alert-info alert-dismissible" role="alert">
+                   <strong>Gestión recuperada automáticamente.</strong>
+                   <span id="recovery-fotos-msg"></span>
+                   <span id="recovery-inputs-msg"></span>
+                   <button type="button" class="btn btn-sm btn-warning"
+                           id="btn-discard-draft" style="margin-left:8px;">
+                     Descartar y empezar de nuevo
+                   </button>
+                 </div>
+
+                 <!-- Indicador de autoguardado (oculto por defecto) -->
+                 <div id="draft-save-indicator" style="display:none; align-items:center; gap:6px;
+                      font-size:12px; color:#555; padding:4px 8px; background:#f8f8f8;
+                      border:1px solid #ddd; border-radius:4px; margin-bottom:8px;">
+                   <span id="draft-save-text">Guardado localmente</span>
+                 </div>
 
                  <!-- Paso 1 -->
                  <div class="wizard-step" id="step-1">
@@ -724,6 +770,7 @@ input[type=file][id^="fotoPregunta_"] {
                         ?>
                             <div class="form-group question-container<?php echo $conditionalClass; ?>"
                                  data-question-id="<?php echo $q_id; ?>"
+                                 data-question-type="<?php echo (int)$tipo; ?>"
                                  data-question-text="<?php echo $questionText; ?>"
                                  data-required="<?php echo $isRequired; ?>"
                                  <?php echo $conditionalAttr; ?>>
@@ -2049,6 +2096,11 @@ async function enqueueMaterialFoto({ idFQ, compressed, meta, coords, captureSour
       inputElem._queuedPhotos = inputElem._queuedPhotos.filter(p => p.taskId !== taskRef.id);
     }
 
+    // Notificar al draft que esta foto fue subida
+    if (window.GestionDraft && resp.id_foto) {
+      window.GestionDraft.markFotoMatUpload(idFQ, localId, resp.id_foto, resp.url || resp.foto_url || '');
+    }
+
     delBtnQueue.remove();
     const delBtnOnline = document.createElement('button');
     delBtnOnline.className   = 'delete-button';
@@ -2361,7 +2413,7 @@ async function compressEvidenceInputs() {
 }
 
 /* === DOM Ready inicializaciones === */
-document.addEventListener('DOMContentLoaded', ()=>{
+document.addEventListener('DOMContentLoaded', async ()=>{
   window.CSRF_TOKEN = document.querySelector('input[name="csrf_token"]').value;
   const sess = ensureVisitSession();
   const mapped = resolveVisitaIdFromMappings(sess.client_guid);
@@ -2373,11 +2425,160 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const el = document.getElementById(id);
       if (el) { setupEvidencePreview(id); }
     });
+
+  // ── Draft: inicializar módulo ───────────────────────────────────────────
+  const _userId  = <?php echo (int)$usuario_id; ?>;
+  const _formId  = <?php echo (int)$idCampana; ?>;
+  const _localId = <?php echo (int)$idLocal; ?>;
+  const _guid    = sess.client_guid || '';
+
+  if (window.GestionDraft && _guid) {
+    window.GestionDraft.init(_userId, _formId, _localId, _guid);
+
+    // Cargar en paralelo: snapshot servidor + draft local
+    const [snapshot, localDraft] = await Promise.all([
+      window.GestionDraft.fetchServerSnapshot(_formId, _localId, _guid, sess.visita_id || 0)
+        .catch(() => null),
+      window.GestionDraft.loadDraft(_userId, _formId, _localId, _guid)
+        .catch(() => null),
+    ]);
+
+    const isVisitaClosed = snapshot?.visita?.is_open === false;
+    const hasServerData  = snapshot && (
+      Object.keys(snapshot.fotos_materiales || {}).length > 0 ||
+      Object.keys(snapshot.fotos_preguntas  || {}).length > 0
+    );
+    const hasLocalDraft  = localDraft && localDraft.status !== 'submitted';
+
+    if (isVisitaClosed) {
+      // Visita ya cerrada: solo mostramos fotos en modo lectura
+      if (snapshot) {
+        window.GestionDraft.renderSnapshotThumbs(snapshot, { isClosed: true });
+      }
+    } else {
+      // Hay datos que restaurar
+      if (hasServerData || hasLocalDraft) {
+        // Merge y aplicar
+        const merged = window.GestionDraft.mergeStates(snapshot, localDraft);
+
+        if (merged) {
+          // Restaurar inputs del formulario
+          window.GestionDraft.applyDraftToUI(merged);
+          // Guardar draft fusionado en IndexedDB (para offline)
+          window.GestionDraft.saveDraft(merged, true);
+        }
+
+        // Mostrar thumbnails de fotos ya subidas
+        if (snapshot) {
+          window.GestionDraft.renderSnapshotThumbs(snapshot, { isClosed: false });
+        }
+        // Mostrar thumbnails de fotos pendientes locales
+        if (merged) {
+          window.GestionDraft.renderPendingThumbs(merged);
+        }
+
+        // Banner de recuperación
+        const fotosCount = snapshot
+          ? Object.values(snapshot.fotos_materiales || {}).reduce((a, v) => a + (Array.isArray(v) ? v.length : 1), 0)
+          + Object.keys(snapshot.fotos_preguntas || {}).length
+          : 0;
+
+        const banner = document.getElementById('gestion-recovery-banner');
+        if (banner && (hasServerData || hasLocalDraft)) {
+          document.getElementById('recovery-fotos-msg').textContent =
+            fotosCount > 0 ? ` ${fotosCount} foto(s) ya subida(s) recuperadas.` : '';
+          document.getElementById('recovery-inputs-msg').textContent =
+            hasLocalDraft ? ' Respuestas previas restauradas.' : '';
+          banner.style.display = 'block';
+        }
+      }
+
+      // Wiring autosave
+      window.GestionDraft.wireAutosave();
+
+      // Botón descartar draft
+      const btnDiscard = document.getElementById('btn-discard-draft');
+      if (btnDiscard) {
+        btnDiscard.addEventListener('click', async () => {
+          if (!confirm('¿Seguro que deseas descartar la gestión guardada y empezar de nuevo?')) return;
+          await window.GestionDraft.clearDraft(_userId, _formId, _localId, _guid);
+          location.reload();
+        });
+      }
+    }
+  }
 });
 
 $(document).ready(function(){
   function canAddMaterial() { return ![6, 9, 21].includes(Number(window.campaignDivision)); }
   $('.conditional-question').each(function(){ if ($(this).css('display') === 'none') { $(this).find('input, select, textarea').removeAttr('required'); } });
+
+  // ── Eliminar fotos restauradas desde snapshot (clase generada por buildFotoThumbHtml) ──
+  $(document).on('click', '.draft-foto-del-btn', async function () {
+    const btn    = this;
+    const thumb  = btn.closest('.draft-foto-thumb');
+    const fotoId = thumb ? thumb.dataset.fotoId : null;
+    if (!fotoId) return;
+
+    const matContainer  = btn.closest('[id^="previewContainer_"]');
+    const pregContainer = btn.closest('[id^="previewFoto_"]');
+
+    const ok = await mcConfirm({
+      title: 'Eliminar foto',
+      message: '<p>¿Seguro que deseas eliminar esta foto?</p>',
+      confirmText: 'Sí, eliminar',
+      confirmClass: 'btn-danger',
+    });
+    if (!ok) return;
+    btn.disabled = true;
+
+    try {
+      const visitaId = document.getElementById('visita_id')?.value || '';
+      const csrf     = window.CSRF_TOKEN || '';
+
+      if (matContainer) {
+        const fqId = matContainer.id.replace('previewContainer_', '');
+        const form = new FormData();
+        form.append('csrf_token', csrf);
+        form.append('id_foto', fotoId);
+        form.append('id_formularioQuestion', fqId);
+        form.append('visita_id', visitaId);
+        form.append('X_Idempotency_Key', crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random());
+        const r  = await fetch('/visibility2/app/eliminar_material_foto_pruebas.php', { method: 'POST', body: form });
+        const js = await r.json();
+        if (js.status === 'success') {
+          $(thumb).fadeOut(150, () => thumb.remove());
+          document.getElementById('hiddenUploadContainer_' + fqId)?.querySelector(`input[data-foto-id="${fotoId}"]`)?.remove();
+          mcToast('success', 'Foto eliminada', 'La foto fue eliminada correctamente.');
+        } else {
+          mcToast('danger', 'No se pudo eliminar', js.message || 'Intente nuevamente.');
+          btn.disabled = false;
+        }
+      } else if (pregContainer) {
+        const qId = pregContainer.id.replace('previewFoto_', '');
+        const form = new FormData();
+        form.append('csrf_token', csrf);
+        form.append('resp_id', fotoId);
+        form.append('id_form_question', qId);
+        form.append('visita_id', visitaId);
+        const r  = await fetch('/visibility2/app/eliminar_pregunta_foto_pruebas.php', { method: 'POST', body: form });
+        const js = await r.json();
+        if (js.status === 'success') {
+          $(thumb).fadeOut(150, () => thumb.remove());
+          const flag = document.getElementById('flagFoto_' + qId);
+          if (flag) flag.value = '';
+          mcToast('success', 'Foto eliminada', 'La foto fue eliminada correctamente.');
+        } else {
+          mcToast('danger', 'No se pudo eliminar', js.message || 'Intente nuevamente.');
+          btn.disabled = false;
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      mcToast('danger', 'Error de red', 'No se pudo eliminar la foto.');
+      btn.disabled = false;
+    }
+  });
 
   let currentStep = 1;
   let totalSteps  = <?php echo $totalSteps; ?>;
@@ -3159,6 +3360,7 @@ const online = await isReallyOnline();
 
         if (stillPending || stillUnmarked) {
           await queueProcesarGestion(document.getElementById('gestionarForm'), { reason: 'create_visita_pending' });
+          if (window.GestionDraft) { try { await window.GestionDraft.markSubmitted(); } catch (_) {} }
           clearClientGuid();
           mcToast('warning','Gestión en cola','La visita aún está sincronizándose; la gestión se enviará cuando quede lista.');
           setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 700);
@@ -3172,6 +3374,8 @@ const online = await isReallyOnline();
         localStorage.setItem(VISIT_SESSION_KEY, JSON.stringify({}));
         localStorage.removeItem(clientGuidKey());
       } catch(_) {}
+      // Limpiar draft local: el form ya va al servidor
+      if (window.GestionDraft) { try { await window.GestionDraft.clearDraft(); } catch (_) {} }
       document.getElementById('gestionarForm').submit();
       return;
     } catch (err) {
@@ -3179,6 +3383,7 @@ const online = await isReallyOnline();
       alert('No se pudo confirmar la creación de la visita. Continuamos en modo offline.');
       try {
         await queueProcesarGestion(document.getElementById('gestionarForm'), { reason: 'create_visita_sync_error' });
+        if (window.GestionDraft) { try { await window.GestionDraft.markSubmitted(); } catch (_) {} }
         clearClientGuid();
         mcToast('warning','Gestión en cola','Se enviará automáticamente al recuperar conexión.');
         setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 700);
@@ -3196,6 +3401,7 @@ const online = await isReallyOnline();
   try {
     ensureClientGuid();
     await queueProcesarGestion(document.getElementById('gestionarForm'), { reason: 'offline' });
+    if (window.GestionDraft) { try { await window.GestionDraft.markSubmitted(); } catch (_) {} }
     clearClientGuid();     
     mcToast('success','Gestión encolada','Se enviará automáticamente al recuperar conexión.');
     setTimeout(()=>{ window.location.href = 'index_pruebas.php'; }, 600);

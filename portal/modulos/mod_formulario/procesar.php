@@ -533,11 +533,18 @@ try {
         $tiene_divisiones = (contarDivisionesPorEmpresa($empresa_form) > 0);
 
         if ($tiene_divisiones) {
-            $stmt_local   = $conn->prepare("SELECT id FROM local WHERE codigo = ? AND id_empresa = ? LIMIT 1");
+            if ($id_division > 0) {
+                $stmt_local          = $conn->prepare("SELECT id FROM local WHERE codigo = ? AND id_empresa = ? AND id_division = ? LIMIT 1");
+                $stmt_local_fallback = $conn->prepare("SELECT id FROM local WHERE codigo = ? AND id_empresa = ? LIMIT 1");
+            } else {
+                $stmt_local          = $conn->prepare("SELECT id FROM local WHERE codigo = ? AND id_empresa = ? LIMIT 1");
+                $stmt_local_fallback = null;
+            }
             $stmt_usuario = $conn->prepare("SELECT id FROM usuario WHERE usuario = ? AND id_empresa = ? LIMIT 1");
         } else {
-            $stmt_local   = $conn->prepare("SELECT id FROM local WHERE codigo = ? LIMIT 1");
-            $stmt_usuario = $conn->prepare("SELECT id FROM usuario WHERE usuario = ? LIMIT 1");
+            $stmt_local          = $conn->prepare("SELECT id FROM local WHERE codigo = ? LIMIT 1");
+            $stmt_local_fallback = null;
+            $stmt_usuario        = $conn->prepare("SELECT id FROM usuario WHERE usuario = ? LIMIT 1");
         }
 
         $stmt_insert_fq = $conn->prepare("
@@ -593,30 +600,44 @@ try {
             }
 
             // Buscar local con caché en memoria
-            $localKey = $tiene_divisiones ? ($empresa_form . '|' . $cod_local) : $cod_local;
+            $localKey = $tiene_divisiones ? ($empresa_form . '|' . $id_division . '|' . $cod_local) : $cod_local;
 
             if (array_key_exists($localKey, $cacheLocales)) {
                 $id_local = $cacheLocales[$localKey];
             } else {
+                $id_local = null;
+
+                // Paso 1: búsqueda con filtro de división (desambigua códigos duplicados)
                 if ($tiene_divisiones) {
-                    $stmt_local->bind_param('si', $cod_local, $empresa_form);
+                    if ($id_division > 0) {
+                        $stmt_local->bind_param('sii', $cod_local, $empresa_form, $id_division);
+                    } else {
+                        $stmt_local->bind_param('si', $cod_local, $empresa_form);
+                    }
                 } else {
                     $stmt_local->bind_param('s', $cod_local);
                 }
-
                 $stmt_local->execute();
                 $stmt_local->bind_result($id_local_tmp);
-
                 if ($stmt_local->fetch()) {
                     $id_local = (int)$id_local_tmp;
-                    $cacheLocales[$localKey] = $id_local;
-                } else {
-                    $id_local = null;
-                    $cacheLocales[$localKey] = null;
                 }
-
                 $stmt_local->free_result();
                 $stmt_local->reset();
+
+                // Paso 2: fallback empresa-only si no se encontró (código único en otra división)
+                if ($id_local === null && $stmt_local_fallback !== null) {
+                    $stmt_local_fallback->bind_param('si', $cod_local, $empresa_form);
+                    $stmt_local_fallback->execute();
+                    $stmt_local_fallback->bind_result($id_local_tmp2);
+                    if ($stmt_local_fallback->fetch()) {
+                        $id_local = (int)$id_local_tmp2;
+                    }
+                    $stmt_local_fallback->free_result();
+                    $stmt_local_fallback->reset();
+                }
+
+                $cacheLocales[$localKey] = $id_local;
             }
 
             if (!$id_local) {

@@ -63,6 +63,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_division'])) {
     }
 
     if ($mensaje === "") {
+        $dupCheck = $conn->query("SELECT id FROM division_empresa WHERE nombre = '$nombreEsc' AND id_empresa = $id_empresa LIMIT 1");
+        if ($dupCheck && $dupCheck->num_rows > 0) {
+            $mensaje = "Ya existe una división con ese nombre para la empresa seleccionada.";
+            $tipo_mensaje = "danger";
+        }
+    }
+
+    if ($mensaje === "") {
         $imageEsc = $conn->real_escape_string($image_url);
 
         $sql = "
@@ -71,7 +79,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_division'])) {
         ";
 
         if ($conn->query($sql)) {
-            $mensaje = "División creada exitosamente.";
+            $id_division_nueva = $conn->insert_id;
+            $subdivision_nombre = trim($_POST['subdivision_nombre'] ?? '');
+            if ($subdivision_nombre !== '') {
+                $subNombreEsc = $conn->real_escape_string($subdivision_nombre);
+                $chkSub = $conn->query("SELECT id FROM subdivision WHERE nombre = '$subNombreEsc' AND id_division = $id_division_nueva LIMIT 1");
+                if ($chkSub && $chkSub->num_rows === 0) {
+                    $conn->query("INSERT INTO subdivision (nombre, id_division) VALUES ('$subNombreEsc', $id_division_nueva)");
+                }
+            }
+            $mensaje = "División creada exitosamente." . ($subdivision_nombre !== '' ? " Subdivisión «{$subdivision_nombre}» registrada." : "");
             $tipo_mensaje = "success";
         } else {
             $mensaje = "Error al guardar la división: " . $conn->error;
@@ -469,6 +486,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_division'])) {
                                 <small class="small-help">Ingresa el nombre visible con el que se identificará la división.</small>
                             </div>
 
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label-modern">Estado</label>
+                                <div class="status-switch">
+                                    <input type="checkbox" class="form-check-input mt-0" id="estado" name="estado" checked style="position:relative; margin-left:0;">
+                                    <label class="form-check-label mb-0" for="estado">Activo</label>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="subdivision_nombre" class="form-label-modern">Subdivisión <small style="font-weight:400;color:#6b7280;">(opcional)</small></label>
+                                <input type="text" id="subdivision_nombre" name="subdivision_nombre" class="form-control" placeholder="Ej: Bebidas, Snacks, Lácteos">
+                                <small class="small-help">Si no existe, se creará automáticamente para esta división.</small>
+                            </div>
+
                             <div class="col-md-12 mb-4">
                                 <label class="form-label-modern">Logo o imagen</label>
                                 <div class="upload-box">
@@ -479,14 +510,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_division'])) {
                                 </div>
                                 <div class="image-preview-wrapper" id="imagePreviewWrapper">
                                     <img id="imagePreview" src="" alt="Vista previa del logo">
-                                </div>
-                            </div>
-
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label-modern">Estado</label>
-                                <div class="status-switch">
-                                    <input type="checkbox" class="form-check-input mt-0" id="estado" name="estado" checked style="position:relative; margin-left:0;">
-                                    <label class="form-check-label mb-0" for="estado">Activo</label>
                                 </div>
                             </div>
                         </div>
@@ -514,7 +537,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_division'])) {
                                 <div class="preview-meta">
                                     <span class="preview-pill" id="previewStatus">Activo</span>
                                     <span class="preview-pill">División</span>
-                                    <span class="preview-pill">Identidad visual</span>
+                                    <span class="preview-pill" id="previewSubdivision" style="display:none;"></span>
                                 </div>
                             </div>
                         </div>
@@ -600,6 +623,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_division'])) {
                   <label class="form-check-label mb-0" for="edit_estado">Activo</label>
                 </div>
               </div>
+
+              <div class="form-group">
+                <label class="form-label-modern">Subdivisiones registradas</label>
+                <div id="edit_subdivisiones_list" style="min-height:28px;margin-bottom:10px;">
+                  <span class="text-muted" style="font-size:.83rem;">—</span>
+                </div>
+                <label class="form-label-modern">Agregar subdivisión <small style="font-weight:400;color:#6b7280;">(opcional)</small></label>
+                <input type="text" class="form-control" name="subdivision_nombre" id="edit_subdivision_nombre"
+                       placeholder="Ej: Bebidas, Snacks, Lácteos" autocomplete="off">
+                <small class="small-help">Se creará si no existe para esta división.</small>
+              </div>
             </div>
 
             <div class="col-lg-5">
@@ -648,10 +682,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_division'])) {
         const nombre = $("#nombre").val().trim() || "Nombre de la división";
         const empresa = $("#id_empresa option:selected").text() || "Empresa asociada";
         const activa = $("#estado").is(":checked");
+        const subdivision = $("#subdivision_nombre").val().trim();
 
         $("#previewMain").text(nombre);
         $("#previewSub").text(empresa);
         $("#previewStatus").text(activa ? "Activo" : "Inactivo");
+
+        if (subdivision) {
+            $("#previewSubdivision").text(subdivision).show();
+        } else {
+            $("#previewSubdivision").hide();
+        }
     }
 
     function previewImage(input) {
@@ -688,6 +729,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_division'])) {
         $("#nombre").on("input", updatePreview);
         $("#id_empresa").on("change", updatePreview);
         $("#estado").on("change", updatePreview);
+        $("#subdivision_nombre").on("input", updatePreview);
 
         $("#image").on("change", function() {
             previewImage(this);
@@ -750,6 +792,24 @@ $(document).on("click", ".btn-editar-division", function() {
     } else {
         $("#edit_previewImage").css("background-image", "url('https://via.placeholder.com/800x450/f3f4f6/9ca3af?text=Logo+Divisi%C3%B3n')");
     }
+
+    // Cargar subdivisiones existentes
+    $("#edit_subdivisiones_list").html('<span class="text-muted" style="font-size:.83rem;">Cargando...</span>');
+    $("#edit_subdivision_nombre").val("");
+    $.getJSON("mod_cargar/cargar_subdivisiones.php?id_division=" + id, function(resp) {
+        if (resp.ok && resp.subdivisiones && resp.subdivisiones.length > 0) {
+            let html = '';
+            $.each(resp.subdivisiones, function(_, s) {
+                html += '<span class="badge badge-light mr-1 mb-1" style="font-size:.82rem;padding:6px 10px;border:1px solid #dbe2ea;border-radius:8px;">' +
+                        $('<span>').text(s.nombre).html() + '</span>';
+            });
+            $("#edit_subdivisiones_list").html(html);
+        } else {
+            $("#edit_subdivisiones_list").html('<span class="text-muted" style="font-size:.83rem;">Sin subdivisiones registradas.</span>');
+        }
+    }).fail(function() {
+        $("#edit_subdivisiones_list").html('<span class="text-muted" style="font-size:.83rem;">—</span>');
+    });
 
     updateEditPreview();
     $("#modalEditarDivision").modal("show");

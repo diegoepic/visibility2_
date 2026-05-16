@@ -3,13 +3,15 @@ session_start();
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 
 $sql = "
-    SELECT 
+    SELECT
         d.id,
         d.nombre,
         d.id_empresa,
         d.image_url,
         d.estado,
-        e.nombre AS empresa_nombre
+        e.nombre AS empresa_nombre,
+        (SELECT GROUP_CONCAT(s.nombre ORDER BY s.nombre ASC SEPARATOR '||')
+         FROM subdivision s WHERE s.id_division = d.id) AS subdivisiones
     FROM division_empresa d
     INNER JOIN empresa e ON e.id = d.id_empresa
     ORDER BY e.nombre ASC, d.nombre ASC
@@ -28,7 +30,8 @@ if (!$res) {
         <thead>
             <tr>
                 <th style="width:90px;">Logo</th>
-                <th>DivisiÃ³n</th>
+                <th>Divisi¨®n</th>
+                <th>Subdivisiones</th>
                 <th>Empresa</th>
                 <th>Estado</th>
                 <th style="width:140px;">Acciones</th>
@@ -52,6 +55,18 @@ if (!$res) {
 
                         <td>
                             <strong><?php echo htmlspecialchars($row['nombre']); ?></strong>
+                        </td>
+
+                        <td>
+                            <?php if (!empty($row['subdivisiones'])): ?>
+                                <?php foreach (explode('||', $row['subdivisiones']) as $sub): ?>
+                                    <span class="badge badge-light mr-1 mb-1" style="font-size:.78rem;padding:5px 8px;border:1px solid #dbe2ea;border-radius:8px;">
+                                        <?php echo htmlspecialchars($sub); ?>
+                                    </span>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <span class="text-muted" style="font-size:.82rem;">¡ª</span>
+                            <?php endif; ?>
                         </td>
 
                         <td>
@@ -89,7 +104,7 @@ if (!$res) {
                 <?php endwhile; ?>
             <?php else: ?>
                 <tr>
-                    <td colspan="5" class="text-center text-muted py-4">No hay divisiones registradas.</td>
+                    <td colspan="6" class="text-center text-muted py-4">No hay divisiones registradas.</td>
                 </tr>
             <?php endif; ?>
         </tbody>

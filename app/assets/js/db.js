@@ -1,9 +1,11 @@
 
 // Wrapper IndexedDB para cola offline (estado robusto)
 (function(){
-  const DB_NAME = 'v2_offline';
-  const DB_VER  = 9;
-  const STORE   = 'queue';
+  const DB_NAME        = 'v2_offline';
+  const DB_VER         = 10;
+  const STORE          = 'queue';
+  const STORE_DRAFTS   = 'gestion_drafts';
+  const STORE_BLOBS    = 'gestion_blobs';
 
   const STATUS_ALIASES = {
     pending: 'queued',
@@ -54,6 +56,7 @@
       req.onupgradeneeded = e => {
         const db = e.target.result;
         let os;
+        // ── Store: queue (existente) ──────────────────────────────────────
         if (!db.objectStoreNames.contains(STORE)) {
           os = db.createObjectStore(STORE, { keyPath: 'id' });
         } else {
@@ -65,6 +68,22 @@
         if (!os.indexNames.contains('dedupeKey')) os.createIndex('dedupeKey', 'dedupeKey', { unique: false });
         if (!os.indexNames.contains('nextTryAt')) os.createIndex('nextTryAt', 'nextTryAt', { unique: false });
         if (!os.indexNames.contains('updatedAt')) os.createIndex('updatedAt', 'updatedAt', { unique: false });
+        // ── Store: gestion_drafts (nuevo v10) ────────────────────────────
+        if (!db.objectStoreNames.contains(STORE_DRAFTS)) {
+          const ds = db.createObjectStore(STORE_DRAFTS, {
+            keyPath: ['user_id', 'form_id', 'local_id', 'client_guid']
+          });
+          ds.createIndex('by_user_form',    ['user_id', 'form_id'], { unique: false });
+          ds.createIndex('by_updated',      'updated_at',           { unique: false });
+          ds.createIndex('by_status',       'status',               { unique: false });
+          ds.createIndex('by_client_guid',  'client_guid',          { unique: false });
+        }
+        // ── Store: gestion_blobs (nuevo v10) ─────────────────────────────
+        if (!db.objectStoreNames.contains(STORE_BLOBS)) {
+          const bs = db.createObjectStore(STORE_BLOBS, { keyPath: 'blob_key' });
+          bs.createIndex('by_draft',   'draft_key',  { unique: false });
+          bs.createIndex('by_created', 'created_at', { unique: false });
+        }
       };
       req.onsuccess = () => res(req.result);
       req.onerror   = () => rej(req.error);
@@ -319,6 +338,126 @@
     });
   }
 
+  // ── gestion_drafts helpers ────────────────────────────────────────────────
+
+  async function putDraft(record) {
+    const db = await openDB();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(STORE_DRAFTS, 'readwrite');
+      const req = tx.objectStore(STORE_DRAFTS).put(record);
+      tx.oncomplete = () => res(record);
+      tx.onerror    = () => rej(tx.error);
+    });
+  }
+
+  async function getDraft(userId, formId, localId, clientGuid) {
+    const db = await openDB();
+    return new Promise((res, rej) => {
+      const tx  = db.transaction(STORE_DRAFTS, 'readonly');
+      const req = tx.objectStore(STORE_DRAFTS).get([userId, formId, localId, clientGuid]);
+      req.onsuccess = () => res(req.result || null);
+      req.onerror   = () => rej(req.error);
+    });
+  }
+
+  async function deleteDraft(userId, formId, localId, clientGuid) {
+    const db = await openDB();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(STORE_DRAFTS, 'readwrite');
+      tx.objectStore(STORE_DRAFTS).delete([userId, formId, localId, clientGuid]);
+      tx.oncomplete = () => res();
+      tx.onerror    = () => rej(tx.error);
+    });
+  }
+
+  async function getDraftByGuid(clientGuid) {
+    const db = await openDB();
+    return new Promise((res, rej) => {
+      const tx  = db.transaction(STORE_DRAFTS, 'readonly');
+      const idx = tx.objectStore(STORE_DRAFTS).index('by_client_guid');
+      const req = idx.get(clientGuid);
+      req.onsuccess = () => res(req.result || null);
+      req.onerror   = () => rej(req.error);
+    });
+  }
+
+  async function listDraftsByUserForm(userId, formId) {
+    const db = await openDB();
+    return new Promise((res, rej) => {
+      const tx  = db.transaction(STORE_DRAFTS, 'readonly');
+      const idx = tx.objectStore(STORE_DRAFTS).index('by_user_form');
+      const req = idx.getAll(IDBKeyRange.only([userId, formId]));
+      req.onsuccess = () => res(req.result || []);
+      req.onerror   = () => rej(req.error);
+    });
+  }
+
+  async function cleanupOldDrafts(maxAgeDays = 30) {
+    const db     = await openDB();
+    const cutoff = Date.now() - (maxAgeDays * 86400 * 1000);
+    return new Promise((res, rej) => {
+      const tx  = db.transaction(STORE_DRAFTS, 'readwrite');
+      const os  = tx.objectStore(STORE_DRAFTS);
+      const req = os.getAll();
+      let removed = 0;
+      req.onsuccess = () => {
+        (req.result || []).forEach(draft => {
+          const isSubmitted = draft.status === 'submitted';
+          const ts = draft.updated_at || draft.created_at || 0;
+          if (isSubmitted || (ts && ts < cutoff)) {
+            os.delete([draft.user_id, draft.form_id, draft.local_id, draft.client_guid]);
+            removed++;
+          }
+        });
+      };
+      tx.oncomplete = () => res(removed);
+      tx.onerror    = () => rej(tx.error);
+    });
+  }
+
+  // ── gestion_blobs helpers ─────────────────────────────────────────────────
+
+  async function putBlob(record) {
+    const db = await openDB();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(STORE_BLOBS, 'readwrite');
+      tx.objectStore(STORE_BLOBS).put(record);
+      tx.oncomplete = () => res(record.blob_key);
+      tx.onerror    = () => rej(tx.error);
+    });
+  }
+
+  async function getBlob(blobKey) {
+    const db = await openDB();
+    return new Promise((res, rej) => {
+      const tx  = db.transaction(STORE_BLOBS, 'readonly');
+      const req = tx.objectStore(STORE_BLOBS).get(blobKey);
+      req.onsuccess = () => res(req.result || null);
+      req.onerror   = () => rej(req.error);
+    });
+  }
+
+  async function deleteBlob(blobKey) {
+    const db = await openDB();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(STORE_BLOBS, 'readwrite');
+      tx.objectStore(STORE_BLOBS).delete(blobKey);
+      tx.oncomplete = () => res();
+      tx.onerror    = () => rej(tx.error);
+    });
+  }
+
+  async function listBlobsByDraftKey(draftKey) {
+    const db = await openDB();
+    return new Promise((res, rej) => {
+      const tx  = db.transaction(STORE_BLOBS, 'readonly');
+      const idx = tx.objectStore(STORE_BLOBS).index('by_draft');
+      const req = idx.getAll(draftKey);
+      req.onsuccess = () => res(req.result || []);
+      req.onerror   = () => rej(req.error);
+    });
+  }
+
   window.AppDB = {
     add,
     listByStatus,
@@ -331,6 +470,18 @@
     getByDedupeKey,
     listByClientGuid,
     getStats,
-    cleanup
+    cleanup,
+    // Draft store
+    putDraft,
+    getDraft,
+    getDraftByGuid,
+    deleteDraft,
+    listDraftsByUserForm,
+    cleanupOldDrafts,
+    // Blob store
+    putBlob,
+    getBlob,
+    deleteBlob,
+    listBlobsByDraftKey,
   };
 })();

@@ -30,6 +30,7 @@ function json_fail(string $message, int $code = 400, array $extra = []): void
 function normalize_text(string $value): string
 {
     $value = trim($value);
+
     $map = [
         'Á'=>'A','À'=>'A','Ä'=>'A','Â'=>'A','á'=>'a','à'=>'a','ä'=>'a','â'=>'a',
         'É'=>'E','È'=>'E','Ë'=>'E','Ê'=>'E','é'=>'e','è'=>'e','ë'=>'e','ê'=>'e',
@@ -38,21 +39,25 @@ function normalize_text(string $value): string
         'Ú'=>'U','Ù'=>'U','Ü'=>'U','Û'=>'U','ú'=>'u','ù'=>'u','ü'=>'u','û'=>'u',
         'Ñ'=>'N','ñ'=>'n'
     ];
+
     $value = strtr($value, $map);
     $value = mb_strtolower($value, 'UTF-8');
     $value = preg_replace('/\s+/', ' ', $value);
+
     return trim($value);
 }
 
 function find_header_index(array $headers, array $aliases): int
 {
     $normalizedHeaders = [];
+
     foreach ($headers as $idx => $header) {
         $normalizedHeaders[$idx] = normalize_text((string)$header);
     }
 
     foreach ($aliases as $alias) {
         $aliasNorm = normalize_text($alias);
+
         foreach ($normalizedHeaders as $idx => $headerNorm) {
             if ($headerNorm === $aliasNorm) {
                 return $idx;
@@ -78,6 +83,37 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     json_fail('Método no permitido.', 405);
 }
 
+$idDivisionRuta = (int)($_POST['id_division'] ?? 0);
+
+if ($idDivisionRuta <= 0) {
+    json_fail('Debes seleccionar una división para cargar los locales.');
+}
+
+// Validar que la división exista y esté activa
+$stmtDivision = $conn->prepare("
+    SELECT id, nombre
+    FROM division_empresa
+    WHERE id = ?
+      AND estado = 1
+    LIMIT 1
+");
+
+if (!$stmtDivision) {
+    json_fail('Error al validar la división: ' . $conn->error, 500);
+}
+
+$stmtDivision->bind_param('i', $idDivisionRuta);
+$stmtDivision->execute();
+$resDivision = $stmtDivision->get_result();
+$divisionData = $resDivision ? $resDivision->fetch_assoc() : null;
+$stmtDivision->close();
+
+if (!$divisionData) {
+    json_fail('La división seleccionada no existe o no está activa.');
+}
+
+$divisionNombreRuta = (string)($divisionData['nombre'] ?? '');
+
 if (!isset($_FILES['csvFile']) || !is_array($_FILES['csvFile'])) {
     json_fail('No se recibió el archivo CSV.');
 }
@@ -89,21 +125,25 @@ if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
 }
 
 $tmpPath = $file['tmp_name'] ?? '';
+
 if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
     json_fail('Archivo temporal inválido.');
 }
 
 $handle = fopen($tmpPath, 'r');
+
 if (!$handle) {
     json_fail('No se pudo abrir el archivo CSV.');
 }
 
 // Detectar BOM UTF-8
 $firstLine = fgets($handle);
+
 if ($firstLine === false) {
     fclose($handle);
     json_fail('El archivo CSV está vacío.');
 }
+
 $firstLine = preg_replace('/^\xEF\xBB\xBF/', '', $firstLine);
 
 // Reiniciar lectura
@@ -117,6 +157,7 @@ $bestCount = -1;
 
 foreach ($delimiters as $delimiter) {
     $count = count(str_getcsv($sample, $delimiter));
+
     if ($count > $bestCount) {
         $bestCount = $count;
         $bestDelimiter = $delimiter;
@@ -124,6 +165,7 @@ foreach ($delimiters as $delimiter) {
 }
 
 $headers = fgetcsv($handle, 0, $bestDelimiter);
+
 if ($headers === false || empty($headers)) {
     fclose($handle);
     json_fail('No se pudo leer la cabecera del CSV.');
@@ -174,7 +216,7 @@ if (empty($rows)) {
     json_fail('El CSV no contiene filas válidas.');
 }
 
-// Obtener códigos únicos
+// Obtener códigos únicos y usuarios únicos
 $codigos = [];
 $usuariosInput = [];
 
@@ -182,6 +224,7 @@ foreach ($rows as $row) {
     if ($row['codigo'] !== '') {
         $codigos[$row['codigo']] = true;
     }
+
     if ($row['usuario_input'] !== '') {
         $usuariosInput[$row['usuario_input']] = true;
     }
@@ -190,33 +233,44 @@ foreach ($rows as $row) {
 $codigos = array_keys($codigos);
 $usuariosInput = array_keys($usuariosInput);
 
-// Buscar locales
+// Buscar locales por código + división
 $localesMap = [];
+
 if (!empty($codigos)) {
     $placeholders = implode(',', array_fill(0, count($codigos), '?'));
-    $types = str_repeat('s', count($codigos));
+
+    $types = str_repeat('s', count($codigos)) . 'i';
+    $params = $codigos;
+    $params[] = $idDivisionRuta;
 
     $sqlLocales = "
         SELECT
+            l.id AS id_local,
             l.codigo,
             l.nombre,
             l.direccion,
             c.comuna,
             l.lat,
-            l.lng
+            l.lng,
+            l.id_division,
+            d.nombre AS division_nombre
         FROM local l
         LEFT JOIN comuna c
             ON c.id = l.id_comuna
+        LEFT JOIN division_empresa d
+            ON d.id = l.id_division
         WHERE l.codigo IN ($placeholders)
+          AND l.id_division = ?
           AND l.deleted_at IS NULL
     ";
 
     $stmtLocales = $conn->prepare($sqlLocales);
+
     if (!$stmtLocales) {
         json_fail('Error al preparar consulta de locales: ' . $conn->error, 500);
     }
 
-    $stmtLocales->bind_param($types, ...$codigos);
+    $stmtLocales->bind_param($types, ...$params);
 
     if (!$stmtLocales->execute()) {
         $msg = $stmtLocales->error;
@@ -225,22 +279,29 @@ if (!empty($codigos)) {
     }
 
     $resLocales = $stmtLocales->get_result();
+
     while ($row = $resLocales->fetch_assoc()) {
         $codigo = trim((string)$row['codigo']);
+
         $localesMap[$codigo] = [
-            'codigo'    => $codigo,
-            'nombre'    => $row['nombre'] ?? '',
-            'direccion' => $row['direccion'] ?? '',
-            'comuna'    => $row['comuna'] ?? '',
-            'lat'       => $row['lat'],
-            'lng'       => $row['lng'],
+            'id_local'        => (int)$row['id_local'],
+            'codigo'          => $codigo,
+            'nombre'          => $row['nombre'] ?? '',
+            'direccion'       => $row['direccion'] ?? '',
+            'comuna'          => $row['comuna'] ?? '',
+            'lat'             => $row['lat'],
+            'lng'             => $row['lng'],
+            'id_division'     => (int)$row['id_division'],
+            'division_nombre' => $row['division_nombre'] ?? '',
         ];
     }
+
     $stmtLocales->close();
 }
 
-// Buscar usuarios
+// Buscar usuarios activos
 $usuariosMap = [];
+
 if (!empty($usuariosInput)) {
     $sqlUsuarios = "
         SELECT
@@ -254,6 +315,7 @@ if (!empty($usuariosInput)) {
     ";
 
     $resUsuarios = $conn->query($sqlUsuarios);
+
     if (!$resUsuarios) {
         json_fail('Error al consultar usuarios: ' . $conn->error, 500);
     }
@@ -300,18 +362,22 @@ foreach ($rows as $row) {
     if ($codigo === '') {
         $errores[] = 'Código vacío';
     }
+
     if ($usuarioInput === '') {
         $errores[] = 'Usuario vacío';
     }
 
     $local = $localesMap[$codigo] ?? null;
+
     if ($codigo !== '' && !$local) {
-        $errores[] = 'Código de local no existe';
+        $errores[] = 'Código de local no existe para la división seleccionada';
     }
 
     $usuarioMatch = null;
+
     if ($usuarioInput !== '') {
         $keyNorm = normalize_text($usuarioInput);
+
         if (isset($usuariosMap[$keyNorm])) {
             $usuarioMatch = $usuariosMap[$keyNorm];
         } elseif (isset($usuariosMap[(string)$usuarioInput])) {
@@ -328,6 +394,8 @@ foreach ($rows as $row) {
             'fila_csv' => $filaCsv,
             'codigo' => $codigo,
             'usuario_input' => $usuarioInput,
+            'id_division' => $idDivisionRuta,
+            'division_nombre' => $divisionNombreRuta,
             'motivo' => implode(' | ', $errores),
         ];
 
@@ -338,7 +406,9 @@ foreach ($rows as $row) {
                 'fila_csv' => $filaCsv,
                 'codigo' => $codigo,
                 'usuario_input' => $usuarioInput,
-                'motivo' => 'Código no existe en local',
+                'id_division' => $idDivisionRuta,
+                'division_nombre' => $divisionNombreRuta,
+                'motivo' => 'Código no existe en local para la división seleccionada',
             ];
         }
 
@@ -355,24 +425,29 @@ foreach ($rows as $row) {
     }
 
     $encontradosValidos[] = [
-        'fila_csv'       => $filaCsv,
-        'codigo'         => $local['codigo'],
-        'nombre'         => $local['nombre'],
-        'direccion'      => $local['direccion'],
-        'comuna'         => $local['comuna'],
-        'lat'            => $local['lat'],
-        'lng'            => $local['lng'],
-        'tiene_coords'   => has_valid_coords($local),
-        'usuario_input'  => $usuarioInput,
-        'usuario_id'     => $usuarioMatch['usuario_id'],
-        'usuario_login'  => $usuarioMatch['usuario_login'],
-        'usuario_nombre' => $usuarioMatch['usuario_nombre'],
+        'fila_csv'        => $filaCsv,
+        'id_local'        => $local['id_local'],
+        'codigo'          => $local['codigo'],
+        'nombre'          => $local['nombre'],
+        'direccion'       => $local['direccion'],
+        'comuna'          => $local['comuna'],
+        'lat'             => $local['lat'],
+        'lng'             => $local['lng'],
+        'id_division'     => $local['id_division'],
+        'division_nombre' => $local['division_nombre'],
+        'tiene_coords'    => has_valid_coords($local),
+        'usuario_input'   => $usuarioInput,
+        'usuario_id'      => $usuarioMatch['usuario_id'],
+        'usuario_login'   => $usuarioMatch['usuario_login'],
+        'usuario_nombre'  => $usuarioMatch['usuario_nombre'],
     ];
 }
 
 echo json_encode([
     'success' => true,
     'message' => 'Archivo procesado correctamente.',
+    'id_division' => $idDivisionRuta,
+    'division_nombre' => $divisionNombreRuta,
     'total_csv' => count($rows),
     'encontrados' => $encontradosValidos,
     'no_encontrados' => $localesNoEncontrados,
@@ -385,3 +460,4 @@ echo json_encode([
         'filas_invalidas' => count($filasInvalidas),
     ],
 ], JSON_UNESCAPED_UNICODE);
+exit;
