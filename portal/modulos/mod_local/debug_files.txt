@@ -2,19 +2,19 @@ Array
 (
     [csvFile] => Array
         (
-            [name] => formato_creacion_locales1.csv
-            [full_path] => formato_creacion_locales1.csv
+            [name] => formato_creacion_locales.csv
+            [full_path] => formato_creacion_locales.csv
             [type] => text/csv
-            [tmp_name] => /tmp/phpolHLou
+            [tmp_name] => /tmp/php3lrosE
             [error] => 0
-            [size] => 490
+            [size] => 807
         )
 
 )
 
 Array
 (
-    [csrf_token] => 3a2382e17a3fe0abd9f28f208a92eeb773fbb50f961caca2434286440afc438d
+    [csrf_token] => 8c5379163d3edbe5a7a233d128885b88f6506b34cc0dd312477e956b926047ac
     [empresa_id] => 103
-    [division_id] => 7
+    [division_id] => 24
 )

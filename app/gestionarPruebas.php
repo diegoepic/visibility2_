@@ -524,10 +524,6 @@ input[type=file][id^="fotoPregunta_"] {
                    <strong>Gestión recuperada automáticamente.</strong>
                    <span id="recovery-fotos-msg"></span>
                    <span id="recovery-inputs-msg"></span>
-                   <button type="button" class="btn btn-sm btn-warning"
-                           id="btn-discard-draft" style="margin-left:8px;">
-                     Descartar y empezar de nuevo
-                   </button>
                  </div>
 
                  <!-- Indicador de autoguardado (oculto por defecto) -->
@@ -789,10 +785,10 @@ input[type=file][id^="fotoPregunta_"] {
                                             $fullUrl = (!empty($refImg)) ? 'https://visibility.cl/' . ltrim($refImg, '/') : '';
                                             echo "<div style='margin-bottom:5px;'>";
                                             echo "  <label style='margin-right:10px;'>";
-                                            echo "    <input type='radio' name='respuesta[$q_id]' value='$optId' " . ($isRequired==1 ? "required" : "") . "> $optText";
+                                            echo "    <input type='radio' name='respuesta[$q_id]' value='$optId' " . ($isRequired==1 ? "required" : "") . ($isValued===1 ? " data-valued='1'" : "") . "> $optText";
                                             echo "  </label>";
                                             if ($isValued === 1) {
-                                                echo " <input type='number' name='valorRespuesta[$q_id][$optId]' placeholder='Valor' style='width:70px; margin-left:10px;'>";
+                                                echo " <input type='number' name='valorRespuesta[$q_id][$optId]' placeholder='Valor' style='width:70px; margin-left:10px;' class='valor-alternativa'>";
                                             }
                                             if (!empty($refImg)) {
                                                 echo "  <img src='$fullUrl' alt='Ref' style='max-width:50px; max-height:50px; cursor:pointer;' onclick=\"verImagenGrande('$fullUrl')\" title='Haz clic para agrandar'>";
@@ -812,10 +808,10 @@ input[type=file][id^="fotoPregunta_"] {
                                             $fullUrl = (!empty($refImg)) ? 'https://visibility.cl/' . ltrim($refImg, '/') : '';
                                             echo "<div style='margin-bottom:5px;'>";
                                             echo "  <label style='margin-right:10px;'>";
-                                            echo "    <input type='checkbox' name='respuesta[$q_id][]' value='$optId'> $optText";
+                                            echo "    <input type='checkbox' name='respuesta[$q_id][]' value='$optId'" . ($isValued===1 ? " data-valued='1'" : "") . "> $optText";
                                             echo "  </label>";
                                             if ($isValued === 1) {
-                                                echo " <input type='number' name='valorRespuesta[$q_id][$optId]' placeholder='Valor' style='width:70px; margin-left:10px;'>";
+                                                echo " <input type='number' name='valorRespuesta[$q_id][$optId]' placeholder='Valor' style='width:70px; margin-left:10px;' class='valor-alternativa'>";
                                             }
                                             if (!empty($refImg)) {
                                                 echo "  <img src='$fullUrl' alt='Ref' style='max-width:50px; max-height:50px; cursor:pointer;' onclick=\"verImagenGrande('$fullUrl')\" title='Haz clic para agrandar'>";
@@ -1127,6 +1123,24 @@ function mcToast(type, title, msg, timeout=3000) {
   $t.find('.close').on('click', () => $t.fadeOut(200, () => $t.remove()));
   $wrap.append($t);
   setTimeout(() => $t.fadeOut(300, () => $t.remove()), timeout);
+}
+
+function mcAlert(title, message, { type = 'warning', okText = 'Aceptar' } = {}) {
+  return new Promise(resolve => {
+    const $modal = $('#mcConfirmModal');
+    $modal.find('#mcConfirmTitle').text(title);
+    $modal.find('#mcConfirmMessage').html(message);
+    const $ok     = $modal.find('#mcConfirmOk');
+    const $cancel = $modal.find('#mcConfirmCancel');
+    const btnClass = type === 'danger' ? 'btn-danger' : type === 'success' ? 'btn-success' : 'btn-warning';
+    $ok.text(okText).attr('class', 'btn ' + btnClass);
+    $cancel.hide();
+    let handled = false;
+    const done = () => { if (!handled) { handled = true; $cancel.show(); resolve(); $modal.modal('hide'); } };
+    $ok.off('click').on('click', done);
+    $modal.off('hidden.bs.modal').on('hidden.bs.modal', done);
+    $modal.modal('show');
+  });
 }
 
 function resetFileInput(el) {
@@ -2602,19 +2616,19 @@ $(document).ready(function(){
   const motivo = $('#motivo').val();
 
   if (!estado) {
-    alert('Selecciona el estado de la gestión.');
+    await mcAlert('Campo requerido', 'Selecciona el estado de la gestión.');
     $btn.prop('disabled', false).text('Siguiente »');
     return;
   }
 
   if ((estado === 'pendiente' || estado === 'cancelado') && !motivo) {
-    alert('Debes seleccionar un motivo antes de continuar.');
+    await mcAlert('Campo requerido', 'Debes seleccionar un motivo antes de continuar.');
     $btn.prop('disabled', false).text('Siguiente »');
     return;
   }
 
   if (motivo === 'otro_tipo_exhibicion' && !$('#otroTipoExhibicionDetalle').val().trim()) {
-    alert('Debes especificar el tipo de exhibición.');
+    await mcAlert('Campo requerido', 'Debes especificar el tipo de exhibición.');
     $btn.prop('disabled', false).text('Siguiente »');
     return;
   }
@@ -2727,7 +2741,7 @@ $(document).ready(function(){
 
   // Si el backend respondió conflicto, no encolar otra vez
   if (msg.includes('409') || msg.includes('GUID_REUSED') || msg.includes('Conflict')) {
-    alert('Ya existe una visita abierta o hubo conflicto de creación. Recarga la página e inténtalo nuevamente.');
+    await mcAlert('Conflicto de visita', 'Ya existe una visita abierta o hubo conflicto de creación. Recarga la página e inténtalo nuevamente.', { type: 'danger' });
     return;
   }
 
@@ -2753,7 +2767,7 @@ $(document).ready(function(){
       showStep(currentStep);
     } else {
       console.error('Error encolando visita:', offlineErr);
-      alert('No se pudo iniciar la visita ni online ni offline.');
+      await mcAlert('Error de conexión', 'No se pudo iniciar la visita ni online ni offline.', { type: 'danger' });
     }
   }
 } finally {
@@ -2768,9 +2782,9 @@ $(document).ready(function(){
   });
 
   <?php if ($encuestaPendiente): ?>
-  $('#btnNext2').on('click', function(e) {
+  $('#btnNext2').on('click', async function(e) {
       e.preventDefault();
-      if (!validarMateriales()) return;
+      if (!await validarMateriales()) return;
       let estado = $('#estadoGestion').val();
       if (estado === 'implementado_auditado' || estado === 'solo_auditoria'  ) {
           currentStep = 3;
@@ -2913,45 +2927,50 @@ $(document).ready(function(){
 
   // === Validación materiales (acepta modo offline) ===
   
-  function validarMateriales() {
+  async function validarMateriales() {
     const estado = $('#estadoGestion').val();
     if (estado === 'pendiente' || estado === 'cancelado' || estado === 'solo_auditoria') { return true; }
 
     if (estado === 'implementado_auditado' || estado === 'solo_implementado' || estado === 'solo_retirado') {
-      const hayImplementaciones = $('.implementa-material:checked').length > 0;
-      if (!hayImplementaciones) {
-        alert("Para marcar la gestión como implementada, debes seleccionar al menos un material e ingresar su cantidad.");
+      if ($('.implementa-material:checked').length === 0) {
+        await mcAlert('Validación', 'Para marcar la gestión como implementada, debes seleccionar al menos un material e ingresar su cantidad.');
         return false;
       }
     }
 
-    let valido = true;
-    $('.implementa-material').each(function () {
-      const idFQ = $(this).data('id-material');
-      const implementa = $(this).is(':checked');
+    const mats = $('.implementa-material').toArray();
+    for (const el of mats) {
+      const $el = $(el);
+      if (!$el.is(':checked')) continue;
+      const idFQ = $el.data('id-material');
+      const $inputValor = $('#implementa_section_' + idFQ).find('.valor-implementado');
+      const maxPropuesto = parseInt($inputValor.data('valor-propuesto'), 10);
+      const valor = parseInt($inputValor.val(), 10);
 
-      if (implementa) {
-        const $inputValor = $('#implementa_section_' + idFQ).find('.valor-implementado');
-        const maxPropuesto = parseInt($inputValor.data('valor-propuesto'), 10);
-        const valor = parseInt($inputValor.val(), 10);
-
-        if (isNaN(valor)) { alert("Debe ingresar un valor numérico en ID " + idFQ); valido = false; return false; }
-        if (valor <= 0) { alert("El valor implementado debe ser al menos 1 (ID " + idFQ + ")."); valido = false; return false; }
-        if (!isNaN(maxPropuesto) && valor > maxPropuesto) { alert("El valor implementado (" + valor + ") excede el propuesto (" + maxPropuesto + "). (ID " + idFQ + ")"); valido = false; return false; }
-
-        const hiddenUrls = document.querySelectorAll(`#hiddenUploadContainer_${idFQ} input[type="hidden"][name^="fotos[${idFQ}]"]`);
-        const fileInput  = document.getElementById(`fotos_input_${idFQ}`);
-        const haveLocalFiles = fileInput && fileInput.files && fileInput.files.length > 0;
-        const haveQueued = fileInput && fileInput._queuedPhotos && fileInput._queuedPhotos.length > 0;
-
-        if (hiddenUrls.length === 0 && !haveLocalFiles && !haveQueued) {
-          alert("Debes adjuntar al menos una foto para el material implementado (ID " + idFQ + ").\
- Si estás offline, basta con dejar los archivos cargados (se subirán cuando haya red).");
-          valido = false; return false;
-        }
+      if (isNaN(valor)) {
+        await mcAlert('Valor requerido', 'Debes ingresar un valor numérico para el material seleccionado.');
+        return false;
       }
-    });
-    return valido;
+      if (valor <= 0) {
+        await mcAlert('Valor inválido', 'El valor implementado debe ser al menos 1.');
+        return false;
+      }
+      if (!isNaN(maxPropuesto) && valor > maxPropuesto) {
+        await mcAlert('Valor excedido', `El valor implementado (${valor}) excede el propuesto (${maxPropuesto}).`);
+        return false;
+      }
+
+      const hiddenUrls = document.querySelectorAll(`#hiddenUploadContainer_${idFQ} input[type="hidden"][name^="fotos[${idFQ}]"]`);
+      const fileInput  = document.getElementById(`fotos_input_${idFQ}`);
+      const haveLocalFiles = fileInput && fileInput.files && fileInput.files.length > 0;
+      const haveQueued = fileInput && fileInput._queuedPhotos && fileInput._queuedPhotos.length > 0;
+
+      if (hiddenUrls.length === 0 && !haveLocalFiles && !haveQueued) {
+        await mcAlert('Foto requerida', 'Debes adjuntar al menos una foto para el material implementado. Si estás offline, basta con dejar los archivos cargados (se subirán cuando haya red).');
+        return false;
+      }
+    }
+    return true;
   }
 
   // Motivos visible => select foto requerida
@@ -3241,12 +3260,12 @@ function eliminarMaterial(idFQ){
       if(resp.status === 'success'){
         $('#material_block_' + idFQ).remove();
       } else {
-        alert('Error: ' + resp.message);
+        mcToast('danger', 'Error', resp.message || 'No se pudo eliminar el material.', 5000);
       }
     },
     error: function(err){
       console.error(err);
-      alert('Error al conectar con el servidor');
+      mcToast('danger', 'Error de red', 'No se pudo conectar con el servidor.', 5000);
     }
   });
 }
@@ -3269,7 +3288,7 @@ document.getElementById('btnFinalizar')?.addEventListener('click', async functio
   e.preventDefault();
 
   if (pendingUploads > 0) {
-    alert(`Aún se están subiendo ${pendingUploads} foto(s). Espera un momento.`);
+    await mcAlert('Subida en progreso', `Aún se están subiendo ${pendingUploads} foto(s). Espera un momento antes de finalizar.`);
     return;
   }
 
@@ -3277,32 +3296,46 @@ document.getElementById('btnFinalizar')?.addEventListener('click', async functio
   if (visitaReal) { $('#visita_id').val(visitaReal); }
 
   // Validación encuesta/obligatorias
-  var allAnswered = true;
-  $('.question-container:visible').each(function() {
-    var isReq = $(this).attr('data-required');
-    if (isReq === "1") {
-      var answered = false;
-      $(this).find("input[type=radio], input[type=checkbox]").each(function() {
-        if (this.checked) { answered = true; return false; }
+  var containers = $('.question-container:visible').toArray();
+  for (var i = 0; i < containers.length; i++) {
+    var $c = $(containers[i]);
+    if ($c.attr('data-required') !== "1") continue;
+    var answered = false;
+    $c.find("input[type=radio], input[type=checkbox]").each(function() {
+      if (this.checked) { answered = true; return false; }
+    });
+    if (!answered) {
+      $c.find("input:not([type=radio]):not([type=checkbox]), select, textarea").each(function() {
+        if (!this.disabled && String($(this).val()).trim() !== "") { answered = true; return false; }
       });
-      if (!answered) {
-        $(this).find("input:not([type=radio]):not([type=checkbox]), select, textarea").each(function() {
-          var val = $(this).val();
-          if (!this.disabled && String(val).trim() !== "") { answered = true; return false; }
-        });
-      }
-      if (!answered) {
-        alert("Debes responder la pregunta: " + $(this).data('question-text') + ".");
-        allAnswered = false;
-        return false;
+    }
+    if (!answered) {
+      await mcAlert('Pregunta requerida', 'Debes responder la pregunta: <strong>' + $c.data('question-text') + '</strong>');
+      containers[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+  }
+
+  // Validar que las alternativas seleccionadas con valor obligatorio tengan su valor ingresado
+  for (var j = 0; j < containers.length; j++) {
+    var $container = $(containers[j]);
+    var inputs = $container.find("input[type=radio][data-valued='1'], input[type=checkbox][data-valued='1']").toArray();
+    for (var k = 0; k < inputs.length; k++) {
+      if (!inputs[k].checked) continue;
+      var $valorInput = $(inputs[k]).closest('div').find('input.valor-alternativa');
+      if ($valorInput.length && $.trim($valorInput.val()) === '') {
+        var qText = $container.data('question-text');
+        var optText = $.trim($(inputs[k]).closest('label').text());
+        await mcAlert('Valor requerido', 'Debes ingresar el valor para <strong>"' + optText + '"</strong> en la pregunta: ' + qText);
+        $valorInput.focus();
+        return;
       }
     }
-  });
-  if (!allAnswered) return;
+  }
 
   if ($('#comentarioContainer').is(':visible')) {
     var comentario = $('#comentario').val()||"";
-    if ($.trim(comentario) === "") { alert("Debes ingresar comentarios generales."); return; }
+    if ($.trim(comentario) === "") { await mcAlert('Campo requerido', 'Debes ingresar comentarios generales.'); return; }
   }
 
   const estado = $('#estadoGestion').val();
@@ -3316,17 +3349,17 @@ document.getElementById('btnFinalizar')?.addEventListener('click', async functio
     );
     let hasFile = false;
     $inputsVisibles.each(function(){ if (this.files && this.files.length > 0) { hasFile = true; return false; } });
-    if (!hasFile) { alert('Debes subir al menos una foto de evidencia.'); return; }
+    if (!hasFile) { await mcAlert('Foto requerida', 'Debes subir al menos una foto de evidencia.'); return; }
   }
 
-  if (typeof validarMateriales === 'function' && !validarMateriales()) { return; }
+  if (typeof validarMateriales === 'function' && !await validarMateriales()) { return; }
 
   this.disabled = true;
   try{
     await ensureFreshGeo();
   }catch(err){
     showGeoError(err);
-    alert('Para finalizar debes activar el GPS y conceder el permiso de ubicación.');
+    await mcAlert('GPS requerido', 'Para finalizar debes activar el GPS y conceder el permiso de ubicación.', { type: 'danger' });
     this.disabled = false;
     return;
   }
@@ -3380,7 +3413,7 @@ const online = await isReallyOnline();
       return;
     } catch (err) {
       console.error('No se pudo sincronizar la visita antes de enviar la gestión', err);
-      alert('No se pudo confirmar la creación de la visita. Continuamos en modo offline.');
+      mcToast('warning', 'Modo offline', 'No se pudo confirmar la creación de la visita. Continuamos en modo offline.', 5000);
       try {
         await queueProcesarGestion(document.getElementById('gestionarForm'), { reason: 'create_visita_sync_error' });
         if (window.GestionDraft) { try { await window.GestionDraft.markSubmitted(); } catch (_) {} }
@@ -3390,7 +3423,7 @@ const online = await isReallyOnline();
         return;
       } catch (e2) {
         console.error('Tampoco se pudo encolar la gestión', e2);
-        alert('No se pudo enviar ni encolar la gestión. Intenta nuevamente.');
+        await mcAlert('Error', 'No se pudo enviar ni encolar la gestión. Intenta nuevamente.', { type: 'danger' });
         this.disabled = false;
         document.getElementById('loadingOverlay').style.display = 'none';
         return;

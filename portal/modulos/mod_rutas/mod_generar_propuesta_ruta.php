@@ -667,7 +667,7 @@ function twoOptImproveRoute(array $route, int $maxPasses = 25): array
     return $route;
 }
 
-function buildCircuitGroups(array $locales, int $targetPerDay, float $maxJumpKm = 120.0): array
+function buildCircuitGroups(array $locales, int $targetPerDay, float $maxTotalRouteKm = 120.0): array
 {
     if (empty($locales)) {
         return [];
@@ -675,15 +675,18 @@ function buildCircuitGroups(array $locales, int $targetPerDay, float $maxJumpKm 
 
     $targetPerDay = max(1, $targetPerDay);
 
+    // Ordena todos los locales buscando un circuito por cercanía
     $ordered = orderGroupByBestStart($locales);
     $ordered = twoOptImproveRoute($ordered, 25);
 
     $groups = [];
     $current = [];
+    $currentDistanceKm = 0.0;
 
     foreach ($ordered as $local) {
         if (empty($current)) {
             $current[] = $local;
+            $currentDistanceKm = 0.0;
             continue;
         }
 
@@ -696,14 +699,22 @@ function buildCircuitGroups(array $locales, int $targetPerDay, float $maxJumpKm 
             (float)$local['lng']
         );
 
-        $breakBySize = count($current) >= $targetPerDay;
-        $breakByJump = $maxJumpKm > 0 && $jumpKm > $maxJumpKm;
+        $candidateDistanceKm = $currentDistanceKm + $jumpKm;
 
-        if ($breakBySize || $breakByJump) {
+        // Corta la ruta si llegó a la cantidad diaria
+        $breakBySize = count($current) >= $targetPerDay;
+
+        // Corta la ruta si el recorrido acumulado A -> Z supera el KM indicado
+        $breakByTotalDistance = $maxTotalRouteKm > 0 && $candidateDistanceKm > $maxTotalRouteKm;
+
+        if ($breakBySize || $breakByTotalDistance) {
             $groups[] = $current;
+
             $current = [$local];
+            $currentDistanceKm = 0.0;
         } else {
             $current[] = $local;
+            $currentDistanceKm = $candidateDistanceKm;
         }
     }
 
@@ -1645,7 +1656,7 @@ $totalKmEstimado += $distanciaRutaKm;
                 : 'Cobertura suficiente (' . $minLocalesRuta . ' locales o más)',
             
             'observacion' => $modoPlanificacion === 'circuito'
-                ? 'Circuito optimizado por cercanía. Solo se separa cuando se completa la cantidad objetivo diaria o cuando el salto entre puntos supera ' . round($maxKmEntrePuntos, 2) . ' KM.'
+                ? 'Circuito optimizado por cercanía. Solo se separa cuando se completa la cantidad objetivo diaria o cuando la distancia acumulada desde el primer local hasta el último supera ' . round($maxKmEntrePuntos, 2) . ' KM.'
                 : 'Ruta optimizada por cercanía y comuna para usuario asignado. Priorizada por antigüedad de fechaPropuesta y manteniendo compactación geográfica.'
         ];
     }
@@ -1675,7 +1686,7 @@ $sheet->fromArray([
     ['Cantidad objetivo por día', $cantidadPorDia],
     ['Máximo permitido por día', $maximoPorDia],
     ['Rango esperado por ruta', $cantidadPorDia . ' a ' . $maximoPorDia],
-    ['Máx. salto entre puntos (KM)', round($maxKmEntrePuntos, 2)],
+    ['Máx. distancia circuito A-Z (KM)', round($maxKmEntrePuntos, 2)],
     ['Máx. diámetro por ruta (KM)', round($maxDiameterKm, 2)],
     ['Máx. radio por ruta (KM)', round($maxRadiusKm, 2)],
     ['Máx. comunas por ruta', $maxComunasRuta],

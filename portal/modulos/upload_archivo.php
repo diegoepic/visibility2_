@@ -87,17 +87,39 @@ $nombreSeguro = preg_replace('/[^A-Za-z0-9_.-]/', '_', $nombreOri);
 // 5) Ruta destino completa:
 $rutaDestino = "$rutaCarpeta/$nombreSeguro";
 
-// 5.1) (Opcional) Si quieres borrar el viejo antes de pisar:
-// if (file_exists($rutaDestino)) {
-//     unlink($rutaDestino);
-// }
+// 5.1) Si el archivo ya existe, lo eliminamos antes de subir el nuevo
+$reemplazado = false;
 
-// 6) Mover el archivo (si el destino ya existe, lo sobrescribe por defecto):
+if (file_exists($rutaDestino)) {
+    if (!is_writable($rutaDestino)) {
+        http_response_code(500);
+        echo json_encode([
+            "error" => "El archivo ya existe, pero no tiene permisos para ser reemplazado."
+        ]);
+        exit;
+    }
+
+    if (!unlink($rutaDestino)) {
+        http_response_code(500);
+        echo json_encode([
+            "error" => "No se pudo eliminar el archivo anterior para reemplazarlo."
+        ]);
+        exit;
+    }
+
+    $reemplazado = true;
+}
+
+// 6) Mover el archivo nuevo
 if (!move_uploaded_file($nombreTemp, $rutaDestino)) {
     http_response_code(500);
-    echo json_encode(["error" => "Error al mover el archivo a la carpeta destino."]);
+    echo json_encode([
+        "error" => "Error al mover el archivo a la carpeta destino."
+    ]);
     exit;
 }
+
+clearstatcache(true, $rutaDestino);
 
 // 7) Generar la URL pública:
 $dominio = "https://visibility.cl/visibility2/portal";
@@ -107,7 +129,10 @@ $urlFinal = "$dominio/$subpath";
 // 8) Responder con éxito:
 http_response_code(200);
 echo json_encode([
-    "exito" => true,
-    "url"   => $urlFinal
+    "exito"       => true,
+    "url"         => $urlFinal,
+    "reemplazado" => $reemplazado,
+    "archivo"     => $nombreSeguro,
+    "modificado"  => date('Y-m-d H:i:s', filemtime($rutaDestino))
 ]);
 exit;

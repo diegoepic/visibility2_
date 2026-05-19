@@ -103,7 +103,7 @@ foreach($flat as $q){
     'required' => (int)$q['is_required']===1,
     'valued'   => (int)$q['is_valued']===1,
     'dep'  => $q['id_dependency_option'] ? (int)$q['id_dependency_option'] : null,
-    'options' => array_map(fn($o)=>['id'=>(int)$o['id'],'text'=>$o['option_text']], $ops)
+    'options' => array_map(fn($o)=>['id'=>(int)$o['id'],'text'=>$o['option_text'],'img'=>$o['reference_image']??''], $ops)
   ];
 }
 
@@ -202,6 +202,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='add_questio
   @keyframes flash { 0%{box-shadow:0 0 0 rgba(17,120,255,0);} 25%{box-shadow:0 0 0 6px rgba(17,120,255,.2);} 100%{box-shadow:0 0 0 rgba(17,120,255,0);} }
   .small-help{font-size:.85rem; color:#6c757d;}
   .toast-container{position:fixed; top:12px; right:12px; z-index:2000;}
+  /* Simulador */
+  .sim-ref-img { transition: max-width .2s, max-height .2s; }
+  .sim-ref-img--big { max-width: 200px !important; max-height: 200px !important; }
 </style>
 </head>
 <body class="p-3">
@@ -827,60 +830,127 @@ $('#searchInput').on('input', function(){
 
 /* ====== Simulador ====== */
 $('#btnSimular').on('click', function(){
-  const data=(window.SET_MODEL && window.SET_MODEL.questions) ? window.SET_MODEL.questions : [];
-  const byOpt={}; data.forEach(q => (q.options||[]).forEach(o=>{byOpt[o.id]=q.id;}));
-  const $c=$('#simContainer').empty(); const state={};
+  const data = (window.SET_MODEL && window.SET_MODEL.questions) ? window.SET_MODEL.questions : [];
+  const byOpt = {}, byId = {};
+  data.forEach(q => { byId[q.id] = q; (q.options||[]).forEach(o => { byOpt[o.id] = q.id; }); });
+
+  const $c      = $('#simContainer').empty();
+  const state    = {};  // qId → optId (radio) | optId[] (checkbox)
+  const valState = {};  // qId → { optId: value }   (preguntas valorizadas)
+  const txtState = {};  // qId → string              (tipos 4/5/6)
+
+  $c.off();
+
+  $c.on('change', 'input[type=radio]', function(){
+    const qid = parseInt($(this).data('qid'), 10);
+    state[qid] = parseInt(this.value, 10);
+    render();
+  });
+  $c.on('change', 'input[type=checkbox]', function(){
+    const qid = parseInt($(this).data('qid'), 10);
+    let arr = Array.isArray(state[qid]) ? [...state[qid]] : [];
+    const val = parseInt(this.value, 10);
+    if (this.checked) { if (!arr.includes(val)) arr.push(val); }
+    else { arr = arr.filter(x => x !== val); }
+    state[qid] = arr;
+    render();
+  });
+  $c.on('input', '.sim-txt-input', function(){
+    txtState[parseInt($(this).data('qid'), 10)] = this.value;
+  });
+  $c.on('input', '.sim-val-input', function(){
+    const qid = parseInt($(this).data('qid'), 10);
+    const oid = parseInt($(this).data('oid'), 10);
+    if (!valState[qid]) valState[qid] = {};
+    valState[qid][oid] = this.value;
+  });
+  $c.on('click', '.sim-ref-img', function(){
+    $(this).toggleClass('sim-ref-img--big');
+  });
 
   function visibleQuestions(){
-    return data.filter(q=>{
-      if(q.dep===null) return true;
-      const parentQ=byOpt[q.dep]; if(!parentQ) return false;
-      const sel=state[parentQ];
-      if(Array.isArray(sel)) return sel.includes(q.dep);
-      return sel===q.dep;
-    });
+    const memo = {};
+    function isVis(q) {
+      if (q.id in memo) return memo[q.id];
+      if (q.dep === null) return (memo[q.id] = true);
+      const parentQId = byOpt[q.dep];
+      if (!parentQId) return (memo[q.id] = false);
+      const parentQ = byId[parentQId];
+      if (!parentQ || !isVis(parentQ)) return (memo[q.id] = false);
+      const sel = state[parentQId];
+      const depSelected = Array.isArray(sel) ? sel.includes(q.dep) : sel === q.dep;
+      return (memo[q.id] = depSelected);
+    }
+    return data.filter(isVis);
   }
+
+  function appendOption(q, o, isChecked, inputType){
+    const $wrap = $('<div style="margin-bottom:5px;"></div>');
+    const $lbl  = $('<label style="margin:0 10px 0 0; cursor:pointer; font-weight:normal;"></label>');
+    const $inp  = $(`<input type="${inputType}" name="sim_q_${q.id}" value="${o.id}" data-qid="${q.id}" style="margin-right:5px;">`);
+    if (isChecked) $inp.prop('checked', true);
+    $lbl.append($inp).append(document.createTextNode(' ' + o.text));
+    $wrap.append($lbl);
+    if (o.img) {
+      $wrap.append($('<img class="sim-ref-img" style="max-width:50px;max-height:50px;margin-left:8px;vertical-align:middle;border-radius:4px;cursor:pointer;object-fit:cover;">').attr('src', o.img));
+    }
+    if (q.valued) {
+      const curVal = (valState[q.id] || {})[o.id] !== undefined ? (valState[q.id] || {})[o.id] : '';
+      $wrap.append($(`<input type="number" class="sim-val-input" data-qid="${q.id}" data-oid="${o.id}" placeholder="Valor" style="width:70px;margin-left:10px;">`).val(curVal));
+    }
+    return $wrap;
+  }
+
   function render(){
     $c.empty();
-    const vis=visibleQuestions();
-    vis.forEach(q=>{
-      const $row=$('<div class="border rounded p-2 mb-2"></div>');
-      $row.append('<div class="font-weight-bold mb-1">'+escapeHtml(q.text)+'</div>');
-      if([1,2].includes(q.type)){
-        const name='q_'+q.id; const ops=q.options||[];
-        ops.forEach(o=>{
-          const $opt=$(`
-            <div class="custom-control custom-radio">
-              <input type="radio" id="sim_${o.id}" name="${name}" class="custom-control-input" value="${o.id}">
-              <label class="custom-control-label" for="sim_${o.id}">${escapeHtml(o.text)}</label>
-            </div>`);
-          $row.append($opt);
+    visibleQuestions().forEach(q => {
+      const $row = $('<div class="form-group" style="border:1px solid #ddd;border-radius:6px;padding:12px;background:#fff;margin-bottom:12px;"></div>');
+      const reqMark = q.required
+        ? '<span style="font-style:italic;color:#999;font-size:13px;"> *obl</span>'
+        : '<span style="font-style:italic;color:#ccc;font-size:13px;"> *opc</span>';
+      $row.append($('<label style="font-weight:600;display:block;"></label>').html(escapeHtml(q.text) + reqMark));
+
+      if ([1, 2].includes(q.type)) {
+        const curSel = state[q.id];
+        (q.options||[]).forEach(o => {
+          $row.append(appendOption(q, o, curSel === o.id, 'radio'));
         });
-        if(state[q.id]) $row.find('input[value="'+state[q.id]+'"]').prop('checked', true);
-        $row.on('change','input[type=radio]', function(){ state[q.id]=parseInt(this.value,10); render(); });
-      } else if(q.type===3){
-        const ops=q.options||[]; const sel=Array.isArray(state[q.id])?state[q.id]:[];
-        ops.forEach(o=>{
-          const checked=sel.includes(o.id)?'checked':'';
-          const $opt=$(`
-            <div class="custom-control custom-checkbox">
-              <input type="checkbox" id="sim_${o.id}" class="custom-control-input" value="${o.id}" ${checked}>
-              <label class="custom-control-label" for="sim_${o.id}">${escapeHtml(o.text)}</label>
-            </div>`);
-          $row.append($opt);
+
+      } else if (q.type === 3) {
+        const curSel = Array.isArray(state[q.id]) ? state[q.id] : [];
+        (q.options||[]).forEach(o => {
+          $row.append(appendOption(q, o, curSel.includes(o.id), 'checkbox'));
         });
-        $row.on('change','input[type=checkbox]', function(){
-          let arr=Array.isArray(state[q.id])?state[q.id]:[]; const val=parseInt(this.value,10);
-          if(this.checked){ if(!arr.includes(val)) arr.push(val); } else { arr=arr.filter(x=>x!==val); }
-          state[q.id]=arr; render();
-        });
+
+      } else if (q.type === 4) {
+        $row.append($('<input type="text" class="form-control sim-txt-input">').attr('data-qid', q.id).attr('placeholder', 'Respuesta…').val(txtState[q.id] || ''));
+
+      } else if (q.type === 5) {
+        $row.append($('<input type="number" class="form-control sim-txt-input">').attr('data-qid', q.id).attr('placeholder', '0').val(txtState[q.id] !== undefined ? txtState[q.id] : ''));
+
+      } else if (q.type === 6) {
+        $row.append($('<input type="date" class="form-control sim-txt-input">').attr('data-qid', q.id).val(txtState[q.id] || ''));
+
+      } else if (q.type === 7) {
+        $row.append(`
+          <div>
+            <button type="button" class="btn btn-outline-secondary btn-sm" disabled><i class="fa fa-image mr-1"></i>Elegir desde galería</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm ml-1" disabled><i class="fa fa-camera mr-1"></i>Tomar foto</button>
+            <div style="margin-top:6px;font-style:italic;color:#aaa;font-size:12px;">Foto no disponible en simulador</div>
+          </div>`);
       } else {
-        $row.append('<input type="text" class="form-control" placeholder="Respuesta…">');
+        $row.append($('<input type="text" class="form-control sim-txt-input">').attr('data-qid', q.id).attr('placeholder', 'Respuesta…').val(txtState[q.id] || ''));
       }
+
       $c.append($row);
     });
+    if (!$c.children().length) {
+      $c.append('<p class="text-muted">No hay preguntas para mostrar.</p>');
+    }
   }
-  render(); $('#simModal').modal('show');
+
+  render();
+  $('#simModal').modal('show');
 });
 </script>
 </body>

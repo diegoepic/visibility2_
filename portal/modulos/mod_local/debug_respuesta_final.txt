@@ -1,11 +1,12 @@
 {
     "success": true,
-    "inserted": 2,
+    "inserted": 3,
     "failed": 0,
     "reportUrl": "",
     "successes": [
-        "L\u00ednea 2: Local '0097 HIPER LIDER' (c\u00f3digo CPW0097) insertado.",
-        "L\u00ednea 3: Local '0736 HIPER LIDER' (c\u00f3digo CPW0736) insertado."
+        "L\u00ednea 2: Local '0005183854 - LOZANO SILVA LUIS FERNANDO DEL SANTA CRUZ' (c\u00f3digo 5183854) insertado.",
+        "L\u00ednea 3: Local '0006579469 - COMERCIALIZADORA XIMENA LA FLORIDA' (c\u00f3digo 6579469) insertado.",
+        "L\u00ednea 4: Local '0007016458 - COMERCIALIZADORA LICAN PET SPA VILLARRICA' (c\u00f3digo 7016458) insertado."
     ],
     "failures": []
 }

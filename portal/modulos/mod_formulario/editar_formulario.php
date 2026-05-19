@@ -427,6 +427,7 @@ $stmt = $conn->prepare("
         tipo,
         modalidad,
         id_division,
+        id_subdivision,
         id_empresa,
         url_bi,
         reference_image
@@ -476,6 +477,13 @@ $result_divisiones = $stmt_divisiones->get_result();
 $divisiones = $result_divisiones->fetch_all(MYSQLI_ASSOC);
 $stmt_divisiones->close();
 
+// Subdivisiones de la división actual
+$subdivisiones_actuales = [];
+$id_div_actual = (int)($formulario['id_division'] ?? 0);
+if ($id_div_actual > 0) {
+    $subdivisiones_actuales = obtenerSubdivisionesPorDivision($id_div_actual);
+}
+
 // -----------------------------------------------------------------------------
 // ACTUALIZAR FORMULARIO
 // -----------------------------------------------------------------------------
@@ -485,8 +493,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $fechaTermino = $_POST['fechaTermino'] ?? '';
     $estado       = (int)($_POST['estado'] ?? 0);
     $tipo         = (int)($_POST['tipo'] ?? 0);
-    $id_division  = (int)($_POST['id_division'] ?? 0);
-    $modalidad    = trim($_POST['modalidad'] ?? '');
+    $id_division    = (int)($_POST['id_division'] ?? 0);
+    $id_subdivision = (int)($_POST['id_subdivision'] ?? 0);
+    $modalidad      = trim($_POST['modalidad'] ?? '');
     $url_bi       = trim($_POST['url_bi'] ?? '');
 
     // Tipo 2 (Actividad IW / complementaria): modalidad siempre = 'complementaria',
@@ -550,6 +559,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 tipo = ?,
                 modalidad = ?,
                 id_division = ?,
+                id_subdivision = ?,
                 url_bi = ?,
                 reference_image = ?
             WHERE id = ?
@@ -559,7 +569,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
 
         $stmt_update->bind_param(
-            "sssiisissi",
+            "sssiisiissi",
             $nombre,
             $fechaInicio,
             $fechaTermino,
@@ -567,6 +577,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $tipo,
             $modalidad,
             $id_division,
+            $id_subdivision,
             $url_bi,
             $reference_image,
             $formulario_id
@@ -581,6 +592,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $formulario['tipo'] = $tipo;
             $formulario['modalidad'] = $modalidad;
             $formulario['id_division'] = $id_division;
+            $formulario['id_subdivision'] = $id_subdivision;
+            $subdivisiones_actuales = obtenerSubdivisionesPorDivision($id_division);
             $formulario['url_bi'] = $url_bi;
             $formulario['reference_image'] = $reference_image;
         } else {
@@ -1324,6 +1337,19 @@ $sets = getQuestionSets();
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <!-- Selección de Subdivisión -->
+                <div class="form-group">
+                    <label for="id_subdivision">Subdivisión:</label>
+                    <select id="id_subdivision" name="id_subdivision" class="form-control">
+                        <option value="0">Sin subdivisión</option>
+                        <?php foreach ($subdivisiones_actuales as $sub): ?>
+                            <option value="<?php echo (int)$sub['id']; ?>"
+                                <?php if ((int)($formulario['id_subdivision'] ?? 0) === (int)$sub['id']) echo 'selected'; ?>>
+                                <?php echo h($sub['nombre']); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
                 <div class="form-group" id="modalidadContainer">
                   <label for="modalidad">Modalidad de la encuesta:</label>
                   <select id="modalidad" name="modalidad" class="form-control">
@@ -1811,6 +1837,33 @@ $(document).ready(function () {
         const newQuery = params.toString();
         history.replaceState({}, '', location.pathname + (newQuery ? '?' + newQuery : ''));
     }
+
+    // ---------------------------------------------------------
+    // Recargar subdivisiones al cambiar la división
+    // ---------------------------------------------------------
+    $('#id_division').on('change', function () {
+        const idDiv = parseInt($(this).val(), 10) || 0;
+        const $sel = $('#id_subdivision');
+
+        if (idDiv <= 0) {
+            $sel.html('<option value="0">Sin subdivisión</option>');
+            return;
+        }
+
+        $sel.html('<option value="0">Cargando...</option>').prop('disabled', true);
+
+        $.getJSON('../mod_cargar/cargar_subdivisiones.php', { id_division: idDiv }, function (resp) {
+            let opts = '<option value="0">Sin subdivisión</option>';
+            if (resp.ok && resp.subdivisiones && resp.subdivisiones.length > 0) {
+                resp.subdivisiones.forEach(function (s) {
+                    opts += '<option value="' + s.id + '">' + $('<span>').text(s.nombre).html() + '</option>';
+                });
+            }
+            $sel.html(opts).prop('disabled', false);
+        }).fail(function () {
+            $sel.html('<option value="0">Sin subdivisión</option>').prop('disabled', false);
+        });
+    });
 
     // ---------------------------------------------------------
     // Ver gestiones

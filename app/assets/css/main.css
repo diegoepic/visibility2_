@@ -68,8 +68,9 @@ span.input-icon, span.input-help {
 	position: relative;
 }
 .nickname{
-    position: absolute;
-    top: 63%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
     
 
@@ -390,6 +391,11 @@ a.bricky:hover {
 }
 .navbar > .container .navbar-brand i, .logo i {
 	font-size: 20px;
+}
+.navbar-tools {
+	display: flex;
+	align-items: center;
+	float: right;
 }
 .navbar-tools > ul {
 	list-style: none;

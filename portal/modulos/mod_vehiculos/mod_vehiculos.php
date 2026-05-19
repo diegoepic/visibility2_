@@ -151,6 +151,291 @@ date_default_timezone_set('America/Santiago');
         .select2-dropdown {
             z-index: 9999;
         }
+.report-answer-box {
+    max-height: 180px;
+    overflow-y: auto;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 10px;
+    font-size: 13px;
+}
+
+.report-answer-item {
+    padding: 7px 0;
+    border-bottom: 1px dashed #d1d5db;
+}
+
+.report-answer-item:last-child {
+    border-bottom: none;
+}
+
+.report-question {
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 2px;
+}
+
+.report-response {
+    color: #374151;
+}
+
+.report-date {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 600;
+}
+
+.report-table thead th {
+    white-space: nowrap;
+    font-size: 12px;
+    vertical-align: middle;
+}
+
+.report-table tbody td {
+    vertical-align: top;
+    font-size: 13px;
+    min-width: 150px;
+}
+
+.report-cell-text {
+    max-width: 260px;
+    max-height: 120px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 8px;
+    color: #374151;
+}
+
+.report-photo-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-width: 230px;
+}
+
+.report-photo-thumb {
+    width: 58px;
+    height: 58px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
+    background: #f3f4f6;
+    cursor: pointer;
+    transition: .15s ease;
+}
+
+.report-photo-thumb:hover {
+    transform: scale(1.05);
+}
+
+.report-photo-more {
+    width: 58px;
+    height: 58px;
+    border-radius: 10px;
+    background: #111827;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+#modalReporte .modal-reporte-dialog {
+    width: calc(100vw - 28px);
+    max-width: calc(100vw - 28px);
+    margin: 14px auto;
+}
+
+#modalReporte .modal-content {
+    height: calc(100vh - 28px);
+}
+
+#modalReporte .modal-body {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.report-table-scroll {
+    flex: 1;
+    overflow: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    background: #fff;
+}
+
+.report-table {
+    min-width: 1500px;
+    margin-bottom: 0;
+}
+
+.report-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    white-space: nowrap;
+    font-size: 12px;
+    vertical-align: middle;
+    background: #111827 !important;
+    color: #fff;
+}
+
+.report-table tbody td {
+    vertical-align: top;
+    font-size: 13px;
+    min-width: 150px;
+}
+
+.report-cell-text {
+    max-width: 260px;
+    max-height: 90px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 8px;
+    color: #374151;
+}
+
+.report-photo-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-width: 240px;
+}
+
+.report-photo-thumb {
+    width: 62px;
+    height: 62px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
+    background: #f3f4f6;
+    cursor: pointer;
+    transition: .15s ease;
+}
+
+.report-photo-thumb:hover {
+    transform: scale(1.06);
+    box-shadow: 0 6px 14px rgba(15, 23, 42, .18);
+}
+
+.report-photo-more {
+    width: 62px;
+    height: 62px;
+    border-radius: 10px;
+    background: #111827;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.report-photo-large {
+    max-width: 100%;
+    max-height: calc(100vh - 95px);
+    object-fit: contain;
+    border-radius: 14px;
+}
+
+@media (min-width: 1200px) {
+    .modal-xl {
+        --bs-modal-width: 95%!important;
+    }
+}
+
+.visor-foto-reporte {
+    position: fixed;
+    inset: 10px;
+    background: rgba(3, 7, 18, .96);
+    z-index: 30000;
+    display: none;
+    flex-direction: column;
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .45);
+}
+
+.visor-foto-reporte.show {
+    display: flex;
+}
+
+.visor-foto-reporte-header {
+    height: 58px;
+    padding: 0 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: white;
+    border-bottom: 1px solid rgba(255, 255, 255, .12);
+}
+
+.visor-foto-reporte-title {
+    font-weight: 700;
+    font-size: 15px;
+}
+
+.visor-foto-reporte-close {
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 34px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.visor-foto-reporte-body {
+    flex: 1;
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+}
+
+.visor-foto-reporte-body img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 14px;
+}
+
+#modalReporte .modal-reporte-dialog {
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    margin: 10px auto;
+}
+
+#modalReporte .modal-content {
+    height: calc(100vh - 20px);
+}
+
+#modalReporte .modal-body {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.report-table-scroll {
+    flex: 1;
+    overflow: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    background: #fff;
+}
+
+.report-table {
+    min-width: 1700px;
+    margin-bottom: 0;
+}
     </style>
 </head>
 
@@ -165,6 +450,10 @@ date_default_timezone_set('America/Santiago');
         </div>
 
         <div class="d-flex gap-2">
+            <button class="btn btn-outline-light btn-main" onclick="abrirModalReporte()">
+                <i class="fa-solid fa-chart-table me-1"></i> Reporte
+            </button>
+        
             <a href="mod_vehiculos_carga_masiva.php" class="btn btn-outline-light btn-main">
                 <i class="fa-solid fa-file-arrow-up me-1"></i> Carga masiva
             </a>
@@ -173,7 +462,7 @@ date_default_timezone_set('America/Santiago');
                 <i class="fa-solid fa-plus me-1"></i> Nuevo vehículo
             </button>
         </div>
-    </div>
+            </div>
 
     <div class="card card-modern">
         <div class="card-body">
@@ -358,6 +647,102 @@ date_default_timezone_set('America/Santiago');
     </div>
 </div>
 
+<!-- MODAL REPORTE -->
+<div class="modal fade" id="modalReporte" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fa-solid fa-chart-table me-2"></i> Reporte
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+
+                <div class="row mb-3 g-2">
+                    <div class="col-md-5">
+                        <input 
+                            type="text" 
+                            id="buscarReporteVehiculo" 
+                            class="form-control" 
+                            placeholder="Buscar por patente, RUT, nombre o respuesta..."
+                        >
+                    </div>
+
+                    <div class="col-md-2">
+                        <button class="btn btn-dark w-100 btn-main" onclick="cargarReporteVehiculos()">
+                            <i class="fa-solid fa-rotate me-1"></i> Actualizar
+                        </button>
+                    </div>
+                </div>
+
+                <div class="alert alert-info">
+                    <i class="fa-solid fa-circle-info me-1"></i>
+                    Este reporte muestra la respuesta más actualizada por trabajador para la campaña/formulario ID 138.
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle report-table" id="tablaReporteVehiculos">
+                        <thead id="theadReporteVehiculos">
+                            <tr>
+                                <th>Placa patente</th>
+                                <th>RUT usuario</th>
+                                <th>Nombre completo</th>
+                                <th>Última respuesta</th>
+                            </tr>
+                        </thead>
+                
+                        <tbody id="tbodyReporteVehiculos">
+                            <tr>
+                                <td colspan="4" class="text-center text-muted py-4">
+                                    Presiona actualizar para cargar el reporte.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- MODAL FOTO REPORTE -->
+<div class="modal fade" id="modalReporte" tabindex="-1">
+    <div class="modal-dialog modal-reporte-dialog modal-dialog-scrollable">
+        <div class="modal-content bg-dark">
+
+            <div class="modal-header border-0 text-white">
+                <h5 class="modal-title" id="tituloFotoReporte">Foto</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body p-2 d-flex align-items-center justify-content-center">
+                <img id="imgFotoReporte" src="" class="report-photo-large" alt="Foto reporte">
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- VISOR FOTO REPORTE -->
+<div id="visorFotoReporte" class="visor-foto-reporte">
+    <div class="visor-foto-reporte-header">
+        <div id="visorFotoReporteTitulo" class="visor-foto-reporte-title">Foto</div>
+
+        <button type="button" class="visor-foto-reporte-close" onclick="cerrarFotoReporte()">
+            &times;
+        </button>
+    </div>
+
+    <div class="visor-foto-reporte-body">
+        <img id="visorFotoReporteImg" src="" alt="Foto reporte">
+    </div>
+</div>
+
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -375,10 +760,19 @@ let catalogos = {
 
 let modalVehiculo = null;
 let modalHistorial = null;
+let modalReporte = null;
+
+let reporteVehiculos = [];
+let reportePreguntas = [];
 
 $(document).ready(function () {
     modalVehiculo = new bootstrap.Modal(document.getElementById('modalVehiculo'));
     modalHistorial = new bootstrap.Modal(document.getElementById('modalHistorial'));
+    const modalReporteEl = document.getElementById('modalReporte');
+    
+    if (modalReporteEl) {
+        modalReporte = new bootstrap.Modal(modalReporteEl);
+    }
 
     cargarCatalogos();
     cargarVehiculos();
@@ -387,9 +781,20 @@ $(document).ready(function () {
         renderVehiculos();
     });
 
+    $('#buscarReporteVehiculo').on('keyup', function () {
+        renderReporteVehiculos();
+    });
+
     $('#formVehiculo').on('submit', function (e) {
         e.preventDefault();
         guardarVehiculo();
+    });
+
+    $(document).on('click', '.js-report-photo', function () {
+        const url = $(this).attr('data-url') || '';
+        const title = $(this).attr('data-title') || 'Foto';
+    
+        abrirFotoReporte(url, title);
     });
 
     inicializarSelect2Merchan();
@@ -833,6 +1238,273 @@ function verHistorial(idVehiculo) {
         `);
     });
 }
+
+function abrirModalReporte() {
+    if (!modalReporte) {
+        alert('No se encontró el modal de reporte. Revisa que exista el HTML con id="modalReporte".');
+        return;
+    }
+
+    $('#buscarReporteVehiculo').val('');
+
+    $('#tbodyReporteVehiculos').html(`
+        <tr>
+            <td colspan="5" class="text-center text-muted py-4">
+                Cargando reporte...
+            </td>
+        </tr>
+    `);
+
+    modalReporte.show();
+    cargarReporteVehiculos();
+}
+
+function cargarReporteVehiculos() {
+    $('#tbodyReporteVehiculos').html(`
+        <tr>
+            <td colspan="4" class="text-center text-muted py-4">
+                <i class="fa-solid fa-spinner fa-spin me-1"></i> Cargando reporte...
+            </td>
+        </tr>
+    `);
+
+    $.getJSON('/visibility2/portal/modulos/mod_vehiculos/ajax_vehiculos_reporte.php', function (resp) {
+        if (!resp || !resp.ok) {
+            $('#tbodyReporteVehiculos').html(`
+                <tr>
+                    <td colspan="4" class="text-center text-danger py-4">
+                        ${escapeHtml(resp?.msg || 'No se pudo cargar el reporte.')}
+                    </td>
+                </tr>
+            `);
+            return;
+        }
+
+        reportePreguntas = Array.isArray(resp.questions) ? resp.questions : [];
+        reporteVehiculos = Array.isArray(resp.data) ? resp.data : [];
+
+        renderReporteVehiculos();
+
+    }).fail(function (xhr) {
+        console.error(xhr.responseText);
+
+        $('#tbodyReporteVehiculos').html(`
+            <tr>
+                <td colspan="4" class="text-center text-danger py-4">
+                    Error inesperado al cargar el reporte.
+                </td>
+            </tr>
+        `);
+    });
+}
+
+function renderReporteVehiculos() {
+    renderHeaderReporte();
+
+    const filtro = $('#buscarReporteVehiculo').val().toLowerCase().trim();
+
+    const data = reporteVehiculos.filter(item => {
+        const texto = obtenerTextoBusquedaReporte(item);
+        return texto.includes(filtro);
+    });
+
+    const colspan = 4 + reportePreguntas.length;
+
+    if (data.length === 0) {
+        $('#tbodyReporteVehiculos').html(`
+            <tr>
+                <td colspan="${colspan}" class="text-center text-muted py-4">
+                    No se encontraron datos para el reporte.
+                </td>
+            </tr>
+        `);
+        return;
+    }
+
+    let html = '';
+
+    data.forEach(item => {
+        html += `
+            <tr>
+                <td>
+                    <span class="vehicle-plate">
+                        <i class="fa-solid fa-car"></i>
+                        ${escapeHtml(item.patente || '-')}
+                    </span>
+                </td>
+
+                <td>${escapeHtml(item.rut_usuario || '-')}</td>
+
+                <td>
+                    <strong>${escapeHtml(item.nombre_completo || '-')}</strong>
+                    ${
+                        item.usuario_merchan
+                            ? `<div class="text-muted small">${escapeHtml(item.usuario_merchan)}</div>`
+                            : ''
+                    }
+                </td>
+
+                <td>
+                    <div>${escapeHtml(item.fecha_ultima_respuesta || '-')}</div>
+                    <div class="report-date">${escapeHtml(item.hora_ultima_respuesta || '')}</div>
+                </td>
+        `;
+
+        reportePreguntas.forEach(pregunta => {
+            const key = 'q_' + pregunta.id;
+            const respuesta = item.answers ? item.answers[key] : null;
+
+            html += `
+                <td>
+                    ${renderCeldaRespuestaReporte(respuesta, pregunta)}
+                </td>
+            `;
+        });
+
+        html += `</tr>`;
+    });
+
+    $('#tbodyReporteVehiculos').html(html);
+}
+
+function renderHeaderReporte() {
+    let html = `
+        <tr>
+            <th>Placa patente</th>
+            <th>RUT usuario</th>
+            <th>Nombre completo</th>
+            <th>Última respuesta</th>
+    `;
+
+    reportePreguntas.forEach(p => {
+        html += `
+            <th title="${escapeHtml(p.question_text || '')}">
+                ${escapeHtml(p.question_text || '-')}
+            </th>
+        `;
+    });
+
+    html += `</tr>`;
+
+    $('#theadReporteVehiculos').html(html);
+}
+
+function renderCeldaRespuestaReporte(respuesta, pregunta) {
+    if (!respuesta) {
+        return `<span class="text-muted small">-</span>`;
+    }
+
+    const esFoto = Number(pregunta.id_question_type) === 7 || respuesta.type === 'photo';
+
+    if (esFoto) {
+        const fotos = Array.isArray(respuesta.photos) ? respuesta.photos : [];
+
+        if (fotos.length === 0) {
+            return `<span class="text-muted small">Sin foto</span>`;
+        }
+
+        let html = `<div class="report-photo-grid">`;
+
+        fotos.slice(0, 5).forEach(foto => {
+            html += `
+                <a href="${escapeHtml(foto.url)}" target="_blank" title="${escapeHtml(foto.name || 'Foto')}">
+                    <img 
+                        src="${escapeHtml(foto.url)}" 
+                        class="report-photo-thumb" 
+                        alt="${escapeHtml(foto.name || 'Foto')}"
+                        loading="lazy"
+                    >
+                </a>
+            `;
+        });
+
+        if (fotos.length > 5) {
+            html += `
+                <div class="report-photo-more">
+                    +${fotos.length - 5}
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+
+        return html;
+    }
+
+    const valor = respuesta.value || '';
+
+    if (!valor) {
+        return `<span class="text-muted small">-</span>`;
+    }
+
+    return `
+        <div class="report-cell-text">
+            ${escapeHtml(valor)}
+        </div>
+    `;
+}
+
+function obtenerTextoBusquedaReporte(item) {
+    let partes = [
+        item.patente,
+        item.rut_usuario,
+        item.nombre_completo,
+        item.usuario_merchan,
+        item.fecha_ultima_respuesta,
+        item.hora_ultima_respuesta
+    ];
+
+    if (item.answers) {
+        Object.values(item.answers).forEach(resp => {
+            if (!resp) return;
+
+            if (resp.value) {
+                partes.push(resp.value);
+            }
+
+            if (Array.isArray(resp.photos)) {
+                resp.photos.forEach(foto => {
+                    partes.push(foto.name || '');
+                    partes.push(foto.url || '');
+                });
+            }
+        });
+    }
+
+    return partes
+        .map(v => v || '')
+        .join(' ')
+        .toLowerCase();
+}
+
+function abrirFotoReporte(url, title) {
+    if (!url) {
+        return;
+    }
+
+    $('#visorFotoReporteImg').attr('src', url);
+    $('#visorFotoReporteTitulo').text(title || 'Foto');
+
+    $('#visorFotoReporte').addClass('show');
+}
+
+function cerrarFotoReporte() {
+    $('#visorFotoReporte').removeClass('show');
+    $('#visorFotoReporteImg').attr('src', '');
+}
+
+$(document).on('keydown', function (e) {
+    if (e.key === 'Escape') {
+        cerrarFotoReporte();
+    }
+});
+
+$(document).on('click', '#visorFotoReporte', function (e) {
+    if (e.target.id === 'visorFotoReporte') {
+        cerrarFotoReporte();
+    }
+});
+
 </script>
 
 </body>
