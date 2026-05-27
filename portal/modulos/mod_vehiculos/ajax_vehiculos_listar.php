@@ -20,7 +20,7 @@ try {
             v.patente,
             v.modelo,
             v.tipo_combustible,
-            v.direccion_origen,
+            upper(v.direccion_origen) as direccion_origen,
             v.lat_origen,
             v.lng_origen,
             v.estado,

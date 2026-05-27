@@ -783,42 +783,29 @@
 
   window.DetalleLocalModal = {
     open(campanaId, localId, visitaId){
-      console.log('[DetalleLocalModal] Opening with params:', { campanaId, localId, visitaId });
       injectStyles();
       $('#detalleLocalContent').html(placeholder);
       $('#detalleLocalModal').modal('show');
       const params = new URLSearchParams({ idCampana: campanaId, format:'json' });
 
-      // FIX: Permitir localId=0 para IW sin local, solo validar que esté definido
       if (localId !== undefined && localId !== null) {
         params.set('idLocal', localId);
-        console.log('[DetalleLocalModal] Added idLocal:', localId);
       }
 
-      // FIX: Permitir visitaId=0, solo validar que esté definido
       if (visitaId !== undefined && visitaId !== null) {
         params.set('idVisita', visitaId);
-        console.log('[DetalleLocalModal] Added idVisita:', visitaId);
       }
 
-      const url = 'detalle_local.php?'+params.toString();
-      console.log('[DetalleLocalModal] Fetching:', url);
-
-      fetch(url, { headers: { 'X-CSRF-TOKEN': MAPA_CONFIG.csrf }})
+      fetch('detalle_local.php?'+params.toString(), { headers: { 'X-CSRF-TOKEN': MAPA_CONFIG.csrf }})
         .then(r=>{
-          console.log('[DetalleLocalModal] Response status:', r.status);
-          if (!r.ok) {
-            throw new Error(`HTTP ${r.status}`);
-          }
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
           return r.json();
         })
         .then(data=> {
-          console.log('[DetalleLocalModal] Received data:', data);
           $('#detalleLocalContent').html(buildLayout(data));
           activateInteractions(data);
         })
         .catch(err=> {
-          console.error('[DetalleLocalModal] Error:', err);
           $('#detalleLocalContent').html('<div class="alert alert-danger m-3">Error cargando detalle: ' + err.message + '</div>');
         });
     }

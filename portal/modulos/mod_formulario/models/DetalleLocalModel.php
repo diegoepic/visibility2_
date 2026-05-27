@@ -35,12 +35,6 @@ class DetalleLocalModel
         $stL->fetch();
         $stL->close();
 
-        if(!$localCodigo || !$localNombre){
-            $tmp=$this->conn->prepare('SELECT codigo,nombre,direccion,lat,lng FROM local WHERE id=? LIMIT 1');
-            $tmp->bind_param('i',$localId); $tmp->execute();
-            $tmp->bind_result($localCodigo,$localNombre,$localDireccion,$latLocal,$lngLocal);
-            $tmp->fetch(); $tmp->close();
-        }
         $localCodigo    = $localCodigo    ?: '#'.$localId;
         $localNombre    = $localNombre    ?: '';
         $localDireccion = $localDireccion ?: '—';
@@ -278,73 +272,123 @@ class DetalleLocalModel
         });
 
         $totalVisitas = count($visitas);
+        if ($totalVisitas === 0) return [];
+
+        $vidList = array_map(fn($v) => (int)$v['id'], $visitas);
+        $place   = implode(',', array_fill(0, $totalVisitas, '?'));
+        $tIds    = str_repeat('i', $totalVisitas);
+
+        // Bulk: estado_local
+        $stmtClass = $this->conn->prepare(
+            "SELECT gv.visita_id, gv.estado_gestion, gv.observacion, gv.foto_url
+             FROM gestion_visita gv
+             JOIN formulario f ON f.id = gv.id_formulario AND f.id_empresa = ?
+             WHERE gv.id_formulario = ? AND gv.id_local = ? AND gv.id_formularioQuestion = 0
+               AND gv.visita_id IN ($place)"
+        );
+        $stmtClass->bind_param('iii' . $tIds, $empresaId, $campanaId, $localId, ...$vidList);
+        $stmtClass->execute();
+        $estadoLocalMap = [];
+        foreach ($stmtClass->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
+            $estadoLocalMap[$r['visita_id']][] = $r;
+        }
+        $stmtClass->close();
+
+        // Bulk: implementaciones_ok
+        $stmtImpOk = $this->conn->prepare(
+            "SELECT gv.id, gv.visita_id, gv.id_formularioQuestion, m.nombre AS material, gv.valor_real, gv.observacion
+             FROM gestion_visita gv
+             LEFT JOIN material m ON m.id = gv.id_material
+             JOIN formulario f ON f.id = gv.id_formulario AND f.id_empresa = ?
+             WHERE gv.id_formulario = ? AND gv.id_local = ? AND gv.valor_real > 0
+               AND gv.visita_id IN ($place)
+             ORDER BY gv.fecha_visita ASC"
+        );
+        $stmtImpOk->bind_param('iii' . $tIds, $empresaId, $campanaId, $localId, ...$vidList);
+        $stmtImpOk->execute();
+        $impOkMap = [];
+        foreach ($stmtImpOk->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
+            $impOkMap[$r['visita_id']][] = $r;
+        }
+        $stmtImpOk->close();
+
+        // Bulk: fotos (only if there are implementaciones_ok)
+        $fotosMap = [];
+        $allFqIds = [];
+        foreach ($impOkMap as $rows) {
+            foreach ($rows as $r) {
+                $allFqIds[] = (int)$r['id_formularioQuestion'];
+            }
+        }
+        $allFqIds = array_values(array_unique($allFqIds));
+        if (!empty($allFqIds)) {
+            $fqPlace = implode(',', array_fill(0, count($allFqIds), '?'));
+            $tFq     = str_repeat('i', count($allFqIds));
+            $stmtF = $this->conn->prepare(
+                "SELECT visita_id, id_formularioQuestion, url
+                 FROM fotoVisita
+                 WHERE id_formulario = ? AND id_local = ?
+                   AND id_formularioQuestion IN ($fqPlace)
+                   AND visita_id IN ($place)"
+            );
+            $stmtF->bind_param('ii' . $tFq . $tIds, $campanaId, $localId, ...$allFqIds, ...$vidList);
+            $stmtF->execute();
+            foreach ($stmtF->get_result()->fetch_all(MYSQLI_ASSOC) as $f) {
+                $fotosMap[$f['visita_id']][$f['id_formularioQuestion']][] = ['url' => $f['url']];
+            }
+            $stmtF->close();
+        }
+
+        // Bulk: implementaciones_no
+        $stmtImpNo = $this->conn->prepare(
+            "SELECT gv.id, gv.visita_id, gv.id_formularioQuestion, m.nombre AS material, gv.observacion AS observacion_no_impl
+             FROM gestion_visita gv
+             LEFT JOIN material m ON m.id = gv.id_material
+             JOIN formulario f ON f.id = gv.id_formulario AND f.id_empresa = ?
+             WHERE gv.id_formulario = ? AND gv.id_local = ?
+               AND gv.valor_real = 0 AND gv.id_formularioQuestion <> 0
+               AND gv.visita_id IN ($place)
+             ORDER BY gv.fecha_visita ASC"
+        );
+        $stmtImpNo->bind_param('iii' . $tIds, $empresaId, $campanaId, $localId, ...$vidList);
+        $stmtImpNo->execute();
+        $impNoMap = [];
+        foreach ($stmtImpNo->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
+            $impNoMap[$r['visita_id']][] = $r;
+        }
+        $stmtImpNo->close();
+
+        // Bulk: respuestas
+        $stmtR = $this->conn->prepare(
+            "SELECT fqr.id, fqr.visita_id, fq.question_text, fqr.answer_text, fqr.valor, fq.is_valued, fqr.created_at
+             FROM form_question_responses fqr
+             JOIN form_questions fq ON fq.id = fqr.id_form_question
+             JOIN formulario f ON f.id = fq.id_formulario AND f.id_empresa = ?
+             WHERE fqr.id_local = ? AND fq.id_formulario = ?
+               AND fqr.visita_id IN ($place)
+             ORDER BY fqr.created_at ASC"
+        );
+        $stmtR->bind_param('iii' . $tIds, $empresaId, $localId, $campanaId, ...$vidList);
+        $stmtR->execute();
+        $respMap = [];
+        foreach ($stmtR->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
+            $respMap[$r['visita_id']][] = $r;
+        }
+        $stmtR->close();
+
+        // Assign bulk results to each visita
         foreach ($visitas as $idx => &$v) {
             $vid = (int)$v['id'];
-
-            $stmtClass = $this->conn->prepare(
-                "SELECT gv.estado_gestion, gv.observacion, gv.foto_url
-                 FROM gestion_visita gv
-                 JOIN formulario f ON f.id = gv.id_formulario AND f.id_empresa = ?
-                 WHERE gv.visita_id = ? AND gv.id_formulario = ? AND gv.id_local = ? AND gv.id_formularioQuestion = 0"
-            );
-            $stmtClass->bind_param('iiii', $empresaId, $vid, $campanaId, $localId);
-            $stmtClass->execute();
-            $v['estado_local'] = $stmtClass->get_result()->fetch_all(MYSQLI_ASSOC);
-            $stmtClass->close();
-
-            $stmtImpOk = $this->conn->prepare(
-                "SELECT gv.id, gv.id_formularioQuestion, m.nombre AS material, gv.valor_real, gv.observacion
-                 FROM gestion_visita gv
-                 LEFT JOIN material m ON m.id = gv.id_material
-                 JOIN formulario f ON f.id = gv.id_formulario AND f.id_empresa = ?
-                 WHERE gv.visita_id = ? AND gv.id_formulario = ? AND gv.id_local = ? AND gv.valor_real > 0
-                 ORDER BY gv.fecha_visita ASC"
-            );
-            $stmtImpOk->bind_param('iiii', $empresaId, $vid, $campanaId, $localId);
-            $stmtImpOk->execute();
-            $v['implementaciones_ok'] = $stmtImpOk->get_result()->fetch_all(MYSQLI_ASSOC);
-            $stmtImpOk->close();
-
-            foreach ($v['implementaciones_ok'] as &$impl) {
-                $stmtF = $this->conn->prepare(
-                    "SELECT url FROM fotoVisita
-                     WHERE visita_id = ? AND id_formulario = ? AND id_local = ? AND id_formularioQuestion = ?"
-                );
-                $stmtF->bind_param('iiii', $vid, $campanaId, $localId, $impl['id_formularioQuestion']);
-                $stmtF->execute();
-                $impl['fotos'] = $stmtF->get_result()->fetch_all(MYSQLI_ASSOC);
-                $stmtF->close();
+            $v['estado_local']       = $estadoLocalMap[$vid] ?? [];
+            $implOk = $impOkMap[$vid] ?? [];
+            foreach ($implOk as &$impl) {
+                $impl['fotos'] = $fotosMap[$vid][$impl['id_formularioQuestion']] ?? [];
             }
             unset($impl);
-
-            $stmtImpNo = $this->conn->prepare(
-                "SELECT gv.id, gv.id_formularioQuestion, m.nombre AS material, gv.observacion AS observacion_no_impl
-                 FROM gestion_visita gv
-                 LEFT JOIN material m ON m.id = gv.id_material
-                 JOIN formulario f ON f.id = gv.id_formulario AND f.id_empresa = ?
-                 WHERE gv.visita_id = ? AND gv.id_formulario = ? AND gv.id_local = ?
-                   AND gv.valor_real = 0 AND gv.id_formularioQuestion <> 0
-                 ORDER BY gv.fecha_visita ASC"
-            );
-            $stmtImpNo->bind_param('iiii', $empresaId, $vid, $campanaId, $localId);
-            $stmtImpNo->execute();
-            $v['implementaciones_no'] = $stmtImpNo->get_result()->fetch_all(MYSQLI_ASSOC);
-            $stmtImpNo->close();
-
-            $stmtR = $this->conn->prepare(
- "SELECT fqr.id, fq.question_text, fqr.answer_text, fqr.valor, fq.is_valued, fqr.created_at
-                 FROM form_question_responses fqr
-                 JOIN form_questions fq ON fq.id = fqr.id_form_question
-                 JOIN formulario f ON f.id = fq.id_formulario AND f.id_empresa = ?
-                 WHERE fqr.visita_id = ? AND fqr.id_local = ? AND fq.id_formulario = ?
-                 ORDER BY fqr.created_at ASC"
-            );
-            $stmtR->bind_param('iiii', $empresaId, $vid, $localId, $campanaId);
-            $stmtR->execute();
-            $v['respuestas'] = $stmtR->get_result()->fetch_all(MYSQLI_ASSOC);
-            $stmtR->close();
-
-            $v['secuencia'] = $totalVisitas - $idx;
+            $v['implementaciones_ok']  = $implOk;
+            $v['implementaciones_no']  = $impNoMap[$vid] ?? [];
+            $v['respuestas']           = $respMap[$vid] ?? [];
+            $v['secuencia']            = $totalVisitas - $idx;
         }
         unset($v);
 
@@ -405,23 +449,31 @@ class DetalleLocalModel
         $stmtV->close();
 
         $totalVisitas = count($visitas);
-        foreach ($visitas as $idx => &$v) {
-            $vid = (int)$v['id'];
+        $respMapComp  = [];
+        if ($totalVisitas > 0) {
+            $vidListComp = array_map(fn($v) => (int)$v['id'], $visitas);
+            $placeComp   = implode(',', array_fill(0, $totalVisitas, '?'));
+            $tIdsComp    = str_repeat('i', $totalVisitas);
             $stmtR = $this->conn->prepare(
-                "SELECT fqr.id, fq.question_text, fqr.answer_text, fqr.valor, fq.is_valued, fqr.created_at
+                "SELECT fqr.id, fqr.visita_id, fq.question_text, fqr.answer_text, fqr.valor, fq.is_valued, fqr.created_at
                  FROM form_question_responses fqr
                  JOIN form_questions fq ON fq.id = fqr.id_form_question
                  JOIN formulario f ON f.id = fq.id_formulario AND f.id_empresa = ?
-                 WHERE fqr.visita_id = ? AND fq.id_formulario = ?
+                 WHERE fq.id_formulario = ?
+                   AND fqr.visita_id IN ($placeComp)
                  ORDER BY fqr.created_at ASC"
             );
-            $stmtR->bind_param('iii', $empresaId, $vid, $campanaId);
+            $stmtR->bind_param('ii' . $tIdsComp, $empresaId, $campanaId, ...$vidListComp);
             $stmtR->execute();
-            $v['respuestas'] = $stmtR->get_result()->fetch_all(MYSQLI_ASSOC);
+            foreach ($stmtR->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
+                $respMapComp[$r['visita_id']][] = $r;
+            }
             $stmtR->close();
-
-            $v['secuencia'] = $totalVisitas - $idx;
-            $v['estado_local'] = [];
+        }
+        foreach ($visitas as $idx => &$v) {
+            $v['respuestas']          = $respMapComp[(int)$v['id']] ?? [];
+            $v['secuencia']           = $totalVisitas - $idx;
+            $v['estado_local']        = [];
             $v['implementaciones_ok'] = [];
             $v['implementaciones_no'] = [];
         }

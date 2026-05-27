@@ -221,9 +221,9 @@ while ($row = $res->fetch_assoc()) {
             $totemExtrasAgregadosPorLocal[$codigoLocal] = true;
 
             $extras = [
-                ['material' => 'PATAS',    'cantidad_material' => 4],
-                ['material' => 'PILARES',  'cantidad_material' => 12],
-                ['material' => 'BANDEJAS', 'cantidad_material' => 4],
+                ['material' => 'PATAS CUADRADAS 9,5 CMS PARA BANDEJA TOTEM HASBRO',    'cantidad_material' => 4],
+                ['material' => 'PILAR PARA BANDEJA CUADRADO 42.5 CM LARGO',  'cantidad_material' => 12],
+                ['material' => 'BANDEJA PARA TOTEM HASBRO 50X80', 'cantidad_material' => 4], 
             ];
 
             foreach ($extras as $extra) {

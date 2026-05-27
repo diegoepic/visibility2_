@@ -1,5 +1,5 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) { session_start(); }
 require_once __DIR__ . '/../models/Database.php';
 require_once __DIR__ . '/../models/DetalleLocalModel.php';
 require_once __DIR__ . '/../models/LocalModel.php';
@@ -48,7 +48,7 @@ class DetalleLocalController
         header('Content-Type: application/json; charset=UTF-8');
         [$empresaId, $campanaId, $localId, $visitaId] = $this->validate();
         $campanaInfo = $this->localModel->getCampanaInfo($campanaId, $empresaId);
-        $isComplementaria = ($campanaInfo['modalidad'] ?? '') === 'complementaria';
+        $isComplementaria = ($campanaInfo['modalidad'] ?? '') === 'complementaria' || (int)($campanaInfo['tipo'] ?? 0) === 2;
         $iwRequiereLocal = (int)($campanaInfo['iw_requiere_local'] ?? 0) === 1;
         $campanaNombre = $this->localModel->getCampanaNombre($campanaId, $empresaId);
 

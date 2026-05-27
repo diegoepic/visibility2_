@@ -190,16 +190,32 @@ $mapKey = $viewData['mapKey'];
     </div>
   </div>
 
+  <div id="mapaToast" style="position:fixed;bottom:20px;right:20px;z-index:9999;min-width:280px;display:none;" role="alert" aria-live="assertive">
+    <div class="alert alert-info alert-dismissible mb-0 shadow" id="mapaToastBody">
+      <button type="button" class="close" onclick="document.getElementById('mapaToast').style.display='none';" aria-label="Cerrar">&times;</button>
+      <span id="mapaToastMsg"></span>
+    </div>
+  </div>
+
   <script>
-    window.MAPA_DATA = <?= json_encode($locales, JSON_UNESCAPED_UNICODE) ?>;
+    window.MAPA_DATA = <?= json_encode($locales, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     window.MAPA_CONFIG = {
       campanaId: <?= (int)$filters['idCampana'] ?>,
-      csrf: '<?= htmlspecialchars($csrf, ENT_QUOTES) ?>',
+      csrf: <?= json_encode($csrf) ?>,
       isComplementaria: <?= $isComplementaria ? 'true' : 'false' ?>,
       iwRequiereLocal: <?= $iwRequiereLocal ? 'true' : 'false' ?>,
       filteredUserId: <?= (int)($filters['filterUserId'] ?? 0) ?>
     };
-    window.MAP_KEY = '<?= htmlspecialchars($mapKey, ENT_QUOTES) ?>';
+    window.MAP_KEY = <?= json_encode($mapKey) ?>;
+    window.showMapaToast = function(msg, type) {
+      var el   = document.getElementById('mapaToast');
+      var body = document.getElementById('mapaToastBody');
+      var msgEl = document.getElementById('mapaToastMsg');
+      body.className = 'alert alert-' + (type || 'info') + ' alert-dismissible mb-0 shadow';
+      msgEl.textContent = msg;
+      el.style.display = 'block';
+      setTimeout(function(){ el.style.display = 'none'; }, 4500);
+    };
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.1/js/bootstrap.bundle.min.js"></script>
@@ -207,6 +223,300 @@ $mapKey = $viewData['mapKey'];
   <script src="js/gestiones.js"></script>
   <script src="js/detalle_local.js"></script>
   <script src="js/mapa.js"></script>
+<script>
+(function () {
+  let fallbackMarkers = [];
+  let fallbackInfoWindow = null;
+  let capturedMainMap = null;
+
+  function vzParseNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
+
+    const n = parseFloat(
+      String(value)
+        .replace(',', '.')
+        .replace(/[^\d.-]/g, '')
+    );
+
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function vzGetLatLng(local) {
+    const lat = vzParseNumber(
+      local.lat ??
+      local.latitud ??
+      local.latitude ??
+      local.localLat ??
+      local.latLocal ??
+      local.lat_local ??
+      local.latGestion ??
+      local.lat_gestion
+    );
+
+    const lng = vzParseNumber(
+      local.lng ??
+      local.lon ??
+      local.longitud ??
+      local.longitude ??
+      local.localLng ??
+      local.lngLocal ??
+      local.lng_local ??
+      local.lngGestion ??
+      local.lng_gestion
+    );
+
+    if (lat === null || lng === null) return null;
+    if (lat === 0 || lng === 0) return null;
+
+    return { lat: lat, lng: lng };
+  }
+
+  function vzEscape(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  function vzGetEstado(local) {
+    return String(
+      local.estadoLabel ??
+      local.estadoGestion ??
+      local.estado ??
+      local.estado_gestion ??
+      ''
+    );
+  }
+
+  function vzGetColor(local) {
+    const estado = vzGetEstado(local).toLowerCase();
+
+    if (
+      estado.includes('implement') ||
+      estado.includes('auditor') ||
+      estado.includes('encuesta') ||
+      estado.includes('entregado')
+    ) {
+      return '#22a85a';
+    }
+
+    if (
+      estado.includes('cancel') ||
+      estado.includes('cerrado') ||
+      estado.includes('no existe')
+    ) {
+      return '#ef4444';
+    }
+
+    if (
+      estado.includes('pendiente') ||
+      estado.includes('proceso') ||
+      estado.includes('sin dato') ||
+      estado.includes('sin_dato') ||
+      estado.trim() === ''
+    ) {
+      return '#4d7eff';
+    }
+
+    return '#4d7eff';
+  }
+
+  function vzPinIcon(color) {
+    const svg = `
+      <svg width="42" height="52" viewBox="0 0 42 52" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+            <feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#0f2445" flood-opacity="0.32"/>
+          </filter>
+        </defs>
+        <path filter="url(#shadow)" d="M21 2C11.1 2 3 10.1 3 20c0 13.6 18 30 18 30s18-16.4 18-30C39 10.1 30.9 2 21 2Z" fill="${color}"/>
+        <circle cx="21" cy="20" r="8" fill="white" fill-opacity="0.96"/>
+        <circle cx="21" cy="20" r="4" fill="${color}"/>
+      </svg>
+    `;
+
+    return {
+      url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+      scaledSize: new google.maps.Size(42, 52),
+      anchor: new google.maps.Point(21, 50)
+    };
+  }
+
+  function vzGetMapInstance() {
+    return capturedMainMap ||
+      window.map ||
+      window.mapa ||
+      window.mainMap ||
+      window.mapLocales ||
+      null;
+  }
+
+  function vzClearFallbackMarkers() {
+    fallbackMarkers.forEach(marker => marker.setMap(null));
+    fallbackMarkers = [];
+  }
+
+  function vzPopupHtml(local) {
+    const codigo = local.codigoLocal ?? local.codigo ?? local.local_codigo ?? '-';
+    const nombre = local.nombreLocal ?? local.nombre ?? local.local_nombre ?? '-';
+    const direccion = local.direccionLocal ?? local.direccion ?? local.local_direccion ?? '-';
+    const usuario = local.usuarioGestion ?? local.usuario ?? '-';
+    const estado = local.estadoLabel ?? local.estadoGestion ?? local.estado ?? '-';
+    const fecha = local.fechaVisita ?? local.fecha_visita ?? local.ultima_visita ?? '-';
+
+    return `
+      <div style="min-width:240px;max-width:320px;font-family:Arial,sans-serif;">
+        <div style="font-size:14px;font-weight:800;color:#15315d;margin-bottom:8px;">
+          ${vzEscape(nombre)}
+        </div>
+        <div style="font-size:12px;color:#324a6d;line-height:1.55;">
+          <div><strong>Código:</strong> ${vzEscape(codigo)}</div>
+          <div><strong>Dirección:</strong> ${vzEscape(direccion)}</div>
+          <div><strong>Usuario:</strong> ${vzEscape(usuario)}</div>
+          <div><strong>Estado:</strong> ${vzEscape(estado)}</div>
+          <div><strong>Última visita:</strong> ${vzEscape(fecha)}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function vzRenderFallbackPins() {
+    const map = vzGetMapInstance();
+
+    if (!map || !window.google || !google.maps) {
+      console.warn('[Visibility mapa] No se encontró instancia del mapa para dibujar pins.');
+      return;
+    }
+
+    const locales = window.MAPA_DATA || [];
+    vzClearFallbackMarkers();
+
+    const bounds = new google.maps.LatLngBounds();
+    let totalPins = 0;
+
+    locales.forEach(local => {
+      const position = vzGetLatLng(local);
+      if (!position) return;
+
+      const codigo = local.codigoLocal ?? local.codigo ?? local.local_codigo ?? 'Local';
+      const idLocal = local.idLocal ?? local.id_local ?? local.id ?? '';
+      const color = vzGetColor(local);
+
+      const marker = new google.maps.Marker({
+        position: position,
+        map: map,
+        title: String(codigo),
+        icon: vzPinIcon(color),
+        visible: true,
+        opacity: 1,
+        zIndex: 999999
+      });
+
+      marker.addListener('click', function () {
+        if (!fallbackInfoWindow) {
+          fallbackInfoWindow = new google.maps.InfoWindow();
+        }
+
+        fallbackInfoWindow.setContent(vzPopupHtml(local));
+        fallbackInfoWindow.open(map, marker);
+
+        if (idLocal) {
+          const row = document.querySelector('#tblLocales tr[data-id="' + idLocal + '"]');
+          if (row) {
+            document.querySelectorAll('#tblLocales tr').forEach(tr => tr.classList.remove('table-active'));
+            row.classList.add('table-active');
+          }
+        }
+      });
+
+      fallbackMarkers.push(marker);
+      bounds.extend(position);
+      totalPins++;
+    });
+
+    if (totalPins === 1) {
+      map.setCenter(bounds.getCenter());
+      map.setZoom(15);
+    } else if (totalPins > 1) {
+      map.fitBounds(bounds);
+    }
+
+    console.log('[Visibility mapa] Pins individuales visibles:', totalPins);
+  }
+
+  const originalInitMap = window.initMap;
+
+  window.initMap = function () {
+    if (window.google && google.maps && google.maps.Map && !google.maps.Map.__visibilityCaptured) {
+      const OriginalMap = google.maps.Map;
+
+      google.maps.Map = function () {
+        const instance = new OriginalMap(...arguments);
+
+        if (!capturedMainMap) {
+          capturedMainMap = instance;
+          window.__visibilityMainMap = instance;
+        }
+
+        return instance;
+      };
+
+      google.maps.Map.prototype = OriginalMap.prototype;
+      google.maps.Map.__visibilityCaptured = true;
+    }
+
+    if (typeof originalInitMap === 'function') {
+      originalInitMap();
+    }
+
+    setTimeout(vzRenderFallbackPins, 700);
+  };
+
+  window.renderVisibilityPins = vzRenderFallbackPins;
+})();
+</script>
+<script>
+$(document).on('click', '#tblLocales tbody tr', function () {
+  const id = String($(this).data('id') || '');
+  const local = (window.MAPA_DATA || []).find(item => {
+    return String(item.idLocal ?? item.id_local ?? item.id ?? '') === id;
+  });
+
+  if (!local || !window.__visibilityMainMap) return;
+
+  const lat = parseFloat(String(
+    local.lat ??
+    local.latitud ??
+    local.latitude ??
+    local.localLat ??
+    local.latLocal ??
+    local.lat_local ??
+    local.latGestion ??
+    local.lat_gestion ??
+    ''
+  ).replace(',', '.'));
+
+  const lng = parseFloat(String(
+    local.lng ??
+    local.lon ??
+    local.longitud ??
+    local.longitude ??
+    local.localLng ??
+    local.lngLocal ??
+    local.lng_local ??
+    local.lngGestion ??
+    local.lng_gestion ??
+    ''
+  ).replace(',', '.'));
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+  window.__visibilityMainMap.setCenter({ lat, lng });
+  window.__visibilityMainMap.setZoom(16);
+});
+</script>
   <script async defer src="https://maps.googleapis.com/maps/api/js?key=<?= urlencode($mapKey) ?>&callback=initMap"></script>
 </body>
 </html>

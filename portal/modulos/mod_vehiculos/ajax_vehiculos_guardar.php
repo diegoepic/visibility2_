@@ -49,12 +49,24 @@ if ($patente === '') {
     exit;
 }
 
-if (!$id_empresa || !$id_division || !$id_merchan) {
+if (!$id_empresa || !$id_division) {
     echo json_encode([
         'ok' => false,
-        'msg' => 'Empresa, división y merchan son obligatorios.'
+        'msg' => 'Empresa y división son obligatorias.'
     ]);
     exit;
+}
+
+if ($estado === 1 && !$id_merchan) {
+    echo json_encode([
+        'ok' => false,
+        'msg' => 'Debe seleccionar un merchan cuando el vehículo está activo.'
+    ]);
+    exit;
+}
+
+if ($estado === 0) {
+    $id_merchan = null;
 }
 
 try {

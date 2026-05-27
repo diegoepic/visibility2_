@@ -18,7 +18,7 @@
     try {
       localStorage.setItem(PRESETS_KEY, JSON.stringify(arr));
     } catch(e) {
-      alert('No se pudo guardar el preset: el almacenamiento local está lleno o no disponible.');
+      PE.showError('Error al guardar', 'No se pudo guardar el preset: el almacenamiento local está lleno o no disponible.');
     }
   }
 
@@ -257,13 +257,13 @@
       const url = location.origin + location.pathname + '?state=' + encodeURIComponent(encoded);
       if (navigator.clipboard) {
         navigator.clipboard.writeText(url)
-          .then(() => alert('Enlace copiado al portapapeles.\nPégalo en el navegador para restaurar exactamente estos filtros.'))
+          .then(() => PE.showToast('Enlace copiado al portapapeles. Pégalo en el navegador para restaurar estos filtros.'))
           .catch(() => prompt('Copia este enlace:', url));
       } else {
         prompt('Copia este enlace:', url);
       }
     } catch(e) {
-      alert('No se pudo generar el enlace.');
+      PE.showError('Error', 'No se pudo generar el enlace.');
     }
   });
 

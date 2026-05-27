@@ -1,7 +1,10 @@
 <?php
 session_start();
+
 include $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
+
 date_default_timezone_set('America/Santiago');
+
 header('Content-Type: application/json; charset=utf-8');
 
 $mysqli = $conexion ?? $conn ?? $mysqli ?? null;
@@ -13,6 +16,25 @@ if (!$mysqli) {
     ]);
     exit;
 }
+
+$mysqli->set_charset('utf8mb4');
+
+/*
+|--------------------------------------------------------------------------
+| CONFIGURACIÓN GOOGLE GEOCODING
+|--------------------------------------------------------------------------
+| Pega acá tu API Key de Google Maps / Geocoding.
+| Recomendación: usar una key restringida por IP del servidor.
+|--------------------------------------------------------------------------
+*/
+
+$GOOGLE_GEOCODING_API_KEY = 'AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw';
+
+/*
+|--------------------------------------------------------------------------
+| HELPERS GENERALES
+|--------------------------------------------------------------------------
+*/
 
 function responder($data) {
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
@@ -53,6 +75,7 @@ function detectarDelimitador($linea) {
 function limpiarPatente($patente) {
     $patente = strtoupper(trim((string)$patente));
     $patente = str_replace([' ', '.', '_'], '', $patente);
+
     return $patente;
 }
 
@@ -80,10 +103,160 @@ function validarFecha($fecha) {
     throw new Exception('Fecha inválida. Use formato YYYY-MM-DD o DD-MM-YYYY.');
 }
 
-function resolverEmpresa($mysqli, $valor) {
+function normalizarEstadoCarga($valor, $default = 1) {
+    $valorOriginal = trim((string)$valor);
+
+    if ($valorOriginal === '') {
+        return $default;
+    }
+
+    $valorNormalizado = normalizarTexto($valorOriginal);
+
+    if (in_array($valorNormalizado, ['0', 'inactivo', 'inactiva', 'inactive', 'no'], true)) {
+        return 0;
+    }
+
+    if (in_array($valorNormalizado, ['1', 'activo', 'activa', 'active', 'si'], true)) {
+        return 1;
+    }
+
+    return ((int)$valorOriginal === 0) ? 0 : 1;
+}
+
+function textosSonDistintos($a, $b) {
+    return normalizarTexto($a) !== normalizarTexto($b);
+}
+
+/*
+|--------------------------------------------------------------------------
+| GOOGLE GEOCODING
+|--------------------------------------------------------------------------
+*/
+
+function geocodificarDireccionGoogle($direccion, $apiKey) {
+    $direccion = trim((string)$direccion);
+    $apiKey = trim((string)$apiKey);
+
+    if ($direccion === '') {
+        return [
+            'ok' => false,
+            'msg' => 'Dirección vacía.'
+        ];
+    }
+
+    if ($apiKey === '') {
+        return [
+            'ok' => false,
+            'msg' => 'Debe configurar la API Key de Google Geocoding en el backend.'
+        ];
+    }
+
+    $direccionConsulta = $direccion;
+
+    if (stripos($direccionConsulta, 'chile') === false) {
+        $direccionConsulta .= ', Chile';
+    }
+
+    $params = http_build_query([
+        'address' => $direccionConsulta,
+        'region' => 'cl',
+        'key' => $apiKey
+    ]);
+
+    $url = 'https://maps.googleapis.com/maps/api/geocode/json?' . $params;
+
+    $response = false;
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init();
+
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_CONNECTTIMEOUT => 8,
+            CURLOPT_SSL_VERIFYPEER => true,
+        ]);
+
+        $response = curl_exec($ch);
+        $curlError = curl_error($ch);
+
+        curl_close($ch);
+
+        if ($response === false) {
+            return [
+                'ok' => false,
+                'msg' => 'Error cURL al geocodificar dirección: ' . $curlError
+            ];
+        }
+    } else {
+        $context = stream_context_create([
+            'http' => [
+                'timeout' => 15
+            ]
+        ]);
+
+        $response = @file_get_contents($url, false, $context);
+
+        if ($response === false) {
+            return [
+                'ok' => false,
+                'msg' => 'No se pudo consultar Google Geocoding.'
+            ];
+        }
+    }
+
+    $json = json_decode($response, true);
+
+    if (!is_array($json)) {
+        return [
+            'ok' => false,
+            'msg' => 'Respuesta inválida desde Google Geocoding.'
+        ];
+    }
+
+    $status = $json['status'] ?? 'UNKNOWN';
+
+    if ($status !== 'OK') {
+        $mensajeGoogle = $json['error_message'] ?? $status;
+
+        return [
+            'ok' => false,
+            'msg' => 'Google Geocoding no pudo resolver la dirección: ' . $mensajeGoogle
+        ];
+    }
+
+    $location = $json['results'][0]['geometry']['location'] ?? null;
+
+    if (!$location || !isset($location['lat'], $location['lng'])) {
+        return [
+            'ok' => false,
+            'msg' => 'Google Geocoding no retornó coordenadas.'
+        ];
+    }
+
+    return [
+        'ok' => true,
+        'lat' => (float)$location['lat'],
+        'lng' => (float)$location['lng'],
+        'direccion_formateada' => $json['results'][0]['formatted_address'] ?? $direccionConsulta
+    ];
+}
+
+/*
+|--------------------------------------------------------------------------
+| RESOLUCIÓN DE CATÁLOGOS
+|--------------------------------------------------------------------------
+*/
+
+function resolverEmpresa($mysqli, $valor, $idActual = null, $mantenerSiVacio = false) {
     $valor = trim((string)$valor);
 
     if ($valor === '') {
+        if ($mantenerSiVacio && $idActual) {
+            return (int)$idActual;
+        }
+
         throw new Exception('Empresa obligatoria.');
     }
 
@@ -97,6 +270,7 @@ function resolverEmpresa($mysqli, $valor) {
             AND activo = 1
             LIMIT 1
         ");
+
         $stmt->bind_param("i", $id);
     } else {
         $stmt = $mysqli->prepare("
@@ -106,6 +280,7 @@ function resolverEmpresa($mysqli, $valor) {
             AND activo = 1
             LIMIT 1
         ");
+
         $stmt->bind_param("s", $valor);
     }
 
@@ -119,10 +294,14 @@ function resolverEmpresa($mysqli, $valor) {
     return (int)$row['id'];
 }
 
-function resolverDivision($mysqli, $valor, $idEmpresa) {
+function resolverDivision($mysqli, $valor, $idEmpresa, $idActual = null, $mantenerSiVacio = false) {
     $valor = trim((string)$valor);
 
     if ($valor === '') {
+        if ($mantenerSiVacio && $idActual) {
+            return (int)$idActual;
+        }
+
         throw new Exception('División obligatoria.');
     }
 
@@ -137,6 +316,7 @@ function resolverDivision($mysqli, $valor, $idEmpresa) {
             AND estado = 1
             LIMIT 1
         ");
+
         $stmt->bind_param("ii", $id, $idEmpresa);
     } else {
         $stmt = $mysqli->prepare("
@@ -147,6 +327,7 @@ function resolverDivision($mysqli, $valor, $idEmpresa) {
             AND estado = 1
             LIMIT 1
         ");
+
         $stmt->bind_param("si", $valor, $idEmpresa);
     }
 
@@ -160,10 +341,14 @@ function resolverDivision($mysqli, $valor, $idEmpresa) {
     return (int)$row['id'];
 }
 
-function resolverSubdivision($mysqli, $valor, $idDivision) {
+function resolverSubdivision($mysqli, $valor, $idDivision, $idActual = null, $mantenerSiVacio = false) {
     $valor = trim((string)$valor);
 
     if ($valor === '') {
+        if ($mantenerSiVacio) {
+            return $idActual ? (int)$idActual : null;
+        }
+
         return null;
     }
 
@@ -177,6 +362,7 @@ function resolverSubdivision($mysqli, $valor, $idDivision) {
             AND id_division = ?
             LIMIT 1
         ");
+
         $stmt->bind_param("ii", $id, $idDivision);
     } else {
         $stmt = $mysqli->prepare("
@@ -186,6 +372,7 @@ function resolverSubdivision($mysqli, $valor, $idDivision) {
             AND id_division = ?
             LIMIT 1
         ");
+
         $stmt->bind_param("si", $valor, $idDivision);
     }
 
@@ -219,7 +406,14 @@ function resolverMerchan($mysqli, $valor, $idDivision, $idSubdivision) {
             AND (id_subdivision IS NULL OR id_subdivision = ? OR ? IS NULL)
             LIMIT 1
         ");
-        $stmt->bind_param("iiii", $id, $idDivision, $idSubdivision, $idSubdivision);
+
+        $stmt->bind_param(
+            "iiii",
+            $id,
+            $idDivision,
+            $idSubdivision,
+            $idSubdivision
+        );
     } else {
         $stmt = $mysqli->prepare("
             SELECT id
@@ -236,6 +430,7 @@ function resolverMerchan($mysqli, $valor, $idDivision, $idSubdivision) {
             AND (id_subdivision IS NULL OR id_subdivision = ? OR ? IS NULL)
             LIMIT 1
         ");
+
         $stmt->bind_param(
             "ssssiii",
             $valor,
@@ -252,32 +447,74 @@ function resolverMerchan($mysqli, $valor, $idDivision, $idSubdivision) {
     $row = $stmt->get_result()->fetch_assoc();
 
     if (!$row) {
-        throw new Exception('Merchan no encontrado, inactivo, no es perfil 3 o no pertenece a la división/subdivisión indicada: ' . $valor);
+        throw new Exception(
+            'Merchan no encontrado, inactivo, no es perfil 3 o no pertenece a la división/subdivisión indicada: ' . $valor
+        );
     }
 
     return (int)$row['id'];
 }
 
-function buscarVehiculoPorPatente($mysqli, $patente) {
+/*
+|--------------------------------------------------------------------------
+| VEHÍCULOS
+|--------------------------------------------------------------------------
+*/
+
+function buscarVehiculoActualPorPatente($mysqli, $patente) {
     $stmt = $mysqli->prepare("
-        SELECT id
-        FROM vehiculo
-        WHERE patente = ?
-        AND deleted_at IS NULL
+        SELECT 
+            v.id,
+            v.patente,
+            v.modelo,
+            v.tipo_combustible,
+            v.direccion_origen,
+            v.lat_origen,
+            v.lng_origen,
+            v.id_empresa,
+            v.id_division,
+            v.id_subdivision,
+            v.id_merchan,
+            v.estado,
+
+            h.id AS id_historial_activo,
+            h.id_empresa AS h_id_empresa,
+            h.id_division AS h_id_division,
+            h.id_subdivision AS h_id_subdivision,
+            h.id_merchan AS h_id_merchan,
+            h.fecha_inicio AS h_fecha_inicio
+
+        FROM vehiculo v
+
+        LEFT JOIN vehiculo_asignacion_historial h
+            ON h.id_vehiculo = v.id
+            AND h.fecha_termino IS NULL
+
+        WHERE v.patente = ?
+        AND v.deleted_at IS NULL
+
         LIMIT 1
     ");
+
     $stmt->bind_param("s", $patente);
     $stmt->execute();
 
     $row = $stmt->get_result()->fetch_assoc();
 
-    return $row ? (int)$row['id'] : 0;
+    if (!$row) {
+        return null;
+    }
+
+    $row['id_empresa_actual'] = $row['h_id_empresa'] ?: $row['id_empresa'];
+    $row['id_division_actual'] = $row['h_id_division'] ?: $row['id_division'];
+    $row['id_subdivision_actual'] = $row['h_id_subdivision'] ?: $row['id_subdivision'];
+    $row['id_merchan_actual'] = $row['h_id_merchan'] ?: $row['id_merchan'];
+    $row['fecha_inicio_actual'] = $row['h_fecha_inicio'] ?: null;
+
+    return $row;
 }
 
 function insertarVehiculo($mysqli, $data) {
-    $latOrigen = null;
-    $lngOrigen = null;
-
     $stmt = $mysqli->prepare("
         INSERT INTO vehiculo (
             patente,
@@ -300,8 +537,8 @@ function insertarVehiculo($mysqli, $data) {
         $data['modelo'],
         $data['tipo_combustible'],
         $data['direccion_origen'],
-        $latOrigen,
-        $lngOrigen,
+        $data['lat_origen'],
+        $data['lng_origen'],
         $data['id_empresa'],
         $data['id_division'],
         $data['id_subdivision'],
@@ -315,9 +552,6 @@ function insertarVehiculo($mysqli, $data) {
 }
 
 function actualizarVehiculo($mysqli, $idVehiculo, $data) {
-    $latOrigen = null;
-    $lngOrigen = null;
-
     $stmt = $mysqli->prepare("
         UPDATE vehiculo
         SET 
@@ -339,8 +573,8 @@ function actualizarVehiculo($mysqli, $idVehiculo, $data) {
         $data['modelo'],
         $data['tipo_combustible'],
         $data['direccion_origen'],
-        $latOrigen,
-        $lngOrigen,
+        $data['lat_origen'],
+        $data['lng_origen'],
         $data['id_empresa'],
         $data['id_division'],
         $data['id_subdivision'],
@@ -351,6 +585,12 @@ function actualizarVehiculo($mysqli, $idVehiculo, $data) {
 
     $stmt->execute();
 }
+
+/*
+|--------------------------------------------------------------------------
+| HISTORIAL
+|--------------------------------------------------------------------------
+*/
 
 function gestionarHistorial($mysqli, $idVehiculo, $data) {
     $stmt = $mysqli->prepare("
@@ -373,6 +613,59 @@ function gestionarHistorial($mysqli, $idVehiculo, $data) {
 
     $actual = $stmt->get_result()->fetch_assoc();
 
+    /*
+    |--------------------------------------------------------------------------
+    | VEHÍCULO INACTIVO
+    |--------------------------------------------------------------------------
+    | Si queda inactivo, no crea nueva asignación.
+    | Solo cierra la asignación vigente, si existe.
+    |--------------------------------------------------------------------------
+    */
+
+    if ((int)$data['estado'] === 0) {
+        if (!$actual) {
+            return 'sin_cambio';
+        }
+
+        $fechaTerminoAnterior = date('Y-m-d', strtotime($data['fecha_inicio'] . ' -1 day'));
+
+        if ($fechaTerminoAnterior < $actual['fecha_inicio']) {
+            $fechaTerminoAnterior = $actual['fecha_inicio'];
+        }
+
+        $observacionCierre = trim((string)$data['observacion']) !== ''
+            ? $data['observacion']
+            : 'Vehículo marcado como inactivo desde carga masiva.';
+
+        $stmt = $mysqli->prepare("
+            UPDATE vehiculo_asignacion_historial
+            SET 
+                fecha_termino = ?,
+                observacion = CASE
+                    WHEN observacion IS NULL OR observacion = '' THEN ?
+                    ELSE observacion
+                END
+            WHERE id = ?
+        ");
+
+        $stmt->bind_param(
+            "ssi",
+            $fechaTerminoAnterior,
+            $observacionCierre,
+            $actual['id']
+        );
+
+        $stmt->execute();
+
+        return 'historial_cerrado';
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | VEHÍCULO ACTIVO
+    |--------------------------------------------------------------------------
+    */
+
     $debeCrear = false;
 
     if (!$actual) {
@@ -381,7 +674,7 @@ function gestionarHistorial($mysqli, $idVehiculo, $data) {
         $cambioEmpresa = (int)$actual['id_empresa'] !== (int)$data['id_empresa'];
         $cambioDivision = (int)$actual['id_division'] !== (int)$data['id_division'];
         $cambioSubdivision = (int)($actual['id_subdivision'] ?? 0) !== (int)($data['id_subdivision'] ?? 0);
-        $cambioMerchan = (int)$actual['id_merchan'] !== (int)$data['id_merchan'];
+        $cambioMerchan = (int)($actual['id_merchan'] ?? 0) !== (int)($data['id_merchan'] ?? 0);
 
         if ($cambioEmpresa || $cambioDivision || $cambioSubdivision || $cambioMerchan) {
             $debeCrear = true;
@@ -389,25 +682,49 @@ function gestionarHistorial($mysqli, $idVehiculo, $data) {
     }
 
     if (!$debeCrear) {
-        return 'sin_cambio';
+        $stmt = $mysqli->prepare("
+            UPDATE vehiculo_asignacion_historial
+            SET 
+                fecha_inicio = ?,
+                observacion = CASE 
+                    WHEN ? <> '' THEN ?
+                    ELSE observacion
+                END
+            WHERE id = ?
+        ");
+
+        $stmt->bind_param(
+            "sssi",
+            $data['fecha_inicio'],
+            $data['observacion'],
+            $data['observacion'],
+            $actual['id']
+        );
+
+        $stmt->execute();
+
+        return 'historial_actualizado';
     }
 
     if ($actual) {
-        if ($data['fecha_inicio'] <= $actual['fecha_inicio']) {
-            throw new Exception(
-                'La fecha de nueva asignación debe ser posterior a la asignación activa actual: ' .
-                $actual['fecha_inicio']
-            );
-        }
-
         $fechaTerminoAnterior = date('Y-m-d', strtotime($data['fecha_inicio'] . ' -1 day'));
+
+        if ($fechaTerminoAnterior < $actual['fecha_inicio']) {
+            $fechaTerminoAnterior = $actual['fecha_inicio'];
+        }
 
         $stmt = $mysqli->prepare("
             UPDATE vehiculo_asignacion_historial
             SET fecha_termino = ?
             WHERE id = ?
         ");
-        $stmt->bind_param("si", $fechaTerminoAnterior, $actual['id']);
+
+        $stmt->bind_param(
+            "si",
+            $fechaTerminoAnterior,
+            $actual['id']
+        );
+
         $stmt->execute();
     }
 
@@ -438,6 +755,12 @@ function gestionarHistorial($mysqli, $idVehiculo, $data) {
 
     return 'historial_creado';
 }
+
+/*
+|--------------------------------------------------------------------------
+| VALIDAR ARCHIVO
+|--------------------------------------------------------------------------
+*/
 
 if (!isset($_FILES['archivo_csv']) || $_FILES['archivo_csv']['error'] !== UPLOAD_ERR_OK) {
     responder([
@@ -485,6 +808,12 @@ $resumen = [
 
 $resultadoFilas = [];
 
+/*
+|--------------------------------------------------------------------------
+| PROCESAR FILAS
+|--------------------------------------------------------------------------
+*/
+
 for ($i = 1; $i < count($lineas); $i++) {
     $linea = trim($lineas[$i]);
 
@@ -511,21 +840,21 @@ for ($i = 1; $i < count($lineas); $i++) {
             throw new Exception('Patente obligatoria.');
         }
 
-        $modelo = strtoupper(valorFila($row, ['modelo', 'modelo_vehiculo']));
-        $tipoCombustible = strtoupper(valorFila($row, ['tipo_combustible', 'combustible', 'octanaje']));
+        $vehiculoActual = buscarVehiculoActualPorPatente($mysqli, $patente);
+        $existeVehiculo = $vehiculoActual !== null;
 
-        if ($tipoCombustible !== '' && !in_array($tipoCombustible, ['93', '95', '97', 'DIESEL'], true)) {
-            throw new Exception('Tipo de combustible inválido. Use 93, 95, 97 o DIESEL.');
-        }
+        /*
+        |--------------------------------------------------------------------------
+        | VALORES CSV
+        |--------------------------------------------------------------------------
+        */
 
-        if ($tipoCombustible === '') {
-            $tipoCombustible = null;
-        }
+        $modeloCsv = strtoupper(valorFila($row, ['modelo', 'modelo_vehiculo']));
+        $tipoCombustibleCsv = strtoupper(valorFila($row, ['tipo_combustible', 'combustible', 'octanaje']));
+        $direccionCsv = strtoupper(valorFila($row, ['direccion_origen', 'origen', 'punto_partida', 'direccion']));
 
-        $direccionOrigen = strtoupper(valorFila($row, ['direccion_origen', 'origen', 'punto_partida', 'direccion']));
-        $fechaInicio = validarFecha(valorFila($row, ['fecha_inicio', 'fecha_asignacion'], date('Y-m-d')));
-        $estado = (int)valorFila($row, ['estado'], '1');
-        $estado = $estado === 0 ? 0 : 1;
+        $fechaCsv = valorFila($row, ['fecha_inicio', 'fecha_asignacion']);
+        $estadoCsv = valorFila($row, ['estado']);
         $observacion = valorFila($row, ['observacion', 'comentario'], 'Carga masiva');
 
         $empresaValor = valorFila($row, ['empresa', 'id_empresa']);
@@ -533,16 +862,155 @@ for ($i = 1; $i < count($lineas); $i++) {
         $subdivisionValor = valorFila($row, ['subdivision', 'id_subdivision']);
         $merchanValor = valorFila($row, ['merchan', 'usuario_merchan', 'id_merchan', 'usuario']);
 
-        $idEmpresa = resolverEmpresa($mysqli, $empresaValor);
-        $idDivision = resolverDivision($mysqli, $divisionValor, $idEmpresa);
-        $idSubdivision = resolverSubdivision($mysqli, $subdivisionValor, $idDivision);
-        $idMerchan = resolverMerchan($mysqli, $merchanValor, $idDivision, $idSubdivision);
+        /*
+        |--------------------------------------------------------------------------
+        | MANTENER DATOS EXISTENTES SI CSV VIENE VACÍO
+        |--------------------------------------------------------------------------
+        */
+
+        $modelo = $modeloCsv !== ''
+            ? $modeloCsv
+            : ($existeVehiculo ? strtoupper((string)$vehiculoActual['modelo']) : '');
+
+        $tipoCombustible = $tipoCombustibleCsv !== ''
+            ? $tipoCombustibleCsv
+            : ($existeVehiculo ? strtoupper((string)$vehiculoActual['tipo_combustible']) : null);
+
+        if ($tipoCombustible !== '' && $tipoCombustible !== null && !in_array($tipoCombustible, ['93', '95', '97', 'DIESEL'], true)) {
+            throw new Exception('Tipo de combustible inválido. Use 93, 95, 97 o DIESEL.');
+        }
+
+        if ($tipoCombustible === '') {
+            $tipoCombustible = null;
+        }
+
+        $direccionOrigen = $direccionCsv !== ''
+            ? $direccionCsv
+            : ($existeVehiculo ? strtoupper((string)$vehiculoActual['direccion_origen']) : '');
+
+        $fechaInicio = $fechaCsv !== ''
+            ? validarFecha($fechaCsv)
+            : (
+                $existeVehiculo && !empty($vehiculoActual['fecha_inicio_actual'])
+                    ? $vehiculoActual['fecha_inicio_actual']
+                    : date('Y-m-d')
+            );
+
+        $estadoDefault = $existeVehiculo ? (int)$vehiculoActual['estado'] : 1;
+        $estado = normalizarEstadoCarga($estadoCsv, $estadoDefault);
+
+        /*
+        |--------------------------------------------------------------------------
+        | EMPRESA / DIVISIÓN / SUBDIVISIÓN
+        |--------------------------------------------------------------------------
+        */
+
+        $idEmpresaActual = $existeVehiculo ? ($vehiculoActual['id_empresa_actual'] ?? null) : null;
+        $idDivisionActual = $existeVehiculo ? ($vehiculoActual['id_division_actual'] ?? null) : null;
+        $idSubdivisionActual = $existeVehiculo ? ($vehiculoActual['id_subdivision_actual'] ?? null) : null;
+        $idMerchanActual = $existeVehiculo ? ($vehiculoActual['id_merchan_actual'] ?? null) : null;
+
+        $idEmpresa = resolverEmpresa(
+            $mysqli,
+            $empresaValor,
+            $idEmpresaActual,
+            $existeVehiculo
+        );
+
+        $idDivision = resolverDivision(
+            $mysqli,
+            $divisionValor,
+            $idEmpresa,
+            $idDivisionActual,
+            $existeVehiculo
+        );
+
+        $idSubdivision = resolverSubdivision(
+            $mysqli,
+            $subdivisionValor,
+            $idDivision,
+            $idSubdivisionActual,
+            $existeVehiculo
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | MERCHAN
+        |--------------------------------------------------------------------------
+        | Si viene inactivo, se limpia.
+        | Si viene activo:
+        |   - Si CSV trae merchan, lo resuelve.
+        |   - Si CSV viene vacío y existe vehículo, mantiene merchan actual.
+        |   - Si CSV viene vacío y es vehículo nuevo, error.
+        |--------------------------------------------------------------------------
+        */
+
+        if ($estado === 0) {
+            $idMerchan = null;
+        } else {
+            if ($merchanValor !== '') {
+                $idMerchan = resolverMerchan($mysqli, $merchanValor, $idDivision, $idSubdivision);
+            } elseif ($existeVehiculo && $idMerchanActual) {
+                $idMerchan = (int)$idMerchanActual;
+            } else {
+                throw new Exception('Merchan obligatorio para vehículos activos.');
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | LATITUD / LONGITUD
+        |--------------------------------------------------------------------------
+        | Solo geocodifica si viene una dirección con datos en el CSV
+        | y es nueva o distinta a la actual, o si no existen coordenadas.
+        |--------------------------------------------------------------------------
+        */
+
+        $latOrigen = $existeVehiculo ? $vehiculoActual['lat_origen'] : null;
+        $lngOrigen = $existeVehiculo ? $vehiculoActual['lng_origen'] : null;
+
+        $debeGeocodificar = false;
+
+        if ($direccionCsv !== '') {
+            if (!$existeVehiculo) {
+                $debeGeocodificar = true;
+            } else {
+                $direccionActual = $vehiculoActual['direccion_origen'] ?? '';
+
+                if (textosSonDistintos($direccionCsv, $direccionActual)) {
+                    $debeGeocodificar = true;
+                }
+
+                if ($latOrigen === null || $latOrigen === '' || $lngOrigen === null || $lngOrigen === '') {
+                    $debeGeocodificar = true;
+                }
+            }
+        }
+
+        if ($debeGeocodificar) {
+            $geo = geocodificarDireccionGoogle($direccionOrigen, $GLOBALS['GOOGLE_GEOCODING_API_KEY']);
+
+            if (!$geo['ok']) {
+                throw new Exception($geo['msg']);
+            }
+
+            $latOrigen = $geo['lat'];
+            $lngOrigen = $geo['lng'];
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | DATA FINAL
+        |--------------------------------------------------------------------------
+        */
 
         $data = [
             'patente' => $patente,
             'modelo' => $modelo,
             'tipo_combustible' => $tipoCombustible,
             'direccion_origen' => $direccionOrigen,
+            'lat_origen' => $latOrigen,
+            'lng_origen' => $lngOrigen,
             'id_empresa' => $idEmpresa,
             'id_division' => $idDivision,
             'id_subdivision' => $idSubdivision,
@@ -552,26 +1020,49 @@ for ($i = 1; $i < count($lineas); $i++) {
             'observacion' => $observacion
         ];
 
-        $idVehiculo = buscarVehiculoPorPatente($mysqli, $patente);
+        /*
+        |--------------------------------------------------------------------------
+        | INSERT / UPDATE
+        |--------------------------------------------------------------------------
+        */
 
-        if ($idVehiculo > 0) {
+        if ($existeVehiculo) {
+            $idVehiculo = (int)$vehiculoActual['id'];
             actualizarVehiculo($mysqli, $idVehiculo, $data);
+
             $accionVehiculo = 'Actualizado';
             $resumen['actualizados']++;
         } else {
             $idVehiculo = insertarVehiculo($mysqli, $data);
+
             $accionVehiculo = 'Insertado';
             $resumen['insertados']++;
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | HISTORIAL
+        |--------------------------------------------------------------------------
+        */
 
         $resultadoHistorial = gestionarHistorial($mysqli, $idVehiculo, $data);
 
         if ($resultadoHistorial === 'historial_creado') {
             $resumen['historial_creado']++;
             $mensaje = $accionVehiculo . ' con historial creado.';
+        } elseif ($resultadoHistorial === 'historial_cerrado') {
+            $resumen['sin_cambio']++;
+            $mensaje = $accionVehiculo . '. Vehículo inactivo, historial vigente cerrado.';
+        } elseif ($resultadoHistorial === 'historial_actualizado') {
+            $resumen['sin_cambio']++;
+            $mensaje = $accionVehiculo . '. Asignación vigente actualizada.';
         } else {
             $resumen['sin_cambio']++;
             $mensaje = $accionVehiculo . '. Asignación sin cambios.';
+        }
+
+        if ($debeGeocodificar) {
+            $mensaje .= ' Dirección geocodificada.';
         }
 
         $mysqli->commit();

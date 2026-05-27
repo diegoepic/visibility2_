@@ -108,7 +108,7 @@
   // Geolocalización: rellenar lat/lng con posición actual del navegador
   $('#btnGeolocate').on('click', function(){
     if (!navigator.geolocation){
-      alert('Geolocalización no disponible en este navegador.');
+      PE.showError('Geolocalización no disponible', 'Tu navegador no soporta geolocalización.');
       return;
     }
     const $btn = $(this).prop('disabled', true);
@@ -119,7 +119,7 @@
         $btn.prop('disabled', false);
       },
       err => {
-        alert('No se pudo obtener la ubicación: ' + err.message);
+        PE.showError('Error de geolocalización', 'No se pudo obtener la ubicación: ' + err.message);
         $btn.prop('disabled', false);
       },
       { timeout: 10000 }

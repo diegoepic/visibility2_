@@ -1291,106 +1291,643 @@ $totalPages = (int)ceil($totalRows / max(1, $limit));
             justify-content:center;
             gap:5px;
         }
+/* =========================================================
+   GALERÍA MODERNA VISIBILITY
+========================================================= */
+
+body.gallery-modern-body {
+    background:
+        radial-gradient(circle at 12% 8%, rgba(95, 160, 255, .12), transparent 34%),
+        linear-gradient(180deg, #f6f9fd 0%, #eef3f9 100%) !important;
+    color: #183153;
+}
+
+.modern-gallery-container {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 26px 22px 40px;
+}
+
+/* Header */
+
+.modern-gallery-hero {
+    border-radius: 30px;
+    padding: 26px 30px;
+    background:
+        radial-gradient(circle at 10% 0%, rgba(95,160,255,.14), transparent 34%),
+        linear-gradient(180deg, rgba(255,255,255,.88), rgba(245,249,255,.78));
+    border: 1px solid rgba(215,228,246,.95);
+    box-shadow:
+        0 24px 55px rgba(70, 95, 140, .12),
+        inset 0 1px 0 rgba(255,255,255,.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    margin-bottom: 20px;
+}
+
+.modern-gallery-hero-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    flex-wrap: wrap;
+}
+
+.modern-gallery-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.modern-gallery-icon {
+    width: 62px;
+    height: 62px;
+    border-radius: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(145deg, #f7fbff, #dcecff);
+    color: #4d83ff;
+    font-size: 24px;
+    box-shadow:
+        0 12px 26px rgba(70,110,180,.12),
+        inset 0 1px 0 rgba(255,255,255,.9);
+}
+
+.modern-gallery-title {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 950;
+    color: #15315d;
+    letter-spacing: .2px;
+}
+
+.modern-gallery-subtitle {
+    margin: 5px 0 0;
+    color: #7a8ba7;
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.modern-gallery-kpis {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.modern-gallery-kpi {
+    min-width: 130px;
+    padding: 14px 16px;
+    border-radius: 20px;
+    background: rgba(255,255,255,.82);
+    border: 1px solid rgba(218,228,243,.9);
+    box-shadow:
+        0 12px 26px rgba(70,95,140,.07),
+        inset 0 1px 0 rgba(255,255,255,.85);
+}
+
+.modern-gallery-kpi span {
+    display: block;
+    font-size: 11px;
+    font-weight: 850;
+    color: #7c8da8;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+}
+
+.modern-gallery-kpi strong {
+    display: block;
+    margin-top: 5px;
+    font-size: 22px;
+    font-weight: 950;
+    color: #15315d;
+}
+
+/* Tabs */
+
+.modern-gallery-tabs {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 18px 0 0;
+    padding: 0;
+    border: 0;
+}
+
+.modern-gallery-tabs .nav-item {
+    margin: 0;
+}
+
+.modern-gallery-tabs .nav-link {
+    border: 1px solid rgba(200,215,238,.85) !important;
+    border-radius: 999px !important;
+    background: rgba(255,255,255,.72);
+    color: #315071;
+    font-size: 13px;
+    font-weight: 850;
+    padding: 11px 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow:
+        0 10px 22px rgba(70,95,140,.06),
+        inset 0 1px 0 rgba(255,255,255,.8);
+}
+
+.modern-gallery-tabs .nav-link.active {
+    background: linear-gradient(135deg, #75a5ff, #4d7eff);
+    color: #fff !important;
+    border-color: transparent !important;
+    box-shadow:
+        0 14px 28px rgba(77,126,255,.30),
+        inset 0 1px 0 rgba(255,255,255,.35);
+}
+
+/* Filtros */
+
+.modern-gallery-filter-card {
+    border-radius: 26px;
+    padding: 22px;
+    background: rgba(255,255,255,.78);
+    border: 1px solid rgba(215,228,246,.95);
+    box-shadow:
+        0 22px 50px rgba(70,95,140,.10),
+        inset 0 1px 0 rgba(255,255,255,.88);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    margin-bottom: 18px;
+}
+
+.modern-gallery-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(160px, 1fr));
+    gap: 16px;
+}
+
+.modern-gallery-field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.modern-gallery-field label {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 850;
+    color: #294469;
+}
+
+.modern-gallery-field input,
+.modern-gallery-field select {
+    width: 100%;
+    height: 44px;
+    border: 1px solid rgba(185,202,230,.78);
+    border-radius: 15px;
+    background: rgba(255,255,255,.86);
+    color: #28446f;
+    padding: 0 13px;
+    font-size: 13px;
+    font-weight: 650;
+    box-shadow:
+        0 8px 18px rgba(70,95,140,.06),
+        inset 0 1px 0 rgba(255,255,255,.8);
+}
+
+.modern-gallery-field input:focus,
+.modern-gallery-field select:focus {
+    outline: none;
+    border-color: #8eb7ff;
+    box-shadow:
+        0 0 0 4px rgba(90,142,255,.12),
+        0 8px 18px rgba(76,108,163,.08);
+}
+
+/* Toolbar */
+
+.modern-gallery-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+
+.modern-gallery-limit {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #294469;
+    font-size: 13px;
+    font-weight: 750;
+}
+
+.modern-gallery-limit select {
+    height: 42px;
+    border-radius: 14px;
+    border: 1px solid rgba(185,202,230,.78);
+    background: rgba(255,255,255,.88);
+    color: #28446f;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.modern-gallery-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.modern-gallery-btn {
+    height: 44px;
+    border: 0;
+    border-radius: 15px;
+    padding: 0 18px;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 850;
+    box-shadow:
+        0 14px 28px rgba(70,95,140,.15),
+        inset 0 1px 0 rgba(255,255,255,.32);
+    transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.modern-gallery-btn:hover {
+    transform: translateY(-2px);
+    color: #fff;
+}
+
+.modern-gallery-btn.success {
+    background: linear-gradient(135deg, #50c878, #22a85a);
+}
+
+.modern-gallery-btn.primary {
+    background: linear-gradient(135deg, #75a5ff, #4d7eff);
+}
+
+/* Tabla */
+
+.modern-gallery-table-shell {
+    border-radius: 26px;
+    overflow: hidden;
+    background: rgba(255,255,255,.82);
+    border: 1px solid rgba(215,228,246,.95);
+    box-shadow:
+        0 24px 55px rgba(70,95,140,.11),
+        inset 0 1px 0 rgba(255,255,255,.88);
+}
+
+.modern-gallery-table {
+    margin: 0;
+    background: transparent;
+}
+
+.modern-gallery-table thead th {
+    border: 0 !important;
+    background: rgba(242,247,255,.96);
+    color: #324a6d;
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    padding: 16px 14px;
+    vertical-align: middle;
+}
+
+.modern-gallery-table tbody td {
+    border-color: rgba(220,230,245,.85) !important;
+    padding: 14px;
+    vertical-align: middle;
+    color: #253b59;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.modern-gallery-table tbody tr {
+    transition: background .16s ease;
+}
+
+.modern-gallery-table tbody tr:hover {
+    background: rgba(245,249,255,.88);
+}
+
+.thumbnail {
+    width: 112px;
+    height: 94px;
+    object-fit: cover;
+    border-radius: 18px;
+    cursor: pointer;
+    box-shadow:
+        0 12px 24px rgba(35,65,115,.14),
+        inset 0 1px 0 rgba(255,255,255,.82);
+    transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.thumbnail:hover {
+    transform: scale(1.04);
+    box-shadow: 0 16px 30px rgba(35,65,115,.20);
+}
+
+.custom-img-cell {
+    width: 140px;
+    position: relative;
+}
+
+.badge-count {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: rgba(21,49,93,.86);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 900;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    box-shadow: 0 8px 16px rgba(21,49,93,.22);
+}
+
+.modern-gallery-empty {
+    padding: 34px;
+    text-align: center;
+    color: #7a8ba7;
+    font-weight: 750;
+}
+
+/* Paginación */
+
+.pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 7px;
+    margin-top: 22px;
+}
+
+.pagination .page-link {
+    border: 0;
+    border-radius: 13px;
+    color: #315071;
+    font-weight: 800;
+    box-shadow: 0 8px 18px rgba(70,95,140,.08);
+}
+
+.pagination .page-item.active .page-link {
+    background: linear-gradient(135deg, #75a5ff, #4d7eff);
+}
+
+/* Modal imagen */
+
+.modern-photo-modal .modal-dialog {
+    max-width: 92vw;
+}
+
+.modern-photo-modal .modal-content {
+    border: 0;
+    border-radius: 26px;
+    overflow: hidden;
+    background: rgba(255,255,255,.98);
+    box-shadow: 0 34px 95px rgba(20,45,90,.30);
+}
+
+.modern-photo-modal .modal-body {
+    padding: 18px !important;
+    background:
+        radial-gradient(circle at 12% 0%, rgba(95,160,255,.10), transparent 36%),
+        #fff;
+}
+
+.modern-photo-modal #modalBodyImgs img {
+    max-height: 82vh;
+    border-radius: 18px;
+    box-shadow: 0 18px 45px rgba(40,70,120,.18);
+}
+
+.modern-photo-modal .modal-footer {
+    border-top: 1px solid rgba(205,218,238,.75);
+    background: rgba(248,251,255,.96);
+}
+
+@media (max-width: 1200px) {
+    .modern-gallery-filter-grid {
+        grid-template-columns: repeat(3, minmax(160px, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .modern-gallery-container {
+        padding: 18px 14px 30px;
+    }
+
+    .modern-gallery-title {
+        font-size: 24px;
+    }
+
+    .modern-gallery-filter-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .modern-gallery-toolbar {
+        align-items: stretch;
+    }
+
+    .modern-gallery-actions,
+    .modern-gallery-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .modern-gallery-table-shell {
+        overflow-x: auto;
+    }
+}
     </style>
 </head>
-<body class="bg-light">
-<div class="container mt-4">
-    <h2>Galería de Campaña</h2>
+<body class="gallery-modern-body">
+<div class="modern-gallery-container">
+
+  <div class="modern-gallery-hero">
+    <div class="modern-gallery-hero-main">
+
+      <div class="modern-gallery-title-wrap">
+        <div class="modern-gallery-icon">
+          <i class="fas fa-images"></i>
+        </div>
+
+        <div>
+          <h2 class="modern-gallery-title">Galería de Campaña</h2>
+          <p class="modern-gallery-subtitle">
+            Visualización, filtro y descarga de registros fotográficos
+          </p>
+        </div>
+      </div>
+
+      <div class="modern-gallery-kpis">
+        <div class="modern-gallery-kpi">
+          <span>Total registros</span>
+          <strong><?= number_format((int)$totalRows, 0, ',', '.'); ?></strong>
+        </div>
+
+        <div class="modern-gallery-kpi">
+          <span>Vista actual</span>
+          <strong>
+            <?php
+              echo $view === 'implementacion'
+                ? 'Implementación'
+                : ($view === 'encuesta' ? 'Encuesta' : 'No gestionados');
+            ?>
+          </strong>
+        </div>
+
+        <div class="modern-gallery-kpi">
+          <span>Página</span>
+          <strong><?= (int)$page; ?> / <?= max(1, (int)$totalPages); ?></strong>
+        </div>
+      </div>
+
+    </div>
 
     <?php if ($tipoForm == 1 || $tipoForm == 3): ?>
-        <ul class="nav nav-tabs mb-3">
+        <ul class="nav modern-gallery-tabs">
             <li class="nav-item">
                 <a class="nav-link <?= $view === 'implementacion' ? 'active' : '' ?>"
                    href="?<?= http_build_query(array_merge($_GET, ['view' => 'implementacion', 'page' => 1])) ?>">
+                    <i class="fas fa-image"></i>
                     Fotos Implementación
                 </a>
             </li>
             <li class="nav-item">
                 <a class="nav-link <?= $view === 'encuesta' ? 'active' : '' ?>"
                    href="?<?= http_build_query(array_merge($_GET, ['view' => 'encuesta', 'page' => 1])) ?>">
+                    <i class="fas fa-clipboard-list"></i>
                     Fotos Encuesta
                 </a>
             </li>
             <li class="nav-item">
                 <a class="nav-link <?= $view === 'locales_no_visitados' ? 'active' : '' ?>"
                    href="?<?= http_build_query(array_merge($_GET, ['view' => 'locales_no_visitados', 'page' => 1])) ?>">
+                    <i class="fas fa-store-slash"></i>
                     Locales No Gestionados
                 </a>
             </li>
         </ul>
     <?php endif; ?>
+  </div>
 
-    <form id="filterForm" method="GET" class="form-inline mb-3">
-        <input type="hidden" name="id" value="<?= $formulario_id ?>">
-        <input type="hidden" name="view" value="<?= htmlspecialchars($view) ?>">
+<form id="filterForm" method="GET" class="modern-gallery-filter-card">
+  <input type="hidden" name="id" value="<?= $formulario_id ?>">
+  <input type="hidden" name="view" value="<?= htmlspecialchars($view) ?>">
 
-        <label class="mr-2">Desde:</label>
-        <input type="date" name="start_date" class="form-control mr-2" value="<?= htmlspecialchars($start_date) ?>">
+  <div class="modern-gallery-filter-grid">
 
-        <label class="mr-2">Hasta:</label>
-        <input type="date" name="end_date" class="form-control mr-2" value="<?= htmlspecialchars($end_date) ?>">
-
-        <label class="mr-2">Usuario:</label>
-        <select name="user_id" class="form-control mr-2">
-            <option value="0">-- Todos --</option>
-            <?php foreach ($usuarios as $u): ?>
-                <option value="<?= $u['id'] ?>" <?= $u['id'] == $user_id ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($u['usuario']) ?>
-                </option>
-            <?php endforeach; ?>
-        </select>
-
-        <?php if (($tipoForm == 1 || $tipoForm == 3) && $view === 'implementacion'): ?>
-            <label class="mr-2">Material:</label>
-            <select name="material_id" class="form-control mr-2">
-                <option value="0">-- Todos --</option>
-                <?php foreach ($materials as $m): ?>
-                    <option value="<?= $m['id'] ?>" <?= $m['id'] == $material_id ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($m['nombre']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        <?php endif; ?>
-
-        <?php if (($tipoForm == 1 || $tipoForm == 3) && $view === 'encuesta'): ?>
-            <label class="mr-2">Pregunta:</label>
-            <select name="id_question" class="form-control mr-2">
-                <option value="">-- Todas --</option>
-                <?php foreach ($preguntasDisponibles as $p): ?>
-                    <option value="<?= $p['id'] ?>" <?= $p['id'] == $id_question ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($p['question_text']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        <?php endif; ?>
-
-        <?php if ($tipoForm == 1 || $tipoForm == 3): ?>
-            <label class="mr-2">Cód. Local:</label>
-            <input type="text" name="local_code" class="form-control mr-2" value="<?= htmlspecialchars($local_code) ?>">
-        <?php endif; ?>
-
-        <button type="submit" class="btn btn-primary d-none">Filtrar</button>
-    </form>
-
-    <div class="d-flex align-items-center mb-2">
-        <label class="mr-2">Mostrar:</label>
-        <select id="limitSelect" class="form-control" style="width:auto">
-            <?php foreach ([10, 25, 50, 100] as $n): ?>
-                <option value="<?= $n ?>" <?= $n == $limit ? 'selected' : '' ?>><?= $n ?></option>
-            <?php endforeach; ?>
-        </select>
-        <span class="ml-2">registros</span>
+    <div class="modern-gallery-field">
+      <label>Desde</label>
+      <input type="date" name="start_date" value="<?= htmlspecialchars($start_date) ?>">
     </div>
 
-    <button id="btnDownloadSelected" class="btn btn-success mb-3">Descargar seleccionadas</button>
-    <button id="btnDownloadAll" class="btn btn-warning mb-3 ml-2">Descargar Todas las fotos</button>
+    <div class="modern-gallery-field">
+      <label>Hasta</label>
+      <input type="date" name="end_date" value="<?= htmlspecialchars($end_date) ?>">
+    </div>
+
+    <div class="modern-gallery-field">
+      <label>Usuario</label>
+      <select name="user_id">
+        <option value="0">Todos</option>
+        <?php foreach ($usuarios as $u): ?>
+          <option value="<?= $u['id'] ?>" <?= $u['id'] == $user_id ? 'selected' : '' ?>>
+            <?= htmlspecialchars($u['usuario']) ?>
+          </option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+
+    <?php if (($tipoForm == 1 || $tipoForm == 3) && $view === 'implementacion'): ?>
+      <div class="modern-gallery-field">
+        <label>Material</label>
+        <select name="material_id">
+          <option value="0">Todos</option>
+          <?php foreach ($materials as $m): ?>
+            <option value="<?= $m['id'] ?>" <?= $m['id'] == $material_id ? 'selected' : '' ?>>
+              <?= htmlspecialchars($m['nombre']) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+    <?php endif; ?>
+
+    <?php if (($tipoForm == 1 || $tipoForm == 3) && $view === 'encuesta'): ?>
+      <div class="modern-gallery-field">
+        <label>Pregunta</label>
+        <select name="id_question">
+          <option value="">Todas</option>
+          <?php foreach ($preguntasDisponibles as $p): ?>
+            <option value="<?= $p['id'] ?>" <?= $p['id'] == $id_question ? 'selected' : '' ?>>
+              <?= htmlspecialchars($p['question_text']) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+    <?php endif; ?>
+
+    <?php if ($tipoForm == 1 || $tipoForm == 3): ?>
+      <div class="modern-gallery-field">
+        <label>Cód. Local</label>
+        <input type="text" name="local_code" value="<?= htmlspecialchars($local_code) ?>">
+      </div>
+    <?php endif; ?>
+
+  </div>
+
+  <button type="submit" class="btn btn-primary d-none">Filtrar</button>
+</form>
+
+    <div class="modern-gallery-toolbar">
+
+  <div class="modern-gallery-limit">
+    <span>Mostrar</span>
+
+    <select id="limitSelect">
+      <?php foreach ([10, 25, 50, 100] as $n): ?>
+        <option value="<?= $n ?>" <?= $n == $limit ? 'selected' : '' ?>>
+          <?= $n ?>
+        </option>
+      <?php endforeach; ?>
+    </select>
+
+    <span>registros</span>
+  </div>
+
+  <div class="modern-gallery-actions">
+    <button id="btnDownloadSelected" class="modern-gallery-btn success" type="button">
+      <i class="fas fa-download"></i>
+      <span>Descargar seleccionadas</span>
+    </button>
+
+    <button id="btnDownloadAll" class="modern-gallery-btn primary" type="button">
+      <i class="fas fa-cloud-download-alt"></i>
+      <span>Descargar todas las fotos</span>
+    </button>
+  </div>
+
+</div>
 
     <form id="zipForm" method="POST" action="download_zip.php" style="display:none">
         <input type="hidden" name="jsonFotos" id="jsonFotos">
     </form>
 
     <?php if ($view === 'implementacion' || $view === 'locales_no_visitados'): ?>
-        <table class="table table-bordered table-hover">
+<div class="modern-gallery-table-shell">
+  <table class="table modern-gallery-table">
             <thead class="thead-light">
             <tr>
                 <th><input type="checkbox" id="selectAll"></th>
@@ -1412,7 +1949,14 @@ $totalPages = (int)ceil($totalRows / max(1, $limit));
             </thead>
             <tbody>
             <?php if (empty($data)): ?>
-                <tr><td colspan="11" class="text-center">Sin fotos</td></tr>
+            <tr>
+              <td colspan="11">
+                <div class="modern-gallery-empty">
+                  <i class="fas fa-images mb-2 d-block"></i>
+                  Sin fotos disponibles para los filtros seleccionados.
+                </div>
+              </td>
+            </tr>
             <?php else: ?>
                 <?php $i = $offset + 1; ?>
                 <?php foreach ($data as $row): ?>
@@ -1476,9 +2020,11 @@ $totalPages = (int)ceil($totalRows / max(1, $limit));
             <?php endif; ?>
             </tbody>
         </table>
+    </div>
 
     <?php else: ?>
-        <table class="table table-bordered table-hover">
+<div class="modern-gallery-table-shell">
+  <table class="table modern-gallery-table">
             <thead class="thead-light">
             <tr>
                 <th><input type="checkbox" id="selectAll"></th>
@@ -1496,7 +2042,14 @@ $totalPages = (int)ceil($totalRows / max(1, $limit));
             </thead>
             <tbody>
             <?php if (empty($data)): ?>
-                <tr><td colspan="11" class="text-center">Sin fotos de encuesta</td></tr>
+            <tr>
+              <td colspan="11">
+                <div class="modern-gallery-empty">
+                  <i class="fas fa-clipboard-list mb-2 d-block"></i>
+                  Sin fotos de encuesta para los filtros seleccionados.
+                </div>
+              </td>
+            </tr>
             <?php else: ?>
                 <?php $i = $offset + 1; ?>
                 <?php foreach ($data as $row): ?>
@@ -1539,6 +2092,7 @@ $totalPages = (int)ceil($totalRows / max(1, $limit));
             <?php endif; ?>
             </tbody>
         </table>
+</div>        
     <?php endif; ?>
 
     <?php if ($totalPages > 1): ?>
@@ -1574,15 +2128,24 @@ $totalPages = (int)ceil($totalRows / max(1, $limit));
     <?php endif; ?>
 </div>
 
-<div class="modal fade" id="fullSizeModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-body p-0 text-center" id="modalBodyImgs"></div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
-            </div>
+<div class="modal fade modern-photo-modal" id="fullSizeModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+
+      <div class="modal-body text-center" id="modalBodyImgs"></div>
+
+      <div class="modal-footer justify-content-between">
+        <div class="small text-muted font-weight-bold">
+          Vista ampliada de imágenes
         </div>
+
+        <button class="btn btn-light font-weight-bold" data-dismiss="modal">
+          Cerrar
+        </button>
+      </div>
+
     </div>
+  </div>
 </div>
 
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>

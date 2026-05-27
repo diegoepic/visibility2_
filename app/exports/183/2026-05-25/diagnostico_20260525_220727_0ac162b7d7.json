@@ -1,0 +1,77 @@
+{
+    "exported_at": "2026-05-26T02:07:26.910Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 15; 2312DRA50G Build/AQ3A.240912.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/148.0.7778.120 Mobile Safari/537.36 median",
+    "sw_version": "v7.1.1",
+    "stats": {
+        "today": {
+            "ymd": "2026-05-25",
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        },
+        "overall": {
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        }
+    },
+    "queue": {
+        "total_records": 0,
+        "last_created_at": null,
+        "last_updated_at": null
+    },
+    "recent_events": [],
+    "storage_estimate": {
+        "usage": 15127737,
+        "quota": 10752545977,
+        "percent_used": 0
+    },
+    "connection_info": {
+        "effectiveType": "4g",
+        "downlink": 9,
+        "rtt": null,
+        "saveData": false
+    },
+    "service_worker": {
+        "active": "active",
+        "installing": null,
+        "waiting": null,
+        "scope": "https://visibility.cl/visibility2/app/"
+    },
+    "idb_databases": [
+        {
+            "name": "v2_journal",
+            "version": 9
+        },
+        {
+            "name": "v2_mappings",
+            "version": 1
+        },
+        {
+            "name": "v2_offline",
+            "version": 10
+        },
+        {
+            "name": "v2_route_cache",
+            "version": 1
+        },
+        {
+            "name": "visibility2-v2",
+            "version": 9
+        }
+    ],
+    "recent_errors": [],
+    "client_time": {
+        "local": "Mon May 25 2026 22:07:26 GMT-0400 (hora estándar de Chile)",
+        "timezone": "America/Santiago",
+        "offset_minutes": 240
+    },
+    "csrf_token": "2ec1850bdcfeae1dc650d29613ad237dc5d5c726835ddae0b24e703a6155fe14"
+}

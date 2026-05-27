@@ -48,7 +48,7 @@ function panel_encuesta_json_response(
         'error_code' => $errorCode,
         'debug_id' => $debugId,
         'meta' => $meta,
-    ], JSON_UNESCAPED_UNICODE);
+    ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 }
 
 function panel_encuesta_abs_base(): string
@@ -150,9 +150,23 @@ function panel_encuesta_photo_fs_path(?string $url): ?string
 
     $path = ($path[0] ?? '') === '/' ? $path : ('/' . $path);
 
+    $allowedRoots = [
+        realpath($docroot . '/visibility2/app/uploads') ?: ($docroot . '/visibility2/app/uploads'),
+        realpath($docroot . '/visibility2/uploads')     ?: ($docroot . '/visibility2/uploads'),
+    ];
+
+    $inAllowedRoot = static function (string $fs) use ($allowedRoots): bool {
+        foreach ($allowedRoots as $root) {
+            if (str_starts_with($fs, $root . DIRECTORY_SEPARATOR) || $fs === $root) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     // Intentar ruta directa
     $fs = realpath($docroot . $path);
-    if ($fs && is_file($fs)) {
+    if ($fs && is_file($fs) && $inAllowedRoot($fs)) {
         return $fs;
     }
 
@@ -174,7 +188,7 @@ function panel_encuesta_photo_fs_path(?string $url): ?string
 
     foreach ($alternativePaths as $altPath) {
         $fs = realpath($altPath);
-        if ($fs && is_file($fs)) {
+        if ($fs && is_file($fs) && $inAllowedRoot($fs)) {
             return $fs;
         }
     }
@@ -269,9 +283,17 @@ function build_panel_encuesta_filters(
         $appliedDefaultRange = true;
     }
 
+    // Validación de fechas: formato y orden (desde <= hasta)
+    if ($desde !== '' && !\DateTime::createFromFormat('Y-m-d', $desde)) { $desde = ''; }
+    if ($hasta !== '' && !\DateTime::createFromFormat('Y-m-d', $hasta)) { $hasta = ''; }
+    if ($desde !== '' && $hasta !== '' && $desde > $hasta) {
+        // Rango invertido: intercambiar para evitar queries vacías
+        [$desde, $hasta] = [$hasta, $desde];
+    }
+
     // Normalización a timestamp (se usan en el WHERE principal)
-    $desdeFull = $desde ? ($desde.'  00:00:00') : null;
-    $hastaFull = $hasta ? (date('Y-m-d', strtotime($hasta.' +1 day')).' 00:00:00') : null;
+    $desdeFull = $desde ? ($desde . ' 00:00:00') : null;
+    $hastaFull = $hasta ? (date('Y-m-d', strtotime($hasta . ' +1 day')) . ' 00:00:00') : null;
 
     // -------- Análisis de rango y "scope" (no corta aún, solo marca) --------
     $rangeDays = null;

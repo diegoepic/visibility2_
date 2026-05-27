@@ -143,6 +143,165 @@ if ($division_id > 0) {
     text-align: center;
     border: 1px solid rgba(0,0,0,.05);
 }
+
+/* =========================================================
+   MODAL DESCARGA VEHÍCULOS
+========================================================= */
+
+.vehicle-download-modal {
+    border: 0 !important;
+    border-radius: 28px !important;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 12% 0%, rgba(95,160,255,.12), transparent 36%),
+        linear-gradient(180deg, rgba(255,255,255,.98), rgba(245,249,255,.96)) !important;
+    box-shadow:
+        0 34px 95px rgba(20,45,90,.30),
+        inset 0 1px 0 rgba(255,255,255,.86) !important;
+}
+
+.vehicle-download-header {
+    min-height: 76px;
+    background:
+        radial-gradient(circle at 12% 0%, rgba(95,160,255,.14), transparent 36%),
+        rgba(248,251,255,.96) !important;
+    border-bottom: 1px solid rgba(205,218,238,.78) !important;
+    color: #172848 !important;
+    align-items: center;
+}
+
+.vehicle-download-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.vehicle-download-icon {
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    border-radius: 18px;
+    background: linear-gradient(145deg, #f7fbff, #dcecff);
+    color: #4d7eff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    box-shadow:
+        0 12px 26px rgba(70,110,180,.12),
+        inset 0 1px 0 rgba(255,255,255,.9);
+}
+
+.vehicle-download-header .modal-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 950;
+    color: #172848;
+}
+
+.vehicle-download-header p {
+    margin: 4px 0 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: #7285a4;
+}
+
+.vehicle-download-close {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: rgba(240,246,255,.95) !important;
+    color: #536782 !important;
+    text-shadow: none !important;
+    opacity: 1 !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.vehicle-download-body {
+    padding: 22px !important;
+}
+
+.vehicle-download-option {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px;
+    border-radius: 22px;
+    margin-bottom: 14px;
+    text-decoration: none !important;
+    background: rgba(255,255,255,.86);
+    border: 1px solid rgba(215,228,246,.95);
+    box-shadow:
+        0 14px 30px rgba(70,95,140,.08),
+        inset 0 1px 0 rgba(255,255,255,.88);
+    transition: all .18s ease;
+}
+
+.vehicle-download-option:hover {
+    transform: translateY(-2px);
+    box-shadow:
+        0 20px 38px rgba(70,95,140,.14),
+        inset 0 1px 0 rgba(255,255,255,.92);
+}
+
+.vehicle-download-option-icon {
+    width: 54px;
+    height: 54px;
+    min-width: 54px;
+    border-radius: 18px;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 21px;
+}
+
+.vehicle-download-option-icon.blue {
+    background: linear-gradient(135deg, #4d7eff, #6a73ff);
+}
+
+.vehicle-download-option-icon.purple {
+    background: linear-gradient(135deg, #7d5fff, #5f47ff);
+}
+
+.vehicle-download-option-text {
+    flex: 1;
+}
+
+.vehicle-download-option-text strong {
+    display: block;
+    color: #172848;
+    font-size: 14px;
+    font-weight: 950;
+    margin-bottom: 4px;
+}
+
+.vehicle-download-option-text span {
+    display: block;
+    color: #7285a4;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.vehicle-download-arrow {
+    color: #8ba0bd;
+}
+
+.vehicle-download-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 4px;
+    padding: 14px;
+    border-radius: 16px;
+    background: rgba(229,242,255,.96);
+    color: #245b95;
+    font-size: 12px;
+    font-weight: 750;
+}
   </style>
 </head>
 <body class="hold-transition sidebar-mini layout-fixed" data-panel-auto-height-mode="height">
@@ -887,7 +1046,7 @@ if ($division_id > 0) {
       <nav class="mt-2">
         <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
           <li class="nav-item">
-            <a href="ui_dashboard1.php" class="nav-link">
+            <a href="ui_dashboard2.php" class="nav-link">
               <i class="nav-icon fas fa-tachometer-alt"></i>
               <p>Dashboard</p>
             </a>
@@ -946,12 +1105,12 @@ if ($division_id > 0) {
                   <p>Crear/Editar vehiculos</p>
                 </a>
               </li>
-              <li class="nav-item">
-                  <a href="#" class="nav-link" data-toggle="modal" data-target="#">
-                      <i class="far fa-circle nav-icon"></i>
-                      <p>Descargar vehiculos</p>
-                  </a>
-              </li>              
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-toggle="modal" data-target="#modalDescargarVehiculos">
+                        <i class="far fa-circle nav-icon"></i>
+                        <p>Descargar vehículos</p>
+                    </a>
+                </li>             
             </ul>
           </li>
 
@@ -1312,10 +1471,75 @@ if ($division_id > 0) {
         </div>
       </div>
       <div class="tab-pane fade active show" id="panel-index2-html" role="tabpanel" aria-labelledby="tab-index2-html">
-        <iframe src="./ui_dashboard1.php" style="height: 300.6px;"></iframe>
+        <iframe src="./ui_dashboard2.php" style="height: 300.6px;"></iframe>
       </div>
     </div>
   </div>
+
+<!-- MODAL DESCARGA VEHÍCULOS -->
+<div class="modal fade" id="modalDescargarVehiculos" tabindex="-1" role="dialog" aria-labelledby="modalDescargarVehiculosLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content vehicle-download-modal">
+
+            <div class="modal-header vehicle-download-header">
+                <div class="vehicle-download-title-wrap">
+                    <div class="vehicle-download-icon">
+                        <i class="fas fa-car-side"></i>
+                    </div>
+
+                    <div>
+                        <h5 class="modal-title" id="modalDescargarVehiculosLabel">
+                            Descargar vehículos
+                        </h5>
+                        <p>Exporta el estado actual o el historial completo de la flota.</p>
+                    </div>
+                </div>
+
+                <button type="button" class="close vehicle-download-close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+
+            <div class="modal-body vehicle-download-body">
+
+                <a href="/visibility2/portal/modulos/mod_vehiculos/exportar_vehiculos.php?tipo=actual"
+                   class="vehicle-download-option">
+                    <div class="vehicle-download-option-icon blue">
+                        <i class="fas fa-file-download"></i>
+                    </div>
+
+                    <div class="vehicle-download-option-text">
+                        <strong>Estado actual de vehículos</strong>
+                        <span>Descarga el último registro vigente de cada vehículo, incluyendo empresa, división, merchan actual y estado.</span>
+                    </div>
+
+                    <i class="fas fa-chevron-right vehicle-download-arrow"></i>
+                </a>
+
+                <a href="/visibility2/portal/modulos/mod_vehiculos/exportar_vehiculos.php?tipo=historico"
+                   class="vehicle-download-option">
+                    <div class="vehicle-download-option-icon purple">
+                        <i class="fas fa-history"></i>
+                    </div>
+
+                    <div class="vehicle-download-option-text">
+                        <strong>Histórico de asignaciones</strong>
+                        <span>Descarga todos los movimientos históricos de asignación por vehículo.</span>
+                    </div>
+
+                    <i class="fas fa-chevron-right vehicle-download-arrow"></i>
+                </a>
+
+                <div class="vehicle-download-note">
+                    <i class="fa-solid fa-circle-info"></i>
+                    Los archivos se descargan en formato Excel (.xlsx).
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+</div>
 
 <!-- Modal descarga RB Tradicional -->
 <div class="modal fade" id="modalDescargaRBTradicional" tabindex="-1" role="dialog" aria-labelledby="modalDescargaRBTradicionalLabel" aria-hidden="true">

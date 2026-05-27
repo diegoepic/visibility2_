@@ -701,7 +701,7 @@ $stmtP->close();
             <button type="button" class="btn btn-modern" id="btnKilometrajes"
                     style="background:#217346;border-color:#217346;color:#fff;"
                     data-toggle="modal" data-target="#modalKilometrajes">
-                <i class="fas fa-file-excel mr-1"></i>Informe Kilometrajes
+                <i class="fas fa-file-excel mr-1"></i>Informe Estatus Vehículo
             </button>
             <?php endif; ?>
         </div>
@@ -749,13 +749,13 @@ $stmtP->close();
 </div>
 
 <?php if ($formulario_id === 138): ?>
-<!-- ── Modal Informe Kilometrajes ── -->
+<!-- ── Modal Informe Estatus Vehículo ── -->
 <div class="modal fade" id="modalKilometrajes" tabindex="-1" role="dialog">
     <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
         <div class="modal-content">
             <div class="modal-header" style="background:#217346;color:#fff;">
                 <h5 class="modal-title">
-                    <i class="fas fa-file-excel mr-2"></i>Informe Kilometrajes
+                    <i class="fas fa-file-excel mr-2"></i>Informe Estatus Vehículo
                 </h5>
                 <button type="button" class="close" data-dismiss="modal" style="color:#fff;opacity:1;">
                     <span aria-hidden="true">&times;</span>
@@ -763,8 +763,7 @@ $stmtP->close();
             </div>
             <div class="modal-body">
                 <p class="text-muted small mb-3">
-                    Selecciona el período a analizar y <strong>desmarca los días feriados</strong> de cada semana.
-                    El sistema calculará automáticamente cuándo debieron subirse los kilometrajes.
+                    Selecciona el período, el modo de análisis y <strong>desmarca los días feriados</strong> de cada semana.
                 </p>
                 <div class="form-row mb-3">
                     <div class="col">
@@ -778,9 +777,24 @@ $stmtP->close();
                                value="<?= htmlspecialchars($end_date, ENT_QUOTES) ?>">
                     </div>
                 </div>
+                <div class="mb-3 p-2 rounded" style="background:#f8f9fa;border:1px solid #dee2e6;">
+                    <label class="font-weight-bold small mb-2 d-block">Modo de análisis</label>
+                    <div class="form-check mb-1">
+                        <input class="form-check-input" type="radio" name="kmModo" id="kmModoClasico" value="clasico" checked>
+                        <label class="form-check-label small" for="kmModoClasico">
+                            <strong>Fin de semana</strong> — lunes mañana + viernes tarde 
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="kmModo" id="kmModoDiario" value="diario">
+                        <label class="form-check-label small" for="kmModoDiario">
+                            <strong>Diario</strong> — 2 subidas por día hábil (inicio y término de jornada)
+                        </label>
+                    </div>
+                </div>
                 <div id="kmWeeksContainer"></div>
                 <div class="mt-3 p-2 rounded" style="background:#f0f9f0;border:1px solid #c3e6cb;">
-                    <span class="font-weight-bold small">Total días de subida esperados: </span>
+                    <span class="font-weight-bold small">Total subidas esperadas: </span>
                     <span id="kmTotalExpected" class="font-weight-bold" style="color:#217346;font-size:16px;">0</span>
                 </div>
             </div>
@@ -796,7 +810,7 @@ $stmtP->close();
 </div>
 
 <form id="formKilometrajes" method="POST"
-      action="../../informes/descargar_excel_kilometrajes.php"
+      action="../../informes/descargar_excel_estatus_vehiculo.php"
       target="_blank" style="display:none;">
     <input type="hidden" name="start_date" id="kmFormStart">
     <input type="hidden" name="end_date"   id="kmFormEnd">
@@ -1248,7 +1262,7 @@ $(function () {
 
 <?php if ($formulario_id === 138): ?>
 <script>
-/* ── Informe Kilometrajes — lógica del modal ── */
+/* ── Informe Estatus Vehículo — lógica del modal ── */
 (function () {
     'use strict';
 
@@ -1296,29 +1310,45 @@ $(function () {
         return blocks;
     }
 
+    /* Devuelve el modo activo ('clasico' o 'diario') */
+    function getModo() {
+        var el = document.querySelector('input[name="kmModo"]:checked');
+        return el ? el.value : 'clasico';
+    }
+
     /* Lee los checks activos de una tarjeta de semana y devuelve
-       [{date, tipo:'inicio'|'termino'}] deduplicados */
+       [{date, tipo:'inicio'|'termino'}] deduplicados según el modo */
     function calcExpectedForCard(card) {
         var checked = Array.from(card.querySelectorAll('.km-day-check:checked'))
                            .map(function (c) { return c.dataset.date; });
         if (!checked.length) return [];
 
-        var blocks  = consecutiveBlocks(checked);
-        var result  = [];
-        var seen    = {};
+        var modo   = getModo();
+        var result = [];
+        var seen   = {};
 
-        blocks.forEach(function (block) {
-            var first = block[0];
-            var last  = block[block.length - 1];
-
-            function push(date, tipo) {
-                var k = date + '|' + tipo;
-                if (!seen[k]) { seen[k] = true; result.push({ date: date, tipo: tipo }); }
-            }
-
-            push(first, 'inicio');
-            push(last,  'termino');
-        });
+        if (modo === 'diario') {
+            /* Modo diario: cada día checked genera inicio + termino */
+            checked.slice().sort().forEach(function (date) {
+                ['inicio', 'termino'].forEach(function (tipo) {
+                    var k = date + '|' + tipo;
+                    if (!seen[k]) { seen[k] = true; result.push({ date: date, tipo: tipo }); }
+                });
+            });
+        } else {
+            /* Modo clásico: primer día de cada bloque = inicio, último = termino */
+            var blocks = consecutiveBlocks(checked);
+            blocks.forEach(function (block) {
+                var first = block[0];
+                var last  = block[block.length - 1];
+                function push(date, tipo) {
+                    var k = date + '|' + tipo;
+                    if (!seen[k]) { seen[k] = true; result.push({ date: date, tipo: tipo }); }
+                }
+                push(first, 'inicio');
+                push(last,  'termino');
+            });
+        }
 
         return result;
     }
@@ -1333,10 +1363,21 @@ $(function () {
     function updatePreview(card) {
         var preview  = card.querySelector('.km-week-preview');
         var expected = calcExpectedForCard(card);
+        var modo     = getModo();
 
         if (!expected.length) {
             preview.innerHTML = '<span class="text-danger">⚠ Semana sin días hábiles — no aplica</span>';
+        } else if (modo === 'diario') {
+            /* Preview compacto: lista días y total de slots */
+            var dias = expected.filter(function (e) { return e.tipo === 'inicio'; });
+            var dayLabels = dias.map(function (e) {
+                var d = new Date(e.date + 'T12:00:00');
+                return '<strong>' + DAY_SHORT[d.getDay()] + ' ' + fmtShort(e.date) + '</strong>';
+            }).join(' · ');
+            preview.innerHTML = '<span style="color:#217346">→ ' + dayLabels
+                + ' &nbsp;— 2 subidas c/día = <strong>' + expected.length + '</strong> total</span>';
         } else {
+            /* Preview clásico: muestra qué día es mañana y cuál es tarde */
             var parts = expected.map(function (e) {
                 var d = new Date(e.date + 'T12:00:00');
                 return '<strong>' + DAY_SHORT[d.getDay()] + ' ' + fmtShort(e.date) + '</strong> ' + TIPO_LBL[e.tipo];
@@ -1347,7 +1388,7 @@ $(function () {
         updateTotal();
     }
 
-    /* Actualiza el contador global de días esperados */
+    /* Actualiza el contador global de subidas esperadas */
     function updateTotal() {
         var total = 0;
         document.querySelectorAll('#kmWeeksContainer .km-week-card').forEach(function (card) {
@@ -1438,9 +1479,17 @@ $(function () {
         });
     }
 
-    /* Wiring */
+    /* Wiring — fechas y modo disparan reconstrucción de grilla */
     document.getElementById('kmInputStart').addEventListener('change', buildGrid);
     document.getElementById('kmInputEnd').addEventListener('change', buildGrid);
+    document.querySelectorAll('input[name="kmModo"]').forEach(function (r) {
+        r.addEventListener('change', function () {
+            /* Al cambiar modo, solo recalcular previews (sin reconstruir grilla) */
+            document.querySelectorAll('#kmWeeksContainer .km-week-card').forEach(function (card) {
+                updatePreview(card);
+            });
+        });
+    });
 
     $('#modalKilometrajes').on('show.bs.modal', function () {
         buildGrid();
@@ -1455,17 +1504,24 @@ $(function () {
             return;
         }
         if (parseInt(document.getElementById('kmTotalExpected').textContent || '0', 10) === 0) {
-            alert('No hay días de subida esperados en el rango seleccionado.');
+            alert('No hay subidas esperadas en el rango seleccionado.');
             return;
         }
 
         var form = document.getElementById('formKilometrajes');
 
-        /* Limpiar feriados anteriores */
-        form.querySelectorAll('input[name="feriados[]"]').forEach(function (el) { el.remove(); });
+        /* Limpiar campos dinámicos anteriores */
+        form.querySelectorAll('input[name="feriados[]"], input[name="modo"]').forEach(function (el) { el.remove(); });
 
         document.getElementById('kmFormStart').value = start;
         document.getElementById('kmFormEnd').value   = end;
+
+        /* Pasar modo seleccionado */
+        var modoInput = document.createElement('input');
+        modoInput.type  = 'hidden';
+        modoInput.name  = 'modo';
+        modoInput.value = getModo();
+        form.appendChild(modoInput);
 
         /* Agregar un input hidden por cada día desmarcado (feriado) */
         document.querySelectorAll('#kmWeeksContainer .km-day-check:not(:checked)').forEach(function (cb) {

@@ -823,7 +823,7 @@ $uploadBaseUrl = '/visibility2/app/';
                 <td>
                   <div class="d-flex align-items-center">
                     <span class="material-text"><?= h($impl['material']) ?></span>
-                    <input type="text" class="form-control form-control-sm ml-2 material-input"
+                    <input disabled type="text" class="form-control form-control-sm ml-2 material-input"
                            value="<?= h($impl['material']) ?>"
                            style="display:none; width:120px;">
                     <button class="btn btn-sm btn-success ml-1 save-material" style="display:none;">

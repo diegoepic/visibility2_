@@ -657,7 +657,7 @@ class ExportController
         }
         try {
             $dompdf = new \Dompdf\Dompdf([
-                'isRemoteEnabled' => true, 'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled' => false, 'isHtml5ParserEnabled' => true,
                 'dpi' => $dpi, 'chroot' => rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/'),
             ]);
             $dompdf->loadHtml($html, 'UTF-8');
@@ -665,8 +665,9 @@ class ExportController
             $dompdf->render();
             $dompdf->stream($filename, ['Attachment' => true]);
         } catch (\Throwable $e) {
+            error_log('[panel_encuesta] PDF error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
             http_response_code(500); header('Content-Type: application/json; charset=UTF-8');
-            echo json_encode(['status' => 'error', 'message' => 'Error generando PDF: ' . $e->getMessage(), 'debug_id' => $debugId], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['status' => 'error', 'message' => 'Error generando PDF. Contacta soporte si el problema persiste.', 'debug_id' => $debugId], JSON_UNESCAPED_UNICODE);
         }
     }
 
@@ -751,7 +752,11 @@ class ExportController
     private function csvSafe(mixed $value): string
     {
         $v = (string)$value;
-        return preg_match('/^[=+\-@]/', $v) ? "'" . $v : $v;
+        if ($v === '') { return ''; }
+        if (preg_match('/^[=+\-@\t\r]/', $v)) {
+            return "'" . $v;
+        }
+        return $v;
     }
 
     private function zipSafeName(string $s): string

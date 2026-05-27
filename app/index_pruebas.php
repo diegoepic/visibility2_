@@ -5,6 +5,7 @@ if (!isset($_SESSION['usuario_id'])) {
     exit();
 }
 
+
 require_once __DIR__ . '/lib/security_headers.php';
 emit_security_headers();
 
@@ -844,7 +845,7 @@ if (isset($_SESSION['success'])) {
             <ul>
                <li><strong>Botón Gestionar Local:</strong> cada local tiene el botón azul con un engranaje. Al presionarlo abre el modal del local y desde ahí eliges <em>Gestionar</em> para entrar a la seccion de gestionar Local.</li>
    
-               <li><strong>Actividades complementarias:</strong>abajo de la tabla de locales aparecen las gestiones complementarias, como pueden ser gestiones adicionales, kilometrajes etc.</li>
+               <li><strong>Actividades complementarias:</strong>abajo de la tabla de locales aparecen las gestiones complementarias, como pueden ser gestiones adicionales, estatus del vehículo, etc.</li>
             </ul>
 
             <h4>3. Guardar locales para trabajar sin conexión</h4>

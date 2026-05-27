@@ -436,6 +436,908 @@ date_default_timezone_set('America/Santiago');
     min-width: 1700px;
     margin-bottom: 0;
 }
+
+/* =========================================================
+   FLEET MODERN UI - VISIBILITY
+   Solo visual / no cambia backend
+========================================================= */
+
+:root {
+    --vz-bg: #f5f8fc;
+    --vz-bg-2: #eef3f9;
+    --vz-card: rgba(255,255,255,.88);
+    --vz-card-strong: rgba(255,255,255,.96);
+    --vz-border: rgba(215,228,246,.95);
+    --vz-text: #172848;
+    --vz-muted: #7285a4;
+    --vz-blue: #4d7eff;
+    --vz-blue-2: #6a73ff;
+    --vz-green: #1fb57c;
+    --vz-red: #ef6f6c;
+    --vz-purple: #7d5fff;
+    --vz-cyan: #2fb8d8;
+    --vz-shadow: 0 24px 55px rgba(70,95,140,.12);
+    --vz-soft-shadow: 0 12px 28px rgba(70,95,140,.08);
+}
+
+/* Fondo general */
+
+body {
+    min-height: 100vh;
+    background:
+        radial-gradient(circle at 12% 8%, rgba(95,160,255,.12), transparent 34%),
+        linear-gradient(180deg, var(--vz-bg) 0%, var(--vz-bg-2) 100%) !important;
+    color: var(--vz-text);
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.container-fluid.p-4 {
+    max-width: 1540px;
+    margin: 0 auto;
+    padding: 30px 24px !important;
+}
+
+/* Header */
+
+.page-header {
+    position: relative;
+    overflow: hidden;
+    border-radius: 32px !important;
+    padding: 30px !important;
+    margin-bottom: 22px !important;
+    border: 1px solid var(--vz-border);
+    background:
+        radial-gradient(circle at 10% 0%, rgba(95,160,255,.14), transparent 36%),
+        linear-gradient(180deg, rgba(255,255,255,.92), rgba(245,249,255,.84)) !important;
+    color: var(--vz-text) !important;
+    box-shadow:
+        var(--vz-shadow),
+        inset 0 1px 0 rgba(255,255,255,.88) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.page-header::after {
+    content: "";
+    position: absolute;
+    width: 440px;
+    height: 440px;
+    right: -190px;
+    top: -230px;
+    border-radius: 50%;
+    background: rgba(77,126,255,.08);
+    pointer-events: none;
+}
+
+.page-header > div:first-child {
+    position: relative;
+    z-index: 2;
+    padding-left: 84px;
+    min-height: 66px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.page-header > div:first-child::before {
+    content: "\f5e4";
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 66px;
+    height: 66px;
+    border-radius: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(145deg, #f7fbff, #dcecff);
+    color: var(--vz-blue);
+    font-size: 26px;
+    box-shadow:
+        0 12px 26px rgba(70,110,180,.12),
+        inset 0 1px 0 rgba(255,255,255,.9);
+}
+
+.page-header h3 {
+    margin: 0 !important;
+    font-size: 30px;
+    line-height: 1.1;
+    font-weight: 950 !important;
+    color: var(--vz-text) !important;
+    letter-spacing: .2px;
+}
+
+.page-header h3 i {
+    display: none;
+}
+
+.page-header p {
+    margin: 7px 0 0 !important;
+    color: var(--vz-muted) !important;
+    font-size: 14px;
+    font-weight: 650;
+}
+
+.page-header .d-flex.gap-2 {
+    position: relative;
+    z-index: 2;
+    flex-wrap: wrap;
+}
+
+/* Botones principales */
+
+.btn-main {
+    min-height: 46px;
+    border-radius: 15px !important;
+    border: 0 !important;
+    padding: 0 18px !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    font-size: 13px !important;
+    font-weight: 850 !important;
+    box-shadow:
+        0 14px 28px rgba(70,95,140,.12),
+        inset 0 1px 0 rgba(255,255,255,.32) !important;
+    transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.page-header .btn-light {
+    background: linear-gradient(135deg, var(--vz-blue), var(--vz-blue-2)) !important;
+    color: #fff !important;
+}
+
+.page-header .btn-outline-light {
+    background: rgba(255,255,255,.82) !important;
+    color: #355277 !important;
+    border: 1px solid rgba(200,215,238,.9) !important;
+}
+
+.btn-main:hover {
+    transform: translateY(-2px);
+    box-shadow:
+        0 18px 34px rgba(77,126,255,.22),
+        inset 0 1px 0 rgba(255,255,255,.35) !important;
+}
+
+/* KPI */
+
+.fleet-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.fleet-kpi-card {
+    border-radius: 24px;
+    background: rgba(255,255,255,.86);
+    border: 1px solid rgba(220,230,245,.95);
+    box-shadow:
+        0 14px 30px rgba(70,95,140,.08),
+        inset 0 1px 0 rgba(255,255,255,.88);
+    padding: 20px;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    min-height: 116px;
+}
+
+.fleet-kpi-icon {
+    width: 66px;
+    height: 66px;
+    min-width: 66px;
+    border-radius: 22px;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    box-shadow: 0 16px 34px rgba(70,95,140,.18);
+}
+
+.fleet-kpi-icon.blue { background: linear-gradient(135deg, #4d7eff, #6c78ff); }
+.fleet-kpi-icon.green { background: linear-gradient(135deg, #60d5ae, #1fb57c); }
+.fleet-kpi-icon.red { background: linear-gradient(135deg, #ef6f6c, #dc3545); }
+.fleet-kpi-icon.purple { background: linear-gradient(135deg, #7d5fff, #5f47ff); }
+
+.fleet-kpi-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 850;
+    color: #6e809e;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    margin-bottom: 5px;
+}
+
+.fleet-kpi-card strong {
+    display: block;
+    margin: 0;
+    font-size: 26px;
+    line-height: 1;
+    font-weight: 950;
+    color: var(--vz-text);
+}
+
+.fleet-kpi-card small {
+    display: block;
+    margin-top: 7px;
+    color: #7e90aa;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* Card tabla */
+
+.card-modern {
+    border: 1px solid var(--vz-border) !important;
+    border-radius: 30px !important;
+    background:
+        radial-gradient(circle at 10% 0%, rgba(95,160,255,.08), transparent 36%),
+        linear-gradient(180deg, rgba(255,255,255,.90), rgba(245,249,255,.82)) !important;
+    box-shadow:
+        0 24px 55px rgba(70,95,140,.12),
+        inset 0 1px 0 rgba(255,255,255,.88) !important;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    overflow: hidden;
+}
+
+.card-modern .card-body {
+    padding: 22px !important;
+}
+
+/* Buscador */
+
+#buscarVehiculo,
+#buscarReporteVehiculo {
+    min-height: 46px;
+    border-radius: 16px !important;
+    border: 1px solid rgba(185,202,230,.78) !important;
+    background: rgba(255,255,255,.90) !important;
+    color: #28446f !important;
+    font-size: 13px !important;
+    font-weight: 700;
+    box-shadow:
+        0 8px 18px rgba(70,95,140,.05),
+        inset 0 1px 0 rgba(255,255,255,.8) !important;
+}
+
+#buscarVehiculo:focus,
+#buscarReporteVehiculo:focus,
+.form-control:focus,
+.form-select:focus {
+    border-color: #8eb7ff !important;
+    box-shadow:
+        0 0 0 4px rgba(90,142,255,.12),
+        0 8px 18px rgba(76,108,163,.08) !important;
+}
+
+.btn-dark {
+    background: linear-gradient(135deg, var(--vz-blue), var(--vz-blue-2)) !important;
+    border: 0 !important;
+    color: #fff !important;
+}
+
+/* Tabla principal */
+
+.table-responsive {
+    border: 0 !important;
+    border-radius: 24px;
+    overflow-x: auto;
+    box-shadow: none !important;
+}
+
+.table {
+    border-collapse: separate !important;
+    border-spacing: 0 12px !important;
+    margin: 0 !important;
+}
+
+.table thead th {
+    background: rgba(244,248,255,.96) !important;
+    color: #172848 !important;
+    border: 0 !important;
+    font-size: 12px !important;
+    font-weight: 950 !important;
+    text-transform: uppercase;
+    letter-spacing: .45px;
+    padding: 16px !important;
+    vertical-align: middle !important;
+    white-space: nowrap;
+}
+
+.table thead th:first-child {
+    border-top-left-radius: 18px !important;
+    border-bottom-left-radius: 18px !important;
+}
+
+.table thead th:last-child {
+    border-top-right-radius: 18px !important;
+    border-bottom-right-radius: 18px !important;
+}
+
+.table tbody tr {
+    background: rgba(255,255,255,.86) !important;
+    box-shadow:
+        0 10px 24px rgba(70,95,140,.05),
+        inset 0 1px 0 rgba(255,255,255,.85) !important;
+    transition: transform .16s ease, box-shadow .16s ease;
+}
+
+.table tbody tr:hover {
+    transform: translateY(-1px);
+    box-shadow:
+        0 14px 30px rgba(70,95,140,.10),
+        inset 0 1px 0 rgba(255,255,255,.9) !important;
+}
+
+.table tbody td {
+    background: transparent !important;
+    color: #223a5d !important;
+    font-size: 13px !important;
+    font-weight: 700;
+    padding: 16px !important;
+    border-top: 1px solid rgba(228,236,247,.92) !important;
+    border-bottom: 1px solid rgba(228,236,247,.92) !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    vertical-align: middle !important;
+}
+
+.table tbody td:first-child {
+    border-left: 1px solid rgba(228,236,247,.92) !important;
+    border-top-left-radius: 18px !important;
+    border-bottom-left-radius: 18px !important;
+}
+
+.table tbody td:last-child {
+    border-right: 1px solid rgba(228,236,247,.92) !important;
+    border-top-right-radius: 18px !important;
+    border-bottom-right-radius: 18px !important;
+}
+
+/* Patente */
+
+.vehicle-plate {
+    border: 1px solid rgba(200,215,238,.9) !important;
+    border-radius: 15px !important;
+    background: rgba(255,255,255,.88) !important;
+    color: #1b3054 !important;
+    padding: 9px 13px !important;
+    font-size: 12px;
+    font-weight: 950 !important;
+    letter-spacing: .8px;
+    box-shadow:
+        0 10px 22px rgba(70,95,140,.07),
+        inset 0 1px 0 rgba(255,255,255,.85);
+}
+
+.vehicle-plate i {
+    color: var(--vz-blue);
+}
+
+/* Badges */
+
+.badge-soft {
+    min-height: 32px;
+    padding: 7px 14px !important;
+    border-radius: 999px !important;
+    font-size: 12px !important;
+    font-weight: 900 !important;
+    letter-spacing: .2px;
+}
+
+.badge-activo {
+    background: #d7f2df !important;
+    color: #0f8a4d !important;
+}
+
+.badge-inactivo {
+    background: #ffe1e1 !important;
+    color: #d04a4a !important;
+}
+
+/* Botones tabla */
+
+.table .btn-sm {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow:
+        0 10px 20px rgba(70,95,140,.10),
+        inset 0 1px 0 rgba(255,255,255,.35) !important;
+    transition: transform .16s ease, box-shadow .16s ease;
+}
+
+.table .btn-sm:hover {
+    transform: translateY(-2px);
+    box-shadow:
+        0 14px 26px rgba(70,95,140,.16),
+        inset 0 1px 0 rgba(255,255,255,.40) !important;
+}
+
+.table .btn-outline-dark {
+    background: linear-gradient(135deg, #f6b93b, #f59e0b) !important;
+    color: #fff !important;
+}
+
+.table .btn-outline-primary {
+    background: linear-gradient(135deg, var(--vz-blue), var(--vz-blue-2)) !important;
+    color: #fff !important;
+}
+
+/* Modales */
+
+.modal-content {
+    border: 0 !important;
+    border-radius: 28px !important;
+    overflow: hidden;
+    background:
+        linear-gradient(180deg, rgba(255,255,255,.98), rgba(245,249,255,.96)) !important;
+    box-shadow:
+        0 34px 95px rgba(20,45,90,.30),
+        inset 0 1px 0 rgba(255,255,255,.82) !important;
+}
+
+.modal-header {
+    min-height: 66px;
+    background:
+        radial-gradient(circle at 12% 0%, rgba(95,160,255,.15), transparent 36%),
+        rgba(248,251,255,.96) !important;
+    border-bottom: 1px solid rgba(205,218,238,.78) !important;
+    color: var(--vz-text) !important;
+    align-items: center;
+}
+
+.modal-title {
+    font-size: 18px;
+    font-weight: 950;
+    color: var(--vz-text);
+}
+
+.modal-header .btn-close {
+    background-color: rgba(240,246,255,.95) !important;
+    border-radius: 50%;
+    opacity: 1;
+    padding: 12px;
+    box-shadow:
+        0 10px 22px rgba(70,95,140,.08),
+        inset 0 1px 0 rgba(255,255,255,.9);
+}
+
+.modal-body {
+    background:
+        radial-gradient(circle at 10% 0%, rgba(95,160,255,.08), transparent 36%),
+        #fff !important;
+    padding: 24px !important;
+}
+
+.modal-footer {
+    background: rgba(248,251,255,.96);
+    border-top: 1px solid rgba(205,218,238,.75) !important;
+    padding: 16px 22px !important;
+}
+
+/* Formularios */
+
+.form-label {
+    color: #294469 !important;
+    font-size: 13px !important;
+    font-weight: 850 !important;
+}
+
+.form-control,
+.form-select,
+.select2-container--bootstrap-5 .select2-selection {
+    min-height: 44px !important;
+    border-radius: 15px !important;
+    border: 1px solid rgba(185,202,230,.78) !important;
+    background: rgba(255,255,255,.90) !important;
+    color: #28446f !important;
+    font-size: 13px !important;
+    font-weight: 650;
+    box-shadow:
+        0 8px 18px rgba(70,95,140,.05),
+        inset 0 1px 0 rgba(255,255,255,.8) !important;
+}
+
+.select2-container--bootstrap-5 .select2-dropdown {
+    border-radius: 16px !important;
+    overflow: hidden;
+    border: 1px solid rgba(185,202,230,.78) !important;
+    box-shadow: 0 18px 38px rgba(30,60,110,.18);
+}
+
+.select2-container--bootstrap-5 .select2-results__option--highlighted {
+    background: var(--vz-blue) !important;
+}
+
+/* Alertas */
+
+.alert {
+    border: 0 !important;
+    border-radius: 18px !important;
+    box-shadow: var(--vz-soft-shadow) !important;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.alert-info {
+    background: rgba(229,242,255,.96) !important;
+    color: #245b95 !important;
+}
+
+/* Historial */
+
+.history-item {
+    border-left: 0 !important;
+    border-radius: 20px !important;
+    padding: 16px !important;
+    margin-bottom: 14px !important;
+    background:
+        radial-gradient(circle at 12% 0%, rgba(95,160,255,.08), transparent 36%),
+        rgba(255,255,255,.90) !important;
+    border: 1px solid rgba(215,228,246,.95) !important;
+    box-shadow:
+        0 12px 28px rgba(70,95,140,.08),
+        inset 0 1px 0 rgba(255,255,255,.88) !important;
+}
+
+.history-date {
+    color: #7285a4 !important;
+    font-weight: 800;
+}
+
+/* Reporte */
+
+#modalReporte .modal-xl {
+    --bs-modal-width: 95vw;
+}
+
+#modalReporte .modal-content {
+    height: 95vh;
+}
+
+#modalReporte .modal-body {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.report-table-scroll,
+#modalReporte .table-responsive {
+    flex: 1;
+    overflow: auto;
+    border: 1px solid rgba(215,228,246,.95) !important;
+    border-radius: 20px !important;
+    background: rgba(255,255,255,.92) !important;
+}
+
+.report-table {
+    min-width: 1700px;
+}
+
+.report-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+.report-cell-text {
+    background: rgba(244,248,255,.96) !important;
+    border: 1px solid rgba(215,228,246,.95) !important;
+    border-radius: 14px !important;
+    color: #28446f !important;
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.report-photo-thumb {
+    border-radius: 14px !important;
+    border: 1px solid rgba(215,228,246,.95) !important;
+    box-shadow: 0 10px 22px rgba(70,95,140,.08);
+}
+
+.report-photo-more {
+    border-radius: 14px !important;
+    background: linear-gradient(135deg, var(--vz-blue), var(--vz-blue-2)) !important;
+}
+
+/* Visor foto */
+
+.visor-foto-reporte {
+    inset: 16px !important;
+    border-radius: 28px !important;
+    background: rgba(7,18,38,.92) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 34px 95px rgba(0,0,0,.42) !important;
+}
+
+.visor-foto-reporte-header {
+    height: 64px !important;
+    padding: 0 22px !important;
+    background: rgba(15,26,48,.92);
+}
+
+.visor-foto-reporte-title {
+    font-weight: 900 !important;
+}
+
+.visor-foto-reporte-close {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.10) !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Responsive */
+
+@media (max-width: 1200px) {
+    .fleet-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .page-header {
+        align-items: flex-start !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .container-fluid.p-4 {
+        padding: 18px 14px !important;
+    }
+
+    .page-header {
+        border-radius: 24px !important;
+        padding: 22px !important;
+    }
+
+    .page-header > div:first-child {
+        padding-left: 0;
+        padding-top: 82px;
+    }
+
+    .page-header > div:first-child::before {
+        top: 0;
+        transform: none;
+    }
+
+    .page-header h3 {
+        font-size: 23px;
+    }
+
+    .page-header .d-flex.gap-2 {
+        width: 100%;
+        flex-direction: column;
+    }
+
+    .page-header .btn-main {
+        width: 100%;
+    }
+
+    .fleet-kpi-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .card-modern {
+        border-radius: 24px !important;
+    }
+
+    .card-modern .card-body {
+        padding: 16px !important;
+    }
+}
+
+/* =========================================================
+   MODAL MODERNO PARA FOTOS DEL REPORTE
+========================================================= */
+
+.fleet-photo-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 40000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+}
+
+.fleet-photo-modal.show {
+    display: flex;
+}
+
+.fleet-photo-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(7, 18, 38, .52);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.fleet-photo-content {
+    position: relative;
+    z-index: 2;
+    width: min(96vw, 1500px);
+    height: 94vh;
+    border-radius: 28px;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 12% 0%, rgba(95,160,255,.12), transparent 36%),
+        linear-gradient(180deg, rgba(255,255,255,.98), rgba(245,249,255,.96));
+    border: 1px solid rgba(215,228,246,.95);
+    box-shadow:
+        0 34px 95px rgba(20,45,90,.34),
+        inset 0 1px 0 rgba(255,255,255,.86);
+    display: flex;
+    flex-direction: column;
+}
+
+.fleet-photo-header {
+    height: 68px;
+    min-height: 68px;
+    padding: 12px 18px 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    background:
+        radial-gradient(circle at 12% 0%, rgba(95,160,255,.14), transparent 36%),
+        rgba(248,251,255,.96);
+    border-bottom: 1px solid rgba(205,218,238,.78);
+}
+
+.fleet-photo-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.fleet-photo-icon {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    border-radius: 15px;
+    background: linear-gradient(145deg, #f7fbff, #dcecff);
+    color: #4d7eff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow:
+        0 10px 22px rgba(70,110,180,.12),
+        inset 0 1px 0 rgba(255,255,255,.88);
+}
+
+.fleet-photo-title-wrap h5 {
+    margin: 0;
+    max-width: 62vw;
+    font-size: 15px;
+    font-weight: 950;
+    color: #172848;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fleet-photo-title-wrap p {
+    margin: 4px 0 0;
+    font-size: 11px;
+    font-weight: 700;
+    color: #7285a4;
+}
+
+.fleet-photo-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.fleet-photo-action-btn,
+.fleet-photo-close {
+    width: 42px;
+    height: 42px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(240,246,255,.95);
+    color: #536782;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    font-size: 17px;
+    cursor: pointer;
+    box-shadow:
+        0 10px 22px rgba(70,95,140,.08),
+        inset 0 1px 0 rgba(255,255,255,.9);
+    transition: all .18s ease;
+}
+
+.fleet-photo-close {
+    font-size: 30px;
+    line-height: 1;
+}
+
+.fleet-photo-action-btn:hover,
+.fleet-photo-close:hover {
+    background: #e8f1ff;
+    color: #1d4f91;
+    transform: scale(1.05);
+}
+
+.fleet-photo-body {
+    flex: 1;
+    padding: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    background:
+        radial-gradient(circle at 50% 0%, rgba(77,126,255,.08), transparent 34%),
+        #f8fbff;
+}
+
+.fleet-photo-body img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 20px;
+    box-shadow: 0 22px 55px rgba(30,60,110,.22);
+    background: #fff;
+}
+
+body.fleet-photo-open {
+    overflow: hidden;
+}
+
+/* Miniaturas clickeables dentro del reporte */
+.report-photo-thumb.js-report-photo {
+    cursor: zoom-in;
+}
+
+.report-photo-thumb.js-report-photo:hover {
+    transform: scale(1.08);
+    box-shadow: 0 14px 30px rgba(70,95,140,.20);
+}
+
+@media (max-width: 768px) {
+    .fleet-photo-modal {
+        padding: 10px;
+    }
+
+    .fleet-photo-content {
+        width: 98vw;
+        height: 96vh;
+        border-radius: 22px;
+    }
+
+    .fleet-photo-header {
+        height: auto;
+        min-height: 64px;
+    }
+
+    .fleet-photo-title-wrap h5 {
+        max-width: 48vw;
+    }
+
+    .fleet-photo-body {
+        padding: 10px;
+    }
+}
     </style>
 </head>
 
@@ -463,6 +1365,54 @@ date_default_timezone_set('America/Santiago');
             </button>
         </div>
             </div>
+
+<div class="fleet-kpi-grid mb-4">
+
+    <div class="fleet-kpi-card">
+        <div class="fleet-kpi-icon blue">
+            <i class="fa-solid fa-car-side"></i>
+        </div>
+        <div>
+            <span class="fleet-kpi-label">Total vehículos</span>
+            <strong id="kpiTotalVehiculos">0</strong>
+            <small>Registrados en flota</small>
+        </div>
+    </div>
+
+    <div class="fleet-kpi-card">
+        <div class="fleet-kpi-icon green">
+            <i class="fa-solid fa-circle-check"></i>
+        </div>
+        <div>
+            <span class="fleet-kpi-label">Activos</span>
+            <strong id="kpiVehiculosActivos">0</strong>
+            <small>Disponibles actualmente</small>
+        </div>
+    </div>
+
+    <div class="fleet-kpi-card">
+        <div class="fleet-kpi-icon red">
+            <i class="fa-solid fa-circle-xmark"></i>
+        </div>
+        <div>
+            <span class="fleet-kpi-label">Inactivos</span>
+            <strong id="kpiVehiculosInactivos">0</strong>
+            <small>Fuera de operación</small>
+        </div>
+    </div>
+
+    <div class="fleet-kpi-card">
+        <div class="fleet-kpi-icon purple">
+            <i class="fa-solid fa-user-check"></i>
+        </div>
+        <div>
+            <span class="fleet-kpi-label">Asignados</span>
+            <strong id="kpiVehiculosAsignados">0</strong>
+            <small>Con merchan actual</small>
+        </div>
+    </div>
+
+</div>
 
     <div class="card card-modern">
         <div class="card-body">
@@ -578,7 +1528,7 @@ date_default_timezone_set('America/Santiago');
 
                         <div class="col-md-6">
                             <label class="form-label">Merchan asignado</label>
-                            <select name="id_merchan" id="id_merchan" class="form-select" required>
+                                <select name="id_merchan" id="id_merchan" class="form-select">
                                 <option value="">Seleccione...</option>
                             </select>
                         </div>
@@ -710,36 +1660,44 @@ date_default_timezone_set('America/Santiago');
     </div>
 </div>
 
-<!-- MODAL FOTO REPORTE -->
-<div class="modal fade" id="modalReporte" tabindex="-1">
-    <div class="modal-dialog modal-reporte-dialog modal-dialog-scrollable">
-        <div class="modal-content bg-dark">
+<!-- MODAL VISOR FOTO REPORTE -->
+<div id="modalFotoReporte" class="fleet-photo-modal" aria-hidden="true">
+    <div class="fleet-photo-backdrop" onclick="cerrarFotoReporte()"></div>
 
-            <div class="modal-header border-0 text-white">
-                <h5 class="modal-title" id="tituloFotoReporte">Foto</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+    <div class="fleet-photo-content">
+        <div class="fleet-photo-header">
+            <div class="fleet-photo-title-wrap">
+                <div class="fleet-photo-icon">
+                    <i class="fa-solid fa-image"></i>
+                </div>
+
+                <div>
+                    <h5 id="visorFotoReporteTitulo">Foto reporte</h5>
+                    <p>Vista ampliada de imagen registrada</p>
+                </div>
             </div>
 
-            <div class="modal-body p-2 d-flex align-items-center justify-content-center">
-                <img id="imgFotoReporte" src="" class="report-photo-large" alt="Foto reporte">
-            </div>
+            <div class="fleet-photo-actions">
+                <a id="visorFotoReporteDownload"
+                   href="#"
+                   target="_blank"
+                   class="fleet-photo-action-btn"
+                   title="Abrir imagen en una nueva pestaña">
+                    <i class="fa-solid fa-up-right-from-square"></i>
+                </a>
 
+                <button type="button"
+                        class="fleet-photo-close"
+                        onclick="cerrarFotoReporte()"
+                        title="Cerrar">
+                    &times;
+                </button>
+            </div>
         </div>
-    </div>
-</div>
 
-<!-- VISOR FOTO REPORTE -->
-<div id="visorFotoReporte" class="visor-foto-reporte">
-    <div class="visor-foto-reporte-header">
-        <div id="visorFotoReporteTitulo" class="visor-foto-reporte-title">Foto</div>
-
-        <button type="button" class="visor-foto-reporte-close" onclick="cerrarFotoReporte()">
-            &times;
-        </button>
-    </div>
-
-    <div class="visor-foto-reporte-body">
-        <img id="visorFotoReporteImg" src="" alt="Foto reporte">
+        <div class="fleet-photo-body">
+            <img id="visorFotoReporteImg" src="" alt="Foto reporte">
+        </div>
     </div>
 </div>
 
@@ -777,6 +1735,10 @@ $(document).ready(function () {
     cargarCatalogos();
     cargarVehiculos();
 
+    $('#estado').on('change', function () {
+        controlarMerchanPorEstado();
+    });
+
     $('#buscarVehiculo').on('keyup', function () {
         renderVehiculos();
     });
@@ -796,7 +1758,19 @@ $(document).ready(function () {
     
         abrirFotoReporte(url, title);
     });
-
+    
+    $(document).on('keydown', function (e) {
+        if (e.key === 'Escape') {
+            cerrarFotoReporte();
+        }
+    });
+    
+    $(document).on('click', '#modalFotoReporte', function (e) {
+        if (e.target.id === 'modalFotoReporte') {
+            cerrarFotoReporte();
+        }
+    });
+    
     inicializarSelect2Merchan();
 });
 
@@ -809,6 +1783,23 @@ function escapeHtml(text) {
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
+}
+
+function actualizarKpisVehiculos(data) {
+    const lista = Array.isArray(data) ? data : [];
+
+    const total = lista.length;
+    const activos = lista.filter(v => Number(v.estado) === 1).length;
+    const inactivos = total - activos;
+    const asignados = lista.filter(v => {
+        return (v.merchan && String(v.merchan).trim() !== '') ||
+               (v.id_merchan && Number(v.id_merchan) > 0);
+    }).length;
+
+    $('#kpiTotalVehiculos').text(total);
+    $('#kpiVehiculosActivos').text(activos);
+    $('#kpiVehiculosInactivos').text(inactivos);
+    $('#kpiVehiculosAsignados').text(asignados);
 }
 
 function inicializarSelect2Merchan() {
@@ -833,6 +1824,33 @@ function inicializarSelect2Merchan() {
         allowClear: true,
         dropdownParent: $('#modalVehiculo')
     });
+}
+
+function controlarMerchanPorEstado() {
+    const estado = $('#estado').val();
+    const $merchan = $('#id_merchan');
+
+    if (String(estado) === '0') {
+        // Vehículo inactivo: limpiar y dejar sin asignar
+        $merchan
+            .val('')
+            .trigger('change')
+            .prop('required', false)
+            .prop('disabled', true);
+
+        if ($merchan.hasClass('select2-hidden-accessible')) {
+            $merchan.trigger('change.select2');
+        }
+
+        $('label[for="id_merchan"]').text('Merchan asignado (sin asignar por inactividad)');
+    } else {
+        // Vehículo activo: vuelve a exigir merchan
+        $merchan
+            .prop('disabled', false)
+            .prop('required', true);
+
+        $('label[for="id_merchan"]').text('Merchan asignado');
+    }
 }
 
 function destruirSelect2Merchan() {
@@ -990,6 +2008,31 @@ function renderVehiculos() {
     const filtro = $('#buscarVehiculo').val().toLowerCase().trim();
 
     const data = vehiculos.filter(v => {
+        const estaActivo = Number(v.estado) === 1;
+        const estadoTexto = estaActivo ? 'activo activos' : 'inactivo inactivos';
+
+        const tieneMerchan =
+            (v.merchan && String(v.merchan).trim() !== '') ||
+            (v.id_merchan && Number(v.id_merchan) > 0);
+
+        const asignacionTexto = tieneMerchan ? 'asignado asignados' : 'sin asignar no asignado';
+
+        /*
+        | Búsqueda exacta por estado para evitar que "activo"
+        | también encuentre "inactivo", porque inactivo contiene la palabra activo.
+        */
+        if (filtro === 'activo' || filtro === 'activos') {
+            return estaActivo;
+        }
+
+        if (filtro === 'inactivo' || filtro === 'inactivos') {
+            return !estaActivo;
+        }
+
+        if (filtro === 'sin asignar' || filtro === 'no asignado') {
+            return !tieneMerchan;
+        }
+
         const texto = [
             v.patente,
             v.modelo,
@@ -999,7 +2042,9 @@ function renderVehiculos() {
             v.division,
             v.subdivision,
             v.merchan,
-            v.usuario_merchan
+            v.usuario_merchan,
+            estadoTexto,
+            asignacionTexto
         ]
             .map(valor => valor || '')
             .join(' ')
@@ -1007,6 +2052,8 @@ function renderVehiculos() {
 
         return texto.includes(filtro);
     });
+
+    actualizarKpisVehiculos(vehiculos);
 
     if (data.length === 0) {
         $('#tbodyVehiculos').html(`
@@ -1082,6 +2129,7 @@ function abrirModalNuevo() {
     $('#lat_origen').val('');
     $('#lng_origen').val('');
     $('#estado').val('1');
+    controlarMerchanPorEstado();
     $('#fecha_inicio').val('<?= date('Y-m-d') ?>');
     $('#observacion').val('');
 
@@ -1137,7 +2185,9 @@ function abrirModalEditar(id) {
 
     $('#tituloModalVehiculo').text('Editar vehículo');
 
+    controlarMerchanPorEstado();
     modalVehiculo.show();
+    
 }
 
 function guardarVehiculo() {
@@ -1406,15 +2456,19 @@ function renderCeldaRespuestaReporte(respuesta, pregunta) {
         let html = `<div class="report-photo-grid">`;
 
         fotos.slice(0, 5).forEach(foto => {
+            const fotoUrl = foto.url || '';
+            const fotoTitulo = foto.name || pregunta.question_text || 'Foto reporte';
+        
             html += `
-                <a href="${escapeHtml(foto.url)}" target="_blank" title="${escapeHtml(foto.name || 'Foto')}">
-                    <img 
-                        src="${escapeHtml(foto.url)}" 
-                        class="report-photo-thumb" 
-                        alt="${escapeHtml(foto.name || 'Foto')}"
-                        loading="lazy"
-                    >
-                </a>
+                <img 
+                    src="${escapeHtml(fotoUrl)}" 
+                    data-url="${escapeHtml(fotoUrl)}"
+                    data-title="${escapeHtml(fotoTitulo)}"
+                    class="report-photo-thumb js-report-photo" 
+                    alt="${escapeHtml(fotoTitulo)}"
+                    title="${escapeHtml(fotoTitulo)}"
+                    loading="lazy"
+                >
             `;
         });
 
@@ -1483,14 +2537,25 @@ function abrirFotoReporte(url, title) {
     }
 
     $('#visorFotoReporteImg').attr('src', url);
-    $('#visorFotoReporteTitulo').text(title || 'Foto');
+    $('#visorFotoReporteTitulo').text(title || 'Foto reporte');
+    $('#visorFotoReporteDownload').attr('href', url);
 
-    $('#visorFotoReporte').addClass('show');
+    $('#modalFotoReporte')
+        .addClass('show')
+        .attr('aria-hidden', 'false');
+
+    $('body').addClass('fleet-photo-open');
 }
 
 function cerrarFotoReporte() {
-    $('#visorFotoReporte').removeClass('show');
+    $('#modalFotoReporte')
+        .removeClass('show')
+        .attr('aria-hidden', 'true');
+
     $('#visorFotoReporteImg').attr('src', '');
+    $('#visorFotoReporteDownload').attr('href', '#');
+
+    $('body').removeClass('fleet-photo-open');
 }
 
 $(document).on('keydown', function (e) {

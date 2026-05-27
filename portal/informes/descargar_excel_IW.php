@@ -84,13 +84,26 @@ while ($r = $rs->fetch_assoc()) {
 }
 $stmt->close();
 
+// Helper para textos en mayúscula con soporte UTF-8
+function iw_upper_utf8($value) {
+    $value = trim((string)$value);
+
+    if ($value === '') {
+        return '';
+    }
+
+    return function_exists('mb_strtoupper')
+        ? mb_strtoupper($value, 'UTF-8')
+        : strtoupper($value);
+}
+
 // ------------------------------------------------------------------------------------
 // 4) Mapear usuarios (id_usuario => usuario/login)
 // ------------------------------------------------------------------------------------
 $usernames = [];
 $res = $conn->query("SELECT id, usuario FROM usuario");
 while ($u = $res->fetch_assoc()) {
-    $usernames[(int)$u['id']] = (string)$u['usuario'];
+    $usernames[(int)$u['id']] = iw_upper_utf8($u['usuario']);
 }
 $res->free();
 
@@ -240,14 +253,14 @@ if ($iw_requiere_local && !empty($localIdsToFetch)) {
 
 // Helper para C��digo Local en CSV (preservar ceros a la izquierda en Excel)
 function iw_format_codigo_csv($codigo, $isCsv) {
-    if ($codigo === null || $codigo === '') return 'N/A';
-    // Prefijo ap��strofe fuerza texto en Excel
-    return $isCsv ? ("'".$codigo) : $codigo;
-}
+    $codigo = trim((string)$codigo);
 
-// ------------------------------------------------------------------------------------
-// 9) Construir filas finales
-// ------------------------------------------------------------------------------------
+    if ($codigo === '') {
+        return 'N/A';
+    }
+
+    return $codigo;
+}
 
 // ------------------------------------------------------------------------------------
 // 9) Construir filas finales ALINEADAS (sin duplicar valores)
@@ -269,42 +282,50 @@ foreach ($data as $event) {
     // 2) construir filas alineadas
     for ($i = 0; $i < $maxRows; $i++) {
 
-        $row = [
-            'ID Campana'        => $meta['local_id'],
-            'Nombre Campana'    => $camp_name,
-            'Nombre Usuario'    => $meta['Nombre Usuario'],
-            'Fecha Planificada' => $meta['Fecha Planificada'],
-            'Fecha Respuesta'   => $meta['Fecha Respuesta'],
-            'Hora Respuesta'    => $meta['Hora Respuesta']
-        ];
+$row = [
+    'ID Campana'                  => $meta['local_id'],
+    'Nombre Campana'              => $camp_name,
+    'Codigo Local'                => '',
+    'Fecha Respuesta'             => $meta['Fecha Respuesta'],
+    'FECHA CREACION'              => $meta['Fecha Respuesta'],
+    'FECHA INICIO IMPLEMENTACION' => $meta['Fecha Respuesta'],
+    'FECHA FIN IMPLEMENTACION'    => $meta['Fecha Respuesta'],
+    'FECHA VIGENTE DESDE'         => $meta['Fecha Respuesta'],
+    'FECHA VIGENTE HASTA'         => $meta['Fecha Respuesta'],
+    'FECHA VISITA'                => $meta['Fecha Respuesta'],
+    'Hora Respuesta'              => $meta['Hora Respuesta'],
+    'Cuenta'                      => '',
+    'Cadena'                      => '',
+    'Nombre Local'                => '',
+    'Direccion Local'             => '',
+    'Region'                      => '',
+    'Comuna'                      => '',
+    'Nombre Usuario'              => iw_upper_utf8($meta['Nombre Usuario'])
+];
 
         // 3) info del local
         if ($iw_requiere_local) {
             $lid = (int)$meta['local_id'];
 
-            if ($lid > 0 && isset($localInfo[$lid])) {
-                $codigoLocal = iw_format_codigo_csv($localInfo[$lid]['codigo'], $isCsvOutput);
+if ($lid > 0 && isset($localInfo[$lid])) {
+    $codigoLocal = iw_format_codigo_csv($localInfo[$lid]['codigo'], $isCsvOutput);
 
-                $row['Codigo Local']    = $codigoLocal;
-                $row['N Local']         = $codigoLocal;
-                $row['Nombre Local']    = $localInfo[$lid]['nombre'];
-                $row['Direccion Local'] = $localInfo[$lid]['direccion'];
-                $row['Cuenta']          = $localInfo[$lid]['cuenta'];
-                $row['Cadena']          = $localInfo[$lid]['cadena'];
-                $row['Comuna']          = $localInfo[$lid]['comuna'];
-                $row['Region']          = $localInfo[$lid]['region'];
-                $row['JefeVenta']       = $localInfo[$lid]['jefeVenta'];
-            } else {
-                $row['Codigo Local']    = 'N/A';
-                $row['N Local']         = 'N/A';
-                $row['Nombre Local']    = 'N/A';
-                $row['Direccion Local'] = 'N/A';
-                $row['Cuenta']          = 'N/A';
-                $row['Cadena']          = 'N/A';
-                $row['Comuna']          = 'N/A';
-                $row['Region']          = 'N/A';
-                $row['JefeVenta']       = 'N/A';
-            }
+    $row['Codigo Local']    = $codigoLocal;
+    $row['Nombre Local']    = $localInfo[$lid]['nombre'];
+    $row['Direccion Local'] = $localInfo[$lid]['direccion'];
+    $row['Cuenta']          = $localInfo[$lid]['cuenta'];
+    $row['Cadena']          = $localInfo[$lid]['cadena'];
+    $row['Comuna']          = $localInfo[$lid]['comuna'];
+    $row['Region']          = $localInfo[$lid]['region'];
+} else {
+    $row['Codigo Local']    = 'N/A';
+    $row['Nombre Local']    = 'N/A';
+    $row['Direccion Local'] = 'N/A';
+    $row['Cuenta']          = 'N/A';
+    $row['Cadena']          = 'N/A';
+    $row['Comuna']          = 'N/A';
+    $row['Region']          = 'N/A';
+}
         }
 
         // 4) columnas din��micas (preguntas por ID ��nico)
@@ -368,28 +389,37 @@ if (!empty($data)) {
 if ($iw_requiere_local) {
     $fixedHeaders = [
         'ID Campana',
-        'Codigo Local',
-        'N Local',
         'Nombre Campana',
+        'Codigo Local',
+        'Fecha Respuesta',
+        'FECHA CREACION',
+        'FECHA INICIO IMPLEMENTACION',
+        'FECHA FIN IMPLEMENTACION',
+        'FECHA VIGENTE DESDE',
+        'FECHA VIGENTE HASTA',
+        'FECHA VISITA',
+        'Hora Respuesta',
         'Cuenta',
         'Cadena',
         'Nombre Local',
         'Direccion Local',
-        'Comuna',
         'Region',
-        'JefeVenta',        
-        'Nombre Usuario',
-        'Fecha Planificada',         
-        'Fecha Respuesta',
-        'Hora Respuesta'
+        'Comuna',
+        'Nombre Usuario'
     ];
 } else {
-    // fallback hist��rico (por seguridad)
     $fixedHeaders = [
         'ID Campana',
         'Nombre Campana',
-        'Nombre Usuario',
-        'Fecha Respuesta'
+        'Fecha Respuesta',
+        'FECHA CREACION',
+        'FECHA INICIO IMPLEMENTACION',
+        'FECHA FIN IMPLEMENTACION',
+        'FECHA VIGENTE DESDE',
+        'FECHA VIGENTE HASTA',
+        'FECHA VISITA',
+        'Hora Respuesta',
+        'Nombre Usuario'
     ];
 }
 

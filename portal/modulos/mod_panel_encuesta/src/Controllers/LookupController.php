@@ -33,6 +33,12 @@ class LookupController
             echo json_encode(['error' => 'Sesión expirada']); return;
         }
 
+        $csrf = is_string($_GET['csrf_token'] ?? null) ? $_GET['csrf_token'] : '';
+        if (!panel_encuesta_validate_csrf($csrf)) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Token CSRF inválido.']); return;
+        }
+
         $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
         $user_div   = (int)($_SESSION['division_id'] ?? 0);
         $is_mc      = ($user_div === 1);
@@ -61,6 +67,12 @@ class LookupController
             echo json_encode(['error' => 'Sesión expirada']); return;
         }
 
+        $csrf = is_string($_GET['csrf_token'] ?? null) ? $_GET['csrf_token'] : '';
+        if (!panel_encuesta_validate_csrf($csrf)) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Token CSRF inválido.']); return;
+        }
+
         $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
         $user_div   = (int)($_SESSION['division_id'] ?? 0);
         $is_mc      = ($user_div === 1);
@@ -87,6 +99,12 @@ class LookupController
             echo json_encode(['error' => 'Sesión expirada']); return;
         }
 
+        $csrf = is_string($_GET['csrf_token'] ?? null) ? $_GET['csrf_token'] : '';
+        if (!panel_encuesta_validate_csrf($csrf)) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Token CSRF inválido.']); return;
+        }
+
         $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
         $user_div   = (int)($_SESSION['division_id'] ?? 0);
         $is_mc      = ($user_div === 1);
@@ -111,6 +129,12 @@ class LookupController
         if (!isset($_SESSION['usuario_id'])) {
             http_response_code(401);
             echo json_encode(['error' => 'Sesión expirada']); return;
+        }
+
+        $csrf = is_string($_GET['csrf_token'] ?? null) ? $_GET['csrf_token'] : '';
+        if (!panel_encuesta_validate_csrf($csrf)) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Token CSRF inválido.']); return;
         }
 
         $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
@@ -266,10 +290,21 @@ class LookupController
             echo json_encode(['status' => 'error', 'message' => 'local_id y form_id son requeridos.', 'debug_id' => $debugId]); return;
         }
 
+        // Verificar que el formulario pertenece a la empresa del usuario
+        $stmtScope = $this->conn->prepare("SELECT 1 FROM formulario WHERE id = ? AND id_empresa = ? LIMIT 1");
+        $stmtScope->bind_param("ii", $form_id, $empresa_id);
+        $stmtScope->execute();
+        $scopeOk = (bool)$stmtScope->get_result()->fetch_row();
+        $stmtScope->close();
+        if (!$scopeOk) {
+            http_response_code(403);
+            echo json_encode(['status' => 'error', 'message' => 'Sin permiso.', 'debug_id' => $debugId]); return;
+        }
+
         $modelPath = $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/mod_formulario/models/DetalleLocalModel.php';
         if (!file_exists($modelPath)) {
             http_response_code(500);
-            echo json_encode(['status' => 'error', 'message' => 'DetalleLocalModel no encontrado.', 'debug_id' => $debugId]); return;
+            echo json_encode(['status' => 'error', 'message' => 'Error interno.', 'debug_id' => $debugId]); return;
         }
         require_once $modelPath;
 
@@ -282,8 +317,9 @@ class LookupController
                 'status' => 'ok', 'data' => $detalle, 'debug_id' => $debugId,
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         } catch (\Throwable $e) {
+            error_log('[panel_encuesta] handleDetalleLocal error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
             http_response_code(500);
-            echo json_encode(['status' => 'error', 'message' => 'Error interno: ' . $e->getMessage(), 'debug_id' => $debugId], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['status' => 'error', 'message' => 'Error interno.', 'debug_id' => $debugId], JSON_UNESCAPED_UNICODE);
         }
     }
 }

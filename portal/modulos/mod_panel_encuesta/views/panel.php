@@ -377,7 +377,7 @@ window.PEConfig = <?= json_encode([
     'USER_ID'         => (int)$user_id,
     'USER_DIV'        => (int)$user_div,
     'FACTORY_PRESETS' => $factory_presets ?? [],
-], JSON_HEX_TAG | JSON_UNESCAPED_UNICODE) ?>;
+], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <?php
 // Ruta absoluta al directorio de este módulo (evita problemas con base URLs de portales)

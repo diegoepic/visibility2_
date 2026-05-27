@@ -38,6 +38,23 @@
     $('#errorModal').modal('show');
   };
 
+  PE.showToast = function(msg, type){
+    type = type || 'success';
+    const id = 'pe-toast-' + Date.now();
+    const bgClass = type === 'success' ? 'bg-success' : (type === 'warning' ? 'bg-warning' : 'bg-danger');
+    const textClass = type === 'warning' ? 'text-dark' : 'text-white';
+    document.body.insertAdjacentHTML('beforeend',
+      '<div id="' + id + '" class="toast position-fixed" role="alert" aria-live="assertive"' +
+      ' style="top:1rem;right:1rem;z-index:9999;min-width:260px" data-delay="4000">' +
+      '<div class="toast-header ' + bgClass + ' ' + textClass + '">' +
+      '<strong class="mr-auto">Panel Encuesta</strong>' +
+      '<button type="button" class="ml-2 mb-1 close ' + textClass + '" data-dismiss="toast" aria-label="Cerrar">' +
+      '<span aria-hidden="true">&times;</span></button></div>' +
+      '<div class="toast-body">' + PE.escapeHtml(msg) + '</div></div>');
+    var $t = $('#' + id);
+    $t.toast('show').on('hidden.bs.toast', function(){ document.getElementById(id) && document.getElementById(id).remove(); });
+  };
+
   function showLoading(){
     $('#panel-encuesta-loading').removeClass('d-none');
     $('#panel-encuesta-table-wrapper').addClass('is-loading');
@@ -66,18 +83,20 @@
   $('#f_division').on('change', function(){
     const div = $(this).val();
 
-    $.getJSON('ajax_subdivisiones.php',{ division: div }, function(rows){
+    const csrfToken = $('#csrf_token').val();
+
+    $.getJSON('ajax_subdivisiones.php',{ division: div, csrf_token: csrfToken }, function(rows){
       const $s = $('#f_subdivision').empty().append('<option value="0">-- Todas --</option>');
       rows.forEach(r => $s.append(`<option value="${r.id}">${PE.escapeHtml(r.nombre)}</option>`));
     }).fail(xhr => PE.showError('No se pudo cargar subdivisiones', xhr.responseText||'Error inesperado'))
       .always(() => loadCampanas(true));
 
-    $.getJSON('ajax_jefes_por_division.php',{ division: div }, function(rows){
+    $.getJSON('ajax_jefes_por_division.php',{ division: div, csrf_token: csrfToken }, function(rows){
       const $j = $('#f_jv').empty().append('<option value="0">-- Todos --</option>');
       rows.forEach(r => $j.append(`<option value="${r.id}">${PE.escapeHtml(r.nombre)}</option>`));
     }).fail(xhr => PE.showError('No se pudo cargar jefes', xhr.responseText||'Error inesperado'));
 
-    $.getJSON('ajax_distritos_por_division.php',{ division: div }, function(rows){
+    $.getJSON('ajax_distritos_por_division.php',{ division: div, csrf_token: csrfToken }, function(rows){
       const $d = $('#f_distrito').empty().append('<option value="0">-- Todos --</option>');
       rows.forEach(r => $d.append(`<option value="${r.id}">${PE.escapeHtml(r.nombre_distrito)}</option>`));
     }).fail(xhr => PE.showError('No se pudo cargar distritos', xhr.responseText||'Error inesperado'));
@@ -90,7 +109,8 @@
     $.getJSON('ajax_campanas_por_div_sub.php', {
       division: $('#f_division').val(),
       subdivision: $('#f_subdivision').val(),
-      tipo: $('#f_tipo').val()
+      tipo: $('#f_tipo').val(),
+      csrf_token: $('#csrf_token').val()
     }, function(rows){
       const $c = $('#f_form').empty().append('<option value="0">-- Todas --</option>');
       rows.forEach(r => $c.append(`<option value="${r.id}">${PE.escapeHtml(r.nombre)}</option>`));

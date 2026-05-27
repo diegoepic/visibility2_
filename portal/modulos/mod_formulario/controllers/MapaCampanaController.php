@@ -1,5 +1,5 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) { session_start(); }
 require_once __DIR__ . '/../models/Database.php';
 require_once __DIR__ . '/../models/LocalModel.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/session_data.php';
@@ -57,7 +57,8 @@ class MapaCampanaController
             $filterHasta = preg_match('/^\d{4}-\d{2}-\d{2}$/', $filterHastaRaw) ? $filterHastaRaw . ' 23:59:59' : null;
         }
 
-        $perPage = isset($_GET['per_page']) && ctype_digit((string)$_GET['per_page']) ? (int)$_GET['per_page'] : 50;
+        $perPage = (int)($_GET['per_page'] ?? 50);
+        if (!in_array($perPage, [25, 50, 100, 150], true)) { $perPage = 50; }
         $page    = max(1, intval($_GET['page'] ?? 1));
 
         // SEGURIDAD: Validar que el usuario filtrado pertenece a la misma empresa (si se especifica)
@@ -77,11 +78,8 @@ class MapaCampanaController
 
     private function getMapKey(): string
     {
-        // SEGURIDAD: Leer API key desde configuración o variable de entorno
-        // Primero intenta leer de variable de entorno
         $key = getenv('GOOGLE_MAPS_API_KEY');
 
-        // Si no existe, intenta leer del archivo de configuración
         if (!$key) {
             $configFile = $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/config/maps_config.php';
             if (file_exists($configFile)) {
@@ -90,12 +88,7 @@ class MapaCampanaController
             }
         }
 
-        // Fallback a la key hardcodeada (temporal, debe ser removida)
-        if (!$key) {
-            $key = 'AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw';
-        }
-
-        return $key;
+        return (string)$key;
     }
 
     private function estadoLabel(string $estado): string
@@ -124,7 +117,7 @@ class MapaCampanaController
 
         $campanaNombre = $this->localModel->getCampanaNombre($filters['idCampana'], $filters['empresa_id']);
         $campanaInfo = $this->localModel->getCampanaInfo($filters['idCampana'], $filters['empresa_id']);
-        $isComplementaria = ($campanaInfo['modalidad'] ?? '') === 'complementaria';
+        $isComplementaria = ($campanaInfo['modalidad'] ?? '') === 'complementaria' || (int)($campanaInfo['tipo'] ?? 0) === 2;
         $iwRequiereLocal = (int)($campanaInfo['iw_requiere_local'] ?? 0) === 1;
 
         if ($isComplementaria) {
@@ -209,7 +202,7 @@ class MapaCampanaController
         }
 
         $campanaInfo = $this->localModel->getCampanaInfo($filters['idCampana'], $filters['empresa_id']);
-        $isComplementaria = ($campanaInfo['modalidad'] ?? '') === 'complementaria';
+        $isComplementaria = ($campanaInfo['modalidad'] ?? '') === 'complementaria' || (int)($campanaInfo['tipo'] ?? 0) === 2;
         $iwRequiereLocal = (int)($campanaInfo['iw_requiere_local'] ?? 0) === 1;
 
         if ($isComplementaria) {

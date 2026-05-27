@@ -25,7 +25,7 @@ class LocalModel
     public function getCampanaInfo(int $idCampana, int $empresaId): array
     {
         $stmt = $this->conn->prepare(
-            "SELECT modalidad, iw_requiere_local
+            "SELECT modalidad, tipo, iw_requiere_local
              FROM formulario
              WHERE id = ? AND id_empresa = ?
              LIMIT 1"
@@ -37,7 +37,8 @@ class LocalModel
         $stmt->close();
 
         return [
-            'modalidad' => $row['modalidad'] ?? '',
+            'modalidad'        => $row['modalidad'] ?? '',
+            'tipo'             => isset($row['tipo']) ? (int)$row['tipo'] : 0,
             'iw_requiere_local' => isset($row['iw_requiere_local']) ? (int)$row['iw_requiere_local'] : 0,
         ];
     }
@@ -268,10 +269,13 @@ public function getLocalesPage(array $filters): array
 
     $sql = "
         SELECT
-            l.*,
+            l.id,
             l.id         AS idLocal,
             l.codigo     AS codigoLocal,
             l.nombre     AS nombreLocal,
+            l.direccion  AS direccionLocal,
+            l.lat,
+            l.lng,
             DATE_FORMAT(gv_stats.last_fecha, '%d/%m/%Y %H:%i') AS fechaVisita,
             gv_stats.estado_agg  AS estadoGestion,
             gv_stats.visitas_count   AS visitasCount,
@@ -379,12 +383,12 @@ public function getLocalesPage(array $filters): array
           SELECT
             l.id AS idLocal,
             MIN(l.codigo) AS cod_min,
-            last.fecha_inicio AS last_fecha
+            MAX(last.fecha_inicio) AS last_fecha
           FROM visita v
           JOIN local l ON l.id = v.id_local
           JOIN formulario f ON f.id = v.id_formulario AND f.id_empresa = ?
           LEFT JOIN (
-            SELECT v2.*
+            SELECT v2.id_local, v2.fecha_inicio
             FROM visita v2
             JOIN (
               SELECT id_local,
@@ -425,12 +429,12 @@ public function getLocalesPage(array $filters): array
         $havingTypes = '';
 
         if ($filterDesde) {
-            $havingClauses[] = 'last.fecha_inicio >= ?';
+            $havingClauses[] = 'last_fecha >= ?';
             $havingParams[] = $filterDesde;
             $havingTypes .= 's';
         }
         if ($filterHasta) {
-            $havingClauses[] = 'last.fecha_inicio <= ?';
+            $havingClauses[] = 'last_fecha <= ?';
             $havingParams[] = $filterHasta;
             $havingTypes .= 's';
         }

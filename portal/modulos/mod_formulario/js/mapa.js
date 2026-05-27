@@ -24,7 +24,6 @@
     window.mapGestiones = mapGestiones;
     if (window.GestionesMap) window.GestionesMap.setMap(mapGestiones);
 
-    // OPTIMIZACIÓN: Crear InfoWindow solo al hacer clic (lazy loading)
     locales.forEach(loc => {
       const markerLat = (loc.markerLat != null) ? loc.markerLat : loc.lat;
       const markerLng = (loc.markerLng != null) ? loc.markerLng : loc.lng;
@@ -33,9 +32,7 @@
       const icon=`/visibility2/portal/assets/images/marker_${loc.is_priority?'blue':'red'}1.png`;
       const marker = new google.maps.Marker({ position: pos, map: mapLocales, icon:{url:icon, scaledSize:new google.maps.Size(30,30)} });
 
-      // LAZY LOADING: Generar contenido solo al hacer clic
       marker.addListener('click', () => {
-        console.log('[mapa.js] Marker clicked for location:', { idLocal: loc.idLocal, visitaId: loc.visitaId });
         const last = (loc.lastLat!=null && loc.lastLng!=null && loc.lat!=null && loc.lng!=null)
           ? {lat:+loc.lastLat,lng:+loc.lastLng}
           : null;
@@ -53,7 +50,6 @@
           ? `<small><strong>Fecha:</strong> ${esc(loc.fechaVisita ?? '—')} · ${esc(loc.usuarioGestion ?? '—')}</small><br>`
           : `<small><strong>Última visita:</strong> ${esc(loc.fechaVisita ?? '—')} · ${esc(loc.usuarioGestion ?? '—')}</small><br>`;
         const visitaIdForButton = +loc.visitaId || +loc.idLocal;
-        console.log('[mapa.js] Button will use visitaId:', visitaIdForButton, 'for iwNoLocal:', iwNoLocal);
         const detailButton = iwNoLocal
           ? `<div class="mt-2 d-flex"><button class="btn btn-sm btn-info" onclick="DetalleLocalModal.open(${MAPA_CONFIG.campanaId},0,${visitaIdForButton})">Detalle</button></div>`
           : `<div class="mt-2 d-flex"><button class="btn btn-sm btn-info" onclick="DetalleLocalModal.open(${MAPA_CONFIG.campanaId},${+loc.idLocal})">Detalle</button></div>`;
@@ -87,22 +83,12 @@
 
     $('#tblLocales').on('click','tr', function(){
       const id = +$(this).data('id');
-      console.log('[mapa.js] Row clicked, data-id:', id);
-      if (!id) {
-        console.warn('[mapa.js] No valid ID found in data-id');
-        return;
-      }
+      if (!id) return;
       if ($('#tabLocales').hasClass('active')) {
-        console.log('[mapa.js] Locales tab active, triggering marker click');
         const m = markersLocales[id];
-        if (!m) {
-          console.error('[mapa.js] Marker not found for id:', id);
-          return;
-        }
+        if (!m) return;
         mapLocales.setZoom(15); mapLocales.panTo(m.getPosition()); google.maps.event.trigger(m,'click');
       } else if (window.GestionesMap) {
-        // FIX: Pasar el ID correcto (puede ser idLocal o visitaId)
-        console.log('[mapa.js] Gestiones tab active, calling GestionesMap.load with id:', id);
         window.GestionesMap.load(id);
       }
     });
