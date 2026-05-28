@@ -308,11 +308,11 @@ try {
         }
 
         $rut_input = obtenerValorFila($data, (int)$rut_idx);
-        $nombre    = obtenerValorFila($data, (int)$nombre_idx);
-        $apellido  = obtenerValorFila($data, (int)$apellido_idx);
+        $nombre    = mb_strtoupper(obtenerValorFila($data, (int)$nombre_idx),   'UTF-8');
+        $apellido  = mb_strtoupper(obtenerValorFila($data, (int)$apellido_idx), 'UTF-8');
         $telefono  = obtenerValorFila($data, (int)$telefono_idx);
-        $email     = obtenerValorFila($data, (int)$email_idx);
-        $usuario   = obtenerValorFila($data, (int)$usuario_idx);
+        $email     = mb_strtoupper(obtenerValorFila($data, (int)$email_idx),    'UTF-8');
+        $usuario   = mb_strtoupper(obtenerValorFila($data, (int)$usuario_idx),  'UTF-8');
         $clave     = obtenerValorFila($data, (int)$password_idx);
 
         if ($rut_input === '' || $nombre === '' || $apellido === '' || $telefono === '' || $email === '' || $usuario === '' || $clave === '') {

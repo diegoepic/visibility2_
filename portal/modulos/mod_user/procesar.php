@@ -109,11 +109,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Sanitizar y obtener las entradas del formulario
     $rut_input = trim($_POST['rut'] ?? '');
-    $nombre = trim($_POST['nombre'] ?? '');
-    $apellido = trim($_POST['apellido'] ?? '');
-    $telefono = trim($_POST['telefono'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $usuario = trim($_POST['usuario'] ?? '');
+    $nombre    = mb_strtoupper(trim($_POST['nombre']   ?? ''), 'UTF-8');
+    $apellido  = mb_strtoupper(trim($_POST['apellido'] ?? ''), 'UTF-8');
+    $telefono  = trim($_POST['telefono'] ?? '');
+    $email     = mb_strtoupper(trim($_POST['email']    ?? ''), 'UTF-8');
+    $usuario   = mb_strtoupper(trim($_POST['usuario']  ?? ''), 'UTF-8');
     $id_empresa = isset($_POST['id_empresa']) ? (int) $_POST['id_empresa'] : 0;
     $id_perfil = isset($_POST['id_perfil']) ? (int) $_POST['id_perfil'] : 0;
     $clave = $_POST['password'] ?? '';

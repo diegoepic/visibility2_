@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
 
-ini_set('memory_limit', '512M');
-set_time_limit(120);
+ini_set('memory_limit', '1G');
+set_time_limit(300);
 date_default_timezone_set('America/Santiago');
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -212,6 +212,7 @@ $stmtU = $conn->prepare("
       AND u.clasificacion_usuario = 'interno'
       AND u.id_perfil = 3
       AND u.id_empresa = ?
+      AND u.id <> 50
     ORDER BY u.usuario ASC
 ");
 $stmtU->bind_param('i', $empresa_id);
@@ -366,6 +367,42 @@ if (!empty($nonPhotoQuestions)) {
     $stmtNPR->close();
 }
 
+/* ─────────────────────────────────────────────────────────────
+ * Query 5: Fotos del período por usuario × fecha
+ * ───────────────────────────────────────────────────────────── */
+$photoRows = []; // [uid][date] => [['url'=>..., 'hora'=>...], ...]
+
+$stmtF = $conn->prepare("
+    SELECT
+        m.id_usuario,
+        DATE(m.created_at)  AS fecha_foto,
+        m.foto_url,
+        m.created_at        AS hora_foto
+    FROM form_question_photo_meta m
+    JOIN form_question_responses r ON r.id  = m.resp_id
+    JOIN form_questions fq         ON fq.id = r.id_form_question
+    JOIN usuario u                 ON u.id  = m.id_usuario
+    WHERE fq.id_formulario    = 138
+      AND fq.id_question_type = 7
+      AND m.created_at BETWEEN ? AND ?
+      AND u.id_empresa = ?
+      AND u.activo     = 1
+      AND u.id        <> 50
+    ORDER BY m.id_usuario, fecha_foto, m.created_at
+");
+$stmtF->bind_param('ssi', $startDt, $endDt, $empresa_id);
+$stmtF->execute();
+$resF = $stmtF->get_result();
+while ($row = $resF->fetch_assoc()) {
+    $uid  = (int)$row['id_usuario'];
+    $date = (string)$row['fecha_foto'];
+    $photoRows[$uid][$date][] = [
+        'url'  => (string)$row['foto_url'],
+        'hora' => (string)$row['hora_foto'],
+    ];
+}
+$stmtF->close();
+
 $conn->close();
 
 /* ─────────────────────────────────────────────────────────────
@@ -473,6 +510,37 @@ function complianceColors(float $pct): array
     if ($pct >= 80.0) return ['C6EFCE', '276221']; // verde
     if ($pct >= 50.0) return ['FFEB9C', '9C6500']; // amarillo
     return ['FFC7CE', '9C0006'];                     // rojo
+}
+
+/**
+ * Resuelve una foto_url a ruta de archivo usable por Drawing.
+ * Convierte webp → JPEG temporal si es necesario.
+ * Retorna null si el archivo no existe o no es imagen soportada.
+ */
+function resolveDrawingPath(string $fotoUrl): ?string
+{
+    $absPath = $_SERVER['DOCUMENT_ROOT'] . $fotoUrl;
+    if (!file_exists($absPath)) {
+        return null;
+    }
+
+    $ext = strtolower(pathinfo($absPath, PATHINFO_EXTENSION));
+
+    if ($ext === 'webp') {
+        if (!function_exists('imagecreatefromwebp')) {
+            return null;
+        }
+        $img = @imagecreatefromwebp($absPath);
+        if ($img === false) {
+            return null;
+        }
+        $tmp = tempnam(sys_get_temp_dir(), 'viz_') . '.jpg';
+        imagejpeg($img, $tmp, 85);
+        unset($img);
+        return $tmp;
+    }
+
+    return $absPath;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -890,6 +958,91 @@ foreach (['A' => 18, 'B' => 26, 'C' => 10, 'D' => 11,
 }
 $ws4->freezePane('A' . ($hdrRow4 + 1));
 
+/* ═════════════════════════════════════════════════════════════
+ * HOJA 5 — FOTOS VEHÍCULO
+ * ═════════════════════════════════════════════════════════════ */
+$ws5 = $spreadsheet->createSheet()->setTitle('Fotos Vehículo');
+/** @var Worksheet $ws5 */
+$ws5 = $spreadsheet->getSheetByName('Fotos Vehículo');
+
+$ws5->mergeCells('A1:F1');
+setVal($ws5, 1, 1, $title . ' — Fotos Vehículo');
+$ws5->getStyle('A1')->applyFromArray([
+    'font'      => ['bold' => true, 'size' => 13, 'color' => ['argb' => 'FFFFFFFF']],
+    'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF217346']],
+    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER,
+                    'vertical'   => Alignment::VERTICAL_CENTER],
+]);
+$ws5->getRowDimension(1)->setRowHeight(26);
+
+$hdr5    = ['Usuario', 'Nombre', 'Fecha', 'Día', 'Hora subida', 'Foto'];
+$hdrRow5 = 3;
+foreach ($hdr5 as $i => $h) {
+    setVal($ws5, $i + 1, $hdrRow5, $h);
+}
+applyHeaderStyle($ws5, 'A' . $hdrRow5 . ':F' . $hdrRow5);
+$ws5->getRowDimension($hdrRow5)->setRowHeight(22);
+
+$r5       = $hdrRow5 + 1;
+$tmpFiles = [];
+
+foreach ($users as $uid => $udata) {
+    if (empty($photoRows[$uid])) {
+        continue;
+    }
+    foreach ($photoRows[$uid] as $date => $fotos) {
+        foreach ($fotos as $foto) {
+            $d       = new DateTime($date);
+            $dowName = $ES_DAYS[(int)$d->format('N')] ?? '?';
+
+            setStr($ws5, 1, $r5, $udata['usuario']);
+            setStr($ws5, 2, $r5, $udata['nombre_completo']);
+            setStr($ws5, 3, $r5, fmtDate($date));
+            setStr($ws5, 4, $r5, $dowName);
+            setStr($ws5, 5, $r5, fmtDateTime($foto['hora']));
+
+            $drawPath = resolveDrawingPath($foto['url']);
+            if ($drawPath !== null) {
+                $absOriginal = $_SERVER['DOCUMENT_ROOT'] . $foto['url'];
+                if ($drawPath !== $absOriginal) {
+                    $tmpFiles[] = $drawPath;
+                }
+                try {
+                    $drawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+                    $drawing->setName('foto_' . $uid . '_' . $r5);
+                    $drawing->setPath($drawPath);
+                    $drawing->setCoordinates('F' . $r5);
+                    $drawing->setOffsetX(4);
+                    $drawing->setOffsetY(4);
+                    $drawing->setWidth(140);
+                    $drawing->setHeight(105);
+                    $drawing->setWorksheet($ws5);
+                } catch (\Throwable $e) {
+                    setStr($ws5, 6, $r5, '(error imagen)');
+                }
+            } else {
+                setStr($ws5, 6, $r5, '(sin foto)');
+            }
+
+            applyDataBorders($ws5, 'A' . $r5 . ':F' . $r5);
+            $ws5->getRowDimension($r5)->setRowHeight(82);
+            $r5++;
+        }
+    }
+}
+
+if ($r5 === $hdrRow5 + 1) {
+    $ws5->mergeCells('A' . $r5 . ':F' . $r5);
+    setVal($ws5, 1, $r5, 'Sin fotos registradas en el período.');
+    $ws5->getStyle('A' . $r5)->getAlignment()
+        ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+}
+
+foreach (['A' => 18, 'B' => 26, 'C' => 12, 'D' => 12, 'E' => 18, 'F' => 22] as $col => $w) {
+    $ws5->getColumnDimension($col)->setWidth($w);
+}
+$ws5->freezePane('A' . ($hdrRow5 + 1));
+
 /* ─────────────────────────────────────────────────────────────
  * Activar primera hoja y descargar
  * ───────────────────────────────────────────────────────────── */
@@ -911,4 +1064,8 @@ header('Pragma: public');
 
 $writer = new Xlsx($spreadsheet);
 $writer->save('php://output');
+
+foreach ($tmpFiles as $tmp) {
+    @unlink($tmp);
+}
 exit;

@@ -62,11 +62,11 @@ if (!isset($_POST['csrf_token']) || !isset($_SESSION['csrf_token']) || $_POST['c
 // 5) Recoger y sanear entradas
 $usuario_id             = (int) $_POST['usuario_id'];
 $rut_input              = trim($_POST['rut'] ?? '');
-$nombre                 = trim($_POST['nombre'] ?? '');
-$apellido               = trim($_POST['apellido'] ?? '');
+$nombre                 = mb_strtoupper(trim($_POST['nombre']   ?? ''), 'UTF-8');
+$apellido               = mb_strtoupper(trim($_POST['apellido'] ?? ''), 'UTF-8');
 $telefono               = trim($_POST['telefono'] ?? '');
-$email                  = trim($_POST['email'] ?? '');
-$usuario_nombre         = trim($_POST['usuario'] ?? '');
+$email                  = mb_strtoupper(trim($_POST['email']    ?? ''), 'UTF-8');
+$usuario_nombre         = mb_strtoupper(trim($_POST['usuario']  ?? ''), 'UTF-8');
 $id_perfil              = (int) ($_POST['id_perfil'] ?? 0);
 $id_empresa             = (int) ($_POST['id_empresa'] ?? 0);
 $id_division            = (isset($_POST['id_division']) && $_POST['id_division'] !== '') ? (int) $_POST['id_division'] : null;
