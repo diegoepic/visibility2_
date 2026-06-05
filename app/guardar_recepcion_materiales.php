@@ -100,25 +100,9 @@ if (!$algunaPos) {
     exit();
 }
 
-/* ── Foto guía de despacho ── */
-if (!isset($_FILES['foto_guia']) || $_FILES['foto_guia']['error'] !== UPLOAD_ERR_OK) {
+/* ── Foto(s) guía de despacho ── */
+if (empty($_FILES['foto_guia']['tmp_name'])) {
     echo json_encode(['status' => 'error', 'message' => 'La foto de la guía de despacho es obligatoria']);
-    exit();
-}
-
-$tmpFoto  = $_FILES['foto_guia']['tmp_name'];
-$origName = $_FILES['foto_guia']['name'];
-$sizeFile = $_FILES['foto_guia']['size'];
-
-$mimeType  = @mime_content_type($tmpFoto);
-$ext       = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
-$looksImg  = (strpos((string)$mimeType, 'image/') === 0) || in_array($ext, ['heic', 'heif']);
-if (!$looksImg) {
-    echo json_encode(['status' => 'error', 'message' => 'El archivo no es una imagen válida']);
-    exit();
-}
-if ($sizeFile > 5 * 1024 * 1024) {
-    echo json_encode(['status' => 'error', 'message' => 'La imagen excede 5 MB']);
     exit();
 }
 
@@ -201,23 +185,60 @@ function convertToWebP_guia($srcPath, $dstPath, $maxDim = 1280, $quality = 80): 
 $dirGuia = __DIR__ . '/uploads/recepcion_materiales/';
 if (!is_dir($dirGuia)) mkdir($dirGuia, 0755, true);
 
-$uniqueName = uniqid('guia_', true) . '.webp';
-$destino    = $dirGuia . $uniqueName;
+$fotoNames  = (array)$_FILES['foto_guia']['name'];
+$fotoTmps   = (array)$_FILES['foto_guia']['tmp_name'];
+$fotoErrors = (array)$_FILES['foto_guia']['error'];
+$fotoSizes  = (array)$_FILES['foto_guia']['size'];
 
-if (!convertToWebP_guia($tmpFoto, $destino)) {
-    echo json_encode(['status' => 'error', 'message' => 'No se pudo procesar la imagen de la guía']);
+$urlsGuia   = [];
+$savedPaths = [];
+
+foreach ($fotoTmps as $idx => $tmpFoto) {
+    if (empty($tmpFoto) || $fotoErrors[$idx] !== UPLOAD_ERR_OK) continue;
+
+    $origName = $fotoNames[$idx];
+    $sizeFile = $fotoSizes[$idx];
+    $mimeType = @mime_content_type($tmpFoto);
+    $ext      = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+    $looksImg = (strpos((string)$mimeType, 'image/') === 0) || in_array($ext, ['heic', 'heif']);
+
+    if (!$looksImg) {
+        foreach ($savedPaths as $p) @unlink($p);
+        echo json_encode(['status' => 'error', 'message' => 'Uno de los archivos no es una imagen válida']);
+        exit();
+    }
+    if ($sizeFile > 5 * 1024 * 1024) {
+        foreach ($savedPaths as $p) @unlink($p);
+        echo json_encode(['status' => 'error', 'message' => 'Una imagen excede el límite de 5 MB']);
+        exit();
+    }
+
+    $uniqueName = uniqid('guia_', true) . '.webp';
+    $destino    = $dirGuia . $uniqueName;
+
+    if (!convertToWebP_guia($tmpFoto, $destino)) {
+        foreach ($savedPaths as $p) @unlink($p);
+        echo json_encode(['status' => 'error', 'message' => 'No se pudo procesar una imagen de la guía']);
+        exit();
+    }
+    @chmod($destino, 0644);
+    $savedPaths[] = $destino;
+    $urlsGuia[]   = "/visibility2/app/uploads/recepcion_materiales/{$uniqueName}";
+}
+
+if (empty($urlsGuia)) {
+    echo json_encode(['status' => 'error', 'message' => 'La foto de la guía de despacho es obligatoria']);
     exit();
 }
-@chmod($destino, 0644);
 
-$urlGuia = "/visibility2/app/uploads/recepcion_materiales/{$uniqueName}";
+$urlGuia = json_encode($urlsGuia);
 
 /* ── Validar y sanitizar campos del formulario ── */
 $numero_guia = trim($_POST['numero_guia'] ?? '');
 $observacion = trim($_POST['observacion'] ?? '');
 
 if ($numero_guia === '') {
-    if (file_exists($destino)) @unlink($destino);
+    foreach ($savedPaths as $p) @unlink($p);
     echo json_encode(['status' => 'error', 'message' => 'El número de guía de despacho es obligatorio']);
     exit();
 }
@@ -225,13 +246,13 @@ if ($numero_guia === '') {
 /* fecha_recepcion: validar formato y que no sea futura */
 $fecha_recepcion_raw = trim($_POST['fecha_recepcion'] ?? '');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_recepcion_raw)) {
-    if (file_exists($destino)) @unlink($destino);
+    foreach ($savedPaths as $p) @unlink($p);
     echo json_encode(['status' => 'error', 'message' => 'Fecha de recepción inválida']);
     exit();
 }
 $fecha_recepcion = $fecha_recepcion_raw;
 if ($fecha_recepcion > date('Y-m-d')) {
-    if (file_exists($destino)) @unlink($destino);
+    foreach ($savedPaths as $p) @unlink($p);
     echo json_encode(['status' => 'error', 'message' => 'La fecha de recepción no puede ser futura']);
     exit();
 }
@@ -279,7 +300,7 @@ try {
     ]);
 } catch (Throwable $e) {
     $conn->rollback();
-    if (file_exists($destino)) @unlink($destino);
+    foreach ($savedPaths as $p) @unlink($p);
     error_log('guardar_recepcion_materiales error: ' . $e->getMessage());
     echo json_encode(['status' => 'error', 'message' => 'Error interno al guardar. Intenta de nuevo.']);
 }

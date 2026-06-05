@@ -1,10 +1,19 @@
 {
     "success": true,
-    "inserted": 1,
+    "inserted": 10,
     "failed": 0,
     "reportUrl": "",
     "successes": [
-        "L\u00ednea 2: Local '910 - LIDER EXPRESS MAIPU' (c\u00f3digo 5267398) insertado."
+        "L\u00ednea 2: Local 'UNIVERSITY621 - UNIVERSIDAD DE VALPARAISO MEDICINA VINA DEL MAR' (c\u00f3digo UNIVERSITY621) insertado.",
+        "L\u00ednea 3: Local 'UNIVERSITY622 - UNIVERSIDAD DE VALPARAISO MEDICINA VINA DEL MAR' (c\u00f3digo UNIVERSITY622) insertado.",
+        "L\u00ednea 4: Local 'UNIVERSITY623 - UNIVERSIDAD DE VALPARAISO MEDICINA VINA DEL MAR' (c\u00f3digo UNIVERSITY623) insertado.",
+        "L\u00ednea 5: Local 'UNIVERSITY624 - UNIVERSIDAD DE VALPARAISO MEDICINA VINA DEL MAR' (c\u00f3digo UNIVERSITY624) insertado.",
+        "L\u00ednea 6: Local 'UNIVERSITY625 - UNIVERSIDAD DE VALPARAISO MEDICINA VINA DEL MAR' (c\u00f3digo UNIVERSITY625) insertado.",
+        "L\u00ednea 7: Local 'UNIVERSITY626 - UNIVERSIDAD DE VALPARAISO MEDICINA VINA DEL MAR' (c\u00f3digo UNIVERSITY626) insertado.",
+        "L\u00ednea 8: Local 'UNIVERSITY627 - UNIVERSIDAD DE VALPARAISO PSICOLOGIA VINA DEL MAR' (c\u00f3digo UNIVERSITY627) insertado.",
+        "L\u00ednea 9: Local 'UNIVERSITY628 - UNIVERSIDAD DE VALPARAISO NEGOCIOS INTERNACIONALES VINA DEL MAR' (c\u00f3digo UNIVERSITY628) insertado.",
+        "L\u00ednea 10: Local 'UNIVERSITY629 - UNIVERSIDAD DE VALPARAISO VINA DEL MAR' (c\u00f3digo UNIVERSITY629) insertado.",
+        "L\u00ednea 11: Local 'UNIVERSITY630 - UNIVERSIDAD DE VALPARAISO VINA DEL MAR' (c\u00f3digo UNIVERSITY630) insertado."
     ],
     "failures": []
 }

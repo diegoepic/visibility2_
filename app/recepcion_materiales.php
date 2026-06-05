@@ -178,14 +178,9 @@ $tieneHist      = count($historial) > 0;
         .mat-name { font-size: 14px; font-weight: 600; color: #333; }
         .mat-prop { font-size: 12px; color: #888; margin-top: 2px; }
         .mat-input { width: 90px; text-align: center; }
-        .foto-preview-wrap { position: relative; margin-top: 8px; }
-        .foto-preview {
-            width: 100%; max-height: 200px;
-            object-fit: cover;
-            border-radius: 8px;
-            display: none;
-            border: 2px solid #217346;
-        }
+        .foto-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .foto-thumb-wrap { position: relative; width: 90px; height: 90px; }
+        .foto-thumb-wrap img { width: 90px; height: 90px; object-fit: cover; border-radius: 8px; border: 2px solid #217346; }
         .btn-submit {
             background: #217346;
             color: #fff;
@@ -315,14 +310,12 @@ $tieneHist      = count($historial) > 0;
             <div class="form-group">
                 <label for="foto_guia" style="display:block; padding: 40px; border: 2px dashed #ccc; border-radius: 8px; text-align:center; cursor:pointer; color:#888;" id="fotoLabel">
                     <i class="fa fa-upload fa-2x"></i><br>
-                    <span id="fotoLabelText">Toca para seleccionar o tomar foto</span>
+                    <span id="fotoLabelText">Toca para seleccionar fotos (puedes elegir varias)</span>
                 </label>
-                <input type="file" id="foto_guia" name="foto_guia"
-                       accept="image/*" capture="environment"
-                       style="display:none;" required>
-                <div class="foto-preview-wrap">
-                    <img id="fotoPreview" class="foto-preview" src="" alt="Vista previa">
-                </div>
+                <input type="file" id="foto_guia" name="foto_guia[]"
+                       accept="image/*"
+                       style="display:none;" required multiple>
+                <div id="fotoPreviewGrid" class="foto-grid"></div>
             </div>
 
             <!-- Fecha real de recepción -->
@@ -380,12 +373,17 @@ $tieneHist      = count($historial) > 0;
                 <?php if ($h['numero_guia']): ?>
                     <div class="hist-guia"><i class="fa fa-file-text-o"></i> Guía: <?= htmlspecialchars($h['numero_guia'], ENT_QUOTES, 'UTF-8') ?></div>
                 <?php endif; ?>
-                <?php if ($h['foto_guia_url']): ?>
-                    <div style="margin-top:6px;">
-                        <a href="<?= htmlspecialchars($h['foto_guia_url'], ENT_QUOTES, 'UTF-8') ?>" target="_blank">
-                            <img src="<?= htmlspecialchars($h['foto_guia_url'], ENT_QUOTES, 'UTF-8') ?>"
-                                 style="max-width:100%; max-height:120px; border-radius:6px; border:1px solid #ddd;" alt="Guía">
-                        </a>
+                <?php if ($h['foto_guia_url']):
+                    $fotos = json_decode($h['foto_guia_url'], true);
+                    if (!is_array($fotos)) $fotos = [$h['foto_guia_url']];
+                ?>
+                    <div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:6px;">
+                        <?php foreach ($fotos as $fotoUrl): ?>
+                            <a href="<?= htmlspecialchars($fotoUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank">
+                                <img src="<?= htmlspecialchars($fotoUrl, ENT_QUOTES, 'UTF-8') ?>"
+                                     style="max-height:120px; border-radius:6px; border:1px solid #ddd;" alt="Guía">
+                            </a>
+                        <?php endforeach; ?>
                     </div>
                 <?php endif; ?>
                 <?php if ($h['observacion']): ?>
@@ -400,25 +398,35 @@ $tieneHist      = count($historial) > 0;
 
 <script>
 (function () {
-    /* Vista previa de foto */
+    /* Vista previa de fotos */
     const inputFoto = document.getElementById('foto_guia');
-    const preview   = document.getElementById('fotoPreview');
+    const grid      = document.getElementById('fotoPreviewGrid');
     const lblText   = document.getElementById('fotoLabelText');
     const fotoLabel = document.getElementById('fotoLabel');
 
     if (inputFoto) {
         inputFoto.addEventListener('change', function () {
-            const file = this.files[0];
-            if (!file) return;
-            lblText.textContent = file.name;
+            const files = Array.from(this.files);
+            if (!files.length) return;
+            const n = files.length;
+            lblText.textContent = n === 1 ? files[0].name : n + ' fotos seleccionadas';
             fotoLabel.style.borderColor = '#217346';
             fotoLabel.style.color       = '#217346';
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                preview.src     = e.target.result;
-                preview.style.display = 'block';
-            };
-            reader.readAsDataURL(file);
+            if (grid) {
+                grid.innerHTML = '';
+                files.forEach(function (file) {
+                    const reader = new FileReader();
+                    reader.onload = function (e) {
+                        const wrap = document.createElement('div');
+                        wrap.className = 'foto-thumb-wrap';
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        wrap.appendChild(img);
+                        grid.appendChild(wrap);
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
         });
     }
 
