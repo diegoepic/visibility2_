@@ -67,7 +67,7 @@ mysqli_set_charset($conn, 'utf8mb4');
  * ───────────────────────────────────────────────────────────── */
 function isoWeekKey(string $date): string
 {
-    $d  = new DateTime($date);
+    $d = new DateTime($date);
     return $d->format('o') . '-W' . $d->format('W');
 }
 
@@ -75,7 +75,7 @@ function consecutiveBlocks(array $dates): array
 {
     if (empty($dates)) return [];
     sort($dates);
-    $blocks  = [[$dates[0]]];
+    $blocks = [[$dates[0]]];
     for ($i = 1, $n = count($dates); $i < $n; $i++) {
         $diff = (int)(new DateTime($dates[$i]))->diff(new DateTime($dates[$i - 1]))->days;
         if ($diff === 1) {
@@ -93,13 +93,13 @@ function consecutiveBlocks(array $dates): array
  */
 function calcExpectedDays(string $start, string $end, array $holidays): array
 {
-    $byWeek   = [];
-    $weekOrd  = [];
-    $current  = new DateTime($start);
-    $last     = new DateTime($end);
+    $byWeek  = [];
+    $weekOrd = [];
+    $current = new DateTime($start);
+    $last    = new DateTime($end);
 
     while ($current <= $last) {
-        $dow  = (int)$current->format('N'); // 1=Lun…7=Dom
+        $dow = (int)$current->format('N'); // 1=Lun…7=Dom
         if ($dow <= 5) {
             $date = $current->format('Y-m-d');
             if (!in_array($date, $holidays, true)) {
@@ -124,13 +124,14 @@ function calcExpectedDays(string $start, string $end, array $holidays): array
 
             $k1 = $first . '|inicio';
             if (!isset($seen[$k1])) {
-                $seen[$k1]  = true;
-                $result[] = ['date' => $first, 'tipo' => 'inicio'];
+                $seen[$k1] = true;
+                $result[]  = ['date' => $first, 'tipo' => 'inicio'];
             }
+
             $k2 = $last2 . '|termino';
             if (!isset($seen[$k2])) {
-                $seen[$k2]  = true;
-                $result[] = ['date' => $last2, 'tipo' => 'termino'];
+                $seen[$k2] = true;
+                $result[]  = ['date' => $last2, 'tipo' => 'termino'];
             }
         }
     }
@@ -176,6 +177,28 @@ function fmtDateTime(?string $dt): string
     return $d->format('d/m/Y H:i');
 }
 
+function slotFromDateTime(?string $dt): string
+{
+    if (!$dt || $dt === '0000-00-00 00:00:00') return '—';
+    try {
+        $h = (int)(new DateTime($dt))->format('H');
+        return $h < 12 ? 'Entrada' : 'Salida';
+    } catch (Throwable $e) {
+        return '—';
+    }
+}
+
+function slotKeyFromDateTime(?string $dt): string
+{
+    if (!$dt || $dt === '0000-00-00 00:00:00') return 'sin_hora';
+    try {
+        $h = (int)(new DateTime($dt))->format('H');
+        return $h < 12 ? 'inicio' : 'termino';
+    } catch (Throwable $e) {
+        return 'sin_hora';
+    }
+}
+
 $ES_DAYS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 $ES_DAYS_SHORT = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
@@ -202,6 +225,7 @@ sort($expectedDatesUnique);
 $users = [];
 $stmtU = $conn->prepare("
     SELECT u.id,
+           COALESCE(u.rut, '') AS rut,
            u.usuario,
            CONCAT(COALESCE(u.nombre,''), ' ', COALESCE(u.apellido,'')) AS nombre_completo,
            COALESCE(u.email, '') AS email,
@@ -220,6 +244,7 @@ $stmtU->execute();
 $resU = $stmtU->get_result();
 while ($row = $resU->fetch_assoc()) {
     $users[(int)$row['id']] = [
+        'rut'             => trim($row['rut']),
         'usuario'         => trim($row['usuario']),
         'nombre_completo' => trim($row['nombre_completo']),
         'email'           => trim($row['email']),
@@ -259,16 +284,16 @@ while ($row = $resS->fetch_assoc()) {
     $uid  = (int)$row['id_usuario'];
     $date = (string)$row['fecha_subida'];
     $uploads[$uid][$date] = [
-        'total'       => (int)$row['total_fotos'],
-        'primera'     => (string)$row['primera_hora'],
-        'ultima'      => (string)$row['ultima_hora'],
+        'total'   => (int)$row['total_fotos'],
+        'primera' => (string)$row['primera_hora'],
+        'ultima'  => (string)$row['ultima_hora'],
     ];
     $allUploadRows[] = [
-        'id_usuario'  => $uid,
-        'fecha'       => $date,
-        'total_fotos' => (int)$row['total_fotos'],
-        'primera_hora'=> (string)$row['primera_hora'],
-        'ultima_hora' => (string)$row['ultima_hora'],
+        'id_usuario'   => $uid,
+        'fecha'        => $date,
+        'total_fotos'  => (int)$row['total_fotos'],
+        'primera_hora' => (string)$row['primera_hora'],
+        'ultima_hora'  => (string)$row['ultima_hora'],
     ];
 }
 $stmtS->close();
@@ -368,16 +393,39 @@ if (!empty($nonPhotoQuestions)) {
 }
 
 /* ─────────────────────────────────────────────────────────────
- * Query 5: Fotos del período por usuario × fecha
+ * Query 5: Preguntas fotográficas y fotos del período
  * ───────────────────────────────────────────────────────────── */
-$photoRows = []; // [uid][date] => [['url'=>..., 'hora'=>...], ...]
+$photoQuestions = []; // [qid => ['text'=>..., 'sort_order'=>...]]
+$stmtPQ = $conn->prepare("
+    SELECT id, question_text, COALESCE(sort_order, 0) AS sort_order
+    FROM form_questions
+    WHERE id_formulario = 138
+      AND id_question_type = 7
+      AND deleted_at IS NULL
+    ORDER BY sort_order ASC, id ASC
+");
+$stmtPQ->execute();
+$resPQ = $stmtPQ->get_result();
+while ($row = $resPQ->fetch_assoc()) {
+    $photoQuestions[(int)$row['id']] = [
+        'text'       => trim((string)$row['question_text']),
+        'sort_order' => (int)$row['sort_order'],
+    ];
+}
+$stmtPQ->close();
+
+$photoRows = []; // [uid][date][grupo] => ['visita_id','tipo','primera_hora','ultima_hora','photos'=>[qid=>[]]]
 
 $stmtF = $conn->prepare("
     SELECT
         m.id_usuario,
-        DATE(m.created_at)  AS fecha_foto,
+        COALESCE(r.visita_id, 0) AS visita_id,
+        DATE(m.created_at)       AS fecha_foto,
         m.foto_url,
-        m.created_at        AS hora_foto
+        m.created_at             AS hora_foto,
+        r.id_form_question,
+        fq.question_text,
+        COALESCE(fq.sort_order, 0) AS sort_order
     FROM form_question_photo_meta m
     JOIN form_question_responses r ON r.id  = m.resp_id
     JOIN form_questions fq         ON fq.id = r.id_form_question
@@ -388,20 +436,104 @@ $stmtF = $conn->prepare("
       AND u.id_empresa = ?
       AND u.activo     = 1
       AND u.id        <> 50
-    ORDER BY m.id_usuario, fecha_foto, m.created_at
+    ORDER BY m.id_usuario, fecha_foto, visita_id, fq.sort_order, m.created_at
 ");
 $stmtF->bind_param('ssi', $startDt, $endDt, $empresa_id);
 $stmtF->execute();
 $resF = $stmtF->get_result();
 while ($row = $resF->fetch_assoc()) {
-    $uid  = (int)$row['id_usuario'];
-    $date = (string)$row['fecha_foto'];
-    $photoRows[$uid][$date][] = [
+    $uid      = (int)$row['id_usuario'];
+    $date     = (string)$row['fecha_foto'];
+    $visitaId = (int)$row['visita_id'];
+    $hora     = (string)$row['hora_foto'];
+    $qid      = (int)$row['id_form_question'];
+    $slotKey  = slotKeyFromDateTime($hora);
+
+    if (!isset($photoQuestions[$qid])) {
+        $photoQuestions[$qid] = [
+            'text'       => trim((string)$row['question_text']) ?: ('Pregunta #' . $qid),
+            'sort_order' => (int)$row['sort_order'],
+        ];
+    }
+
+    /*
+     * Agrupación de la hoja de fotos:
+     * - Si existe visita_id, se usa como agrupador principal.
+     * - Si visita_id viene en 0, se separa por bloque horario: entrada (<12) / salida (>=12).
+     * Esto evita mezclar fotos de entrada y salida en la misma fila.
+     */
+    $groupKey = $visitaId > 0 ? ('v' . $visitaId) : ('slot_' . $slotKey);
+
+    if (!isset($photoRows[$uid][$date][$groupKey])) {
+        $photoRows[$uid][$date][$groupKey] = [
+            'visita_id'    => $visitaId,
+            'tipo'         => slotFromDateTime($hora),
+            'primera_hora' => $hora,
+            'ultima_hora'  => $hora,
+            'sort_ts'      => strtotime($hora) ?: 0,
+            'photos'       => [],
+        ];
+    }
+
+    if (strtotime($hora) < strtotime($photoRows[$uid][$date][$groupKey]['primera_hora'])) {
+        $photoRows[$uid][$date][$groupKey]['primera_hora'] = $hora;
+        $photoRows[$uid][$date][$groupKey]['tipo'] = slotFromDateTime($hora);
+        $photoRows[$uid][$date][$groupKey]['sort_ts'] = strtotime($hora) ?: 0;
+    }
+    if (strtotime($hora) > strtotime($photoRows[$uid][$date][$groupKey]['ultima_hora'])) {
+        $photoRows[$uid][$date][$groupKey]['ultima_hora'] = $hora;
+    }
+
+    $photoRows[$uid][$date][$groupKey]['photos'][$qid][] = [
         'url'  => (string)$row['foto_url'],
-        'hora' => (string)$row['hora_foto'],
+        'hora' => $hora,
     ];
 }
 $stmtF->close();
+
+uasort($photoQuestions, static function ($a, $b) {
+    return ($a['sort_order'] <=> $b['sort_order']) ?: strcmp($a['text'], $b['text']);
+});
+
+/* ─────────────────────────────────────────────────────────────
+ * Query 6: Vehículos activos asignados a ejecutores
+ * Se cruza por vehiculo.id_merchan = usuario.id = form_question_responses.id_usuario.
+ * ───────────────────────────────────────────────────────────── */
+$vehiclePatentes = []; // [id_merchan][patente] = true
+$vehicleModelos  = []; // [id_merchan][modelo] = true
+$vehicleInfo     = []; // [id_merchan] => ['patente'=>..., 'modelo'=>...]
+
+$stmtV = $conn->prepare("
+    SELECT
+        v.id_merchan,
+        v.patente,
+        v.modelo
+    FROM vehiculo v
+    WHERE v.id_empresa = ?
+      AND v.estado = 1
+      AND v.deleted_at IS NULL
+      AND v.id_merchan IS NOT NULL
+    ORDER BY v.id_merchan ASC, v.updated_at DESC, v.id DESC
+");
+$stmtV->bind_param('i', $empresa_id);
+$stmtV->execute();
+$resV = $stmtV->get_result();
+while ($row = $resV->fetch_assoc()) {
+    $mid = (int)$row['id_merchan'];
+    $pat = trim((string)($row['patente'] ?? '')) ?: '—';
+    $mod = trim((string)($row['modelo'] ?? '')) ?: '—';
+
+    $vehiclePatentes[$mid][$pat] = true;
+    $vehicleModelos[$mid][$mod]  = true;
+}
+$stmtV->close();
+
+foreach ($vehiclePatentes as $mid => $patentes) {
+    $vehicleInfo[$mid] = [
+        'patente' => implode(' / ', array_keys($patentes)),
+        'modelo'  => implode(' / ', array_keys($vehicleModelos[$mid] ?? ['—' => true])),
+    ];
+}
 
 $conn->close();
 
@@ -543,6 +675,35 @@ function resolveDrawingPath(string $fotoUrl): ?string
     return $absPath;
 }
 
+function addPhotoDrawing(Worksheet $ws, string $cell, string $fotoUrl,
+                         string $name, int $index, array &$tmpFiles): bool
+{
+    $drawPath = resolveDrawingPath($fotoUrl);
+    if ($drawPath === null) {
+        return false;
+    }
+
+    $absOriginal = $_SERVER['DOCUMENT_ROOT'] . $fotoUrl;
+    if ($drawPath !== $absOriginal) {
+        $tmpFiles[] = $drawPath;
+    }
+
+    try {
+        $drawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+        $drawing->setName($name . '_' . $index);
+        $drawing->setPath($drawPath);
+        $drawing->setCoordinates($cell);
+        $drawing->setOffsetX(4);
+        $drawing->setOffsetY(4 + ($index * 98));
+        $drawing->setWidth(120);
+        $drawing->setHeight(90);
+        $drawing->setWorksheet($ws);
+        return true;
+    } catch (\Throwable $e) {
+        return false;
+    }
+}
+
 /* ─────────────────────────────────────────────────────────────
  * Crear libro
  * ───────────────────────────────────────────────────────────── */
@@ -561,9 +722,10 @@ $title = 'INFORME ESTATUS VEHÍCULO — ' . $modoTitleLabel . ' — ' . fmtDate(
  * ═════════════════════════════════════════════════════════════ */
 $ws1 = $spreadsheet->getActiveSheet();
 $ws1->setTitle('Resumen');
+$ws1LastLetter = 'L';
 
 /* Cabecera informativa */
-$ws1->mergeCells('A1:H1');
+$ws1->mergeCells('A1:' . $ws1LastLetter . '1');
 setVal($ws1, 1, 1, $title);
 $ws1->getStyle('A1')->applyFromArray([
     'font'      => ['bold' => true, 'size' => 14, 'color' => ['argb' => 'FFFFFFFF']],
@@ -573,7 +735,7 @@ $ws1->getStyle('A1')->applyFromArray([
 ]);
 $ws1->getRowDimension(1)->setRowHeight(28);
 
-$ws1->mergeCells('A2:H2');
+$ws1->mergeCells('A2:' . $ws1LastLetter . '2');
 $modoDescripcion = $modo === 'diario' ? 'Diario (2 subidas/día hábil)' : 'Clásico (lun mañana + vie tarde)';
 setStr($ws1, 1, 2, 'Período: ' . fmtDate($start_date) . ' → ' . fmtDate($end_date)
     . '    |    Generado: ' . $now
@@ -588,7 +750,7 @@ $ws1->getStyle('A2')->applyFromArray([
 ]);
 
 if (!empty($feriados)) {
-    $ws1->mergeCells('A3:H3');
+    $ws1->mergeCells('A3:' . $ws1LastLetter . '3');
     setStr($ws1, 1, 3, 'Feriados marcados: ' . implode(', ', array_map('fmtDate', $feriados)));
     $ws1->getStyle('A3')->applyFromArray([
         'font'      => ['size' => 9, 'italic' => true, 'color' => ['argb' => 'FF8B4513']],
@@ -602,38 +764,45 @@ if (!empty($feriados)) {
 }
 
 /* Encabezados de tabla */
-$hdr1 = ['Usuario', 'Nombre completo', 'Email',
+$hdr1 = ['Usuario', 'RUT ejecutor', 'Nombre completo', 'Email',
+          'Patente', 'Modelo vehículo', 'División',
           'Subidas esperadas', 'Subidas realizadas', 'Subidas pendientes',
           '% Cumplimiento', 'Con duplicados'];
 $hdrRow1 = $dataStartRow1;
 foreach ($hdr1 as $i => $h) {
     setVal($ws1, $i + 1, $hdrRow1, $h);
 }
-applyHeaderStyle($ws1, 'A' . $hdrRow1 . ':H' . $hdrRow1);
+applyHeaderStyle($ws1, 'A' . $hdrRow1 . ':' . $ws1LastLetter . $hdrRow1);
 $ws1->getRowDimension($hdrRow1)->setRowHeight(22);
 
 /* Datos */
 $r = $hdrRow1 + 1;
 foreach ($userStats as $uid => $stats) {
     $udata = $users[$uid];
-    setStr($ws1, 1, $r, $udata['usuario']);
-    setStr($ws1, 2, $r, $udata['nombre_completo']);
-    setStr($ws1, 3, $r, $udata['email']);
-    setVal($ws1, 4, $r, $stats['expected']);
-    setVal($ws1, 5, $r, $stats['complied']);
-    setVal($ws1, 6, $r, $stats['missed']);
-    $ws1->setCellValue(cellRef(7, $r), $stats['pct'] / 100);
-    $ws1->getStyle(cellRef(7, $r))->getNumberFormat()
-        ->setFormatCode('0.0%');
-    setStr($ws1, 8, $r, $stats['has_dups'] ? 'Sí' : 'No');
+    $vdata = $vehicleInfo[$uid] ?? ['patente' => '—', 'modelo' => '—'];
 
-    applyDataBorders($ws1, 'A' . $r . ':H' . $r);
+    setStr($ws1, 1, $r, $udata['usuario']);
+    setStr($ws1, 2, $r, $udata['rut'] ?: '—');
+    setStr($ws1, 3, $r, $udata['nombre_completo']);
+    setStr($ws1, 4, $r, $udata['email']);
+    setStr($ws1, 5, $r, $vdata['patente']);
+    setStr($ws1, 6, $r, $vdata['modelo']);
+    setStr($ws1, 7, $r, $udata['division'] ?? '—');
+    setVal($ws1, 8, $r, $stats['expected']);
+    setVal($ws1, 9, $r, $stats['complied']);
+    setVal($ws1, 10, $r, $stats['missed']);
+    $ws1->setCellValue(cellRef(11, $r), $stats['pct'] / 100);
+    $ws1->getStyle(cellRef(11, $r))->getNumberFormat()
+        ->setFormatCode('0.0%');
+    setStr($ws1, 12, $r, $stats['has_dups'] ? 'Sí' : 'No');
+
+    applyDataBorders($ws1, 'A' . $r . ':' . $ws1LastLetter . $r);
 
     [$bg, $fg] = complianceColors($stats['pct']);
-    applyRowColor($ws1, 'G' . $r . ':G' . $r, $bg, $fg);
+    applyRowColor($ws1, 'K' . $r . ':K' . $r, $bg, $fg);
 
     if ($stats['has_dups']) {
-        $ws1->getStyle('H' . $r)->applyFromArray([
+        $ws1->getStyle('L' . $r)->applyFromArray([
             'font' => ['bold' => true, 'color' => ['argb' => 'FF9C0006']],
         ]);
     }
@@ -642,9 +811,10 @@ foreach ($userStats as $uid => $stats) {
 }
 
 /* Anchos columna Hoja 1 */
-foreach (['A' => 18, 'B' => 28, 'C' => 28,
-          'D' => 15, 'E' => 15, 'F' => 16,
-          'G' => 16, 'H' => 14] as $col => $w) {
+foreach (['A' => 18, 'B' => 14, 'C' => 28, 'D' => 28,
+          'E' => 18, 'F' => 24, 'G' => 22,
+          'H' => 15, 'I' => 15, 'J' => 16,
+          'K' => 16, 'L' => 14] as $col => $w) {
     $ws1->getColumnDimension($col)->setWidth($w);
 }
 $ws1->freezePane('A' . ($hdrRow1 + 1));
@@ -689,7 +859,7 @@ if ($modo === 'diario') {
 }
 
 /* Título */
-$totalCols2 = count($matrixCols) + 4; // A=Usuario, B=Nombre, C=División, ...días..., last=%
+$totalCols2 = count($matrixCols) + 7; // 6 fijas + días + %
 $lastColLetter2 = Coordinate::stringFromColumnIndex($totalCols2);
 $ws2->mergeCells('A1:' . $lastColLetter2 . '1');
 setVal($ws2, 1, 1, $title);
@@ -704,9 +874,12 @@ $ws2->getRowDimension(1)->setRowHeight(26);
 /* Encabezados */
 $hdrRow2 = 3;
 setVal($ws2, 1, $hdrRow2, 'Usuario');
-setVal($ws2, 2, $hdrRow2, 'Nombre');
-setVal($ws2, 3, $hdrRow2, 'División');
-$col2 = 4;
+setVal($ws2, 2, $hdrRow2, 'RUT ejecutor');
+setVal($ws2, 3, $hdrRow2, 'Nombre');
+setVal($ws2, 4, $hdrRow2, 'Patente');
+setVal($ws2, 5, $hdrRow2, 'Modelo vehículo');
+setVal($ws2, 6, $hdrRow2, 'División');
+$col2 = 7;
 foreach ($matrixCols as $mc) {
     setVal($ws2, $col2, $hdrRow2, $mc['label']);
     $ws2->getRowDimension($hdrRow2)->setRowHeight(30);
@@ -719,11 +892,16 @@ applyHeaderStyle($ws2, 'A' . $hdrRow2 . ':' . Coordinate::stringFromColumnIndex(
 $r2 = $hdrRow2 + 1;
 foreach ($userStats as $uid => $stats) {
     $udata = $users[$uid];
-    setStr($ws2, 1, $r2, $udata['usuario']);
-    setStr($ws2, 2, $r2, $udata['nombre_completo']);
-    setStr($ws2, 3, $r2, $udata['division'] ?? '—');
+    $vdata = $vehicleInfo[$uid] ?? ['patente' => '—', 'modelo' => '—'];
 
-    $col2 = 4;
+    setStr($ws2, 1, $r2, $udata['usuario']);
+    setStr($ws2, 2, $r2, $udata['rut'] ?: '—');
+    setStr($ws2, 3, $r2, $udata['nombre_completo']);
+    setStr($ws2, 4, $r2, $vdata['patente']);
+    setStr($ws2, 5, $r2, $vdata['modelo']);
+    setStr($ws2, 6, $r2, $udata['division'] ?? '—');
+
+    $col2 = 7;
     foreach ($matrixCols as $mc) {
         if ($modo === 'diario') {
             $complied_cell = false;
@@ -770,18 +948,21 @@ foreach ($userStats as $uid => $stats) {
         ->setHorizontal(Alignment::HORIZONTAL_CENTER);
     applyDataBorders($ws2, $pctCell);
 
-    applyDataBorders($ws2, 'A' . $r2 . ':C' . $r2);
+    applyDataBorders($ws2, 'A' . $r2 . ':F' . $r2);
     $r2++;
 }
 
 /* Anchos Hoja 2 */
 $ws2->getColumnDimension('A')->setWidth(18);
-$ws2->getColumnDimension('B')->setWidth(26);
-$ws2->getColumnDimension('C')->setWidth(22);
-for ($c = 4; $c <= $col2; $c++) {
+$ws2->getColumnDimension('B')->setWidth(14);
+$ws2->getColumnDimension('C')->setWidth(26);
+$ws2->getColumnDimension('D')->setWidth(18);
+$ws2->getColumnDimension('E')->setWidth(24);
+$ws2->getColumnDimension('F')->setWidth(22);
+for ($c = 7; $c <= $col2; $c++) {
     $ws2->getColumnDimension(Coordinate::stringFromColumnIndex($c))->setWidth(11);
 }
-$ws2->freezePane('D' . ($hdrRow2 + 1));
+$ws2->freezePane('G' . ($hdrRow2 + 1));
 
 /* ═════════════════════════════════════════════════════════════
  * HOJA 3 — DETALLE DE SUBIDAS
@@ -790,8 +971,8 @@ $ws3 = $spreadsheet->createSheet()->setTitle('Detalle Subidas');
 /** @var Worksheet $ws3 */
 $ws3 = $spreadsheet->getSheetByName('Detalle Subidas');
 
-/* Calcular número total de columnas en Hoja 3 (9 fijas + extra por cada pregunta) */
-$ws3TotalCols  = 9 + count($nonPhotoQuestions);
+/* Calcular número total de columnas en Hoja 3 (13 fijas + extra por cada pregunta) */
+$ws3TotalCols  = 13 + count($nonPhotoQuestions);
 $ws3LastLetter = Coordinate::stringFromColumnIndex($ws3TotalCols);
 
 $ws3->mergeCells('A1:' . $ws3LastLetter . '1');
@@ -804,7 +985,8 @@ $ws3->getStyle('A1')->applyFromArray([
 ]);
 $ws3->getRowDimension(1)->setRowHeight(26);
 
-$hdr3 = ['Usuario', 'Nombre', 'Fecha', 'Día semana',
+$hdr3 = ['Usuario', 'RUT ejecutor', 'Nombre', 'Fecha', 'Día semana',
+          'Patente', 'Modelo vehículo', 'División',
           'Primera subida', 'Última subida',
           '# Fotos', '¿Día esperado?', 'Tipo'];
 foreach ($nonPhotoQuestions as $qdef) {
@@ -816,34 +998,39 @@ foreach ($hdr3 as $i => $h) {
     setVal($ws3, $i + 1, $hdrRow3, $h);
 }
 applyHeaderStyle($ws3, 'A' . $hdrRow3 . ':' . $ws3LastLetter . $hdrRow3);
-$ws3->getRowDimension($hdrRow3)->setRowHeight(20);
+$ws3->getRowDimension($hdrRow3)->setRowHeight(24);
 
 $r3 = $hdrRow3 + 1;
 foreach ($allUploadRows as $urow) {
-    $uid   = $urow['id_usuario'];
+    $uid = $urow['id_usuario'];
     if (!isset($users[$uid])) continue;
     $date  = $urow['fecha'];
     $udata = $users[$uid];
+    $vdata = $vehicleInfo[$uid] ?? ['patente' => '—', 'modelo' => '—'];
 
-    $d     = new DateTime($date);
-    $dowN  = (int)$d->format('N');
+    $d       = new DateTime($date);
+    $dowN    = (int)$d->format('N');
     $dayName = $ES_DAYS[$dowN] ?? '?';
 
     $isExpected = isset($expectedMap[$date]);
     $tipos      = $isExpected ? implode(' y ', $expectedMap[$date]) : '';
 
     setStr($ws3, 1, $r3, $udata['usuario']);
-    setStr($ws3, 2, $r3, $udata['nombre_completo']);
-    setStr($ws3, 3, $r3, fmtDate($date));
-    setStr($ws3, 4, $r3, $dayName);
-    setStr($ws3, 5, $r3, fmtDateTime($urow['primera_hora']));
-    setStr($ws3, 6, $r3, fmtDateTime($urow['ultima_hora']));
-    setVal($ws3, 7, $r3, $urow['total_fotos']);
-    setStr($ws3, 8, $r3, $isExpected ? 'Sí' : 'No');
-    setStr($ws3, 9, $r3, $tipos ?: '—');
+    setStr($ws3, 2, $r3, $udata['rut'] ?: '—');
+    setStr($ws3, 3, $r3, $udata['nombre_completo']);
+    setStr($ws3, 4, $r3, fmtDate($date));
+    setStr($ws3, 5, $r3, $dayName);
+    setStr($ws3, 6, $r3, $vdata['patente']);
+    setStr($ws3, 7, $r3, $vdata['modelo']);
+    setStr($ws3, 8, $r3, $udata['division'] ?? '—');
+    setStr($ws3, 9, $r3, fmtDateTime($urow['primera_hora']));
+    setStr($ws3, 10, $r3, fmtDateTime($urow['ultima_hora']));
+    setVal($ws3, 11, $r3, $urow['total_fotos']);
+    setStr($ws3, 12, $r3, $isExpected ? 'Sí' : 'No');
+    setStr($ws3, 13, $r3, $tipos ?: '—');
 
     /* Columnas extra: respuestas texto/numéricas */
-    $extraCol = 10;
+    $extraCol = 14;
     foreach ($nonPhotoQuestions as $qid => $qdef) {
         $ans = $textNumAnswers[$uid][$date][$qid] ?? null;
         if ($ans === null) {
@@ -884,13 +1071,14 @@ if ($r3 === $hdrRow3 + 1) {
         ->setHorizontal(Alignment::HORIZONTAL_CENTER);
 }
 
-foreach (['A' => 18, 'B' => 26, 'C' => 12, 'D' => 12,
-          'E' => 18, 'F' => 18, 'G' => 9,
-          'H' => 14, 'I' => 14] as $col => $w) {
+foreach (['A' => 18, 'B' => 14, 'C' => 26, 'D' => 12, 'E' => 12,
+          'F' => 18, 'G' => 24, 'H' => 22,
+          'I' => 18, 'J' => 18, 'K' => 9,
+          'L' => 14, 'M' => 14] as $col => $w) {
     $ws3->getColumnDimension($col)->setWidth($w);
 }
 /* Anchos para columnas de preguntas extra */
-for ($c = 10; $c <= $ws3TotalCols; $c++) {
+for ($c = 14; $c <= $ws3TotalCols; $c++) {
     $ws3->getColumnDimension(Coordinate::stringFromColumnIndex($c))->setWidth(22);
 }
 $ws3->freezePane('A' . ($hdrRow3 + 1));
@@ -965,8 +1153,12 @@ $ws5 = $spreadsheet->createSheet()->setTitle('Fotos Vehículo');
 /** @var Worksheet $ws5 */
 $ws5 = $spreadsheet->getSheetByName('Fotos Vehículo');
 
-$ws5->mergeCells('A1:F1');
-setVal($ws5, 1, 1, $title . ' — Fotos Vehículo');
+$fixedCols5 = 11;
+$ws5TotalCols = $fixedCols5 + count($photoQuestions);
+$ws5LastLetter = Coordinate::stringFromColumnIndex(max(1, $ws5TotalCols));
+
+$ws5->mergeCells('A1:' . $ws5LastLetter . '1');
+setVal($ws5, 1, 1, $title . ' — Fotos Vehículo por Pregunta');
 $ws5->getStyle('A1')->applyFromArray([
     'font'      => ['bold' => true, 'size' => 13, 'color' => ['argb' => 'FFFFFFFF']],
     'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF217346']],
@@ -975,13 +1167,22 @@ $ws5->getStyle('A1')->applyFromArray([
 ]);
 $ws5->getRowDimension(1)->setRowHeight(26);
 
-$hdr5    = ['Usuario', 'Nombre', 'Fecha', 'Día', 'Hora subida', 'Foto'];
+$hdr5 = ['Usuario', 'RUT ejecutor', 'Nombre', 'Fecha', 'Patente',
+          'Modelo vehículo', 'Kilometraje', 'División', 'Día', 'Tipo', 'Rango subida'];
+$qColMap = [];
+$col5 = $fixedCols5 + 1;
+foreach ($photoQuestions as $qid => $qdef) {
+    $hdr5[] = $qdef['text'];
+    $qColMap[$qid] = $col5;
+    $col5++;
+}
+
 $hdrRow5 = 3;
 foreach ($hdr5 as $i => $h) {
     setVal($ws5, $i + 1, $hdrRow5, $h);
 }
-applyHeaderStyle($ws5, 'A' . $hdrRow5 . ':F' . $hdrRow5);
-$ws5->getRowDimension($hdrRow5)->setRowHeight(22);
+applyHeaderStyle($ws5, 'A' . $hdrRow5 . ':' . $ws5LastLetter . $hdrRow5);
+$ws5->getRowDimension($hdrRow5)->setRowHeight(34);
 
 $r5       = $hdrRow5 + 1;
 $tmpFiles = [];
@@ -990,58 +1191,103 @@ foreach ($users as $uid => $udata) {
     if (empty($photoRows[$uid])) {
         continue;
     }
-    foreach ($photoRows[$uid] as $date => $fotos) {
-        foreach ($fotos as $foto) {
+
+    ksort($photoRows[$uid]);
+    foreach ($photoRows[$uid] as $date => $groups) {
+        uasort($groups, static function ($a, $b) {
+            return ($a['sort_ts'] ?? 0) <=> ($b['sort_ts'] ?? 0);
+        });
+
+        foreach ($groups as $group) {
+            $vdata   = $vehicleInfo[$uid] ?? ['patente' => '—', 'modelo' => '—'];
             $d       = new DateTime($date);
             $dowName = $ES_DAYS[(int)$d->format('N')] ?? '?';
-
-            setStr($ws5, 1, $r5, $udata['usuario']);
-            setStr($ws5, 2, $r5, $udata['nombre_completo']);
-            setStr($ws5, 3, $r5, fmtDate($date));
-            setStr($ws5, 4, $r5, $dowName);
-            setStr($ws5, 5, $r5, fmtDateTime($foto['hora']));
-
-            $drawPath = resolveDrawingPath($foto['url']);
-            if ($drawPath !== null) {
-                $absOriginal = $_SERVER['DOCUMENT_ROOT'] . $foto['url'];
-                if ($drawPath !== $absOriginal) {
-                    $tmpFiles[] = $drawPath;
+            $rango   = fmtDateTime($group['primera_hora']) . ' → ' . fmtDateTime($group['ultima_hora']);
+            $kilometraje = '—';
+            foreach ($nonPhotoQuestions as $kqid => $kqdef) {
+                if (stripos($kqdef['text'], 'kilometraje') === false) {
+                    continue;
                 }
-                try {
-                    $drawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
-                    $drawing->setName('foto_' . $uid . '_' . $r5);
-                    $drawing->setPath($drawPath);
-                    $drawing->setCoordinates('F' . $r5);
-                    $drawing->setOffsetX(4);
-                    $drawing->setOffsetY(4);
-                    $drawing->setWidth(140);
-                    $drawing->setHeight(105);
-                    $drawing->setWorksheet($ws5);
-                } catch (\Throwable $e) {
-                    setStr($ws5, 6, $r5, '(error imagen)');
+                $ansKm = $textNumAnswers[$uid][$date][$kqid] ?? null;
+                if ($ansKm === null) {
+                    continue;
                 }
-            } else {
-                setStr($ws5, 6, $r5, '(sin foto)');
+                $txtKm = trim((string)($ansKm['answer_text'] ?? ''));
+                if ($txtKm !== '') {
+                    $kilometraje = $txtKm;
+                    break;
+                }
+                if ($ansKm['valor'] !== null && (float)$ansKm['valor'] !== 0.0) {
+                    $kilometraje = (string)$ansKm['valor'];
+                    break;
+                }
             }
 
-            applyDataBorders($ws5, 'A' . $r5 . ':F' . $r5);
-            $ws5->getRowDimension($r5)->setRowHeight(82);
+            setStr($ws5, 1, $r5, $udata['usuario']);
+            setStr($ws5, 2, $r5, $udata['rut'] ?: '—');
+            setStr($ws5, 3, $r5, $udata['nombre_completo']);
+            setStr($ws5, 4, $r5, fmtDate($date));
+            setStr($ws5, 5, $r5, $vdata['patente']);
+            setStr($ws5, 6, $r5, $vdata['modelo']);
+            setStr($ws5, 7, $r5, $kilometraje);
+            setStr($ws5, 8, $r5, $udata['division'] ?? '—');
+            setStr($ws5, 9, $r5, $dowName);
+            setStr($ws5, 10, $r5, $group['tipo'] ?: '—');
+            setStr($ws5, 11, $r5, $rango);
+
+            $maxFotosInRow = 1;
+            foreach ($photoQuestions as $qid => $_qdef) {
+                $targetCol = $qColMap[$qid];
+                $cell      = cellRef($targetCol, $r5);
+                $fotos     = $group['photos'][$qid] ?? [];
+
+                if (empty($fotos)) {
+                    setStr($ws5, $targetCol, $r5, '—');
+                    continue;
+                }
+
+                $maxFotosInRow = max($maxFotosInRow, count($fotos));
+                setStr($ws5, $targetCol, $r5, count($fotos) > 1 ? count($fotos) . ' fotos' : '');
+
+                $idx = 0;
+                foreach ($fotos as $foto) {
+                    $ok = addPhotoDrawing(
+                        $ws5,
+                        $cell,
+                        $foto['url'],
+                        'foto_' . $uid . '_' . $r5 . '_' . $qid,
+                        $idx,
+                        $tmpFiles
+                    );
+                    if (!$ok && $idx === 0) {
+                        setStr($ws5, $targetCol, $r5, '(sin foto)');
+                    }
+                    $idx++;
+                }
+            }
+
+            applyDataBorders($ws5, 'A' . $r5 . ':' . $ws5LastLetter . $r5);
+            $ws5->getRowDimension($r5)->setRowHeight(max(82, $maxFotosInRow * 74));
             $r5++;
         }
     }
 }
 
 if ($r5 === $hdrRow5 + 1) {
-    $ws5->mergeCells('A' . $r5 . ':F' . $r5);
+    $ws5->mergeCells('A' . $r5 . ':' . $ws5LastLetter . $r5);
     setVal($ws5, 1, $r5, 'Sin fotos registradas en el período.');
     $ws5->getStyle('A' . $r5)->getAlignment()
         ->setHorizontal(Alignment::HORIZONTAL_CENTER);
 }
 
-foreach (['A' => 18, 'B' => 26, 'C' => 12, 'D' => 12, 'E' => 18, 'F' => 22] as $col => $w) {
+foreach (['A' => 18, 'B' => 14, 'C' => 26, 'D' => 12, 'E' => 18,
+          'F' => 24, 'G' => 14, 'H' => 22, 'I' => 12, 'J' => 12, 'K' => 35] as $col => $w) {
     $ws5->getColumnDimension($col)->setWidth($w);
 }
-$ws5->freezePane('A' . ($hdrRow5 + 1));
+for ($c = $fixedCols5 + 1; $c <= $ws5TotalCols; $c++) {
+    $ws5->getColumnDimension(Coordinate::stringFromColumnIndex($c))->setWidth(24);
+}
+$ws5->freezePane(Coordinate::stringFromColumnIndex($fixedCols5 + 1) . ($hdrRow5 + 1));
 
 /* ─────────────────────────────────────────────────────────────
  * Activar primera hoja y descargar

@@ -302,6 +302,55 @@ if ($division_id > 0) {
     font-size: 12px;
     font-weight: 750;
 }
+
+/* =========================================================
+   AJUSTE HOME IFRAME SIN MARCO BLANCO INFERIOR
+========================================================= */
+
+html,
+body {
+    height: 100%;
+}
+
+body.layout-fixed {
+    overflow: hidden;
+}
+
+.content-wrapper.iframe-mode {
+    padding: 0 !important;
+    margin-bottom: 0 !important;
+    overflow: hidden !important;
+    background: #eef7ff !important;
+}
+
+.content-wrapper.iframe-mode > .nav {
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    overflow: hidden !important;
+}
+
+.content-wrapper.iframe-mode .tab-content,
+.content-wrapper.iframe-mode .tab-pane {
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    background: #eef7ff !important;
+}
+
+.content-wrapper.iframe-mode .tab-pane iframe {
+    width: 100% !important;
+    border: 0 !important;
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #eef7ff !important;
+}
   </style>
 </head>
 <body class="hold-transition sidebar-mini layout-fixed" data-panel-auto-height-mode="height">
@@ -1262,15 +1311,21 @@ if ($division_id > 0) {
               <li class="nav-item">
                 <a href="modulos/mod_panel/mod_panel.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
-                  <p>Panel Merchan</p>
+                  <p>Merchan</p>
                 </a>
               </li>
               <li class="nav-item">
                 <a href="modulos/mod_panel/mod_panel_campanas.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
-                  <p>Panel Campaña</p>
+                  <p>Campaña/Actividades</p>
                 </a>
-              </li>              
+              </li>
+              <li class="nav-item">
+                <a href="modulos/mod_recepcion_materiales.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Recepción de Materiales</p>
+                </a>
+              </li>
             </ul>
           </li>
           
@@ -1448,7 +1503,7 @@ if ($division_id > 0) {
 
   <!-- Content Wrapper. Contains page content -->
   <div class="content-wrapper iframe-mode" data-widget="iframe" data-loading-screen="750">
-    <div class="nav navbar navbar-expand navbar-white navbar-light border-bottom p-0">
+    <div class="nav navbar navbar-expand navbar-white navbar-light border-bottom p-0" style="display:none;">
       <div class="nav-item dropdown">
         <a class="nav-link bg-danger dropdown-toggle" data-toggle="dropdown" href="#" role="button" aria-haspopup="true" aria-expanded="false">Close</a>
         <div class="dropdown-menu mt-0">
@@ -1462,16 +1517,16 @@ if ($division_id > 0) {
       <a class="nav-link bg-light" href="#" data-widget="iframe-fullscreen"><i class="fas fa-expand"></i></a>
     </div>
     <div class="tab-content">
-      <div class="tab-empty" style="height: 574.8px; display: none;">
+      <div class="tab-empty" style="display: none;">
         <h2 class="display-4">No tab selected!</h2>
       </div>
-      <div class="tab-loading" style="height: 574.8px; display: none;">
+      <div class="tab-loading" style="display: none;">
         <div>
           <h2 class="display-4">Tab is loading <i class="fa fa-sync fa-spin"></i></h2>
         </div>
       </div>
       <div class="tab-pane fade active show" id="panel-index2-html" role="tabpanel" aria-labelledby="tab-index2-html">
-        <iframe src="./ui_dashboard2.php" style="height: 300.6px;"></iframe>
+        <iframe src="./ui_dashboard2.php"></iframe>
       </div>
     </div>
   </div>
@@ -1623,18 +1678,18 @@ if ($division_id > 0) {
   </div>
 </div>  
   <!-- /.content-wrapper -->
-  <footer class="main-footer">
+  <!--footer class="main-footer">
     <strong>Copyright &copy; 2014-2024 
       <a href="https://mentecreativa.cl/">Visibility</a>.
     </strong> Todos los derechos reservados.
     <div class="float-right d-none d-sm-inline-block">
       <b>Version</b> 3
     </div>
-  </footer>
+  </footer-->
   <!-- Control Sidebar -->
-  <aside class="control-sidebar control-sidebar-dark">
+  <!--aside class="control-sidebar control-sidebar-dark">
     <!-- Contenido del sidebar de control -->
-  </aside>
+  </aside-->
   <!-- /.control-sidebar -->
 </div>
 <!-- ./wrapper -->
@@ -2211,7 +2266,44 @@ $(document).ready(function() {
 });
 </script>
 <script>
-    
+function ajustarIframeHome() {
+    const header = document.querySelector('.main-header');
+    const headerH = header ? Math.ceil(header.getBoundingClientRect().height) : 57;
+
+    const altoDisponible = window.innerHeight - headerH;
+
+    const elementos = document.querySelectorAll(
+        '.content-wrapper.iframe-mode, ' +
+        '.content-wrapper.iframe-mode .tab-content, ' +
+        '.content-wrapper.iframe-mode .tab-pane, ' +
+        '.content-wrapper.iframe-mode .tab-pane iframe, ' +
+        '.content-wrapper.iframe-mode .tab-empty, ' +
+        '.content-wrapper.iframe-mode .tab-loading'
+    );
+
+    elementos.forEach(function (el) {
+        el.style.setProperty('height', altoDisponible + 'px', 'important');
+        el.style.setProperty('min-height', altoDisponible + 'px', 'important');
+        el.style.setProperty('max-height', altoDisponible + 'px', 'important');
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    ajustarIframeHome();
+
+    setTimeout(ajustarIframeHome, 300);
+    setTimeout(ajustarIframeHome, 800);
+    setTimeout(ajustarIframeHome, 1500);
+});
+
+window.addEventListener('load', ajustarIframeHome);
+window.addEventListener('resize', ajustarIframeHome);
+
+if (window.jQuery) {
+    $(document).on('collapsed.lte.pushmenu shown.lte.pushmenu', function () {
+        setTimeout(ajustarIframeHome, 250);
+    });
+}
 </script>
 </body>
 </html>

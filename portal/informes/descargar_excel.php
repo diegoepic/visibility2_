@@ -365,183 +365,78 @@ function normalizarUrlEncuesta(string $url): string
     return $baseUrl . 'visibility2/app/' . $url;
 }
 
-function getEncuestaPivot(mysqli $conn, int $idForm): array
+function dividirRespuestaEncuesta(string $valor): array
 {
-    $allQuestions = [];
+    $valor = trim($valor);
 
-    $qry = "
-        SELECT question_text
-        FROM form_questions
-        WHERE id_formulario = ?
-        ORDER BY sort_order
-    ";
-
-    $stmtQ = $conn->prepare($qry);
-    if (!$stmtQ) {
-        fail('Error preparando preguntas de encuesta: ' . $conn->error);
+    if ($valor === '') {
+        return [''];
     }
 
-    $stmtQ->bind_param('i', $idForm);
-    $stmtQ->execute();
-    $resQ = $stmtQ->get_result();
+    $partes = preg_split('/\s*;\s*/', $valor);
+    $partes = array_values(array_filter(array_map('trim', $partes), static function ($v) {
+        return $v !== '';
+    }));
 
-    while ($rQ = $resQ->fetch_assoc()) {
-        $allQuestions[] = (string)$rQ['question_text'];
+    return !empty($partes) ? $partes : [''];
+}
+
+function expandirEncuestaMultiplesRespuestas(array $encuesta): array
+{
+    if (empty($encuesta)) {
+        return [];
     }
 
-    $stmtQ->close();
+    $columnasBase = [
+        'ID CAMPAÑA',
+        'NOMBRE CAMPAÑA',
+        'CUENTA',
+        'CADENA',
+        'CODIGO LOCAL',
+        'N° LOCAL',
+        'LOCAL',
+        'DIRECCION',
+        'COMUNA',
+        'REGION',
+        'USUARIO',
+        'FECHA VISITA'
+    ];
 
-    $sql = "
-        SELECT
-            f.id AS id_campana,
-            ANY_VALUE(UPPER(f.nombre)) AS nombre_campana,
-            l.codigo AS codigo_local,
-            ANY_VALUE(
-                CASE
-                    WHEN l.nombre REGEXP '^[0-9]+'
-                        THEN SUBSTRING_INDEX(l.nombre, ' ', 1)
-                    ELSE ''
-                END
-            ) AS numero_local,
-            ANY_VALUE(UPPER(l.nombre)) AS nombre_local,
-            ANY_VALUE(UPPER(l.direccion)) AS direccion_local,
-            ANY_VALUE(UPPER(cu.nombre)) AS cuenta,
-            ANY_VALUE(UPPER(ca.nombre)) AS cadena,
-            ANY_VALUE(UPPER(cm.comuna)) AS comuna,
-            ANY_VALUE(UPPER(re.region)) AS region,
-            ANY_VALUE(UPPER(u.usuario)) AS usuario,
-            DATE(fqr.created_at) AS fecha_visita,
-            fp.question_text AS question_text,
-            UPPER(
-                GROUP_CONCAT(
-                    fqr.answer_text
-                    ORDER BY fqr.id
-                    SEPARATOR '; '
-                )
-            ) AS concat_answers,
-            GROUP_CONCAT(
-                CASE WHEN fqr.valor <> '0.00' THEN fqr.valor END
-                ORDER BY fqr.id
-                SEPARATOR '; '
-            ) AS concat_valores
-        FROM formulario f
-        JOIN form_questions fp           ON fp.id_formulario = f.id
-        JOIN form_question_responses fqr ON fqr.id_form_question = fp.id
-        JOIN usuario u                   ON u.id = fqr.id_usuario
-        JOIN local l                     ON l.id = fqr.id_local
-        JOIN cuenta cu                   ON cu.id = l.id_cuenta
-        JOIN cadena ca                   ON ca.id = l.id_cadena
-        JOIN comuna cm                   ON cm.id = l.id_comuna
-        JOIN region re                   ON re.id = cm.id_region
-        WHERE f.id = ?
-        GROUP BY l.codigo, DATE(fqr.created_at), fp.question_text
-        ORDER BY l.codigo ASC, fp.question_text ASC
-    ";
+    $salida = [];
 
-    $stmt = $conn->prepare($sql);
-    if (!$stmt) {
-        fail('Error preparando getEncuestaPivot: ' . $conn->error);
-    }
+    foreach ($encuesta as $fila) {
+        $partesPorColumna = [];
+        $maxFilas = 1;
 
-    $stmt->bind_param('i', $idForm);
-    $stmt->execute();
-    $res = $stmt->get_result();
+        foreach ($fila as $columna => $valor) {
+            if (in_array((string)$columna, $columnasBase, true)) {
+                continue;
+            }
 
-    $grouped = [];
+            $partes = dividirRespuestaEncuesta((string)($valor ?? ''));
+            $partesPorColumna[$columna] = $partes;
 
-    while ($row = $res->fetch_assoc()) {
-        $key = $row['codigo_local'] . '_' . $row['fecha_visita'];
-
-        if (!isset($grouped[$key])) {
-            $grouped[$key] = [
-                'ID CAMPAÑA'     => $row['id_campana'],
-                'NOMBRE CAMPAÑA' => $row['nombre_campana'],
-                'CUENTA'         => $row['cuenta'],
-                'CADENA'         => $row['cadena'],
-                'CODIGO LOCAL'   => $row['codigo_local'],
-                'N° LOCAL'       => $row['numero_local'],
-                'LOCAL'          => $row['nombre_local'],
-                'DIRECCION'      => $row['direccion_local'],
-                'COMUNA'         => $row['comuna'],
-                'REGION'         => $row['region'],
-                'USUARIO'        => $row['usuario'],
-                'FECHA VISITA'   => $row['fecha_visita'],
-                'questions'      => []
-            ];
-        }
-
-        $grouped[$key]['questions'][(string)$row['question_text']] = [
-            'answer' => $row['concat_answers'] ?? '',
-            'valor'  => $row['concat_valores'] ?? ''
-        ];
-    }
-
-    $stmt->close();
-
-    $final = [];
-
-    foreach ($grouped as $g) {
-        $rowOut = [
-            'ID CAMPAÑA'     => $g['ID CAMPAÑA'],
-            'NOMBRE CAMPAÑA' => $g['NOMBRE CAMPAÑA'],
-            'CUENTA'         => $g['CUENTA'],
-            'CADENA'         => $g['CADENA'],
-            'CODIGO LOCAL'   => $g['CODIGO LOCAL'],
-            'N° LOCAL'       => $g['N° LOCAL'],
-            'LOCAL'          => $g['LOCAL'],
-            'DIRECCION'      => $g['DIRECCION'],
-            'COMUNA'         => $g['COMUNA'],
-            'REGION'         => $g['REGION'],
-            'USUARIO'        => $g['USUARIO'],
-            'FECHA VISITA'   => $g['FECHA VISITA']
-        ];
-
-        foreach ($allQuestions as $q) {
-            if (isset($g['questions'][$q])) {
-                $answer = (string)$g['questions'][$q]['answer'];
-                $parts = array_map('trim', explode(';', $answer));
-                $normalizedParts = [];
-
-                foreach ($parts as $part) {
-                    if ($part === '') {
-                        continue;
-                    }
-                    $normalizedParts[] = normalizarUrlEncuesta($part);
-                }
-
-                $rowOut[$q] = implode('; ', $normalizedParts);
-                $rowOut[$q . '_valor'] = (string)$g['questions'][$q]['valor'];
-            } else {
-                $rowOut[$q] = '';
-                $rowOut[$q . '_valor'] = '';
+            if (count($partes) > $maxFilas) {
+                $maxFilas = count($partes);
             }
         }
 
-        $final[] = $rowOut;
-    }
+        for ($i = 0; $i < $maxFilas; $i++) {
+            $nuevaFila = $fila;
 
-    $valorCols = [];
-    foreach ($final as $r) {
-        foreach ($r as $c => $v) {
-            if (strpos((string)$c, '_valor') !== false) {
-                $valorCols[$c] = $valorCols[$c] ?? false;
-                if (trim((string)$v) !== '') {
-                    $valorCols[$c] = true;
+            foreach ($partesPorColumna as $columna => $partes) {
+                if (count($partes) === 1) {
+                    $nuevaFila[$columna] = $partes[0];
+                } else {
+                    $nuevaFila[$columna] = $partes[$i] ?? '';
                 }
             }
+
+            $salida[] = $nuevaFila;
         }
     }
 
-    foreach ($final as &$r) {
-        foreach ($valorCols as $c => $has) {
-            if (!$has) {
-                unset($r[$c]);
-            }
-        }
-    }
-    unset($r);
-
-    return $final;
+    return $salida;
 }
 
 function removerFotosDeEncuesta(array $encuesta): array
@@ -973,6 +868,10 @@ if ($incluirFotosMaterial && !empty($localesDetails)) {
 
 if (!$incluirFotosEncuesta && !empty($encuestaPivot)) {
     $encuestaPivot = removerFotosDeEncuesta($encuestaPivot);
+}
+
+if (!empty($encuestaPivot)) {
+    $encuestaPivot = expandirEncuestaMultiplesRespuestas($encuestaPivot);
 }
 
 if (empty($campaignData) && empty($localesDetails) && empty($encuestaPivot)) {

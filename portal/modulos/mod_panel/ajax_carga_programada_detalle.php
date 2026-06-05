@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 session_start();
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
 
@@ -7,7 +7,7 @@ header('Content-Type: application/json; charset=utf-8');
 if (!isset($_SESSION['usuario_id'])) {
     echo json_encode([
         'ok' => false,
-        'message' => 'Sesión no válida'
+        'message' => 'Sesion no valida'
     ]);
     exit;
 }
@@ -39,13 +39,13 @@ $fecha_hasta = $_GET['fecha_hasta'] ?? '';
 if ($id_ejecutor <= 0) {
     echo json_encode([
         'ok' => false,
-        'message' => 'Ejecutor inválido'
+        'message' => 'Ejecutor invalido'
     ]);
     exit;
 }
 
 /* ======================================================
-   MISMA LÓGICA DEL PANEL
+   MISMA LOGICA DEL PANEL
 ====================================================== */
 $fechaValida = "
     fq.fechaPropuesta IS NOT NULL
@@ -76,7 +76,7 @@ $sql = "
     SELECT
         f.id AS id_formulario,
         COALESCE(f.nombre, 'SIN FORMULARIO') AS formulario,
-        COALESCE(df.nombre, 'SIN DIVISIÓN') AS division_formulario,
+        COALESCE(df.nombre, 'SIN DIVISION') AS division_formulario,
         COALESCE(sf.nombre, '') AS subdivision_formulario,
         DATE(fq.fechaPropuesta) AS fecha_planificada,
 
@@ -168,6 +168,7 @@ $res = $stmt->get_result();
 $map = [];
 $fechasSet = [];
 $totalesPorFecha = [];
+$iwPctMeta = [];
 
 $totalPlanificado = 0;
 
@@ -201,6 +202,159 @@ while ($row = $res->fetch_assoc()) {
 }
 
 $stmt->close();
+
+if ($estado_gestion !== 'activa') {
+    $sqlIw = "
+        SELECT
+            f.id AS id_formulario,
+            CONCAT(COALESCE(f.nombre, 'SIN FORMULARIO'), ' (IW)') AS formulario,
+            COALESCE(df.nombre, 'SIN DIVISION') AS division_formulario,
+            COALESCE(sf.nombre, '') AS subdivision_formulario,
+            DATE(r.created_at) AS fecha_planificada,
+
+            COUNT(DISTINCT CONCAT(
+                f.id,
+                '|',
+                COALESCE(r.id_local, v.id_local, 0),
+                '|',
+                COALESCE(r.visita_id, 0),
+                '|',
+                DATE(r.created_at),
+                '|',
+                TIME(r.created_at)
+            )) AS total
+
+        FROM form_question_responses r
+
+        INNER JOIN form_questions q
+            ON q.id = r.id_form_question
+           AND q.id_question_type <> 7
+
+        INNER JOIN formulario f
+            ON f.id = q.id_formulario
+           AND f.tipo = 2
+           AND f.id NOT IN (138, 2187)
+
+        INNER JOIN usuario u
+            ON u.id = r.id_usuario
+           AND u.id_empresa = ?
+           AND u.activo = 1
+
+        LEFT JOIN visita v
+            ON v.id = r.visita_id
+
+        LEFT JOIN division_empresa df
+            ON df.id = f.id_division
+
+        LEFT JOIN subdivision sf
+            ON sf.id = f.id_subdivision
+
+        WHERE r.id_usuario = ?
+    ";
+
+    $typesIw = "ii";
+    $paramsIw = [$id_empresa, $id_ejecutor];
+
+    if ($division_usuario > 0) {
+        $sqlIw .= " AND u.id_division = ? ";
+        $typesIw .= "i";
+        $paramsIw[] = $division_usuario;
+    }
+
+    if ($subdivision_usuario > 0) {
+        $sqlIw .= " AND u.id_subdivision = ? ";
+        $typesIw .= "i";
+        $paramsIw[] = $subdivision_usuario;
+    }
+
+    if ($clasificacion_usuario === 'interno' || $clasificacion_usuario === 'externo') {
+        $sqlIw .= " AND u.clasificacion_usuario = ? ";
+        $typesIw .= "s";
+        $paramsIw[] = $clasificacion_usuario;
+    }
+
+    if (!empty($fecha_desde)) {
+        $sqlIw .= " AND DATE(r.created_at) >= ? ";
+        $typesIw .= "s";
+        $paramsIw[] = $fecha_desde;
+    }
+
+    if (!empty($fecha_hasta)) {
+        $sqlIw .= " AND DATE(r.created_at) <= ? ";
+        $typesIw .= "s";
+        $paramsIw[] = $fecha_hasta;
+    }
+
+    if ($formulario_estado === 'activos') {
+        $sqlIw .= " AND f.estado = 1 ";
+    } elseif ($formulario_estado === 'inactivos') {
+        $sqlIw .= " AND f.estado <> 1 ";
+    }
+
+    $sqlIw .= "
+        GROUP BY
+            f.id,
+            f.nombre,
+            df.nombre,
+            sf.nombre,
+            DATE(r.created_at)
+
+        HAVING total > 0
+
+        ORDER BY
+            f.nombre ASC,
+            fecha_planificada ASC
+    ";
+
+    $stmtIw = $conn->prepare($sqlIw);
+    $stmtIw->bind_param($typesIw, ...$paramsIw);
+    $stmtIw->execute();
+    $resIw = $stmtIw->get_result();
+
+    while ($rowIw = $resIw->fetch_assoc()) {
+        $idFormulario = 'IW-' . (int)$rowIw['id_formulario'];
+        $fecha = $rowIw['fecha_planificada'];
+        $total = (int)$rowIw['total'];
+
+        if (!isset($map[$idFormulario])) {
+            $map[$idFormulario] = [
+                'id_formulario' => $idFormulario,
+                'formulario' => $rowIw['formulario'],
+                'division_formulario' => $rowIw['division_formulario'],
+                'subdivision_formulario' => $rowIw['subdivision_formulario'],
+                'total' => 0,
+                'fechas' => []
+            ];
+        }
+
+        $map[$idFormulario]['fechas'][$fecha] = $total;
+        $map[$idFormulario]['total'] += $total;
+
+        $fechasSet[$fecha] = true;
+
+        if (!isset($totalesPorFecha[$fecha])) {
+            $totalesPorFecha[$fecha] = 0;
+        }
+
+        $totalesPorFecha[$fecha] += $total;
+        $totalPlanificado += $total;
+
+        if (!isset($iwPctMeta[$idFormulario])) {
+            $iwPctMeta[$idFormulario] = [
+                'total_general' => 0,
+                'total_finalizado' => 0,
+                'porcentaje_finalizado' => 100,
+                'porcentaje_por_fecha' => []
+            ];
+        }
+
+        $iwPctMeta[$idFormulario]['total_general'] += $total;
+        $iwPctMeta[$idFormulario]['total_finalizado'] += $total;
+        $iwPctMeta[$idFormulario]['porcentaje_por_fecha'][$fecha] = 100;
+    }
+
+    $stmtIw->close();
+}
 
 $fechas = array_keys($fechasSet);
 sort($fechas);
@@ -333,6 +487,27 @@ while ($rowPct = $resPct->fetch_assoc()) {
 }
 
 $stmtPct->close();
+
+foreach ($iwPctMeta as $idFormulario => $vals) {
+    $metaPct[$idFormulario] = $vals;
+
+    foreach ($vals['porcentaje_por_fecha'] as $fecha => $pctFecha) {
+        $totalFechaIw = $map[$idFormulario]['fechas'][$fecha] ?? 0;
+
+        if (!isset($porcentajeGlobalPorFechaBase[$fecha])) {
+            $porcentajeGlobalPorFechaBase[$fecha] = [
+                'total_general' => 0,
+                'total_finalizado' => 0
+            ];
+        }
+
+        $porcentajeGlobalPorFechaBase[$fecha]['total_general'] += $totalFechaIw;
+        $porcentajeGlobalPorFechaBase[$fecha]['total_finalizado'] += $totalFechaIw;
+        $totalGeneralGlobal += $totalFechaIw;
+        $totalFinalizadoGlobal += $totalFechaIw;
+    }
+}
+
 $conn->close();
 
 $porcentajeGlobalPorFecha = [];
@@ -351,7 +526,7 @@ foreach ($metaPct as $idFormulario => $vals) {
 
 /* Inyectar % en cada formulario del detalle */
 foreach ($data as &$item) {
-    $idFormulario = (int)$item['id_formulario'];
+    $idFormulario = (string)$item['id_formulario'];
 
     $item['porcentaje_finalizado'] = isset($metaPct[$idFormulario])
         ? (int)$metaPct[$idFormulario]['porcentaje_finalizado']

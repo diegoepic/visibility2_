@@ -2429,6 +2429,15 @@ body.modal-open {
           <i class="fas fa-bars"></i>
           <span>Informe</span>
         </a>
+
+        <?php if (in_array($rowP['modalidad'] ?? '', ['implementacion_auditoria','solo_implementacion'], true)): ?>
+        <a href="modulos/mod_recepcion_materiales.php?id_campana=<?php echo (int)$rowP['id_campana']; ?>"
+           class="modern-action-btn"
+           title="Ver recepciones de materiales">
+          <i class="fas fa-cubes"></i>
+          <span>Recepción</span>
+        </a>
+        <?php endif; ?>
       </div>
 
       <!-- Porcentajes -->

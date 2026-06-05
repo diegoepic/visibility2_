@@ -1,11 +1,10 @@
 {
     "success": true,
-    "inserted": 2,
+    "inserted": 1,
     "failed": 0,
     "reportUrl": "",
     "successes": [
-        "L\u00ednea 2: Local 'N518 SANTA ISABEL' (c\u00f3digo PURI000518) insertado.",
-        "L\u00ednea 3: Local 'N564 SANTA ISABEL' (c\u00f3digo PURI000564) insertado."
+        "L\u00ednea 2: Local '910 - LIDER EXPRESS MAIPU' (c\u00f3digo 5267398) insertado."
     ],
     "failures": []
 }

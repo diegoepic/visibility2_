@@ -381,58 +381,46 @@ if ($accionBuscar === 1) {
         $params = [$id_empresa];
         $types  = 'i';
 
-$modoMerchan = ($id_ejecutor > 0);
+// Filtro por tipo de gestión: campaña / ruta
+if (in_array($tipoCampana, [1, 3], true)) {
+    $sql .= " AND f.tipo = ? ";
+    $params[] = $tipoCampana;
+    $types .= 'i';
+}
 
-if ($modoMerchan) {
-    /*
-      MODO RESCATE / CORRECCIÓN:
-      Si selecciono un merchan, quiero ver TODO lo asignado a él
-      dentro de la empresa, aunque esos locales estén cargados en otra
-      división, subdivisión, canal, campaña o tipo de gestión.
+// Filtro por campaña específica
+if ($filter_campana > 0) {
+    $sql .= " AND f.id = ? ";
+    $params[] = $filter_campana;
+    $types .= 'i';
+}
 
-      Esto sirve justamente para corregir cargas cruzadas:
-      Ejemplo:
-      Merchan Red Bull / Tradicional con locales cargados por error
-      en Canal Moderno.
-    */
+// Filtro por división del formulario
+if ($filter_division > 0) {
+    $sql .= " AND f.id_division = ? ";
+    $params[] = $filter_division;
+    $types .= 'i';
+}
+
+// Regla para que el local pertenezca a la misma división del formulario
+$sql .= " AND l.id_division = f.id_division ";
+
+// Filtro por subdivisión
+if ($filter_subdivision > 0) {
+    $sql .= " AND f.id_subdivision = ? ";
+    $params[] = $filter_subdivision;
+    $types .= 'i';
+}
+
+if ($filter_subdivision === -1) {
+    $sql .= " AND (f.id_subdivision IS NULL OR f.id_subdivision = 0) ";
+}
+
+// Filtro por ejecutor, sin anular los filtros anteriores
+if ($id_ejecutor > 0) {
     $sql .= " AND fq.id_usuario = ? ";
     $params[] = $id_ejecutor;
     $types .= 'i';
-
-} else {
-    /*
-      MODO NORMAL:
-      Si NO selecciono merchan, aplico filtros normales para no cargar
-      todo el universo de locales.
-    */
-
-    if (in_array($tipoCampana, [1, 3], true)) {
-        $sql .= " AND f.tipo = ? ";
-        $params[] = $tipoCampana;
-        $types .= 'i';
-    }
-
-    if ($filter_campana > 0) {
-        $sql .= " AND f.id = ? ";
-        $params[] = $filter_campana;
-        $types .= 'i';
-    }
-
-    if ($filter_division > 0) {
-        $sql .= " AND f.id_division = ? ";
-        $params[] = $filter_division;
-        $types .= 'i';
-    }
-
-    if ($filter_subdivision > 0) {
-        $sql .= " AND f.id_subdivision = ? ";
-        $params[] = $filter_subdivision;
-        $types .= 'i';
-    }
-
-    if ($filter_subdivision === -1) {
-        $sql .= " AND (f.id_subdivision IS NULL OR f.id_subdivision = 0) ";
-    }
 }
 
         if (in_array($filter_estado, [1, 3], true)) {

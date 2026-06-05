@@ -1746,6 +1746,323 @@ $conn->close();
     width: 86px;
     height: 86px;
 }
+
+/* =========================================================
+   ANALÍTICA REGIONAL
+========================================================= */
+
+.campaign-region-section {
+    margin-top: 28px;
+}
+
+.region-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.region-summary-card {
+    border: 1px solid rgba(215,228,246,.95);
+    border-radius: 22px;
+    background:
+        radial-gradient(circle at 10% 0%, rgba(95,160,255,.08), transparent 36%),
+        linear-gradient(180deg, rgba(255,255,255,.95), rgba(245,249,255,.88));
+    padding: 16px 18px;
+    min-height: 118px;
+    box-shadow:
+        0 15px 28px rgba(69,96,148,.08),
+        inset 0 1px 0 rgba(255,255,255,.88);
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+}
+
+.region-summary-icon {
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: #fff;
+    box-shadow: 0 10px 20px rgba(70,95,140,.14);
+}
+
+.icon-blue   { background: linear-gradient(135deg, #4d7eff, #6c74ff); }
+.icon-orange { background: linear-gradient(135deg, #ffb554, #ff8a3d); }
+.icon-green  { background: linear-gradient(135deg, #31c67b, #1ea960); }
+.icon-purple { background: linear-gradient(135deg, #8c63ff, #6c4fff); }
+.icon-red    { background: linear-gradient(135deg, #ff7c8a, #ff5f69); }
+
+.region-summary-label {
+    color: #7b8daa;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: 8px;
+}
+
+.region-summary-value {
+    color: #172848;
+    font-size: 28px;
+    font-weight: 950;
+    line-height: 1.1;
+}
+
+.region-summary-helper {
+    margin-top: 4px;
+    color: #7285a4;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.region-panel-card {
+    border: 1px solid rgba(215,228,246,.95);
+    border-radius: 26px;
+    background:
+        radial-gradient(circle at 10% 0%, rgba(95,160,255,.06), transparent 36%),
+        linear-gradient(180deg, rgba(255,255,255,.94), rgba(245,249,255,.88));
+    box-shadow:
+        0 18px 42px rgba(70,95,140,.08),
+        inset 0 1px 0 rgba(255,255,255,.88);
+    overflow: hidden;
+    height: 100%;
+}
+
+.region-panel-head {
+    padding: 22px 24px 14px;
+    border-bottom: 1px solid rgba(225,235,248,.85);
+}
+
+.region-panel-title {
+    margin: 0;
+    color: #172848;
+    font-size: 20px;
+    font-weight: 950;
+}
+
+.region-panel-subtitle {
+    margin: 6px 0 0;
+    color: #7285a4;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.region-user-list {
+    padding: 18px 20px 20px;
+}
+
+.region-block {
+    border: 1px solid rgba(224,234,248,.9);
+    border-radius: 20px;
+    background: rgba(255,255,255,.82);
+    padding: 14px 16px;
+    margin-bottom: 14px;
+}
+
+.region-block:last-child {
+    margin-bottom: 0;
+}
+
+.region-block-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.region-name {
+    color: #172848;
+    font-size: 15px;
+    font-weight: 900;
+}
+
+.region-meta {
+    color: #7285a4;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.region-progress-row,
+.user-progress-row {
+    display: grid;
+    grid-template-columns: 150px 1fr 80px;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.user-progress-row {
+    grid-template-columns: 150px 1fr 95px;
+    padding-left: 16px;
+}
+
+.user-progress-row:last-child {
+    margin-bottom: 0;
+}
+
+.progress-label {
+    color: #355277;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.progress-track {
+    width: 100%;
+    height: 10px;
+    border-radius: 999px;
+    background: #e8eff8;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #4d7eff, #31c67b);
+}
+
+.progress-fill.danger {
+    background: linear-gradient(90deg, #ff8f67, #ff5e6f);
+}
+
+.progress-fill.warning {
+    background: linear-gradient(90deg, #ffcb57, #ff9f43);
+}
+
+.progress-value {
+    color: #172848;
+    font-size: 12px;
+    font-weight: 900;
+    text-align: right;
+}
+
+.region-sla-wrap {
+    padding: 18px 20px 20px;
+}
+
+.region-sla-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 10px;
+}
+
+.region-sla-table thead th {
+    color: #7b8daa;
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    padding: 0 10px 6px;
+    white-space: nowrap;
+}
+
+.region-sla-table tbody tr {
+    background: rgba(255,255,255,.86);
+    box-shadow: 0 8px 18px rgba(70,95,140,.05);
+}
+
+.region-sla-table tbody td {
+    padding: 12px 10px;
+    color: #264164;
+    font-size: 12px;
+    font-weight: 800;
+    border-top: 1px solid rgba(224,234,248,.9);
+    border-bottom: 1px solid rgba(224,234,248,.9);
+}
+
+.region-sla-table tbody td:first-child {
+    border-left: 1px solid rgba(224,234,248,.9);
+    border-top-left-radius: 14px;
+    border-bottom-left-radius: 14px;
+}
+
+.region-sla-table tbody td:last-child {
+    border-right: 1px solid rgba(224,234,248,.9);
+    border-top-right-radius: 14px;
+    border-bottom-right-radius: 14px;
+}
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 92px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .35px;
+}
+
+.status-success {
+    background: rgba(49,198,123,.15);
+    color: #14854d;
+}
+
+.status-primary {
+    background: rgba(77,126,255,.14);
+    color: #355bdb;
+}
+
+.status-warning {
+    background: rgba(255,193,75,.18);
+    color: #a36d00;
+}
+
+.status-danger {
+    background: rgba(255,95,105,.15);
+    color: #d33d4c;
+}
+
+.status-neutral {
+    background: rgba(205,215,230,.32);
+    color: #65758d;
+}
+
+@media (max-width: 1400px) {
+    .region-summary-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 992px) {
+    .region-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .region-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .region-progress-row,
+    .user-progress-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .user-progress-row {
+        padding-left: 0;
+    }
+
+    .region-sla-wrap {
+        overflow-x: auto;
+    }
+
+    .region-sla-table {
+        min-width: 720px;
+    }
+}
 </style>
 
 </head>
@@ -2214,6 +2531,61 @@ $conn->close();
                 </div>
               </div>
             </div>
+            
+            <!-- =======================
+                 ANALÍTICA REGIONAL
+            ======================= -->
+            <div class="campaign-region-section mt-4">
+                <div id="regionSummaryCards" class="region-summary-grid"></div>
+            
+                <div class="row mt-4">
+                    <div class="col-lg-6 mb-4">
+                        <div class="region-panel-card">
+                            <div class="region-panel-head">
+                                <div>
+                                    <h4 class="region-panel-title">Avance por región y usuario</h4>
+                                    <p class="region-panel-subtitle">
+                                        Detecta qué regiones avanzan más lento y qué usuario concentra el rezago.
+                                    </p>
+                                </div>
+                            </div>
+            
+                            <div id="regionUserProgressList" class="region-user-list">
+                                <div class="modern-empty-state">
+                                    <i class="fas fa-layer-group"></i>
+                                    <div>
+                                        <strong>Sin datos regionales</strong>
+                                        <span>Aún no hay información para mostrar.</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+            
+                    <div class="col-lg-6 mb-4">
+                        <div class="region-panel-card">
+                            <div class="region-panel-head">
+                                <div>
+                                    <h4 class="region-panel-title">SLA por región</h4>
+                                    <p class="region-panel-subtitle">
+                                        Observa primera visita, última visita y estado operativo de cada región.
+                                    </p>
+                                </div>
+                            </div>
+            
+                            <div id="regionSlaTableWrap" class="region-sla-wrap">
+                                <div class="modern-empty-state">
+                                    <i class="fas fa-clock"></i>
+                                    <div>
+                                        <strong>Sin tabla SLA</strong>
+                                        <span>No hay registros regionales todavía.</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
         </div>
       </div>
@@ -2555,6 +2927,41 @@ if (endEvent) {
 
 }
 
+function limpiarRegionAnalytics() {
+    $('#regionSummaryCards').html('');
+
+    $('#regionUserProgressList').html(`
+        <div class="modern-empty-state">
+            <i class="fas fa-layer-group"></i>
+            <div>
+                <strong>Sin datos regionales</strong>
+                <span>Aún no hay información para mostrar.</span>
+            </div>
+        </div>
+    `);
+
+    $('#regionSlaTableWrap').html(`
+        <div class="modern-empty-state">
+            <i class="fas fa-clock"></i>
+            <div>
+                <strong>Sin tabla SLA</strong>
+                <span>No hay registros regionales todavía.</span>
+            </div>
+        </div>
+    `);
+}
+
+function renderRegionAnalytics(data) {
+    if (!data) {
+        limpiarRegionAnalytics();
+        return;
+    }
+
+    $('#regionSummaryCards').html(buildRegionSummaryCards(data));
+    $('#regionUserProgressList').html(buildRegionUserList(data));
+    $('#regionSlaTableWrap').html(buildRegionSlaTable(data));
+}
+
 function formatearDiasHabiles(valor) {
     if (valor === null || valor === undefined || valor === '') {
         return '-';
@@ -2634,6 +3041,8 @@ $(document).on('click', '.btn-campaign-detail', function() {
             renderTimelineV2(d.timeline_v2 || null, {
                 visitaPct: Number(d.ratio_visita ?? d.pct_visita_total ?? d.porcentaje_visita ?? 0)
             });
+            
+            renderRegionAnalytics(d.region_analytics || null);
         },
         error: function(xhr) {
             $('#detalleCampanaLoading').html(
@@ -2643,24 +3052,6 @@ $(document).on('click', '.btn-campaign-detail', function() {
         }
     });
 });
-
-function limpiarDetalleCampana() {
-    $('#detalleNombreCampana').text('-');
-    $('#detalleEstadoCampana')
-        .removeClass('badge-success badge-warning badge-danger')
-        .addClass('badge-success')
-        .text('-');
-
-    $('#detalleFechaInicio, #detallePrimeraVisita, #detalleUltimaVisita, #detalleFechaTermino').text('-');
-    $('#detalleDiasPrimera, #detalleDiasUltima, #detalleDiasEntre, #detalleDiasPlanificados').text('-');
-    $('#detalleAsignados, #detalleVisitados, #detalleGestionados').text('0');
-    $('#detalleRatioVisita, #detalleRatioEjecucion').text('0%');
-
-$('#timelineV2Events').empty();
-$('#timelineV2Gaps').empty();
-$('#timelineV2Specials').empty();
-$('#timelineV2').css('width', '1500px');
-}
 
     /*
     |--------------------------------------------------------------------------
@@ -2833,6 +3224,452 @@ $('#timelineV2').css('width', '1500px');
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
     }
+    
+function formatNumberCL(value) {
+    return Number(value || 0).toLocaleString('es-CL');
+}
+
+function buildRegionSummaryCards(data) {
+    const resumen = data?.resumen || {};
+    const empateGeneral = resumen.empate_general_avance === true;
+
+    let regionLenta = '-';
+    let regionTop = '-';
+
+    if (empateGeneral) {
+        regionLenta = 'Empate general';
+        regionTop = 'Empate general';
+    } else {
+        regionLenta = resumen.region_mas_lenta
+            ? `${escapeHtml(resumen.region_mas_lenta.region_nombre)} - ${resumen.region_mas_lenta.avance}%`
+            : '-';
+
+        regionTop = resumen.region_mayor_avance
+            ? `${escapeHtml(resumen.region_mayor_avance.region_nombre)} - ${resumen.region_mayor_avance.avance}%`
+            : '-';
+    }
+
+    return `
+        <div class="region-summary-card">
+            <div class="region-summary-icon icon-blue"><i class="fas fa-globe-americas"></i></div>
+            <div>
+                <div class="region-summary-label">Regiones activas</div>
+                <div class="region-summary-value">${formatNumberCL(resumen.regiones_activas || 0)}</div>
+                <div class="region-summary-helper">Con actividad registrada</div>
+            </div>
+        </div>
+
+        <div class="region-summary-card">
+            <div class="region-summary-icon icon-orange"><i class="fas fa-hourglass-half"></i></div>
+            <div>
+                <div class="region-summary-label">Región más lenta</div>
+                <div class="region-summary-value" style="font-size:20px;">${regionLenta}</div>
+                <div class="region-summary-helper">
+                    ${empateGeneral ? 'Todas tienen el mismo avance' : 'Menor avance relativo'}
+                </div>
+            </div>
+        </div>
+
+        <div class="region-summary-card">
+            <div class="region-summary-icon icon-green"><i class="fas fa-chart-line"></i></div>
+            <div>
+                <div class="region-summary-label">Mayor avance</div>
+                <div class="region-summary-value" style="font-size:20px;">${regionTop}</div>
+                <div class="region-summary-helper">
+                    ${empateGeneral ? 'No hay diferencia entre regiones' : 'Región más adelantada'}
+                </div>
+            </div>
+        </div>
+
+        <div class="region-summary-card">
+            <div class="region-summary-icon icon-purple"><i class="fas fa-stopwatch"></i></div>
+            <div>
+                <div class="region-summary-label">SLA promedio</div>
+                <div class="region-summary-value">${formatNumberCL(resumen.sla_promedio || 0)} días</div>
+                <div class="region-summary-helper">Hasta primera visita</div>
+            </div>
+        </div>
+
+        <div class="region-summary-card">
+            <div class="region-summary-icon icon-red"><i class="fas fa-exclamation-triangle"></i></div>
+            <div>
+                <div class="region-summary-label">Regiones en riesgo</div>
+                <div class="region-summary-value">${formatNumberCL(resumen.regiones_en_riesgo || 0)}</div>
+                <div class="region-summary-helper">Con rezago o demora SLA</div>
+            </div>
+        </div>
+    `;
+}
+
+function getProgressClass(avance) {
+    avance = Number(avance || 0);
+
+    if (avance < 40) return 'danger';
+    if (avance < 70) return 'warning';
+    return '';
+}
+
+function buildRegionUserList(data) {
+    const regiones = (data && data.regiones) ? data.regiones : [];
+    const usuariosPorRegion = (data && data.usuarios_por_region) ? data.usuarios_por_region : {};
+
+    if (!regiones.length) {
+        return `
+            <div class="modern-empty-state">
+                <i class="fas fa-layer-group"></i>
+                <div>
+                    <strong>Sin datos regionales</strong>
+                    <span>No hay actividad por región para esta campaña.</span>
+                </div>
+            </div>
+        `;
+    }
+
+    let html = '';
+
+    regiones.forEach(function(region) {
+        const usuarios = usuariosPorRegion[String(region.id_region)] || [];
+        const fillClass = getProgressClass(region.avance);
+
+        html += `
+            <div class="region-block">
+                <div class="region-block-top">
+                    <div>
+                        <div class="region-name">${escapeHtml(region.region_nombre || 'SIN REGIÓN')}</div>
+                        <div class="region-meta">
+                            ${formatNumberCL(region.visitados)} / ${formatNumberCL(region.asignados)} locales visitados
+                        </div>
+                    </div>
+                    <div class="progress-value">${Number(region.avance || 0).toLocaleString('es-CL')}%</div>
+                </div>
+
+                <div class="region-progress-row">
+                    <div class="progress-label">Avance región</div>
+                    <div class="progress-track">
+                        <div class="progress-fill ${fillClass}" style="width:${Number(region.avance || 0)}%;"></div>
+                    </div>
+                    <div class="progress-value">${Number(region.avance || 0).toLocaleString('es-CL')}%</div>
+                </div>
+        `;
+
+        if (usuarios.length) {
+            usuarios.forEach(function(usuario) {
+                const fillClassUser = getProgressClass(usuario.avance);
+
+                html += `
+                    <div class="user-progress-row">
+                        <div class="progress-label">
+                            <i class="fas fa-user mr-1" style="opacity:.6;"></i>
+                            ${escapeHtml(usuario.usuario_nombre || 'SIN USUARIO')}
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill ${fillClassUser}" style="width:${Number(usuario.avance || 0)}%;"></div>
+                        </div>
+                        <div class="progress-value">
+                            ${formatNumberCL(usuario.visitados)} / ${formatNumberCL(usuario.asignados)}
+                            &nbsp;(${Number(usuario.avance || 0).toLocaleString('es-CL')}%)
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        html += `</div>`;
+    });
+
+    return html;
+}
+
+function buildRegionSlaTable(data) {
+    const regiones = (data && data.regiones) ? data.regiones : [];
+
+    if (!regiones.length) {
+        return `
+            <div class="modern-empty-state">
+                <i class="fas fa-clock"></i>
+                <div>
+                    <strong>Sin tabla SLA</strong>
+                    <span>No hay registros por región para esta campaña.</span>
+                </div>
+            </div>
+        `;
+    }
+
+    let html = `
+        <div class="table-responsive">
+            <table class="region-sla-table">
+                <thead>
+                    <tr>
+                        <th>Región</th>
+                        <th>Asignados</th>
+                        <th>Visitados</th>
+                        <th>Avance</th>
+                        <th>Primera visita</th>
+                        <th>Última visita</th>
+                        <th>Días hasta primera</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    regiones.forEach(function(region) {
+        html += `
+            <tr>
+                <td>${escapeHtml(region.region_nombre || 'SIN REGIÓN')}</td>
+                <td>${formatNumberCL(region.asignados)}</td>
+                <td>${formatNumberCL(region.visitados)}</td>
+                <td>${Number(region.avance || 0).toLocaleString('es-CL')}%</td>
+                <td>${escapeHtml(region.primera_visita || '-')}</td>
+                <td>${escapeHtml(region.ultima_visita || '-')}</td>
+                <td>${region.dias_hasta_primera !== null ? region.dias_hasta_primera : '-'}</td>
+                <td>
+                    <span class="status-pill ${escapeHtml(region.estado_class || 'status-neutral')}">
+                        ${escapeHtml(region.estado || '-')}
+                    </span>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    return html;
+}
+
+function formatNumberCL(value) {
+    return Number(value || 0).toLocaleString('es-CL');
+}
+
+function getProgressClass(avance) {
+    avance = Number(avance || 0);
+
+    if (avance < 40) return 'danger';
+    if (avance < 70) return 'warning';
+    return '';
+}
+
+function buildRegionSummaryCards(data) {
+    const resumen = data?.resumen || {};
+
+    const regionLenta = resumen.region_mas_lenta
+        ? `${escapeHtml(resumen.region_mas_lenta.region_nombre)} - ${resumen.region_mas_lenta.avance}%`
+        : '-';
+
+    const regionTop = resumen.region_mayor_avance
+        ? `${escapeHtml(resumen.region_mayor_avance.region_nombre)} - ${resumen.region_mayor_avance.avance}%`
+        : '-';
+
+    return `
+        <div class="region-summary-card">
+            <div class="region-summary-icon icon-blue"><i class="fas fa-globe-americas"></i></div>
+            <div>
+                <div class="region-summary-label">Regiones activas</div>
+                <div class="region-summary-value">${formatNumberCL(resumen.regiones_activas || 0)}</div>
+                <div class="region-summary-helper">Con actividad registrada</div>
+            </div>
+        </div>
+
+        <div class="region-summary-card">
+            <div class="region-summary-icon icon-orange"><i class="fas fa-hourglass-half"></i></div>
+            <div>
+                <div class="region-summary-label">Región más lenta</div>
+                <div class="region-summary-value" style="font-size:20px;">${regionLenta}</div>
+                <div class="region-summary-helper">Menor avance relativo</div>
+            </div>
+        </div>
+
+        <div class="region-summary-card">
+            <div class="region-summary-icon icon-green"><i class="fas fa-chart-line"></i></div>
+            <div>
+                <div class="region-summary-label">Mayor avance</div>
+                <div class="region-summary-value" style="font-size:20px;">${regionTop}</div>
+                <div class="region-summary-helper">Región más adelantada</div>
+            </div>
+        </div>
+
+        <div class="region-summary-card">
+            <div class="region-summary-icon icon-purple"><i class="fas fa-stopwatch"></i></div>
+            <div>
+                <div class="region-summary-label">SLA promedio</div>
+                <div class="region-summary-value">${formatNumberCL(resumen.sla_promedio || 0)} días</div>
+                <div class="region-summary-helper">Hasta primera visita</div>
+            </div>
+        </div>
+
+        <div class="region-summary-card">
+            <div class="region-summary-icon icon-red"><i class="fas fa-exclamation-triangle"></i></div>
+            <div>
+                <div class="region-summary-label">Regiones en riesgo</div>
+                <div class="region-summary-value">${formatNumberCL(resumen.regiones_en_riesgo || 0)}</div>
+                <div class="region-summary-helper">Con rezago o demora SLA</div>
+            </div>
+        </div>
+    `;
+}
+
+function buildRegionUserList(data) {
+    const regiones = data?.regiones || [];
+    const usuariosPorRegion = data?.usuarios_por_region || {};
+
+    if (!regiones.length) {
+        return `
+            <div class="modern-empty-state">
+                <i class="fas fa-layer-group"></i>
+                <div>
+                    <strong>Sin datos regionales</strong>
+                    <span>No hay actividad por región para esta campaña.</span>
+                </div>
+            </div>
+        `;
+    }
+
+    let html = '';
+
+    regiones.forEach(function(region) {
+        const usuarios = usuariosPorRegion[String(region.id_region)] || [];
+        const fillClass = getProgressClass(region.avance);
+
+        html += `
+            <div class="region-block">
+                <div class="region-block-top">
+                    <div>
+                        <div class="region-name">${escapeHtml(region.region_nombre || 'SIN REGIÓN')}</div>
+                        <div class="region-meta">
+                            ${formatNumberCL(region.visitados)} / ${formatNumberCL(region.asignados)} locales visitados
+                        </div>
+                    </div>
+                    <div class="progress-value">${Number(region.avance || 0).toLocaleString('es-CL')}%</div>
+                </div>
+
+                <div class="region-progress-row">
+                    <div class="progress-label">Avance región</div>
+                    <div class="progress-track">
+                        <div class="progress-fill ${fillClass}" style="width:${Number(region.avance || 0)}%;"></div>
+                    </div>
+                    <div class="progress-value">${Number(region.avance || 0).toLocaleString('es-CL')}%</div>
+                </div>
+        `;
+
+        usuarios.forEach(function(usuario) {
+            const fillClassUser = getProgressClass(usuario.avance);
+
+            html += `
+                <div class="user-progress-row">
+                    <div class="progress-label">
+                        <i class="fas fa-user mr-1" style="opacity:.6;"></i>
+                        ${escapeHtml(usuario.usuario_nombre || 'SIN USUARIO')}
+                    </div>
+                    <div class="progress-track">
+                        <div class="progress-fill ${fillClassUser}" style="width:${Number(usuario.avance || 0)}%;"></div>
+                    </div>
+                    <div class="progress-value">
+                        ${formatNumberCL(usuario.visitados)} / ${formatNumberCL(usuario.asignados)}
+                        (${Number(usuario.avance || 0).toLocaleString('es-CL')}%)
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `</div>`;
+    });
+
+    return html;
+}
+
+function buildRegionSlaTable(data) {
+    const regiones = data?.regiones || [];
+
+    if (!regiones.length) {
+        return `
+            <div class="modern-empty-state">
+                <i class="fas fa-clock"></i>
+                <div>
+                    <strong>Sin tabla SLA</strong>
+                    <span>No hay registros por región para esta campaña.</span>
+                </div>
+            </div>
+        `;
+    }
+
+    let html = `
+        <div class="table-responsive">
+            <table class="region-sla-table">
+                <thead>
+                    <tr>
+                        <th>Región</th>
+                        <th>Asignados</th>
+                        <th>Visitados</th>
+                        <th>Avance</th>
+                        <th>Primera visita</th>
+                        <th>Última visita</th>
+                        <th>Días hasta primera</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    regiones.forEach(function(region) {
+        html += `
+            <tr>
+                <td>${escapeHtml(region.region_nombre || 'SIN REGIÓN')}</td>
+                <td>${formatNumberCL(region.asignados)}</td>
+                <td>${formatNumberCL(region.visitados)}</td>
+                <td>${Number(region.avance || 0).toLocaleString('es-CL')}%</td>
+                <td>${escapeHtml(region.primera_visita || '-')}</td>
+                <td>${escapeHtml(region.ultima_visita || '-')}</td>
+                <td>${region.dias_hasta_primera !== null ? region.dias_hasta_primera : '-'}</td>
+                <td>
+                    <span class="status-pill ${escapeHtml(region.estado_class || 'status-neutral')}">
+                        ${escapeHtml(region.estado || '-')}
+                    </span>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    return html;
+}
+
+
+function renderRegionAnalytics(data) {
+    $('#regionSummaryCards').html(buildRegionSummaryCards(data));
+    $('#regionUserProgressList').html(buildRegionUserList(data));
+    $('#regionSlaTableWrap').html(buildRegionSlaTable(data));
+}
+
+function limpiarDetalleCampana() {
+    $('#detalleNombreCampana').text('-');
+
+    $('#detalleEstadoCampana')
+        .removeClass('badge-success badge-warning badge-danger')
+        .addClass('badge-success')
+        .text('-');
+
+    $('#detalleFechaInicio, #detallePrimeraVisita, #detalleUltimaVisita, #detalleFechaTermino').text('-');
+    $('#detalleDiasPrimera, #detalleDiasUltima, #detalleDiasEntre, #detalleDiasPlanificados').text('-');
+
+    $('#detalleAsignados, #detalleVisitados, #detalleGestionados').text('0');
+    $('#detalleRatioVisita, #detalleRatioEjecucion').text('0%');
+
+    $('#timelineV2Events').empty();
+    $('#timelineV2Gaps').empty();
+    $('#timelineV2Specials').empty();
+    $('#timelineV2').css('width', '1500px');
+
+    limpiarRegionAnalytics();
+}
 
 });
 </script>

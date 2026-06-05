@@ -679,6 +679,254 @@ foreach ($rangosSinVisitas as $rango) {
     $posUltima  = timelinePercent($diasHastaUltima, $timelineMax);
     $posTermino = timelinePercent($diasPlanificados, $timelineMax);
 
+    
+    /*
+    |--------------------------------------------------------------------------
+    | ANALÍTICA POR REGIÓN Y USUARIO
+    |--------------------------------------------------------------------------
+    */
+
+    $sqlRegion = "
+        SELECT
+            r.id AS id_region,
+            UPPER(r.region) AS region_nombre,
+
+            COUNT(DISTINCT fq.id_local) AS locales_asignados,
+
+            COUNT(DISTINCT CASE
+                WHEN fq.countVisita > 0 THEN fq.id_local
+            END) AS locales_visitados,
+
+            MIN(CASE
+                WHEN fq.countVisita > 0
+                AND fq.fechaVisita IS NOT NULL
+                AND CAST(fq.fechaVisita AS CHAR) NOT IN (
+                    '',
+                    '0000-00-00',
+                    '0000-00-00 00:00:00'
+                )
+                THEN DATE(fq.fechaVisita)
+            END) AS primera_visita_region,
+
+            MAX(CASE
+                WHEN fq.countVisita > 0
+                AND fq.fechaVisita IS NOT NULL
+                AND CAST(fq.fechaVisita AS CHAR) NOT IN (
+                    '',
+                    '0000-00-00',
+                    '0000-00-00 00:00:00'
+                )
+                THEN DATE(fq.fechaVisita)
+            END) AS ultima_visita_region
+
+        FROM formularioQuestion fq
+        INNER JOIN local l
+            ON l.id = fq.id_local
+        LEFT JOIN comuna c
+            ON c.id = l.id_comuna
+        LEFT JOIN region r
+            ON r.id = c.id_region
+
+        WHERE fq.id_formulario = ?
+
+        GROUP BY r.id, r.region
+        ORDER BY r.region ASC
+    ";
+
+    $stmtRegion = $conn->prepare($sqlRegion);
+    $stmtRegion->bind_param("i", $idCampana);
+    $stmtRegion->execute();
+    $resRegion = $stmtRegion->get_result();
+
+    $regionesDetalle = [];
+    $idsRegion = [];
+    $slaRegionValores = [];
+
+    while ($rr = $resRegion->fetch_assoc()) {
+        $asignadosRegion = (int)$rr['locales_asignados'];
+        $visitadosRegion = (int)$rr['locales_visitados'];
+        $avanceRegion    = porcentajeSeguro($visitadosRegion, $asignadosRegion);
+
+        $primeraRegionIso = normalizarFechaIso($rr['primera_visita_region']);
+        $ultimaRegionIso  = normalizarFechaIso($rr['ultima_visita_region']);
+
+        $diasPrimeraRegion = diffDiasHabilesOrNull($fechaInicio, $primeraRegionIso);
+        $diasUltimaRegion  = diffDiasHabilesOrNull($fechaInicio, $ultimaRegionIso);
+
+        $estadoRegion = clasificarRiesgoRegion($avanceRegion, $diasPrimeraRegion);
+        $estadoClass  = claseRiesgoRegion($estadoRegion);
+
+        $filaRegion = [
+            'id_region'            => (int)$rr['id_region'],
+            'region_nombre'        => $rr['region_nombre'] ?: 'SIN REGIÓN',
+            'asignados'            => $asignadosRegion,
+            'visitados'            => $visitadosRegion,
+            'avance'               => $avanceRegion,
+            'primera_visita'       => formatearFechaCL($primeraRegionIso),
+            'ultima_visita'        => formatearFechaCL($ultimaRegionIso),
+            'dias_hasta_primera'   => $diasPrimeraRegion,
+            'dias_hasta_ultima'    => $diasUltimaRegion,
+            'estado'               => $estadoRegion,
+            'estado_class'         => $estadoClass
+        ];
+
+        $regionesDetalle[] = $filaRegion;
+        $idsRegion[] = (int)$rr['id_region'];
+
+        if ($diasPrimeraRegion !== null) {
+            $slaRegionValores[] = $diasPrimeraRegion;
+        }
+    }
+
+    $stmtRegion->close();
+
+    /*
+    |--------------------------------------------------------------------------
+    | USUARIOS POR REGIÓN
+    |--------------------------------------------------------------------------
+    */
+
+    $sqlUsuariosRegion = "
+        SELECT
+            r.id AS id_region,
+            UPPER(r.region) AS region_nombre,
+            u.id AS id_usuario,
+            UPPER(CONCAT(COALESCE(u.nombre, ''), ' ', COALESCE(u.apellido, ''))) AS usuario_nombre,
+
+            COUNT(DISTINCT fq.id_local) AS locales_asignados,
+            COUNT(DISTINCT CASE
+                WHEN fq.countVisita > 0 THEN fq.id_local
+            END) AS locales_visitados
+
+        FROM formularioQuestion fq
+        INNER JOIN local l
+            ON l.id = fq.id_local
+        LEFT JOIN comuna c
+            ON c.id = l.id_comuna
+        LEFT JOIN region r
+            ON r.id = c.id_region
+        LEFT JOIN usuario u
+            ON u.id = fq.id_usuario
+
+        WHERE fq.id_formulario = ?
+
+        GROUP BY r.id, r.region, u.id, u.nombre, u.apellido
+        ORDER BY r.region ASC, usuario_nombre ASC
+    ";
+
+    $stmtUsuariosRegion = $conn->prepare($sqlUsuariosRegion);
+    $stmtUsuariosRegion->bind_param("i", $idCampana);
+    $stmtUsuariosRegion->execute();
+    $resUsuariosRegion = $stmtUsuariosRegion->get_result();
+
+    $usuariosPorRegion = [];
+
+    while ($ur = $resUsuariosRegion->fetch_assoc()) {
+        $idRegion = (int)$ur['id_region'];
+
+        if (!isset($usuariosPorRegion[$idRegion])) {
+            $usuariosPorRegion[$idRegion] = [];
+        }
+
+        $usuariosPorRegion[$idRegion][] = [
+            'id_usuario'      => (int)$ur['id_usuario'],
+            'usuario_nombre'  => trim($ur['usuario_nombre']) !== '' ? $ur['usuario_nombre'] : 'SIN USUARIO',
+            'asignados'       => (int)$ur['locales_asignados'],
+            'visitados'       => (int)$ur['locales_visitados'],
+            'avance'          => porcentajeSeguro((int)$ur['locales_visitados'], (int)$ur['locales_asignados'])
+        ];
+    }
+
+    $stmtUsuariosRegion->close();
+
+/*
+|--------------------------------------------------------------------------
+| RESUMEN EJECUTIVO DE REGIONES
+|--------------------------------------------------------------------------
+*/
+
+$regionesActivas = count($regionesDetalle);
+$regionesEnRiesgo = 0;
+
+foreach ($regionesDetalle as $reg) {
+    if ($reg['estado'] === 'En riesgo') {
+        $regionesEnRiesgo++;
+    }
+}
+
+/*
+|--------------------------------------------------------------------------
+| REGIÓN MÁS LENTA Y MAYOR AVANCE
+|--------------------------------------------------------------------------
+| Evita mostrar la misma región como lenta y rápida cuando existen
+| más regiones con avances distintos.
+|--------------------------------------------------------------------------
+*/
+
+$regionesValidas = array_values(array_filter($regionesDetalle, function ($reg) {
+    return isset($reg['asignados']) && (int)$reg['asignados'] > 0;
+}));
+
+$regionesOrdenadasAsc = $regionesValidas;
+$regionesOrdenadasDesc = $regionesValidas;
+
+usort($regionesOrdenadasAsc, function ($a, $b) {
+    $cmp = ((float)$a['avance'] <=> (float)$b['avance']);
+
+    if ($cmp === 0) {
+        return strcmp($a['region_nombre'], $b['region_nombre']);
+    }
+
+    return $cmp;
+});
+
+usort($regionesOrdenadasDesc, function ($a, $b) {
+    $cmp = ((float)$b['avance'] <=> (float)$a['avance']);
+
+    if ($cmp === 0) {
+        return strcmp($a['region_nombre'], $b['region_nombre']);
+    }
+
+    return $cmp;
+});
+
+$regionMasLenta = $regionesOrdenadasAsc[0] ?? null;
+$regionMasRapida = $regionesOrdenadasDesc[0] ?? null;
+
+$hayEmpateGeneral = false;
+
+if (count($regionesValidas) > 1 && $regionMasLenta && $regionMasRapida) {
+    $avanceMin = (float)$regionMasLenta['avance'];
+    $avanceMax = (float)$regionMasRapida['avance'];
+
+    /*
+    | Si el mínimo y máximo son iguales, todas las regiones tienen
+    | exactamente el mismo avance.
+    */
+    if ($avanceMin === $avanceMax) {
+        $hayEmpateGeneral = true;
+    }
+
+    /*
+    | Si por alguna razón quedó la misma región como lenta y rápida,
+    | pero sí existen diferencias de avance, buscamos otra región
+    | para el mayor avance.
+    */
+    if (
+        !$hayEmpateGeneral &&
+        (int)$regionMasLenta['id_region'] === (int)$regionMasRapida['id_region']
+    ) {
+        foreach ($regionesOrdenadasDesc as $reg) {
+            if ((int)$reg['id_region'] !== (int)$regionMasLenta['id_region']) {
+                $regionMasRapida = $reg;
+                break;
+            }
+        }
+    }
+}
+
+$slaPromedio = promedioSeguro($slaRegionValores, 1);
+    
     $conn->close();
 
     responder([
@@ -723,7 +971,31 @@ foreach ($rangosSinVisitas as $rango) {
                 'fin_iso' => $finTimelineIso,
                 'eventos' => $eventosTimeline,
                 'sin_visitas' => $rangosSinVisitasTimeline
-]
+            ],
+            'region_analytics' => [
+                'resumen' => [
+                    'regiones_activas' => $regionesActivas,
+                
+                    'region_mas_lenta' => $regionMasLenta ? [
+                        'id_region' => $regionMasLenta['id_region'],
+                        'region_nombre' => $regionMasLenta['region_nombre'],
+                        'avance' => $regionMasLenta['avance']
+                    ] : null,
+                
+                    'region_mayor_avance' => $regionMasRapida ? [
+                        'id_region' => $regionMasRapida['id_region'],
+                        'region_nombre' => $regionMasRapida['region_nombre'],
+                        'avance' => $regionMasRapida['avance']
+                    ] : null,
+                
+                    'empate_general_avance' => $hayEmpateGeneral,
+                
+                    'sla_promedio' => $slaPromedio,
+                    'regiones_en_riesgo' => $regionesEnRiesgo
+                ],
+                'regiones' => $regionesDetalle,
+                'usuarios_por_region' => $usuariosPorRegion
+            ]
         ]
     ]);
 

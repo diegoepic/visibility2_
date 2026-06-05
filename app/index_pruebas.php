@@ -112,12 +112,24 @@ if ($TEST_MODE) {
 } else {
 
 $sql_campaigns = "
-    SELECT DISTINCT 
+    SELECT DISTINCT
         f.id AS id_campana,
         f.nombre AS nombre_campana,
         f.estado,
         f.fechaInicio,
-        f.fechaTermino
+        f.fechaTermino,
+        f.modalidad,
+        CASE WHEN f.tipo = 1
+              AND f.modalidad IN ('implementacion_auditoria','solo_implementacion')
+              AND EXISTS (
+                  SELECT 1 FROM formularioQuestion fq2
+                  WHERE fq2.id_formulario = f.id
+                    AND fq2.material IS NOT NULL
+                    AND TRIM(fq2.material) != ''
+                    AND fq2.valor_propuesto > 0
+              )
+             THEN 1 ELSE 0
+        END AS tiene_recepcion_materiales
     FROM formularioQuestion fq
     INNER JOIN formulario f ON f.id = fq.id_formulario
     WHERE fq.id_usuario = ?
@@ -136,12 +148,36 @@ $campanas = [];
 
 while ($row = $result_campaigns->fetch_assoc()) {
     $campanas[] = [
-        'id_campana'     => (int)$row['id_campana'],
-        'nombre_campana' => htmlspecialchars($row['nombre_campana'], ENT_QUOTES, 'UTF-8'),
-        'estado'         => htmlspecialchars($row['estado'], ENT_QUOTES, 'UTF-8'),
-        'fechaInicio'    => $row['fechaInicio'],
-        'fechaTermino'   => $row['fechaTermino']
+        'id_campana'                => (int)$row['id_campana'],
+        'nombre_campana'            => htmlspecialchars($row['nombre_campana'], ENT_QUOTES, 'UTF-8'),
+        'estado'                    => htmlspecialchars($row['estado'], ENT_QUOTES, 'UTF-8'),
+        'fechaInicio'               => $row['fechaInicio'],
+        'fechaTermino'              => $row['fechaTermino'],
+        'modalidad'                 => $row['modalidad'] ?? '',
+        'tiene_recepcion_materiales'=> (int)($row['tiene_recepcion_materiales'] ?? 0),
     ];
+}
+
+/* Conteo de recepciones previas por campaña (para badge) */
+$campanaIdsConRecepcion = array_column($campanas, 'id_campana');
+$recepcionesCount = [];
+if (!empty($campanaIdsConRecepcion)) {
+    $placeholders = implode(',', array_fill(0, count($campanaIdsConRecepcion), '?'));
+    $types        = str_repeat('i', count($campanaIdsConRecepcion) + 1);
+    $params       = array_merge($campanaIdsConRecepcion, [$usuario_id]);
+    $stmtRC = $conn->prepare("
+        SELECT id_formulario, COUNT(*) AS total
+        FROM material_recepcion
+        WHERE id_formulario IN ($placeholders) AND id_usuario = ?
+        GROUP BY id_formulario
+    ");
+    $stmtRC->bind_param($types, ...$params);
+    $stmtRC->execute();
+    $resRC = $stmtRC->get_result();
+    while ($r = $resRC->fetch_assoc()) {
+        $recepcionesCount[(int)$r['id_formulario']] = (int)$r['total'];
+    }
+    $stmtRC->close();
 }
 $stmt_campaigns->close();
 
@@ -455,11 +491,23 @@ if (isset($_SESSION['success'])) {
                                     $nombre_camp   = $campana['nombre_campana'];
                                     $fechaInicio   = date('d-m-Y', strtotime($campana['fechaInicio']));
                                     $fechaTermino  = date('d-m-Y', strtotime($campana['fechaTermino']));
+                                    $tieneRec      = (int)($campana['tiene_recepcion_materiales'] ?? 0);
+                                    $nRec          = $recepcionesCount[$id_campana] ?? 0;
                                     echo '<li class="list-group-item" data-idcampana="' . $id_campana . '">';
                                     echo ' <a class="todo-actions" href="javascript:void(0)">';
                                     echo '   <i class="fa fa-square-o"></i> ';
                                     echo '   <span class="desc">' . $nombre_camp . ' (' . $fechaInicio . ' - ' . $fechaTermino . ')</span>';
                                     echo ' </a>';
+                                    if ($tieneRec) {
+                                        $badge = $nRec > 0
+                                            ? '<span style="background:#217346;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;">' . $nRec . '</span>'
+                                            : '<span style="background:#c0392b;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;">Pendiente</span>';
+                                        echo ' <div style="margin-top:5px;padding-left:22px;">';
+                                        echo '   <a href="recepcion_materiales.php?id_formulario=' . $id_campana . '" '
+                                            . 'style="font-size:12px;color:#217346;font-weight:600;">'
+                                            . '<i class="fa fa-cubes"></i> Recepción de materiales ' . $badge . '</a>';
+                                        echo ' </div>';
+                                    }
                                     echo '</li>';
                                 }
                             } else {
