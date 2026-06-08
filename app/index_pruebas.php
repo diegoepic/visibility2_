@@ -235,6 +235,7 @@ $sql = "
     l.lng       AS lng,
     COUNT(CASE WHEN fq.countVisita = 0 THEN 1 END)        AS totalCampanas,
     GROUP_CONCAT(DISTINCT CASE WHEN fq.countVisita = 0 THEN f.id END) AS campanasIds,
+    MAX(cu.nombre)              AS tipo_cuenta,
     MAX(fq.is_priority)         AS is_priority
 FROM formularioQuestion fq
 INNER JOIN formulario f ON f.id        = fq.id_formulario
@@ -242,6 +243,7 @@ INNER JOIN local      l ON l.id        = fq.id_local
 INNER JOIN cadena     c ON c.id        = l.id_cadena
 INNER JOIN vendedor   v ON v.id = l.id_vendedor
 LEFT JOIN comuna     co ON co.id = l.id_comuna
+LEFT JOIN cuenta     cu ON cu.id = l.id_cuenta
 WHERE fq.id_usuario    = ?
   AND f.id_empresa      = ?
   AND f.tipo           IN (3,1)
@@ -274,6 +276,7 @@ while ($row = $result->fetch_assoc()) {
         'totalCampanas'  => (int)$row['totalCampanas'],
         'campanasIds'    => $row['campanasIds'],
         'is_priority'    => (int)$row['is_priority'],
+        'is_botilleria'  => (stripos($row['tipo_cuenta'] ?? '', 'botiller') !== false),
         'comuna'         => htmlspecialchars($row['comuna'], ENT_QUOTES, 'UTF-8')
     ];
 }
@@ -303,12 +306,14 @@ SELECT
     l.lng AS lng,
     COUNT(DISTINCT f.id) AS totalCampanas,
     GROUP_CONCAT(DISTINCT f.id) AS campanasIds,
+    MAX(cu.nombre) AS tipo_cuenta,
     MAX(fq.is_priority) AS is_priority
 FROM formularioQuestion fq
 INNER JOIN formulario   f ON f.id = fq.id_formulario
 INNER JOIN local        l ON l.id = fq.id_local
 INNER JOIN cadena       c ON c.id = l.id_cadena
 INNER JOIN vendedor     v ON v.id = l.id_vendedor
+LEFT JOIN cuenta       cu ON cu.id = l.id_cuenta
 WHERE fq.id_usuario = ?
   AND f.id_empresa  = ?
   AND f.tipo        IN (3,1)
@@ -344,7 +349,8 @@ while ($row = $result_reag->fetch_assoc()) {
         'lng'            => (float)$row['lng'],
         'totalCampanas'  => (int)$row['totalCampanas'],
         'campanasIds'    => $row['campanasIds'],
-        'is_priority'    => (int)$row['is_priority']
+        'is_priority'    => (int)$row['is_priority'],
+        'is_botilleria'  => (stripos($row['tipo_cuenta'] ?? '', 'botiller') !== false),
     ];
 }
 $stmt_reag->close();
@@ -362,7 +368,7 @@ foreach ($locales_reag as $local) {
 // Preparar datos para el mapa
 $coordenadas_locales_programados = [];
 foreach ($locales as $local) {
-    $markerColor = ($local['is_priority'] === 1) ? 'blue' : 'red';
+    $markerColor = $local['is_botilleria'] ? 'orange' : (($local['is_priority'] === 1) ? 'blue' : 'red');
     $coordenadas_locales_programados[] = [
         'idLocal'        => $local['idLocal'],
         'nombre_local'   => $local['cadena'] . ' - ' . $local['direccionLocal'],
@@ -370,12 +376,13 @@ foreach ($locales as $local) {
         'lng'            => $local['lng'],
         'visitado'       => false,
         'markerColor'    => $markerColor,
-        'fechaPropuesta' => $local['fechaPropuesta']
+        'fechaPropuesta' => $local['fechaPropuesta'],
+        'is_botilleria'  => $local['is_botilleria']
     ];
 }
 $coordenadas_locales_reag = [];
 foreach ($locales_reag as $local) {
-    $markerColor = ($local['is_priority'] === 1) ? 'blue' : 'red';
+    $markerColor = $local['is_botilleria'] ? 'orange' : (($local['is_priority'] === 1) ? 'blue' : 'red');
     $coordenadas_locales_reag[] = [
         'idLocal'        => $local['idLocal'],
         'nombre_local'   => $local['cadena'] . ' - ' . $local['direccionLocal'],
@@ -383,7 +390,8 @@ foreach ($locales_reag as $local) {
         'lng'            => $local['lng'],
         'visitado'       => false,
         'markerColor'    => $markerColor,
-        'fechaPropuesta' => $local['fechaPropuesta']
+        'fechaPropuesta' => $local['fechaPropuesta'],
+        'is_botilleria'  => $local['is_botilleria']
     ];
 }
 }
@@ -402,7 +410,19 @@ foreach ($locales_reag as $local) {
     <link rel="stylesheet" href="assets/css/offline.css">
     <link rel="stylesheet" href="assets/css/nav_ar.css">
      <link rel="stylesheet" href="assets/css/journal.css">
-     <link rel="stylesheet" href="css/index.css">     
+     <link rel="stylesheet" href="css/index.css">
+    <style>
+      .badge-botilleria {
+          display: inline-block;
+          background: #e67e22;
+          color: #fff;
+          border-radius: 10px;
+          padding: 1px 7px;
+          font-size: 11px;
+          margin-left: 4px;
+          white-space: nowrap;
+      }
+    </style>
 </head>
 <body>
 <?php
@@ -587,13 +607,14 @@ if (isset($_SESSION['success'])) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php foreach ($localesDia as $row): 
+                                        <?php foreach ($localesDia as $row):
                                             $cadena         = $row['cadena'];
                                             $direccionLocal = $row['direccionLocal'];
-                        $totalCamp      = $row['totalCampanas'];
+                                            $totalCamp      = $row['totalCampanas'];
                                             $idLocal        = $row['idLocal'];
                                             $campanasIds    = $row['campanasIds'];
                                             $esPrioridad    = ($row['is_priority'] === 1);
+                                            $esBotilleria   = ($row['is_botilleria'] ?? false);
                                             $trClass        = $esPrioridad ? 'priority-row' : '';
                                         ?>
                                           <?php
@@ -610,6 +631,7 @@ if (isset($_SESSION['success'])) {
                                             data-lat="<?php echo $row['latitud']; ?>"
                                             data-lng="<?php echo $row['lng']; ?>"
                                             data-busqueda="<?php echo htmlspecialchars($busquedaProg, ENT_QUOTES, 'UTF-8'); ?>"
+                                            data-isbotilleria="<?php echo $esBotilleria ? 'true' : 'false'; ?>"
                                             class="<?php echo $trClass; ?>">
                                             <td class="center"><?php echo htmlspecialchars($row['codigoLocal'], ENT_QUOTES, 'UTF-8'); ?></td>
                                             <td class="center">
@@ -617,6 +639,9 @@ if (isset($_SESSION['success'])) {
                                                     <i class="fa fa-star priority-icon" title="Local prioritario"></i>
                                                 <?php } ?>
                                                 <?php echo htmlspecialchars($cadena, ENT_QUOTES, 'UTF-8'); ?>
+                                                <?php if ($esBotilleria): ?>
+                                                    <span class="badge-botilleria" title="Botillería: abre aprox las 12:30/13:00 hrs"><i class="fa fa-clock-o"></i> 13:00</span>
+                                                <?php endif; ?>
                                             </td>
                                             <td><?php echo $row['comuna']; ?></td>
                                             <td><?php echo htmlspecialchars($direccionLocal, ENT_QUOTES, 'UTF-8'); ?></td>
@@ -706,13 +731,14 @@ if (isset($_SESSION['success'])) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php foreach ($localesDia as $row): 
+                                        <?php foreach ($localesDia as $row):
                                             $cadena         = $row['cadena'];
                                             $direccionLocal = $row['direccionLocal'];
                                             $totalCamp      = $row['totalCampanas'];
                                             $idLocal        = $row['idLocal'];
                                             $campanasIds    = $row['campanasIds'];
                                             $esPrioridad    = ($row['is_priority'] === 1);
+                                            $esBotilleria   = ($row['is_botilleria'] ?? false);
                                             $trClass        = $esPrioridad ? 'priority-row' : '';
                                         ?>
                                         <?php
@@ -728,6 +754,7 @@ if (isset($_SESSION['success'])) {
                                             data-lat="<?php echo $row['latitud']; ?>"
                                             data-lng="<?php echo $row['lng']; ?>"
                                             data-busqueda="<?php echo htmlspecialchars($busquedaReag, ENT_QUOTES, 'UTF-8'); ?>"
+                                            data-isbotilleria="<?php echo $esBotilleria ? 'true' : 'false'; ?>"
                                             class="<?php echo $trClass; ?>">
                                              <td class="center"><?php echo htmlspecialchars($row['codigoLocal'], ENT_QUOTES, 'UTF-8'); ?></td>
                                              <td class="center">
@@ -735,6 +762,9 @@ if (isset($_SESSION['success'])) {
                                                     <i class="fa fa-star priority-icon" title="Local prioritario"></i>
                                                 <?php } ?>
                                                 <?php echo htmlspecialchars($cadena, ENT_QUOTES, 'UTF-8'); ?>
+                                                <?php if ($esBotilleria): ?>
+                                                    <span class="badge-botilleria" title="Botillería: abre a las 13:00 hrs"><i class="fa fa-clock-o"></i> 13:00</span>
+                                                <?php endif; ?>
                                             </td>
                                             <td><?php echo htmlspecialchars($direccionLocal, ENT_QUOTES, 'UTF-8'); ?></td>
                                             <td class="center">
@@ -1483,8 +1513,18 @@ function collectCurrentPoints(){
       ? $tr.find('.in-route').prop('checked')
       : !window.excluded.has(`${modo}|${fecha}|${idLocal}`);
     if (!include) return;
-    pts.push({ idLocal, lat, lng });
+    const isBotilleria = $tr.data('isbotilleria') === 'true' || $tr.data('isbotilleria') === true;
+    pts.push({ idLocal, lat, lng, isBotilleria });
   });
+
+  // Botillerías al final cuando es antes de las 13:00
+  const horaActualMin = new Date().getHours() * 60 + new Date().getMinutes();
+  if (horaActualMin < 13 * 60) {
+    const normales    = pts.filter(p => !p.isBotilleria);
+    const botillerias = pts.filter(p => p.isBotilleria);
+    pts.length = 0;
+    pts.push(...normales, ...botillerias);
+  }
 
   // Fix #18: avisar al usuario cuando se superan los 24 puntos
   if (pts.length > 24) {
@@ -1524,6 +1564,16 @@ window.planRouteFromSelection = async function (origen, opts={}){
   if (!puntos.length) {
     (window.mapa.__trafficSegs||[]).forEach(s=>s.setMap(null)); window.mapa.__trafficSegs=[];
     window.plannedRoute=null; $('#distanciaTotal').text('0 km'); $('#duracionEstimada').text('0 min'); $('#listaIndicaciones').empty(); return;
+  }
+  const horaMinActual = new Date().getHours() * 60 + new Date().getMinutes();
+  const hayBotillerias = puntos.some(p => p.isBotilleria);
+  if (hayBotillerias && horaMinActual < 13 * 60) {
+    const nBot = puntos.filter(p => p.isBotilleria).length;
+    const $w = $('#routeWarning');
+    if ($w.length) {
+      $w.html(`<i class="fa fa-clock-o"></i> Hay ${nBot} botillería(s) en la ruta. Se agendaron al final (abren a las 13:00 hrs).`).stop(true).show();
+      setTimeout(() => $w.fadeOut(), 9000);
+    }
   }
   const destination = puntos[puntos.length - 1];
   const waypoints   = puntos.slice(0, -1);
@@ -1697,15 +1747,27 @@ window.initMap=function(){
 
   window.mapa=new google.maps.Map(document.getElementById('map'), mapOptions);
 
+  const orangeMarkerSvg = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="42" viewBox="0 0 30 42">' +
+    '<path d="M15 0C6.72 0 0 6.72 0 15c0 11.25 15 27 15 27S30 26.25 30 15C30 6.72 23.28 0 15 0z" fill="#e67e22" stroke="#fff" stroke-width="1.5"/>' +
+    '<circle cx="15" cy="15" r="6" fill="#fff"/>' +
+    '</svg>'
+  );
+
   // Marcadores Programados
   coordenadasProg.forEach(local=>{
-    const iconUrl=(local.markerColor==='blue') ? 'assets/images/marker_blue1.png' : 'assets/images/marker_red1.png';
+    let iconUrl = 'assets/images/marker_red1.png';
+    if (local.markerColor === 'orange') iconUrl = orangeMarkerSvg;
+    else if (local.markerColor === 'blue') iconUrl = 'assets/images/marker_blue1.png';
     const marker=new google.maps.Marker({
       position:{lat:local.latitud, lng:local.lng}, map:window.mapa, title:local.nombre_local,
       icon:{ url:iconUrl, scaledSize:new google.maps.Size(30,30) }
     });
+    const botNote = local.is_botilleria
+      ? `<span style="color:#e67e22;font-size:12px;font-weight:600;"><i class="fa fa-clock-o"></i> Botillería: abre a las 13:00 hrs</span><br><br>`
+      : '';
     const iw=new google.maps.InfoWindow({content:
-      `<div style="min-width:180px;"><strong>${local.nombre_local}</strong><br><br>
+      `<div style="min-width:180px;"><strong>${local.nombre_local}</strong><br><br>${botNote}
        <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#responsiveProg${local.idLocal}">
        <i class="fa fa-cog"></i> Gestionar Local</button></div>`});
     marker.addListener('click',()=>iw.open(window.mapa,marker));
@@ -1714,13 +1776,17 @@ window.initMap=function(){
 
   // Marcadores Reagendados
   coordenadasReag.forEach(local=>{
-    const iconUrl=(local.markerColor==='blue') ? 'assets/images/marker_blue1.png' : 'assets/images/marker_red1.png';
+    let iconUrl = (local.markerColor === 'orange') ? orangeMarkerSvg : 'assets/images/marker_red1.png';
+    if (local.markerColor === 'blue') iconUrl = 'assets/images/marker_blue1.png';
     const marker=new google.maps.Marker({
       position:{lat:local.latitud, lng:local.lng}, map:window.mapa, title:local.nombre_local,
       icon:{ url:iconUrl, scaledSize:new google.maps.Size(30,30) }
     });
+    const botNote = local.is_botilleria
+      ? `<span style="color:#e67e22;font-size:12px;font-weight:600;"><i class="fa fa-clock-o"></i> Botillería: abre a las 13:00 hrs</span><br><br>`
+      : '';
     const iw=new google.maps.InfoWindow({content:
-      `<div style="min-width:180px;"><strong>${local.nombre_local}</strong><br><br>
+      `<div style="min-width:180px;"><strong>${local.nombre_local}</strong><br><br>${botNote}
        <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#responsiveReag${local.idLocal}">
        <i class="fa fa-cog"></i> Gestionar Local</button></div>`});
     marker.addListener('click',()=>iw.open(window.mapa,marker));
@@ -2069,7 +2135,7 @@ function localYmd(d){
     parts.push('Pendientes: ' + pending);
     parts.push('Enviando: ' + running);
     parts.push('Errores: ' + error);
-    if (st.blocked === 'auth') parts.push('Bloqueada por sesi�n');
+    if (st.blocked === 'auth') parts.push('Bloqueada por sesi n');
     if (st.blocked === 'csrf') parts.push('Bloqueada por CSRF');
 
     let typeLine = '';
@@ -2108,7 +2174,7 @@ function localYmd(d){
       typeLine = '';
     }
 
-    if (detailEl) detailEl.textContent = parts.join(' � ') + (typeLine ? ' | ' + typeLine : '');
+    if (detailEl) detailEl.textContent = parts.join('   ') + (typeLine ? ' | ' + typeLine : '');
   } catch (e) {
     if (detailEl) detailEl.textContent = 'No se pudo leer estado de cola.';
   }
@@ -2127,7 +2193,7 @@ function localYmd(d){
     }
     if (clearBtn) {
       clearBtn.addEventListener('click', async () => {
-        const ok = confirm('Esto limpiara el historial de colas finalizadas. �Continuar?');
+        const ok = confirm('Esto limpiara el historial de colas finalizadas.  Continuar?');
         if (!ok) return;
         try { await AppDB.cleanup(0); } catch(_){ }
         setTimeout(updateQueuePanel, 200);

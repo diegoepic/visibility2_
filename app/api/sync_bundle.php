@@ -15,7 +15,7 @@ try {
             'ok' => false,
             'status' => 'no_session',
             'error_code' => 'NO_SESSION',
-            'message' => 'Sesi�1�7�1�7n expirada',
+            'message' => 'Sesión expirada',
             'retryable' => false
         ], JSON_UNESCAPED_UNICODE);
         exit;
@@ -33,7 +33,7 @@ try {
     $empresa_id  = (int)($_SESSION['empresa_id']  ?? 0);
     $division_id = (int)($_SESSION['division_id'] ?? 0);
 
-    // -------- Par�1�7�1�7metros de rango de fechas
+    // -------- Par 1 71 1 77 1 71 1 77metros de rango de fechas
     $tz  = new DateTimeZone('America/Santiago');
     $now = new DateTime('now', $tz);
 
@@ -50,7 +50,7 @@ try {
     if (!empty($_GET['delta_since'])) {
         $tmp = date_create((string)$_GET['delta_since']);
         if ($tmp !== false) {
-            $deltaSince = $tmp->format('Y-m-d H:i:00'); // minuto-resoluci�1�7�1�7n
+            $deltaSince = $tmp->format('Y-m-d H:i:00'); // minuto-resoluci 1 71 1 77 1 71 1 77n
         }
     }
 
@@ -69,7 +69,7 @@ try {
         ];
     };
 
-    // -------- 1) Campa�1�70�1�79as relevantes (para ETag y alcance)
+    // -------- 1) Campa 1 71 1 770 1 71 1 779as relevantes (para ETag y alcance)
     $sqlCamp = "
         SELECT DISTINCT
             f.id,
@@ -118,12 +118,14 @@ try {
             fq.id_local, fq.is_priority, DATE(fq.fechaPropuesta) AS fechaPropuesta,
             fq.estado, fq.countVisita,
             l.codigo, l.nombre AS local_nombre, l.direccion, l.lat, l.lng,
-            c.nombre AS cadena, co.comuna AS comuna
+            c.nombre AS cadena, co.comuna AS comuna,
+            cu.nombre AS tipo_cuenta
         FROM formularioQuestion fq
         INNER JOIN formulario f ON f.id = fq.id_formulario
         INNER JOIN local l       ON l.id = fq.id_local
         INNER JOIN cadena c      ON c.id = l.id_cadena
         LEFT  JOIN comuna co     ON co.id = l.id_comuna
+        LEFT  JOIN cuenta cu     ON cu.id = l.id_cuenta
         WHERE fq.id_usuario = ?
           AND f.id_empresa  = ?
           AND (f.id_division = ? OR ? = 0)
@@ -147,12 +149,14 @@ try {
             fq.estado, fq.countVisita,
             l.codigo, l.nombre AS local_nombre, l.direccion, l.lat, l.lng,
             c.nombre AS cadena, co.comuna AS comuna,
+            cu.nombre AS tipo_cuenta,
             (CASE WHEN fq.pregunta = 'en proceso' THEN 1 ELSE 0 END) AS flag_en_proceso
         FROM formularioQuestion fq
         INNER JOIN formulario f ON f.id = fq.id_formulario
         INNER JOIN local l       ON l.id = fq.id_local
         INNER JOIN cadena c      ON c.id = l.id_cadena
         LEFT  JOIN comuna co     ON co.id = l.id_comuna
+        LEFT  JOIN cuenta cu     ON cu.id = l.id_cuenta
         WHERE fq.id_usuario = ?
           AND f.id_empresa  = ?
           AND (f.id_division = ? OR ? = 0)
@@ -171,7 +175,7 @@ try {
     $reagendadosTruncated = count($reagendados) >= 500;
     $stmt->close();
 
-    // Si se truncó, obtener total real para informar al cliente
+    // Si se trunc  , obtener total real para informar al cliente
     $reagendadosTotalCount = null;
     if ($reagendadosTruncated) {
         $sqlCount = str_replace('SELECT' . PHP_EOL . '            fq.id_formulario, f.nombre AS nombre_campana,', 'SELECT COUNT(*) AS total', $sqlReag);
@@ -194,11 +198,12 @@ try {
             'fechaPropuesta' => (string)$row['fechaPropuesta'],
             'reagendado'     => $isReag,
             'local' => [
-                'id_local'  => (int)$row['id_local'],
-                'nombre'    => (string)($row['local_nombre'] ?? ''),
-                'direccion' => (string)($row['direccion'] ?? ''),
-                'comuna'    => (string)($row['comuna'] ?? ''),
-                'cadena'    => (string)($row['cadena'] ?? ''),
+                'id_local'      => (int)$row['id_local'],
+                'nombre'        => (string)($row['local_nombre'] ?? ''),
+                'direccion'     => (string)($row['direccion'] ?? ''),
+                'comuna'        => (string)($row['comuna'] ?? ''),
+                'cadena'        => (string)($row['cadena'] ?? ''),
+                'is_botilleria' => (stripos($row['tipo_cuenta'] ?? '', 'botiller') !== false),
             ],
             'camp'  => [
                 'id_formulario' => (int)$row['id_formulario'],
@@ -275,7 +280,7 @@ try {
         }
     }
 
-    // material (por divisi�1�7�1�7n)
+    // material (por divisi 1 71 1 77 1 71 1 77n)
     $stmt = $conn->prepare(
         "SELECT MAX(COALESCE(updated_at, '1970-01-01 00:00:00')) AS mx FROM material WHERE (id_division = ? OR ? = 0)"
     );
@@ -311,7 +316,7 @@ try {
         'locals'  => $routeLocalIds,
         'max'     => $maxUpd,
     ], $jsonFlags);
-    $etag = hash('sha256', $etagPayload ?: ''); // 64 chars hex — no truncar para evitar colisiones
+    $etag = hash('sha256', $etagPayload ?: ''); // 64 chars hex    no truncar para evitar colisiones
 
     // If-None-Match handling
     $clientEtag = '';
