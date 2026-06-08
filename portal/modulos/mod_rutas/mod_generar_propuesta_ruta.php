@@ -273,6 +273,38 @@ function groupDiameterKm(array $group): float
     return $max;
 }
 
+function maxSequentialJumpKm(array $orderedGroup): float
+{
+    $max = 0.0;
+
+    for ($i = 1; $i < count($orderedGroup); $i++) {
+        $dist = distanceBetweenPoints($orderedGroup[$i - 1], $orderedGroup[$i]);
+
+        if ($dist > $max) {
+            $max = $dist;
+        }
+    }
+
+    return $max;
+}
+
+function groupCompactnessScore(array $group): float
+{
+    $count = count($group);
+
+    if ($count <= 1) {
+        return 0.0;
+    }
+
+    $ordered = twoOptImproveRoute(orderGroupByBestStart($group), 12);
+
+    return (groupDiameterKm($group) * 2.40)
+        + (maxDistanceToMedoid($group) * 1.80)
+        + (estimateRouteDistanceKm($ordered) * 0.75)
+        + (maxSequentialJumpKm($ordered) * 1.50)
+        + (max(0, countDistinctComunas($group) - 1) * 3.00);
+}
+
 function routeViolatesConstraints(array $group, array $opts): bool
 {
     if (empty($group)) {
@@ -725,6 +757,162 @@ function buildCircuitGroups(array $locales, int $targetPerDay, float $maxTotalRo
     return $groups;
 }
 
+function compactGroupScoreSum(array $groups): float
+{
+    $score = 0.0;
+
+    foreach ($groups as $group) {
+        if (!empty($group)) {
+            $score += groupCompactnessScore($group);
+        }
+    }
+
+    return $score;
+}
+
+function canUseRefinedGroup(array $group, int $capacity, array $opts, bool $allowUnderMin = true): bool
+{
+    if (empty($group)) {
+        return false;
+    }
+
+    if (count($group) > $capacity) {
+        return false;
+    }
+
+    if (!$allowUnderMin) {
+        $minGroupSize = (int)($opts['min_group_size'] ?? 1);
+        if ($minGroupSize > 1 && count($group) < $minGroupSize) {
+            return false;
+        }
+    }
+
+    return !routeViolatesConstraints($group, $opts);
+}
+
+function refineGroupsByCompactness(array $groups, array $capacities, array $opts = []): array
+{
+    $groups = array_values(array_filter($groups, static fn($group) => !empty($group)));
+
+    if (count($groups) <= 1) {
+        return $groups;
+    }
+
+    $defaultCapacity = max(1, (int)max($capacities ?: [1]));
+    $minGroupSize = (int)($opts['min_group_size'] ?? 1);
+    $maxPasses = max(1, (int)($opts['compact_refine_passes'] ?? 4));
+    $epsilon = 0.01;
+
+    for ($pass = 0; $pass < $maxPasses; $pass++) {
+        $improved = false;
+
+        for ($fromIdx = 0; $fromIdx < count($groups); $fromIdx++) {
+            if (count($groups[$fromIdx]) <= max(1, $minGroupSize)) {
+                continue;
+            }
+
+            for ($localIdx = 0; $localIdx < count($groups[$fromIdx]); $localIdx++) {
+                $local = $groups[$fromIdx][$localIdx];
+                $bestMove = null;
+                $baseScore = groupCompactnessScore($groups[$fromIdx]);
+
+                for ($toIdx = 0; $toIdx < count($groups); $toIdx++) {
+                    if ($toIdx === $fromIdx) {
+                        continue;
+                    }
+
+                    $toCapacity = $capacities[$toIdx] ?? $defaultCapacity;
+                    if (count($groups[$toIdx]) >= $toCapacity) {
+                        continue;
+                    }
+
+                    $newFrom = $groups[$fromIdx];
+                    array_splice($newFrom, $localIdx, 1);
+                    $newTo = $groups[$toIdx];
+                    $newTo[] = $local;
+
+                    if (!canUseRefinedGroup($newFrom, $capacities[$fromIdx] ?? $defaultCapacity, $opts, false)) {
+                        continue;
+                    }
+
+                    if (!canUseRefinedGroup($newTo, $toCapacity, $opts, true)) {
+                        continue;
+                    }
+
+                    $before = $baseScore + groupCompactnessScore($groups[$toIdx]);
+                    $after = groupCompactnessScore($newFrom) + groupCompactnessScore($newTo);
+                    $gain = $before - $after;
+
+                    if ($gain > $epsilon && ($bestMove === null || $gain > $bestMove['gain'])) {
+                        $bestMove = [
+                            'to_idx' => $toIdx,
+                            'new_from' => $newFrom,
+                            'new_to' => $newTo,
+                            'gain' => $gain,
+                        ];
+                    }
+                }
+
+                if ($bestMove !== null) {
+                    $groups[$fromIdx] = $bestMove['new_from'];
+                    $groups[$bestMove['to_idx']] = $bestMove['new_to'];
+                    $improved = true;
+                    continue 3;
+                }
+            }
+        }
+
+        for ($aIdx = 0; $aIdx < count($groups); $aIdx++) {
+            for ($bIdx = $aIdx + 1; $bIdx < count($groups); $bIdx++) {
+                $before = groupCompactnessScore($groups[$aIdx]) + groupCompactnessScore($groups[$bIdx]);
+                $bestSwap = null;
+
+                for ($i = 0; $i < count($groups[$aIdx]); $i++) {
+                    for ($j = 0; $j < count($groups[$bIdx]); $j++) {
+                        $newA = $groups[$aIdx];
+                        $newB = $groups[$bIdx];
+                        $tmp = $newA[$i];
+                        $newA[$i] = $newB[$j];
+                        $newB[$j] = $tmp;
+
+                        if (!canUseRefinedGroup($newA, $capacities[$aIdx] ?? $defaultCapacity, $opts, true)) {
+                            continue;
+                        }
+
+                        if (!canUseRefinedGroup($newB, $capacities[$bIdx] ?? $defaultCapacity, $opts, true)) {
+                            continue;
+                        }
+
+                        $after = groupCompactnessScore($newA) + groupCompactnessScore($newB);
+                        $gain = $before - $after;
+
+                        if ($gain > $epsilon && ($bestSwap === null || $gain > $bestSwap['gain'])) {
+                            $bestSwap = [
+                                'new_a' => $newA,
+                                'new_b' => $newB,
+                                'gain' => $gain,
+                            ];
+                        }
+                    }
+                }
+
+                if ($bestSwap !== null) {
+                    $groups[$aIdx] = $bestSwap['new_a'];
+                    $groups[$bIdx] = $bestSwap['new_b'];
+                    $improved = true;
+                    continue 3;
+                }
+            }
+        }
+
+        if (!$improved) {
+            break;
+        }
+    }
+
+    return array_values(array_filter($groups, static fn($group) => !empty($group)));
+}
+
 function buildBalancedDistanceGroups(array $locales, array $capacities, array $opts = []): array
 {
     if (empty($locales) || empty($capacities)) {
@@ -843,6 +1031,8 @@ function buildBalancedDistanceGroups(array $locales, array $capacities, array $o
         $groups[$bestGroupIdx][] = $local;
     }
 
+    $groups = refineGroupsByCompactness($groups, $capacities, $opts);
+
     $finalGroups = [];
 
     foreach ($groups as $group) {
@@ -859,6 +1049,17 @@ function buildBalancedDistanceGroups(array $locales, array $capacities, array $o
             }
         }
     }
+
+    if (count($finalGroups) > 1) {
+        $finalCapacities = array_fill(0, count($finalGroups), $defaultCapacity);
+        $finalGroups = refineGroupsByCompactness($finalGroups, $finalCapacities, $opts);
+    }
+
+    $orderedFinalGroups = [];
+    foreach ($finalGroups as $group) {
+        $orderedFinalGroups[] = twoOptImproveRoute(orderGroupByBestStart($group), 12);
+    }
+    $finalGroups = $orderedFinalGroups;
 
     usort($finalGroups, function ($a, $b) {
         $ca = calculateCentroid($a);
@@ -1109,6 +1310,10 @@ if (!$dtFechaInicio || $dtFechaInicio->format('Y-m-d') !== $fechaInicio) {
     fail('La fecha de inicio no es válida.');
 }
 
+$diasExclusionFechaPropuesta = isset($_POST['dias_exclusion_fecha_propuesta']) && is_numeric($_POST['dias_exclusion_fecha_propuesta'])
+    ? max(0, (int)$_POST['dias_exclusion_fecha_propuesta'])
+    : 7;
+
 $idDivisionRuta = (int)($_POST['id_division'] ?? 0);
 
 if ($idDivisionRuta <= 0) {
@@ -1172,6 +1377,8 @@ $routeOptions = [
     'max_radius_km'    => $maxRadiusKm,
     'max_comunas_ruta' => $maxComunasRuta,
     'outlier_knn_km'   => $outlierKnnKm,
+    'min_group_size'   => $minLocalesRuta,
+    'compact_refine_passes' => 5,
 ];
 
 $registrosJson = $_POST['registros_json'] ?? '[]';
@@ -1391,9 +1598,9 @@ foreach ($locales as $local) {
         $diasDiff = (int)$dtUltima->diff($fechaFiltro)->days;
         $local['dias_diferencia_fecha_seleccionada'] = $diasDiff;
 
-        // Excluir si la diferencia con la fecha seleccionada es menor a 7 días
-        if ($diasDiff < 7) {
-            $local['motivo_exclusion_fecha'] = 'Última fechaPropuesta con menos de 7 días de diferencia respecto a la fecha seleccionada';
+        // Si el usuario define 0, se desactiva el filtro por fechaPropuesta.
+        if ($diasExclusionFechaPropuesta > 0 && $diasDiff < $diasExclusionFechaPropuesta) {
+            $local['motivo_exclusion_fecha'] = 'Ultima fechaPropuesta con menos de ' . $diasExclusionFechaPropuesta . ' dias de diferencia respecto a la fecha seleccionada';
             $localesExcluidosPorFecha[] = $local;
             continue;
         }
@@ -1683,6 +1890,7 @@ $sheet->fromArray([
     ['Fecha generación', date('d-m-Y H:i:s')],
     ['Fecha inicio base', $dtFechaInicio->format('d-m-Y')],
     ['División seleccionada', $divisionNombreRuta . ' (ID ' . $idDivisionRuta . ')'],
+    ['Dias minimos desde ultima fechaPropuesta', $diasExclusionFechaPropuesta > 0 ? $diasExclusionFechaPropuesta : 'Sin filtro'],
     ['Cantidad objetivo por día', $cantidadPorDia],
     ['Máximo permitido por día', $maximoPorDia],
     ['Rango esperado por ruta', $cantidadPorDia . ' a ' . $maximoPorDia],
@@ -1710,7 +1918,7 @@ $sheet->fromArray([
 ], null, 'A1');
 
 styleHeader($sheet, 'A1:B1');
-styleDataRange($sheet, 'A2:B26');
+styleDataRange($sheet, 'A2:B27');
 $sheet->freezePane('A2');
 setFixedColumnsWidth($sheet, [
     'A' => 35,

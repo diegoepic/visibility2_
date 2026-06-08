@@ -122,6 +122,13 @@ if (!empty($recIds)) {
 
 $conn->close();
 
+/* Normalizar foto_guia_url: puede ser JSON array o URL simple (registros antiguos) */
+foreach ($recepciones as &$rec) {
+    $decoded = json_decode($rec['foto_guia_url'] ?? '', true);
+    $rec['_fotos_str'] = is_array($decoded) ? implode(' | ', $decoded) : ($rec['foto_guia_url'] ?? '');
+}
+unset($rec);
+
 /* ── Helpers ── */
 function cellRef2(int $col, int $row): string
 {
@@ -257,7 +264,7 @@ foreach ($recepciones as $rec) {
         setStr2($ws2, 3, $r2, date('d/m/Y', strtotime($rec['fecha_recepcion'])));
         setStr2($ws2, 4, $r2, date('d/m/Y H:i', strtotime($rec['created_at'])));
         setStr2($ws2, 5, $r2, $rec['numero_guia'] ?? '—');
-        setStr2($ws2, 6, $r2, $rec['foto_guia_url'] ?? '');
+        setStr2($ws2, 6, $r2, $rec['_fotos_str']);
         setStr2($ws2, 7, $r2, '—');
         setVal2($ws2, 8, $r2, 0);
         setVal2($ws2, 9, $r2, 0);
@@ -270,7 +277,7 @@ foreach ($recepciones as $rec) {
             setStr2($ws2, 3, $r2, date('d/m/Y', strtotime($rec['fecha_recepcion'])));
             setStr2($ws2, 4, $r2, date('d/m/Y H:i', strtotime($rec['created_at'])));
             setStr2($ws2, 5, $r2, $rec['numero_guia'] ?? '—');
-            setStr2($ws2, 6, $r2, $rec['foto_guia_url'] ?? '');
+            setStr2($ws2, 6, $r2, $rec['_fotos_str']);
             setStr2($ws2, 7, $r2, $det['nombre_material']);
             setVal2($ws2, 8, $r2, (float)$det['cantidad_propuesta']);
             setVal2($ws2, 9, $r2, (float)$det['cantidad_recibida']);

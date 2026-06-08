@@ -955,6 +955,17 @@ if ($db) {
                                     La primera ruta comenzara desde esta fecha.
                                 </div>
                             </div>
+
+                            <div class="col-12">
+                                <label for="diasExclusionFechaPropuesta" class="form-label fw-semibold">Dias minimos desde ultima propuesta</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">Dias</span>
+                                    <input type="number" min="0" step="1" value="7" class="form-control" id="diasExclusionFechaPropuesta">
+                                </div>
+                                <div class="planner-help">
+                                    Usa 8 para dejar fuera locales cargados el lunes anterior si planificas un lunes. Usa 0 para reiniciar sin filtro.
+                                </div>
+                            </div>
                 
                             <div class="col-12">
                                 <label class="form-label fw-semibold">Resumen de planificacion</label>
@@ -1109,6 +1120,7 @@ function getLocalesObjetivo() {
 function getPlanStats() {
     const cantidadPorDia = Math.max(parseInt($('#cantidadPorDia').val(), 10) || 1, 1);
     const maxKmRuta = Math.max(parseFloat($('#maxKmRuta').val()) || 80, 1);
+    const diasExclusionFechaPropuesta = Math.max(parseInt($('#diasExclusionFechaPropuesta').val(), 10) || 0, 0);
 
     const localesObjetivo = getLocalesObjetivo();
     const localesConCoords = localesObjetivo.filter(localTieneCoords);
@@ -1124,6 +1136,7 @@ function getPlanStats() {
     return {
         cantidadPorDia,
         maxKmRuta,
+        diasExclusionFechaPropuesta,
         localesObjetivo,
         localesConCoords,
         localesSinCoords,
@@ -1484,6 +1497,7 @@ function actualizarResumenPlanificacion() {
     $('#resumenPlanificacionRuta').html(`
         <div class="summary-item"><span>Cantidad objetivo por dia</span><strong>${stats.cantidadPorDia}</strong></div>
         <div class="summary-item"><span>Distancia maxima entre puntos</span><strong>${stats.maxKmRuta} KM</strong></div>
+        <div class="summary-item"><span>Dias minimos desde ultima propuesta</span><strong>${stats.diasExclusionFechaPropuesta === 0 ? 'Sin filtro' : stats.diasExclusionFechaPropuesta}</strong></div>
         <div class="summary-item"><span>Locales considerados</span><strong>${stats.localesObjetivo.length}</strong></div>
         <div class="summary-item"><span>Locales planificables</span><strong>${stats.localesConCoords.length}</strong></div>
         <div class="summary-item"><span>Excluidos por georreferencia</span><strong>${stats.localesSinCoords.length}</strong></div>
@@ -1598,7 +1612,7 @@ $(document).on('click', '#tablaEncontrados tbody tr', function() {
     }
 });
 
-$('#cantidadPorDia, #maxKmRuta').on('input change', function() {
+$('#cantidadPorDia, #minLocalesRuta, #maxKmRuta, #diasExclusionFechaPropuesta').on('input change', function() {
     actualizarResumenPlanificacion();
     renderRoutePreview();
 });
@@ -1630,6 +1644,7 @@ function enviarPlanificacion(modo, boton) {
 
     const cantidadPorDia = Math.max(parseInt($('#cantidadPorDia').val(), 10) || 1, 1);
     const minLocalesRuta = Math.max(parseInt($('#minLocalesRuta').val(), 10) || 7, 1);
+    const diasExclusionFechaPropuesta = Math.max(parseInt($('#diasExclusionFechaPropuesta').val(), 10) || 0, 0);
 
     let maxKmRuta = Math.max(parseFloat($('#maxKmRuta').val()) || 80, 1);
 
@@ -1671,6 +1686,7 @@ function enviarPlanificacion(modo, boton) {
     appendHidden('modo_planificacion', modo);
     appendHidden('cantidad_por_dia', cantidadPorDia);
     appendHidden('min_locales_ruta', minLocalesRuta);
+    appendHidden('dias_exclusion_fecha_propuesta', diasExclusionFechaPropuesta);
     appendHidden('max_km_ruta', maxKmRuta);
     appendHidden('fecha_inicio', fechaInicio);
     appendHidden('id_division', idDivisionRuta);

@@ -11,11 +11,12 @@ $empresa_id  = intval($_SESSION['empresa_id']);
 $division_id = intval($_SESSION['division_id']);
 
 /* ── Filtros ── */
-$filtro_division  = isset($_GET['division'])   ? intval($_GET['division'])   : 0;
-$filtro_campana   = isset($_GET['id_campana']) ? intval($_GET['id_campana']) : 0;
+$filtro_division  = isset($_GET['division'])    ? intval($_GET['division'])    : 0;
+$filtro_campana   = isset($_GET['id_campana'])  ? intval($_GET['id_campana'])  : 0;
 $filtro_fecha_ini = trim($_GET['fecha_ini'] ?? '');
 $filtro_fecha_fin = trim($_GET['fecha_fin'] ?? '');
 $filtro_texto     = trim($_GET['q'] ?? '');
+$filtro_ejecutor  = isset($_GET['id_ejecutor']) ? intval($_GET['id_ejecutor']) : 0;
 $pagina           = max(1, intval($_GET['p'] ?? 1));
 $por_pagina       = 10;
 
@@ -123,12 +124,27 @@ if ($filtro_campana > 0) {
         $pDet = [$filtro_campana, $empresa_id]; $tDet = 'ii';
         if ($filtro_fecha_ini !== '') { $sqlDet .= " AND mr.fecha_recepcion >= ?"; $pDet[] = $filtro_fecha_ini; $tDet .= 's'; }
         if ($filtro_fecha_fin !== '') { $sqlDet .= " AND mr.fecha_recepcion <= ?"; $pDet[] = $filtro_fecha_fin; $tDet .= 's'; }
+        if ($filtro_ejecutor  >   0) { $sqlDet .= " AND mr.id_usuario = ?";       $pDet[] = $filtro_ejecutor;  $tDet .= 'i'; }
         $sqlDet .= " GROUP BY mr.id ORDER BY mr.fecha_recepcion DESC, mr.created_at DESC";
         $stmtDet = $conn->prepare($sqlDet);
         $stmtDet->bind_param($tDet, ...$pDet);
         $stmtDet->execute();
         $detalleRecepciones = $stmtDet->get_result()->fetch_all(MYSQLI_ASSOC);
         $stmtDet->close();
+
+        /* Desglose por material de cada recepción (para fila expandible en historial) */
+        $detallesMap = [];
+        if (!empty($detalleRecepciones)) {
+            $recIds  = array_column($detalleRecepciones, 'id');
+            $phRec   = implode(',', array_fill(0, count($recIds), '?'));
+            $stmtMRD = $conn->prepare("SELECT id_recepcion, nombre_material, cantidad_propuesta, cantidad_recibida FROM material_recepcion_detalle WHERE id_recepcion IN ($phRec) ORDER BY nombre_material");
+            $stmtMRD->bind_param(str_repeat('i', count($recIds)), ...$recIds);
+            $stmtMRD->execute();
+            foreach ($stmtMRD->get_result()->fetch_all(MYSQLI_ASSOC) as $row) {
+                $detallesMap[(int)$row['id_recepcion']][] = $row;
+            }
+            $stmtMRD->close();
+        }
 
         /* Todos los ejecutores asignados */
         $stmtEj = $conn->prepare("
@@ -244,6 +260,33 @@ if ($filtro_campana > 0) {
             ];
         }
         $stmtTE->close();
+
+        /* Propuesto por ejecutor (para columna % en tab ejecutores) */
+        $propuestoPorEj = [];
+        $stmtPE = $conn->prepare("
+            SELECT fq.id_usuario, SUM(CAST(fq.valor_propuesto AS DECIMAL(10,2))) AS total_propuesto
+            FROM formularioQuestion fq
+            WHERE fq.id_formulario = ? AND fq.material IS NOT NULL AND TRIM(fq.material) != ''
+            GROUP BY fq.id_usuario
+        ");
+        $stmtPE->bind_param('i', $filtro_campana);
+        $stmtPE->execute();
+        foreach ($stmtPE->get_result()->fetch_all(MYSQLI_ASSOC) as $row) {
+            $propuestoPorEj[(int)$row['id_usuario']] = (float)$row['total_propuesto'];
+        }
+        $stmtPE->close();
+
+        /* Reorganizar tooltipPorEj por material (para tab materiales) */
+        $tooltipPorMat = [];
+        foreach ($tooltipPorEj as $ejId => $lineas) {
+            $ejNombre = '';
+            foreach ($chartEjecutores as $ce) {
+                if ((int)$ce['id_usuario'] === $ejId) { $ejNombre = trim($ce['nombre']); break; }
+            }
+            foreach ($lineas as $l) {
+                $tooltipPorMat[$l['mat']][] = ['nombre' => $ejNombre, 'total' => $l['total']];
+            }
+        }
     }
 }
 ?>
@@ -420,6 +463,26 @@ if ($filtro_campana > 0) {
         }
         .tt-wrap:hover .tt-box { display: block; }
         .tt-icon { color: #3a7bd5; font-size: 13px; opacity: .75; }
+        /* ── Detalle expandible historial ── */
+        .det-expand-btn { background:none; border:none; padding:2px 5px; color:#3a7bd5; cursor:pointer; font-size:12px; border-radius:4px; vertical-align:middle; }
+        .det-expand-btn:hover { background:#e8f0ff; }
+        .det-expand-row { display:none; }
+        .det-expand-row > td { padding:0 !important; border:none !important; }
+        .det-sub-wrap { padding:8px 16px 8px 48px; background:#f7faff; border-bottom:2px solid #e4e9f0; }
+        .det-sub-table { width:100%; border-collapse:collapse; font-size:12px; }
+        .det-sub-table th { background:#dce8ff; color:#1a3a5c; padding:4px 10px; font-size:11px; text-align:left; }
+        .det-sub-table td { padding:4px 10px; border-bottom:1px solid #e8eef8; }
+        .det-sub-table tr:last-child td { border-bottom:none; }
+        .delta-neg { color:#e74c3c; font-weight:700; }
+        .delta-ok  { color:#27ae60; font-weight:700; }
+        /* ── Miniaturas múltiples foto ── */
+        .fotos-thumb-strip { display:flex; gap:4px; flex-wrap:wrap; }
+        .fotos-thumb-strip img { width:44px; height:34px; object-fit:cover; border-radius:4px; border:1px solid #dde; cursor:zoom-in; }
+        /* ── Modal carrusel ── */
+        .modal-nav-btn { background:rgba(255,255,255,.15); border:none; color:#fff; font-size:20px; padding:4px 10px; cursor:pointer; border-radius:6px; line-height:1; }
+        .modal-nav-btn:hover { background:rgba(255,255,255,.3); }
+        .modal-nav-btn:disabled { opacity:.3; cursor:default; }
+        .modal-foto-counter { font-size:12px; color:#aaa; }
     </style>
 </head>
 <body>
@@ -700,25 +763,30 @@ if ($filtro_campana > 0) {
                 <thead>
                     <tr>
                         <th>Ejecutor</th>
-                        <th>Unidades recibidas</th>
+                        <th>Propuesto</th>
+                        <th>Recibido</th>
+                        <th>% Recibido</th>
                         <th>Registros</th>
                         <th>Estado</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php foreach ($chartEjecutores as $ej):
-                    $tieneRec  = (float)$ej['total_recibido'] > 0;
-                    $ejUid     = (int)$ej['id_usuario'];
-                    $lineasTip = $tooltipPorEj[$ejUid] ?? [];
+                    $tieneRec   = (float)$ej['total_recibido'] > 0;
+                    $ejUid      = (int)$ej['id_usuario'];
+                    $lineasTip  = $tooltipPorEj[$ejUid] ?? [];
+                    $ejProp     = $propuestoPorEj[$ejUid] ?? 0.0;
+                    $ejRecib    = (float)$ej['total_recibido'];
+                    $ejPct      = $ejProp > 0 ? round($ejRecib / $ejProp * 100, 1) : 0.0;
+                    $pctColor   = $ejPct >= 80 ? '#27ae60' : ($ejPct >= 40 ? '#f39c12' : '#e74c3c');
                 ?>
                     <tr>
-                        <td>
-                            <strong><?= htmlspecialchars(trim($ej['nombre']), ENT_QUOTES) ?></strong>
-                        </td>
+                        <td><strong><?= htmlspecialchars(trim($ej['nombre']), ENT_QUOTES) ?></strong></td>
+                        <td><?= $ejProp > 0 ? number_format($ejProp, 0) : '<span style="color:#aaa;">—</span>' ?></td>
                         <td>
                             <?php if (!empty($lineasTip)): ?>
                                 <div class="tt-wrap">
-                                    <strong><?= number_format((float)$ej['total_recibido'], 0) ?></strong>
+                                    <strong><?= number_format($ejRecib, 0) ?></strong>
                                     <i class="fa fa-info-circle tt-icon"></i>
                                     <div class="tt-box">
                                         <?php foreach ($lineasTip as $l): ?>
@@ -729,6 +797,18 @@ if ($filtro_campana > 0) {
                                 </div>
                             <?php else: ?>
                                 <span style="color:#aaa;">—</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if ($ejProp > 0): ?>
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <div style="flex:1; height:6px; background:#e8eef8; border-radius:3px; overflow:hidden; min-width:50px;">
+                                        <div style="width:<?= min(100,$ejPct) ?>%; height:100%; background:<?= $pctColor ?>; border-radius:3px;"></div>
+                                    </div>
+                                    <span style="font-size:12px; font-weight:700; color:<?= $pctColor ?>; min-width:38px;"><?= $ejPct ?>%</span>
+                                </div>
+                            <?php else: ?>
+                                <span style="color:#aaa; font-size:12px;">—</span>
                             <?php endif; ?>
                         </td>
                         <td><?= (int)$ej['registros'] ?></td>
@@ -763,11 +843,14 @@ if ($filtro_campana > 0) {
         <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(40,80,140,.07);">
             <table class="det-table">
                 <thead>
-                    <tr><th>Material</th><th>Propuesto</th><th>Recibido</th><th>% Recibido</th><th>Estado</th></tr>
+                    <tr><th>Material</th><th>Propuesto</th><th>Recibido</th><th>% Recibido</th><th>Estado</th><th></th></tr>
                 </thead>
                 <tbody>
-                <?php foreach ($resumenMateriales as $rm):
-                    $est = $rm['pct'] >= 80 ? ['#d4edda','#155724','Completo'] : ($rm['pct'] >= 40 ? ['#fff3cd','#856404','Parcial'] : ['#f8d7da','#721c24','Bajo']);
+                <?php foreach ($resumenMateriales as $rmIdx => $rm):
+                    $est       = $rm['pct'] >= 80 ? ['#d4edda','#155724','Completo'] : ($rm['pct'] >= 40 ? ['#fff3cd','#856404','Parcial'] : ['#f8d7da','#721c24','Bajo']);
+                    $barColor  = $est[0] === '#d4edda' ? '#27ae60' : ($est[0] === '#fff3cd' ? '#f39c12' : '#e74c3c');
+                    $ejLines   = $tooltipPorMat[$rm['nombre']] ?? [];
+                    $matRowId  = 'mat-row-' . $rmIdx;
                 ?>
                     <tr>
                         <td><strong><?= htmlspecialchars($rm['nombre'], ENT_QUOTES) ?></strong></td>
@@ -776,7 +859,7 @@ if ($filtro_campana > 0) {
                         <td>
                             <div style="display:flex; align-items:center; gap:8px;">
                                 <div style="flex:1; height:6px; background:#e8eef8; border-radius:3px; overflow:hidden;">
-                                    <div style="width:<?= min(100,$rm['pct']) ?>%; height:100%; background:<?= $est[0] === '#d4edda' ? '#27ae60' : ($est[0] === '#fff3cd' ? '#f39c12' : '#e74c3c') ?>; border-radius:3px;"></div>
+                                    <div style="width:<?= min(100,$rm['pct']) ?>%; height:100%; background:<?= $barColor ?>; border-radius:3px;"></div>
                                 </div>
                                 <span style="font-size:12px; font-weight:700; color:#1a3a5c; min-width:38px;"><?= $rm['pct'] ?>%</span>
                             </div>
@@ -784,7 +867,33 @@ if ($filtro_campana > 0) {
                         <td>
                             <span style="background:<?= $est[0] ?>; color:<?= $est[1] ?>; padding:2px 10px; border-radius:8px; font-size:11px; font-weight:700;"><?= $est[2] ?></span>
                         </td>
+                        <td>
+                            <?php if (!empty($ejLines)): ?>
+                                <button class="det-expand-btn" onclick="toggleDet('<?= $matRowId ?>')" title="Ver por ejecutor">
+                                    <i class="fa fa-users"></i>
+                                </button>
+                            <?php endif; ?>
+                        </td>
                     </tr>
+                    <?php if (!empty($ejLines)): ?>
+                    <tr class="det-expand-row" id="det-row-<?= $matRowId ?>">
+                        <td colspan="6">
+                            <div class="det-sub-wrap">
+                                <table class="det-sub-table">
+                                    <thead><tr><th>Ejecutor</th><th>Recibido</th></tr></thead>
+                                    <tbody>
+                                    <?php foreach ($ejLines as $el): ?>
+                                        <tr>
+                                            <td><?= htmlspecialchars($el['nombre'], ENT_QUOTES) ?></td>
+                                            <td><strong><?= number_format($el['total'], 0) ?></strong> unid.</td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endif; ?>
                 <?php endforeach; ?>
                 </tbody>
             </table>
@@ -794,8 +903,32 @@ if ($filtro_campana > 0) {
         <!-- ── TAB: HISTORIAL ── -->
         <?php elseif ($tab === 'historial'): ?>
 
+        <!-- Filtro por ejecutor -->
+        <?php if (!empty($todosEjecutores)):
+            $urlHistBase = '?id_campana='.$filtro_campana.'&tab=historial'
+                .($filtro_division ? '&division='.$filtro_division : '')
+                .($filtro_fecha_ini ? '&fecha_ini='.$filtro_fecha_ini : '')
+                .($filtro_fecha_fin ? '&fecha_fin='.$filtro_fecha_fin : '');
+        ?>
+        <div style="margin-bottom:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <label style="font-size:12px; color:#8fa0b5; font-weight:600; margin:0;">Ejecutor:</label>
+            <select onchange="window.location='<?= $urlHistBase ?>&id_ejecutor='+this.value"
+                    style="border:1px solid #d8e2ee; border-radius:7px; padding:5px 10px; font-size:13px;">
+                <option value="0">Todos</option>
+                <?php foreach ($todosEjecutores as $ej): ?>
+                    <option value="<?= $ej['id'] ?>" <?= $filtro_ejecutor === (int)$ej['id'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars(trim($ej['nombre_ejecutor']), ENT_QUOTES) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <?php if ($filtro_ejecutor > 0): ?>
+                <a href="<?= $urlHistBase ?>" class="btn btn-xs btn-default"><i class="fa fa-times"></i> Quitar filtro</a>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
         <?php if (empty($detalleRecepciones)): ?>
-            <p style="color:#aaa; text-align:center; padding:40px;">Sin recepciones registradas<?= ($filtro_fecha_ini || $filtro_fecha_fin) ? ' en el rango de fechas' : '' ?>.</p>
+            <p style="color:#aaa; text-align:center; padding:40px;">Sin recepciones registradas<?= ($filtro_fecha_ini || $filtro_fecha_fin || $filtro_ejecutor) ? ' con los filtros aplicados' : '' ?>.</p>
         <?php else: ?>
         <div style="overflow-x:auto; background:#fff; border-radius:14px; box-shadow:0 2px 10px rgba(40,80,140,.07);">
             <table class="det-table">
@@ -807,12 +940,18 @@ if ($filtro_campana > 0) {
                         <th>Registrado</th>
                         <th>Materiales recibidos</th>
                         <th>N° Guía</th>
-                        <th>Foto</th>
+                        <th>Fotos</th>
                         <th>Observación</th>
                     </tr>
                 </thead>
                 <tbody>
-                <?php foreach ($detalleRecepciones as $i => $d): ?>
+                <?php foreach ($detalleRecepciones as $i => $d):
+                    $recId    = (int)$d['id'];
+                    $detLines = $detallesMap[$recId] ?? [];
+                    $fotosRaw = $d['foto_guia_url'];
+                    $fotos    = $fotosRaw ? (json_decode($fotosRaw, true) ?: [$fotosRaw]) : [];
+                    $caption  = htmlspecialchars('Guía N° '.($d['numero_guia'] ?? '—').' — '.trim($d['nombre_ejecutor']), ENT_QUOTES);
+                ?>
                     <tr>
                         <td style="color:#aaa; font-size:12px;"><?= $i + 1 ?></td>
                         <td>
@@ -825,17 +964,27 @@ if ($filtro_campana > 0) {
                         <td style="color:#aaa; font-size:11px; white-space:nowrap;">
                             <?= date('d/m/Y H:i', strtotime($d['created_at'])) ?>
                         </td>
-                        <td style="font-size:12px; max-width:200px;">
+                        <td style="font-size:12px; max-width:220px;">
+                            <?php if (!empty($detLines)): ?>
+                                <button class="det-expand-btn" onclick="toggleDet(<?= $recId ?>)" title="Ver desglose por material">
+                                    <i class="fa fa-list-ul"></i>
+                                </button>
+                            <?php endif; ?>
                             <?= htmlspecialchars($d['resumen_mat'] ?? '—', ENT_QUOTES) ?>
                         </td>
                         <td style="font-size:12px;"><?= htmlspecialchars($d['numero_guia'] ?? '—', ENT_QUOTES) ?></td>
                         <td>
-                            <?php if ($d['foto_guia_url']): ?>
-                                <img src="<?= htmlspecialchars($d['foto_guia_url'], ENT_QUOTES) ?>"
-                                     class="foto-thumb js-foto-modal"
-                                     data-src="<?= htmlspecialchars($d['foto_guia_url'], ENT_QUOTES) ?>"
-                                     data-caption="Guía N° <?= htmlspecialchars($d['numero_guia'] ?? '—', ENT_QUOTES) ?> — <?= htmlspecialchars(trim($d['nombre_ejecutor']), ENT_QUOTES) ?>"
-                                     alt="Guía">
+                            <?php if (!empty($fotos)): ?>
+                                <div class="fotos-thumb-strip">
+                                    <?php foreach ($fotos as $fIdx => $fUrl): ?>
+                                        <img src="<?= htmlspecialchars($fUrl, ENT_QUOTES) ?>"
+                                             class="js-foto-modal"
+                                             data-fotos="<?= htmlspecialchars(json_encode($fotos), ENT_QUOTES) ?>"
+                                             data-idx="<?= $fIdx ?>"
+                                             data-caption="<?= $caption ?>"
+                                             alt="Guía">
+                                    <?php endforeach; ?>
+                                </div>
                             <?php else: ?>
                                 <span style="color:#aaa; font-size:12px;">—</span>
                             <?php endif; ?>
@@ -844,6 +993,31 @@ if ($filtro_campana > 0) {
                             <?= htmlspecialchars($d['observacion'] ?? '—', ENT_QUOTES) ?>
                         </td>
                     </tr>
+                    <?php if (!empty($detLines)): ?>
+                    <tr class="det-expand-row" id="det-row-<?= $recId ?>">
+                        <td colspan="8">
+                            <div class="det-sub-wrap">
+                                <table class="det-sub-table">
+                                    <thead><tr><th>Material</th><th>Propuesto</th><th>Recibido</th><th>Diferencia</th></tr></thead>
+                                    <tbody>
+                                    <?php foreach ($detLines as $dl):
+                                        $diff = (float)$dl['cantidad_recibida'] - (float)$dl['cantidad_propuesta'];
+                                        $diffClass = $diff >= 0 ? 'delta-ok' : 'delta-neg';
+                                        $diffStr   = ($diff >= 0 ? '+' : '') . number_format($diff, 0);
+                                    ?>
+                                        <tr>
+                                            <td><strong><?= htmlspecialchars($dl['nombre_material'], ENT_QUOTES) ?></strong></td>
+                                            <td><?= number_format((float)$dl['cantidad_propuesta'], 0) ?></td>
+                                            <td><strong><?= number_format((float)$dl['cantidad_recibida'], 0) ?></strong></td>
+                                            <td class="<?= $diffClass ?>"><?= $diffStr ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endif; ?>
                 <?php endforeach; ?>
                 </tbody>
             </table>
@@ -855,29 +1029,37 @@ if ($filtro_campana > 0) {
     </div><!-- /.rm-main -->
 </div><!-- /.rm-layout -->
 
-<!-- ── Modal foto guía ── -->
+<!-- ── Modal foto guía (carrusel multi-foto) ── -->
 <div id="modalFotoGuia" style="
     display:none; position:fixed; inset:0; z-index:9999;
-    background:rgba(0,0,0,.75); align-items:center; justify-content:center; padding:20px;">
+    background:rgba(0,0,0,.8); align-items:center; justify-content:center; padding:20px;">
     <div style="
-        max-width:680px; width:100%; background:#fff;
+        max-width:720px; width:100%; background:#fff;
         border-radius:16px; overflow:hidden;
-        box-shadow:0 20px 60px rgba(0,0,0,.4);">
+        box-shadow:0 20px 60px rgba(0,0,0,.5);">
         <div style="
             display:flex; align-items:center; justify-content:space-between;
             padding:14px 18px; border-bottom:1px solid #e4e9f0; background:#f8fafc;">
             <span id="modalFotoCaption" style="font-size:13px; font-weight:700; color:#1a3a5c;"></span>
-            <button onclick="cerrarModalFoto()" style="
-                border:none; background:none; font-size:22px;
-                color:#888; cursor:pointer; line-height:1;">&times;</button>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span id="modalFotoCounter" class="modal-foto-counter"></span>
+                <button onclick="cerrarModalFoto()" style="
+                    border:none; background:none; font-size:22px;
+                    color:#888; cursor:pointer; line-height:1;">&times;</button>
+            </div>
         </div>
-        <div style="padding:16px; text-align:center; background:#f0f4f8;">
+        <div style="padding:16px; text-align:center; background:#f0f4f8; position:relative;">
+            <button id="modalPrev" class="modal-nav-btn" onclick="modalNav(-1)"
+                    style="position:absolute; left:12px; top:50%; transform:translateY(-50%);">&#8249;</button>
             <img id="modalFotoImg" src="" alt="Guía de despacho" style="
                 max-width:100%; max-height:70vh;
                 border-radius:10px; object-fit:contain;
                 box-shadow:0 4px 20px rgba(0,0,0,.15);">
+            <button id="modalNext" class="modal-nav-btn" onclick="modalNav(1)"
+                    style="position:absolute; right:12px; top:50%; transform:translateY(-50%);">&#8250;</button>
         </div>
-        <div style="padding:10px 18px; text-align:right; border-top:1px solid #e4e9f0;">
+        <div style="padding:10px 18px; display:flex; justify-content:space-between; align-items:center; border-top:1px solid #e4e9f0;">
+            <div id="modalDots" style="display:flex; gap:6px;"></div>
             <a id="modalFotoLink" href="#" target="_blank"
                style="font-size:12px; color:#3a7bd5; text-decoration:none;">
                 <i class="fa fa-external-link"></i> Abrir en nueva pestaña
@@ -886,28 +1068,82 @@ if ($filtro_campana > 0) {
     </div>
 </div>
 <script>
-document.querySelectorAll('.js-foto-modal').forEach(function (img) {
-    img.style.cursor = 'zoom-in';
-    img.addEventListener('click', function () {
-        document.getElementById('modalFotoImg').src     = this.dataset.src;
-        document.getElementById('modalFotoLink').href   = this.dataset.src;
-        document.getElementById('modalFotoCaption').textContent = this.dataset.caption || 'Foto guía';
-        const m = document.getElementById('modalFotoGuia');
-        m.style.display = 'flex';
-        document.body.style.overflow = 'hidden';
-    });
-});
+/* ── Modal carrusel ── */
+var _modalFotos = [];
+var _modalIdx   = 0;
+
+function abrirModalFoto(fotos, idx, caption) {
+    _modalFotos = fotos;
+    _modalIdx   = idx;
+    document.getElementById('modalFotoCaption').textContent = caption || 'Foto guía';
+    renderModalFoto();
+    var m = document.getElementById('modalFotoGuia');
+    m.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function renderModalFoto() {
+    var n   = _modalFotos.length;
+    var url = _modalFotos[_modalIdx];
+    document.getElementById('modalFotoImg').src   = url;
+    document.getElementById('modalFotoLink').href = url;
+    document.getElementById('modalFotoCounter').textContent = n > 1 ? (_modalIdx + 1) + ' / ' + n : '';
+    document.getElementById('modalPrev').style.display = (n > 1) ? '' : 'none';
+    document.getElementById('modalNext').style.display = (n > 1) ? '' : 'none';
+    document.getElementById('modalPrev').disabled = (_modalIdx === 0);
+    document.getElementById('modalNext').disabled = (_modalIdx === n - 1);
+    /* dots */
+    var dots = document.getElementById('modalDots');
+    dots.innerHTML = '';
+    if (n > 1) {
+        for (var i = 0; i < n; i++) {
+            var d = document.createElement('span');
+            d.style.cssText = 'width:8px;height:8px;border-radius:50%;background:' + (i === _modalIdx ? '#3a7bd5' : '#ccc') + ';display:inline-block;cursor:pointer;';
+            d.setAttribute('data-i', i);
+            d.onclick = function() { _modalIdx = parseInt(this.getAttribute('data-i')); renderModalFoto(); };
+            dots.appendChild(d);
+        }
+    }
+}
+
+function modalNav(dir) {
+    _modalIdx = Math.max(0, Math.min(_modalFotos.length - 1, _modalIdx + dir));
+    renderModalFoto();
+}
+
+
 function cerrarModalFoto() {
     document.getElementById('modalFotoGuia').style.display = 'none';
     document.getElementById('modalFotoImg').src = '';
     document.body.style.overflow = '';
 }
+
+document.querySelectorAll('.js-foto-modal').forEach(function (img) {
+    img.addEventListener('click', function () {
+        var fotos   = JSON.parse(this.dataset.fotos || '[]');
+        var idx     = parseInt(this.dataset.idx || '0');
+        var caption = this.dataset.caption || 'Foto(s) guía';
+        if (!fotos.length && this.dataset.src) fotos = [this.dataset.src];
+        abrirModalFoto(fotos, idx, caption);
+    });
+});
+
 document.getElementById('modalFotoGuia').addEventListener('click', function (e) {
     if (e.target === this) cerrarModalFoto();
 });
 document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') cerrarModalFoto();
+    if (e.key === 'ArrowRight') modalNav(1);
+    if (e.key === 'ArrowLeft')  modalNav(-1);
 });
+
+/* ── Filas expandibles ── */
+function toggleDet(id) {
+    var row = document.getElementById('det-row-' + id);
+    if (!row) return;
+    var isHidden = row.style.display === 'none' || row.style.display === '';
+    row.style.display = isHidden ? 'table-row' : 'none';
+}
 </script>
 
 <?php if ($campSelec && !empty($chartMateriales)): ?>
@@ -945,7 +1181,7 @@ if (ctxMat) {
     });
 }
 
-/* Donut cobertura ejecutores (resumen tab) */
+
 const ctxEj = document.getElementById('chartEj');
 if (ctxEj) {
     new Chart(ctxEj, {
