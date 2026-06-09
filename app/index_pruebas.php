@@ -1339,6 +1339,8 @@ foreach ($locales_reag as $row) {
   window.__GOOGLE_MAPS_API_KEY = "<?php echo htmlspecialchars($googleMapsApiKey, ENT_QUOTES, 'UTF-8'); ?>";
 </script>
 <script src="assets/js/route_engine.js"></script>
+<script src="assets/js/route_selection.js"></script>
+<script src="assets/js/route_planner.js"></script>
 <script src="assets/js/nav_engine.js"></script>
 <script src="assets/js/ar_view_lite.js"></script>
 
@@ -1480,63 +1482,65 @@ function renderIndicacionesFromRoute(route){
 
 // Motor unificado (Routes v2) con fallback a DirectionsService + caché en memoria
 // Fix #15: propaga el flag force para saltarse el rate limit cuando el usuario recalcula manualmente
-async function computeRouteUnified({origin,destination,waypoints=[], optimize=true, mode, force=false}){
+async function computeRouteUnified({origin,destination,waypoints=[], optimize=true, mode, force=false, bypassCache=false}){
   const chosenMode = mode || (window.trafficEnabled ? 'traffic' : 'preview');
-  return window.RouteEngine.computeRouteUnified({ origin, destination, waypoints, optimize, mode: chosenMode, force });
+  // force salta throttle pero NO la caché; bypassCache se usa explícitamente para datos frescos
+  return window.RouteEngine.computeRouteUnified({ origin, destination, waypoints, optimize, mode: chosenMode, bypassThrottle: force, bypassCache });
 }
 
-// Toma puntos desde la tabla activa/visible
-// Fix #19: cuando hay búsqueda activa cross-date, recolectar de todas las fechas visibles
+// Delegado a RouteSelection.collect() — mantiene compatibilidad con llamadas existentes
 function collectCurrentPoints(){
-  const cont     = (window.modoLocal === 'prog') ? '#localesProgCollapse' : '#localesReagCollapse';
-  const selId    = (window.modoLocal==='prog')?'#filtroFechaProg':'#filtroFechaReag';
-  const searchId = (window.modoLocal==='prog')?'#filtroLocalesProg':'#filtroLocalesReag';
-  const fechaSel = $(selId).val();
   const modo     = window.modoLocal;
-  const searchTerm = String($(searchId).val() || '').trim();
-
-  // Con búsqueda activa: recolectar de todas las tablas visibles (cross-date)
-  const tableFilter = searchTerm
-    ? `${cont} table[data-fechaTabla]:visible tbody tr:visible`
-    : `${cont} table[data-fechaTabla="${fechaSel}"]:visible tbody tr:visible`;
-
-  const pts = [];
-  $(tableFilter).each(function(){
-    const $tr   = $(this);
-    const idLocal = parseInt($tr.data('idlocal'), 10);
-    const lat     = parseFloat($tr.data('lat'));
-    const lng     = parseFloat($tr.data('lng'));
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    const fecha   = $tr.closest('table').data('fechatabla') || fechaSel;
-    const hasCheck = $tr.find('.in-route').length > 0;
-    const include  = hasCheck
-      ? $tr.find('.in-route').prop('checked')
-      : !window.excluded.has(`${modo}|${fecha}|${idLocal}`);
-    if (!include) return;
-    const isBotilleria = $tr.data('isbotilleria') === 'true' || $tr.data('isbotilleria') === true;
-    pts.push({ idLocal, lat, lng, isBotilleria });
+  const cont     = (modo === 'prog') ? '#localesProgCollapse' : '#localesReagCollapse';
+  const selId    = (modo === 'prog') ? '#filtroFechaProg' : '#filtroFechaReag';
+  const searchId = (modo === 'prog') ? '#filtroLocalesProg' : '#filtroLocalesReag';
+  const result   = window.RouteSelection.collect({
+    modo,
+    fechaSel:   $(selId).val(),
+    searchTerm: $(searchId).val(),
+    excluded:   window.excluded,
+    cont
   });
+  return result.pts;
+}
 
-  // Botillerías al final cuando es antes de las 13:00
-  const horaActualMin = new Date().getHours() * 60 + new Date().getMinutes();
-  if (horaActualMin < 13 * 60) {
-    const normales    = pts.filter(p => !p.isBotilleria);
-    const botillerias = pts.filter(p => p.isBotilleria);
-    pts.length = 0;
-    pts.push(...normales, ...botillerias);
-  }
+// ── Numeración de marcadores en el mapa ──────────────────────────────────────
 
-  // Fix #18: avisar al usuario cuando se superan los 24 puntos
-  if (pts.length > 24) {
-    const dropped = pts.length - 24;
-    pts.length = 24;
-    const $w = $('#routeWarning');
-    if ($w.length) {
-      $w.text(`Ruta limitada a 24 locales. ${dropped} local(es) omitido(s) por límite de la API.`).stop(true).show();
-      setTimeout(() => $w.fadeOut(), 6000);
-    }
-  }
-  return pts;
+function makeNumberedIcon(num, color){
+  const fs  = num > 9 ? '10' : '13';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="42" viewBox="0 0 30 42">` +
+    `<path d="M15 0C6.72 0 0 6.72 0 15c0 11.25 15 27 15 27S30 26.25 30 15C30 6.72 23.28 0 15 0z" ` +
+    `fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
+    `<text x="15" y="16" text-anchor="middle" dominant-baseline="middle" ` +
+    `fill="#fff" font-family="Arial,Helvetica,sans-serif" font-size="${fs}" font-weight="bold">${num}</text>` +
+    `</svg>`;
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
+
+// Aplica números de orden a los marcadores del modo activo
+function applyRouteNumbers(orderedPts){
+  const markers = (window.modoLocal === 'prog') ? window.markersProg : window.markersReag;
+  // Primero restaurar todos los marcadores a su ícono original
+  Object.values(markers).forEach(function(m){
+    if (m.originalIcon) { m.marker.setIcon(m.originalIcon); }
+  });
+  // Luego numerar los que están en la ruta
+  orderedPts.forEach(function(pt, idx){
+    const m = markers[pt.idLocal];
+    if (!m) return;
+    const color = m.markerColor === 'orange' ? '#e67e22' : m.markerColor === 'blue' ? '#2980b9' : '#c0392b';
+    m.marker.setIcon({ url: makeNumberedIcon(idx + 1, color), scaledSize: new google.maps.Size(30, 42) });
+  });
+}
+
+// Limpia todos los números y restaura íconos originales
+function clearRouteNumbers(){
+  [window.markersProg, window.markersReag].forEach(function(markers){
+    if (!markers) return;
+    Object.values(markers).forEach(function(m){
+      if (m.originalIcon) { m.marker.setIcon(m.originalIcon); }
+    });
+  });
 }
 
 // Texto a voz (toggleable)
@@ -1552,19 +1556,74 @@ function speak(text){
   }catch(_){}
 }
 
-// Planifica/actualiza la ruta en el mapa (polilíneas + drawer + HUD stats) + "Route throttle" + instrumentation
 function logRouteEvent(payload){
   const now=new Date();
   console.debug('[route]', { ts: now.toISOString(), ...payload });
 }
+
+// Reordena las filas del tbody según el orden optimizado devuelto por Routes API
+function renderTableOrder(orderedPts){
+  const cont  = (window.modoLocal === 'prog') ? '#localesProgCollapse' : '#localesReagCollapse';
+  const selId = (window.modoLocal === 'prog') ? '#filtroFechaProg' : '#filtroFechaReag';
+  const fechaSel = $(selId).val();
+  const $tbody = $(`${cont} table[data-fechaTabla="${fechaSel}"] tbody`);
+  if (!$tbody.length) return;
+  const rowMap = {};
+  $tbody.find('tr').each(function(){ rowMap[parseInt($(this).data('idlocal'),10)] = $(this).detach(); });
+  orderedPts.forEach(function(pt, idx){
+    const $tr = rowMap[pt.idLocal];
+    if (!$tr) return;
+    let $badge = $tr.find('.v2-route-ord');
+    if (!$badge.length) {
+      $tr.find('.in-route').closest('td').prepend(
+        '<span class="v2-route-ord" style="display:inline-block;background:#4285F4;color:#fff;border-radius:50%;width:18px;height:18px;text-align:center;line-height:18px;font-size:11px;font-weight:bold;margin-right:3px;vertical-align:middle;"></span>'
+      );
+      $badge = $tr.find('.v2-route-ord');
+    }
+    $badge.text(idx + 1);
+    $tbody.append($tr);
+  });
+  // Filas no incluidas en la ruta (sin checkbox o excluidas) van al final
+  Object.values(rowMap).forEach(function($tr){ if ($tr && $tr.parent().length === 0) $tbody.append($tr); });
+}
+
 window.planRouteFromSelection = async function (origen, opts={}){
   const { force=false, trigger='unknown' } = opts;
   if(!isMapVisible || !window.mapa) { logRouteEvent({trigger, skipped:'map_hidden'}); return; }
-  const puntos = collectCurrentPoints();
+
+  // Recolectar mediante RouteSelection para obtener metadata cross-date
+  const modo     = window.modoLocal;
+  const cont     = (modo === 'prog') ? '#localesProgCollapse' : '#localesReagCollapse';
+  const selId    = (modo === 'prog') ? '#filtroFechaProg' : '#filtroFechaReag';
+  const searchId = (modo === 'prog') ? '#filtroLocalesProg' : '#filtroLocalesReag';
+  const selection = window.RouteSelection.collect({
+    modo, fechaSel: $(selId).val(), searchTerm: $(searchId).val(), excluded: window.excluded, cont
+  });
+  const puntos = selection.pts;
+
   if (!puntos.length) {
     (window.mapa.__trafficSegs||[]).forEach(s=>s.setMap(null)); window.mapa.__trafficSegs=[];
-    window.plannedRoute=null; $('#distanciaTotal').text('0 km'); $('#duracionEstimada').text('0 min'); $('#listaIndicaciones').empty(); return;
+    window.plannedRoute=null; window.lastComputedRoute=null; window._lastSelectionHash=null;
+    clearRouteNumbers();
+    $('#distanciaTotal').text('0 km'); $('#duracionEstimada').text('0 min'); $('#listaIndicaciones').empty(); return;
   }
+
+  // Aviso cross-date: si la búsqueda activa mezcla locales de varias fechas, pedir confirmación
+  if (selection.isMultiDate && trigger !== 'cross_date_confirmed') {
+    const ok = await window.RouteSelection.confirmCrossDate(selection.fechas);
+    if (!ok) return;
+    // Re-invocar con flag que indica que el usuario ya confirmó
+    return window.planRouteFromSelection(origen, { ...opts, trigger: 'cross_date_confirmed' });
+  }
+
+  // Evitar recálculo si la selección no cambió (mismos idLocales, mismo orden)
+  const selectionHash = puntos.map(p => p.idLocal).join(',');
+  if (!force && selectionHash === window._lastSelectionHash && window.lastComputedRoute) {
+    buildTrafficPolylines(window.mapa, window.lastComputedRoute.route);
+    return;
+  }
+  window._lastSelectionHash = selectionHash;
+
   const horaMinActual = new Date().getHours() * 60 + new Date().getMinutes();
   const hayBotillerias = puntos.some(p => p.isBotilleria);
   if (hayBotillerias && horaMinActual < 13 * 60) {
@@ -1575,21 +1634,54 @@ window.planRouteFromSelection = async function (origen, opts={}){
       setTimeout(() => $w.fadeOut(), 9000);
     }
   }
-  const destination = puntos[puntos.length - 1];
-  const waypoints   = puntos.slice(0, -1);
   const mode = window.trafficEnabled ? 'traffic' : 'preview';
   try{
-    const route = await computeRouteUnified({origin:origen, destination, waypoints, optimize:window.optimizeOrder, mode, force});
-    window.plannedRoute = route;
-    buildTrafficPolylines(window.mapa, route);
-    const km  = ((route.distanceMeters||0)/1000).toFixed(2);
-    const min = Math.round(secondsFromDuration(route.duration)/60);
+    const plan = await window.RoutePlanner.planFull({
+      origin:        origen,
+      points:        puntos,
+      optimize:      window.optimizeOrder,
+      mode,
+      bypassThrottle: force,
+      bypassCache:    false
+    });
+    window.plannedRoute      = plan.route;
+    window.lastComputedRoute = { orderedPts: plan.orderedPts, route: plan.route, chunks: plan.chunks };
+
+    // Reordenar tabla y numerar marcadores del mapa con el orden final
+    renderTableOrder(plan.orderedPts);
+    applyRouteNumbers(plan.orderedPts);
+
+    // UI de chunks: banner informativo cuando la ruta fue dividida
+    if (plan.chunks && plan.chunks.length > 1) {
+      window._routeChunks = plan.chunks;
+      const $w = $('#routeWarning');
+      if ($w.length) {
+        $w.html(
+          `📍 Ruta dividida en <strong>${plan.chunks.length} bloques</strong> (${plan.orderedPts.length} locales). ` +
+          plan.chunks.map((c, i) =>
+            `<button type="button" class="btn btn-xs btn-primary v2-export-chunk" data-chunk="${i}">Exportar bloque ${i+1}</button>`
+          ).join(' ')
+        ).stop(true).show();
+      }
+    } else {
+      window._routeChunks = null;
+    }
+
+    buildTrafficPolylines(window.mapa, plan.route);
+    const km  = ((plan.route.distanceMeters||0)/1000).toFixed(2);
+    const min = Math.round(secondsFromDuration(plan.route.duration)/60);
     $('#distanciaTotal').text(`${km} km`);
     $('#duracionEstimada').text(`${min} min`);
-    renderIndicacionesFromRoute(route);
-    logRouteEvent({trigger, cacheHit:false});
+    renderIndicacionesFromRoute(plan.route);
+    logRouteEvent({trigger, apiUsed: plan.apiUsed});
     speak(`Ruta actualizada. ${km} kilómetros, ${min} minutos.`);
-  }catch(err){ logRouteEvent({trigger, error:String(err)}); }
+  }catch(err){
+    logRouteEvent({trigger, error:String(err)});
+    if (!err.message?.includes('Sin conexión')) {
+      const $w = $('#routeWarning');
+      if ($w.length) $w.text('Error al calcular ruta: ' + (err.message || 'Error desconocido')).stop(true).show();
+    }
+  }
 };
 window.debouncedPlanRoute = debounce((pos)=>window.planRouteFromSelection(pos,{trigger:'gps_move'}), 1000);
 
@@ -1609,7 +1701,9 @@ function setMode(mode){
   rememberMode(finalMode);
   if (finalMode === 'prog') { $('#panelReagendados').hide(); $('#panelProgramados').show(); }
   else { $('#panelProgramados').hide(); $('#panelReagendados').show(); }
+  clearRouteNumbers(); // limpiar números del modo anterior antes de ocultar marcadores
   hideAllMarkers(window.markersProg); hideAllMarkers(window.markersReag);
+  window.lastComputedRoute = null; window._lastSelectionHash = null;
   ensureDateSelectedFor(finalMode); applyFilters();
   const pos = window.ejecutorMarker?.getPosition();
   if (isMapVisible && pos && !(window.navigator3D && window.navigator3D.active)) { window.debouncedPlanRoute(pos.toJSON()); }
@@ -1759,9 +1853,10 @@ window.initMap=function(){
     let iconUrl = 'assets/images/marker_red1.png';
     if (local.markerColor === 'orange') iconUrl = orangeMarkerSvg;
     else if (local.markerColor === 'blue') iconUrl = 'assets/images/marker_blue1.png';
+    const iconObj = { url:iconUrl, scaledSize:new google.maps.Size(30,30) };
     const marker=new google.maps.Marker({
       position:{lat:local.latitud, lng:local.lng}, map:window.mapa, title:local.nombre_local,
-      icon:{ url:iconUrl, scaledSize:new google.maps.Size(30,30) }
+      icon: iconObj
     });
     const botNote = local.is_botilleria
       ? `<span style="color:#e67e22;font-size:12px;font-weight:600;"><i class="fa fa-clock-o"></i> Botillería: abre a las 13:00 hrs</span><br><br>`
@@ -1771,16 +1866,18 @@ window.initMap=function(){
        <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#responsiveProg${local.idLocal}">
        <i class="fa fa-cog"></i> Gestionar Local</button></div>`});
     marker.addListener('click',()=>iw.open(window.mapa,marker));
-    window.markersProg[local.idLocal]={ marker, fechaPropuesta: local.fechaPropuesta };
+    // originalIcon permite restaurar el ícono tras limpiar numeración
+    window.markersProg[local.idLocal]={ marker, fechaPropuesta: local.fechaPropuesta, markerColor: local.markerColor, originalIcon: iconObj };
   });
 
   // Marcadores Reagendados
   coordenadasReag.forEach(local=>{
     let iconUrl = (local.markerColor === 'orange') ? orangeMarkerSvg : 'assets/images/marker_red1.png';
     if (local.markerColor === 'blue') iconUrl = 'assets/images/marker_blue1.png';
+    const iconObj = { url:iconUrl, scaledSize:new google.maps.Size(30,30) };
     const marker=new google.maps.Marker({
       position:{lat:local.latitud, lng:local.lng}, map:window.mapa, title:local.nombre_local,
-      icon:{ url:iconUrl, scaledSize:new google.maps.Size(30,30) }
+      icon: iconObj
     });
     const botNote = local.is_botilleria
       ? `<span style="color:#e67e22;font-size:12px;font-weight:600;"><i class="fa fa-clock-o"></i> Botillería: abre a las 13:00 hrs</span><br><br>`
@@ -1790,7 +1887,7 @@ window.initMap=function(){
        <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#responsiveReag${local.idLocal}">
        <i class="fa fa-cog"></i> Gestionar Local</button></div>`});
     marker.addListener('click',()=>iw.open(window.mapa,marker));
-    window.markersReag[local.idLocal]={ marker, fechaPropuesta: local.fechaPropuesta };
+    window.markersReag[local.idLocal]={ marker, fechaPropuesta: local.fechaPropuesta, markerColor: local.markerColor, originalIcon: iconObj };
   });
 
   // Ubicación ejecutor + capa tráfico
@@ -1852,18 +1949,36 @@ window.initMap=function(){
   $('#optimizeOrder').on('change', function(){ window.optimizeOrder=$(this).is(':checked'); const pos=window.ejecutorMarker?.getPosition(); if (isMapVisible && pos && !(window.navigator3D && window.navigator3D.active)) window.planRouteFromSelection(pos.toJSON(),{trigger:'optimize_toggle'}); });
   $('#autoRecalc').on('change', function(){ window.autoRecalc=$(this).is(':checked'); });
   $('#btnVoz').on('click', function(){ window.voiceEnabled=!window.voiceEnabled; $(this).toggleClass('btn-info', window.voiceEnabled); if (window.voiceEnabled) speak('Voz activada.'); else { try{ speechSynthesis.cancel(); }catch(_){}} });
+  function buildMapsUrl(originLatLng, pts){
+    const dest = pts[pts.length-1];
+    const ways = pts.slice(0,-1).map(p=>`${p.lat},${p.lng}`).join('|');
+    return `https://www.google.com/maps/dir/?api=1&origin=${originLatLng.lat},${originLatLng.lng}&destination=${dest.lat},${dest.lng}&travelmode=driving` +
+           (ways ? `&waypoints=${encodeURIComponent(ways)}` : ``);
+  }
   $('#btnExportar').on('click', function(){
     const pos = window.ejecutorMarker?.getPosition(); if (!pos){ alert('No se pudo obtener tu ubicación.'); return; }
-    const pts = collectCurrentPoints(); if (!pts.length){ alert('Selecciona al menos un local en la columna Ruta.'); return; }
-    const origin=pos.toJSON(); const dest=pts[pts.length-1]; const ways=pts.slice(0,-1).map(p=>`${p.lat},${p.lng}`).join('|');
-    const url = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lng}&destination=${dest.lat},${dest.lng}&travelmode=driving` + (ways ? `&waypoints=${encodeURIComponent(ways)}` : ``);
-    window.open(url, '_blank');
+    // Usar el orden optimizado si está disponible; si no, recolectar desde la tabla
+    const pts = (window.lastComputedRoute?.orderedPts?.length ? window.lastComputedRoute.orderedPts : collectCurrentPoints());
+    if (!pts.length){ alert('Selecciona al menos un local en la columna Ruta.'); return; }
+    window.open(buildMapsUrl(pos.toJSON(), pts), '_blank');
+  });
+  // Export de chunk individual (ruta larga dividida en bloques)
+  $(document).on('click', '.v2-export-chunk', function(){
+    const pos = window.ejecutorMarker?.getPosition(); if (!pos){ alert('No se pudo obtener tu ubicación.'); return; }
+    const chunkIdx = parseInt($(this).data('chunk'), 10);
+    const chunks   = window._routeChunks;
+    if (!chunks || !chunks[chunkIdx]) return;
+    const pts = chunks[chunkIdx].points;
+    const chunkOrigin = chunkIdx === 0 ? pos.toJSON() : { lat: chunks[chunkIdx-1].points[chunks[chunkIdx-1].points.length-1].lat, lng: chunks[chunkIdx-1].points[chunks[chunkIdx-1].points.length-1].lng };
+    window.open(buildMapsUrl(chunkOrigin, pts), '_blank');
   });
 
   // Modo inicial — fix #2: listeners de btnVer* movidos a document.ready (evita doble binding)
   $(document).on('change', 'table input.in-route', function(){
     const $tr=$(this).closest('tr'); const id=parseInt($tr.data('idlocal'),10); const modo=window.modoLocal;
-    const fecha=(modo==='prog')?$('#filtroFechaProg').val():$('#filtroFechaReag').val(); const key=`${modo}|${fecha}|${id}`;
+    // Usar la fecha real de la fila (no el filtro activo) para soportar búsqueda cross-date
+    const fecha = $tr.closest('table').data('fechatabla') || ((modo==='prog')?$('#filtroFechaProg').val():$('#filtroFechaReag').val());
+    const key=`${modo}|${fecha}|${id}`;
     if ($(this).is(':checked')) window.excluded.delete(key); else window.excluded.add(key); saveExcluded(); updateCounts();
     const pos = window.ejecutorMarker?.getPosition(); if (isMapVisible && pos && !(window.navigator3D && window.navigator3D.active)) window.debouncedPlanRoute(pos.toJSON()); logRouteEvent({trigger:'checkbox'});
   });
@@ -1918,7 +2033,9 @@ window.initMap=function(){
     $('#btnStartNav').on('click', async ()=>{
       if(!window.mapa){ alert('Mapa no listo.'); return; }
       const nav=ensureNav();
-      const pts=collectCurrentPoints(); const pos=window.ejecutorMarker?.getPosition();
+      // Preferir el orden optimizado del último plan; fallback a recolección desde tabla
+      const pts = (window.lastComputedRoute?.orderedPts?.length ? window.lastComputedRoute.orderedPts : collectCurrentPoints());
+      const pos=window.ejecutorMarker?.getPosition();
       if(!pos || !pts.length){ alert('Necesitas al menos 1 parada y la ubicación actual.'); return; }
       const origin=pos.toJSON(); const destination=pts[pts.length-1]; const waypoints=pts.slice(0,-1);
       try{ await nav.startFromSelection({ origin, destination, waypoints, optimize:window.optimizeOrder }); navTrack=true; $('#btnRecenter').removeClass('show'); }
@@ -2361,7 +2478,7 @@ if ('serviceWorker' in navigator) {
       if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
       reg.addEventListener('updatefound', function(){
         var nw = reg.installing;
-        if (!nw) return;
+        if (!nw) return;A
         nw.addEventListener('statechange', function(){
           if (nw.state === 'installed' && navigator.serviceWorker.controller) {
             reg.waiting && reg.waiting.postMessage({ type: 'SKIP_WAITING' });

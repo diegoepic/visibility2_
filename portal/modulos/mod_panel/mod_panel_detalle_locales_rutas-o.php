@@ -1014,16 +1014,13 @@ table.dataTable.display tbody tr.even {
 <div class="seccion-tabla">
   <!-- Tabla -->
   <hr>
-    <div class="table-header-bar mb-3 d-flex flex-wrap align-items-center justify-content-between">
+    <div class="table-header-bar mb-3">
       <h5 class="table-title mb-0">
         Listado de Locales <?= ($id_ejecutor > 0 && !empty($nombreEjec)) ? 'para ' . htmlspecialchars($nombreEjec) : '' ?>
         <?php if (!empty($locales)): ?>
           <span class="badge results-badge ml-2"><?= count($locales) ?> RESULTADOS</span>
         <?php endif; ?>
       </h5>
-      <a class="btn btn-sm btn-outline-info mt-2 mt-md-0" href="mod_visualizar_ruta_excel.php">
-        <i class="fa fa-map-marked-alt mr-1"></i> Visualizar Excel en mapa
-      </a>
     </div>
 <div class="table-responsive">
   <table id="example" class="display nowrap modern-dark-table" width="100%">
@@ -1035,8 +1032,6 @@ table.dataTable.display tbody tr.even {
         <th>REGION / COMUNA</th>
         <th class="export-only">REGION</th>
         <th class="export-only">COMUNA</th>
-        <th class="export-only">LAT</th>
-        <th class="export-only">LNG</th>
         <th>MERCHAN</th>          
         <th>ESTADO VISITA</th>
         <th>FECHA PLANIFICADA</th>
@@ -1047,23 +1042,13 @@ table.dataTable.display tbody tr.even {
     </thead>
     <tbody>
       <?php if ($locales): foreach($locales as $loc):
-        $idLocalRaw   = $loc['id_local'] ?? '';
-        $idLocal      = htmlspecialchars((string)$idLocalRaw);
+        $idLocal      = htmlspecialchars($loc['id_local']);
         $nombreCamp   = htmlspecialchars($loc['nombre_campana']);
-        $codigoRaw    = $loc['codigo'] ?? '';
-        $codigoLocal  = htmlspecialchars((string)$codigoRaw);
+        $codigoLocal  = htmlspecialchars($loc['codigo']);
         $nombreLoc    = htmlspecialchars($loc['nombre_local']);
         $dirLoc       = htmlspecialchars($loc['direccion_local']);
         $comunaLoc    = htmlspecialchars($loc['comuna_local']);
         $regionLoc    = htmlspecialchars($loc['region_local']);
-        $coordLocal   = (isset($coordenadas_locales[$idLocalRaw]) && is_array($coordenadas_locales[$idLocalRaw]))
-          ? $coordenadas_locales[$idLocalRaw]
-          : [];
-        if (empty($coordLocal) && isset($coordenadas_locales[$codigoRaw]) && is_array($coordenadas_locales[$codigoRaw])) {
-          $coordLocal = $coordenadas_locales[$codigoRaw];
-        }
-        $latLoc       = htmlspecialchars((string)($loc['lat'] ?? $loc['latitud'] ?? $loc['latitude'] ?? $coordLocal['lat'] ?? $coordLocal['latitud'] ?? ''));
-        $lngLoc       = htmlspecialchars((string)($loc['lng'] ?? $loc['longitud'] ?? $loc['longitude'] ?? $coordLocal['lng'] ?? $coordLocal['longitud'] ?? ''));
         $usuarioLoc   = htmlspecialchars($loc['usuario_local']);
         $fechaP       = $loc['fechaPropuesta'] ? date('d-m-Y', strtotime($loc['fechaPropuesta'])) : '-';
         $fechaV       = $loc['fechaVisita'] ? date('d-m-Y', strtotime($loc['fechaVisita'])) : '-';
@@ -1114,8 +1099,6 @@ table.dataTable.display tbody tr.even {
         <!-- Solo export -->
         <td class="export-only"><?= $regionLoc ?></td>
         <td class="export-only"><?= $comunaLoc ?></td>
-        <td class="export-only"><?= $latLoc ?></td>
-        <td class="export-only"><?= $lngLoc ?></td>
 
         <td><?= $usuarioLoc ?></td>
         <td class="text-center"><?= $badgeEstado ?></td>
@@ -1125,7 +1108,7 @@ table.dataTable.display tbody tr.even {
         <td><?= $observacion ?></td>
       </tr>
       <?php endforeach; else: ?>
-        <tr><td colspan="14" class="text-center">SIN RESULTADOS.</td></tr>
+        <tr><td colspan="12" class="text-center">SIN RESULTADOS.</td></tr>
       <?php endif; ?>
     </tbody>
   </table>
@@ -1156,80 +1139,7 @@ table.dataTable.display tbody tr.even {
 
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="../../assets/js/datatables.min.js"></script>
-<script>
-$(document).ready(function() {
-  $('#example').DataTable({
-    dom: 'Bfrtip',
-    responsive: true,
-    buttons: [
-      {
-        extend: 'colvis',
-        text: 'Mostrar columnas',
-        columns: function(idx, data, node) {
-          return true;
-        }
-      },
-      {
-        extend: 'collection',
-        text: 'Exportar',
-        buttons: [
-          {
-            extend: 'copyHtml5',
-            exportOptions: {
-              columns: function(idx, data, node) {
-                return idx !== 3;
-              },
-              format: {
-                body: function(data, row, column, node) {
-                  if (column === 1) {
-                    return $(node).find('.local-name').first().text().trim();
-                  }
-
-                  return $('<div>').html(data).text().trim();
-                }
-              }
-            }
-          },
-          {
-            extend: 'excelHtml5',
-            exportOptions: {
-              columns: function(idx, data, node) {
-                return idx !== 3;
-              },
-              format: {
-                body: function(data, row, column, node) {
-                  if (column === 1) {
-                    return $(node).find('.local-name').first().text().trim();
-                  }
-
-                  return $('<div>').html(data).text().trim();
-                }
-              }
-            }
-          },
-          {
-            extend: 'pdfHtml5',
-            exportOptions: {
-              columns: function(idx, data, node) {
-                return idx !== 3;
-              },
-              format: {
-                body: function(data, row, column, node) {
-                  if (column === 1) {
-                    return $(node).find('.local-name').first().text().trim();
-                  }
-
-                  return $('<div>').html(data).text().trim();
-                }
-              }
-            }
-          }
-        ]
-      }
-    ]
-  });
-});
-</script>
+<script src="../../assets/js/dataTable.js"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 
 <script>

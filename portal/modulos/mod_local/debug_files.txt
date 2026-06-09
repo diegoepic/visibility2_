@@ -5,16 +5,16 @@ Array
             [name] => formato_creacion_locales1.csv
             [full_path] => formato_creacion_locales1.csv
             [type] => text/csv
-            [tmp_name] => /tmp/phpAfmidq
+            [tmp_name] => /tmp/phpyK6pTO
             [error] => 0
-            [size] => 2591
+            [size] => 1449
         )
 
 )
 
 Array
 (
-    [csrf_token] => e2f19b189ff2a4c9ad44151ad3e1a0aba6f6193a091f956c67f57e4c711f5ff6
+    [csrf_token] => 432bbca18666e8acb1588dd2b8e66cfb2ba955c6ea3f2f4570971c3fe3c8d942
     [empresa_id] => 103
     [division_id] => 14
 )

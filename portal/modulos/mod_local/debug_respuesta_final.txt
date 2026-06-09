@@ -1,19 +1,16 @@
 {
     "success": true,
-    "inserted": 10,
+    "inserted": 7,
     "failed": 0,
     "reportUrl": "",
     "successes": [
-        "L\u00ednea 2: Local 'UNIVERSITY621 - UNIVERSIDAD DE VALPARAISO MEDICINA VINA DEL MAR' (c\u00f3digo UNIVERSITY621) insertado.",
-        "L\u00ednea 3: Local 'UNIVERSITY622 - UNIVERSIDAD DE VALPARAISO MEDICINA VINA DEL MAR' (c\u00f3digo UNIVERSITY622) insertado.",
-        "L\u00ednea 4: Local 'UNIVERSITY623 - UNIVERSIDAD DE VALPARAISO MEDICINA VINA DEL MAR' (c\u00f3digo UNIVERSITY623) insertado.",
-        "L\u00ednea 5: Local 'UNIVERSITY624 - UNIVERSIDAD DE VALPARAISO MEDICINA VINA DEL MAR' (c\u00f3digo UNIVERSITY624) insertado.",
-        "L\u00ednea 6: Local 'UNIVERSITY625 - UNIVERSIDAD DE VALPARAISO MEDICINA VINA DEL MAR' (c\u00f3digo UNIVERSITY625) insertado.",
-        "L\u00ednea 7: Local 'UNIVERSITY626 - UNIVERSIDAD DE VALPARAISO MEDICINA VINA DEL MAR' (c\u00f3digo UNIVERSITY626) insertado.",
-        "L\u00ednea 8: Local 'UNIVERSITY627 - UNIVERSIDAD DE VALPARAISO PSICOLOGIA VINA DEL MAR' (c\u00f3digo UNIVERSITY627) insertado.",
-        "L\u00ednea 9: Local 'UNIVERSITY628 - UNIVERSIDAD DE VALPARAISO NEGOCIOS INTERNACIONALES VINA DEL MAR' (c\u00f3digo UNIVERSITY628) insertado.",
-        "L\u00ednea 10: Local 'UNIVERSITY629 - UNIVERSIDAD DE VALPARAISO VINA DEL MAR' (c\u00f3digo UNIVERSITY629) insertado.",
-        "L\u00ednea 11: Local 'UNIVERSITY630 - UNIVERSIDAD DE VALPARAISO VINA DEL MAR' (c\u00f3digo UNIVERSITY630) insertado."
+        "L\u00ednea 2: Local '2542623 - DAZACON SPA TEMUCO' (c\u00f3digo 2542623) insertado.",
+        "L\u00ednea 3: Local '1689932 - JUAN SANHUEZA CRUCES TEMUCO' (c\u00f3digo 1689932) insertado.",
+        "L\u00ednea 4: Local '2540215 - BOTILLERIA TORREMOLINOS SPA TEMUCO' (c\u00f3digo 2540215) insertado.",
+        "L\u00ednea 5: Local '979888 - YOANALET GODOY AEDO TEMUCO' (c\u00f3digo 979888) insertado.",
+        "L\u00ednea 6: Local '1435308 - INGRID YANET AGUILAR NEIRA TEMUCO' (c\u00f3digo 1435308) insertado.",
+        "L\u00ednea 7: Local '2356747 - BOTILLERIA EBER BORQUEZ M. EIRL TEMUCO' (c\u00f3digo 2356747) insertado.",
+        "L\u00ednea 8: Local '820680 - AURELINA SARABIA MONTERO PADRE LAS CASAS' (c\u00f3digo 820680) insertado."
     ],
     "failures": []
 }

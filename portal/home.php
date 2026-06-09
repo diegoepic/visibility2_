@@ -1279,6 +1279,12 @@ body.layout-fixed {
                   <p>Panel Rutas</p>
                 </a>
               </li>
+              <li class="nav-item">
+                 <a href="modulos/mod_panel/mod_visualizar_ruta_excel.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Visor de rutas</p>
+                </a>
+              </li>              
             </ul>
           </li>           
           <?php if (strtolower($perfilUser) == 'editor' || strtolower($perfilUser) == 'coordinador'): ?>

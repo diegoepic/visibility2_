@@ -213,7 +213,7 @@ $status  = isset($_GET['status']) ? $_GET['status'] : '';
 $mensaje = isset($_GET['mensaje']) ? htmlspecialchars($_GET['mensaje'], ENT_QUOTES, 'UTF-8') : '';
 
 /* =========================
-   Materiales
+   Materials
    ========================= */
 $sql_materiales = "
     SELECT

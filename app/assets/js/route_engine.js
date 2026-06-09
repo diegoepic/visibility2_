@@ -40,7 +40,9 @@
   }
 
   function buildCacheKey({ origin, destination, waypoints, optimize, mode }){
-    const wps = (waypoints || []).map(coordsHash).join('|');
+    const wpHashes = (waypoints || []).map(coordsHash);
+    // Cuando optimize=true el orden enviado no importa — mismos puntos = misma key
+    const wps = optimize ? [...wpHashes].sort().join('|') : wpHashes.join('|');
     return [coordsHash(origin), coordsHash(destination), wps, optimize ? '1':'0', mode || 'preview'].join('::');
   }
 
@@ -216,8 +218,12 @@
     return payload;
   }
 
-  // Fix #15: acepta flag force para saltarse el rate limit
-  async function computeRouteUnified({origin, destination, waypoints, optimize=false, mode='preview', force=false}){
+  // bypassThrottle: salta el cooldown de 30 s (p.ej. Recalcular manual)
+  // bypassCache:    salta memoria + IDB (fuerza llamada real a la API)
+  // force:          alias legacy — equivale a bypassThrottle=true, bypassCache=false
+  async function computeRouteUnified({origin, destination, waypoints, optimize=false, mode='preview', force=false, bypassThrottle, bypassCache}){
+    const _skipThrottle = bypassThrottle !== undefined ? bypassThrottle : force;
+    const _skipCache    = bypassCache    !== undefined ? bypassCache    : false;
     if(!origin || !destination) throw new Error('Origen/destino inválido');
     if(!navigator.onLine){
       const offlineRoute = await readIdbFresh(buildCacheKey({origin:quantizePoint(origin), destination:quantizePoint(destination), waypoints:(waypoints||[]).map(quantizePoint), optimize, mode}));
@@ -227,13 +233,12 @@
     const key = buildCacheKey({origin:quantizePoint(origin), destination:quantizePoint(destination), waypoints:(waypoints||[]).map(quantizePoint), optimize, mode});
     const now = Date.now();
     const cached = memoryCache.get(key);
-    if(!force && cached && cached.expires > now){ stats.cache_hits_memory++; notifyStats(); return cached.value; }
+    if(!_skipCache && cached && cached.expires > now){ stats.cache_hits_memory++; notifyStats(); return cached.value; }
 
     const idbCached = await readIdbFresh(key);
-    if(!force && idbCached){ stats.cache_hits_idb++; notifyStats(); memoryCache.set(key,{expires:Date.now()+ROUTE_CACHE_TTL_MS, value:idbCached}); return idbCached; }
+    if(!_skipCache && idbCached){ stats.cache_hits_idb++; notifyStats(); memoryCache.set(key,{expires:Date.now()+ROUTE_CACHE_TTL_MS, value:idbCached}); return idbCached; }
 
-    // Fix #15: omitir throttle cuando force=true
-    if(!force && lastRequestKey === key && (now - lastRequestTime) < MIN_ROUTE_RECALC_MS){
+    if(!_skipThrottle && lastRequestKey === key && (now - lastRequestTime) < MIN_ROUTE_RECALC_MS){
       if(cached) return cached.value;
     }
 
