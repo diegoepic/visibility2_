@@ -9,13 +9,15 @@ header('Content-Disposition: attachment; filename=usuarios_ejemplo.csv');
 $output = fopen('php://output', 'w');
 
 // Agregar los encabezados
-fputcsv($output, ['rut', 'nombre', 'apellido', 'telefono', 'email', 'usuario', 'password']);
+fputcsv($output, ['rut', 'nombre', 'apellido', 'telefono', 'email', 'usuario', 'password', 'region', 'comuna', 'centro_distribucion']);
 
 // Agregar filas de ejemplo
-fputcsv($output, ['12345678-5', 'Juan', 'Perez', '912345678', 'jperez@example.com', 'jperez', '2435']);
-fputcsv($output, ['87654321-K', 'Ana', 'Gomez', '987654321', 'agomez@example.com', 'agomez', '2435']);
+// region y comuna son opcionales; si se incluyen la comuna debe pertenecer a la region
+fputcsv($output, ['12345678-5', 'Juan',  'Perez', '912345678', 'jperez@example.com', 'jperez', '2435', '05 - VALPARAISO', 'VIÑA DEL MAR', 'CD VALPARAISO']);
+fputcsv($output, ['87654321-K', 'Ana',   'Gomez', '987654321', 'agomez@example.com', 'agomez', '2435', '',                '',              '']);
 
 // Cerrar el "archivo"
 fclose($output);
 exit();
 ?>
+

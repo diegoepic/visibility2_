@@ -162,6 +162,9 @@ $valores       = (isset($_POST['valor']) && is_array($_POST['valor'])) ? $_POST[
 $observaciones = (isset($_POST['observacion']) && is_array($_POST['observacion'])) ? $_POST['observacion'] : [];
 $motivoSelect  = (isset($_POST['motivoSelect']) && is_array($_POST['motivoSelect'])) ? $_POST['motivoSelect'] : [];
 $motivoNoImpl  = (isset($_POST['motivoNoImplementado']) && is_array($_POST['motivoNoImplementado'])) ? $_POST['motivoNoImplementado'] : [];
+$etapaMaterial = (isset($_POST['etapaMaterial']) && is_array($_POST['etapaMaterial'])) ? $_POST['etapaMaterial'] : [];
+$apoyosPost    = (isset($_POST['apoyos']) && is_array($_POST['apoyos'])) ? $_POST['apoyos'] : [];
+$motivoParcial = (isset($_POST['motivoParcial']) && is_array($_POST['motivoParcial'])) ? $_POST['motivoParcial'] : [];
 
 $idCampana     = isset($_POST['idCampana']) ? intval($_POST['idCampana']) : 0;
 $nombreCampana = isset($_POST['nombreCampana']) ? trim((string)$_POST['nombreCampana']) : '';
@@ -638,6 +641,112 @@ try {
     insertGestionVisita($conn,$visita_id,$usuario_id,$idCampana,$idLocal,0,0,$fechaVisita,$estadoGestion,0,'','',null,0.0,0.0,$latGestion,$lngGestion);
     $metrics['inserts_gv']++;
   }
+  elseif ($estadoGestion === 'gestion_material') {
+    // Modalidad "implementacion_por_etapas": update POR FILA (no en bloque), para que los
+    // materiales no tocados en esta visita conserven su countVisita/etapa y sigan apareciendo
+    // en la ruta (app/api/sync_bundle.php filtra por etapa_material, no por countVisita global).
+    $MOTIVOS_PARCIAL_OK = ['No permitieron implementar todo', 'Material pendiente queda en bodega'];
+
+    foreach ($etapaMaterial as $idFQ => $etapa) {
+      $idFQ  = (int)$idFQ;
+      $etapa = trim((string)$etapa);
+      if ($etapa === '') continue;
+      if (!in_array($etapa, ['armado','entregado','implementado','retirado'], true)) {
+        throw new Exception("Etapa inválida '$etapa' para material (ID=$idFQ).");
+      }
+
+      // Verificar ownership antes de leer/escribir el FQ (mismo patrón IDOR-safe que arriba)
+      $stmtVal = $conn->prepare("SELECT valor_propuesto, etapa_material, valor FROM formularioQuestion WHERE id=? AND id_formulario=? AND id_local=? AND id_usuario=? LIMIT 1");
+      $stmtVal->bind_param("iiii",$idFQ,$idCampana,$idLocal,$usuario_id); $stmtVal->execute();
+      $rowV = $stmtVal->get_result()->fetch_assoc(); $stmtVal->close();
+      if (!$rowV) { throw new Exception("No tienes permisos sobre el material (ID=$idFQ)."); }
+
+      $savedEtapa = (string)($rowV['etapa_material'] ?? '');
+      $propuesto  = intval($rowV['valor_propuesto']);
+
+      $valorNum = null;       // valor a persistir en formularioQuestion (acumulado para implementado)
+      $valorEvt = 0;          // valor de ESTE evento (lo registrado en esta visita) para gestion_visita
+      $motivoGV = '';         // motivo (solo implementado parcial) → gestion_visita.motivo_no_implementacion
+
+      if ($etapa === 'implementado') {
+        // El ejecutor ingresa la cantidad de ESTA visita (delta); el sistema acumula sobre lo previo.
+        $deltaStr = trim((string)($valores[$idFQ] ?? ''));
+        // El <select> de un implementado parcial preselecciona 'implementado'; si NO se ingresó una
+        // cantidad nueva, es un material parcial que el ejecutor dejó intacto → no se toca nada.
+        if ($deltaStr === '' && $savedEtapa === 'implementado') { continue; }
+        if ($deltaStr === '' || !ctype_digit($deltaStr) || intval($deltaStr) < 1) {
+          throw new Exception("Cantidad implementada (ID=$idFQ) debe ser un entero ≥ 1.");
+        }
+        $delta    = intval($deltaStr);
+        $prevImpl = ($savedEtapa === 'implementado') ? intval($rowV['valor']) : 0;
+        $nuevoTot = $prevImpl + $delta;
+        if ($nuevoTot > $propuesto) {
+          throw new Exception("Acumulado ($nuevoTot) excede valor_propuesto ($propuesto) en ID=$idFQ.");
+        }
+        $valorNum = $nuevoTot;
+        $valorEvt = $delta;
+
+        // Implementado parcial: motivo obligatorio (una de las 2 razones permitidas).
+        if ($nuevoTot < $propuesto) {
+          $motivoGV = trim((string)($motivoParcial[$idFQ] ?? ''));
+          if (!in_array($motivoGV, $MOTIVOS_PARCIAL_OK, true)) {
+            throw new Exception("Debe indicar un motivo válido de implementación parcial (ID=$idFQ).");
+          }
+        }
+      } elseif ($etapa === 'retirado') {
+        $valorImp = trim((string)($valores[$idFQ] ?? ''));
+        if ($valorImp === '' || !ctype_digit($valorImp) || intval($valorImp) < 1) {
+          throw new Exception("Valor retirado (ID=$idFQ) debe ser un entero ≥ 1.");
+        }
+        $valorNum = intval($valorImp);
+        $valorEvt = $valorNum;
+        if ($valorNum > $propuesto) {
+          throw new Exception("Valor ($valorNum) excede valor_propuesto ($propuesto) en ID=$idFQ.");
+        }
+      } else {
+        // armado / entregado: sin cambio real respecto a lo ya guardado → no se toca nada.
+        if ($etapa === $savedEtapa) { continue; }
+      }
+
+      $obs = isset($observaciones[$idFQ]) ? htmlspecialchars(trim((string)$observaciones[$idFQ]), ENT_QUOTES, 'UTF-8') : '';
+
+      $stmtEt = $conn->prepare("UPDATE formularioQuestion SET etapa_material=?, fechaVisita=?, countVisita=countVisita+1, valor=COALESCE(?,valor), observacion=?, latGestion=?, lngGestion=? WHERE id=? AND id_formulario=? AND id_local=? AND id_usuario=?");
+      if (!$stmtEt) throw new Exception("Error preparando actualización de etapa (ID=$idFQ): ".$conn->error);
+      $stmtEt->bind_param("ssisddiiii",$etapa,$fechaVisita,$valorNum,$obs,$latGestion,$lngGestion,$idFQ,$idCampana,$idLocal,$usuario_id);
+      if (!$stmtEt->execute()) throw new Exception("Error actualizando etapa de material (ID=$idFQ): ".$stmtEt->error);
+      $metrics['updates_fq'] += $stmtEt->affected_rows; $stmtEt->close();
+
+      // id material para historial
+      $stmtMatFetch = $conn->prepare("SELECT m.id FROM material m JOIN formularioQuestion fq ON fq.material=m.nombre AND m.id_division=? WHERE fq.id=? LIMIT 1");
+      $stmtMatFetch->bind_param("ii",$division_id,$idFQ); $stmtMatFetch->execute();
+      $resMatFetch = $stmtMatFetch->get_result(); $idMaterial = $resMatFetch->num_rows ? intval($resMatFetch->fetch_assoc()['id']) : 0; $stmtMatFetch->close();
+
+      insertGestionVisita($conn,$visita_id,$usuario_id,$idCampana,$idLocal,$idFQ,$idMaterial,$fechaVisita,$etapa,$valorEvt,$obs,$motivoGV,null,0.0,0.0,$latGestion,$lngGestion);
+      $metrics['inserts_gv']++;
+
+      // Apoyos (otros ejecutores que ayudaron) — aplica a CUALQUIER etapa gestionada.
+      if (isset($apoyosPost[$idFQ]) && is_array($apoyosPost[$idFQ])) {
+        $idsApoyo = array_values(array_unique(array_filter(array_map('intval', $apoyosPost[$idFQ]),
+                      fn($u) => $u > 0 && $u !== $usuario_id)));
+        if (!empty($idsApoyo)) {
+          $stmtApoyo = $conn->prepare("INSERT IGNORE INTO gestion_apoyo (visita_id,id_formulario,id_local,id_formularioQuestion,id_usuario_apoyo,etapa) VALUES (?,?,?,?,?,?)");
+          if (!$stmtApoyo) throw new Exception("Error prepare gestion_apoyo (ID=$idFQ): ".$conn->error);
+          // Validar que cada apoyo sea un usuario activo de la misma empresa antes de insertar.
+          $stmtChkU = $conn->prepare("SELECT 1 FROM usuario WHERE id=? AND id_empresa=? AND activo=1 LIMIT 1");
+          if (!$stmtChkU) throw new Exception("Error prepare validación apoyo (ID=$idFQ): ".$conn->error);
+          foreach ($idsApoyo as $idApoyo) {
+            $stmtChkU->bind_param("ii",$idApoyo,$empresa_id); $stmtChkU->execute();
+            $okU = $stmtChkU->get_result()->num_rows > 0;
+            if (!$okU) { continue; } // ignora apoyos inválidos sin abortar la gestión
+            $stmtApoyo->bind_param("iiiiis",$visita_id,$idCampana,$idLocal,$idFQ,$idApoyo,$etapa);
+            if (!$stmtApoyo->execute()) throw new Exception("Error insert gestion_apoyo (ID=$idFQ): ".$stmtApoyo->error);
+          }
+          $stmtChkU->close();
+          $stmtApoyo->close();
+        }
+      }
+    }
+  }
 
   /* ----- Encuesta (SIEMPRE que venga 'respuesta') ----- */
   $flags = ['created_at'=>$FQR_HAS_CREATED_AT, 'valor'=>$FQR_HAS_VALOR, 'foto_visita_id'=>$FQR_HAS_FOTO_VISITA];
@@ -724,7 +833,7 @@ try {
 
   /* ----- Foto material (archivos convertidos en este request) → fotoVisita ----- */
   if (!empty($imagenes)) {
-    $stmtFV = $conn->prepare("INSERT INTO fotoVisita (visita_id,url,id_usuario,id_formulario,id_local,id_material,id_formularioQuestion,fotoLat,fotoLng) VALUES (?,?,?,?,?,?,?,?,?)");
+    $stmtFV = $conn->prepare("INSERT INTO fotoVisita (visita_id,url,id_usuario,id_formulario,id_local,id_material,id_formularioQuestion,fotoLat,fotoLng,kind) VALUES (?,?,?,?,?,?,?,?,?,?)");
     if (!$stmtFV) throw new Exception("Error insert fotoVisita: ".$conn->error);
     foreach ($imagenes as $img) {
       $rawUrl = (string)$img['url']; // normalmente 'uploads/...'
@@ -744,7 +853,8 @@ try {
       if (isset($_POST['coordsFoto'][$idFQ][$idx]['lat']) && isset($_POST['coordsFoto'][$idFQ][$idx]['lng'])) {
         $latFoto=(float)$_POST['coordsFoto'][$idFQ][$idx]['lat']; $lngFoto=(float)$_POST['coordsFoto'][$idFQ][$idx]['lng'];
       }
-      $stmtFV->bind_param("isiiiiidd",$visita_id,$urlFoto,$usuario_id,$idCampana,$idLocal,$idMat,$idFQ,$latFoto,$lngFoto);
+      $kindFoto = $etapaMaterial[$idFQ] ?? null;
+      $stmtFV->bind_param("isiiiiidds",$visita_id,$urlFoto,$usuario_id,$idCampana,$idLocal,$idMat,$idFQ,$latFoto,$lngFoto,$kindFoto);
       if (!$stmtFV->execute()) throw new Exception("Error insert fotoVisita => ".$stmtFV->error);
       $metrics['inserts_fv']++;
     }
@@ -753,7 +863,7 @@ try {
 
   /* ----- Foto material (URLs ya subidas por el front) → fotoVisita (DEDUPED) ----- */
   if (isset($_POST['fotos']) && is_array($_POST['fotos'])) {
-    $stmtFV2 = $conn->prepare("INSERT INTO fotoVisita (visita_id,url,id_usuario,id_formulario,id_local,id_material,id_formularioQuestion,fotoLat,fotoLng) VALUES (?,?,?,?,?,?,?,?,?)");
+    $stmtFV2 = $conn->prepare("INSERT INTO fotoVisita (visita_id,url,id_usuario,id_formulario,id_local,id_material,id_formularioQuestion,fotoLat,fotoLng,kind) VALUES (?,?,?,?,?,?,?,?,?,?)");
     if (!$stmtFV2) throw new Exception("Error prepare fotoVisita (urls): ".$conn->error);
 
     foreach ($_POST['fotos'] as $idFQ => $urls) {
@@ -764,6 +874,7 @@ try {
       $stmtMatFetch->execute(); $resMatFetch = $stmtMatFetch->get_result();
       $idMaterial = $resMatFetch->num_rows ? (int)$resMatFetch->fetch_assoc()['id'] : 0; $stmtMatFetch->close();
 
+      $kindFoto = $etapaMaterial[$idFQ] ?? null;
       $idx=-1;
       foreach ($urls as $u) {
         $idx++;
@@ -779,7 +890,7 @@ try {
         $latFoto = isset($_POST['coordsFoto'][$idFQ][$idx]['lat']) ? (float)$_POST['coordsFoto'][$idFQ][$idx]['lat'] : 0.0;
         $lngFoto = isset($_POST['coordsFoto'][$idFQ][$idx]['lng']) ? (float)$_POST['coordsFoto'][$idFQ][$idx]['lng'] : 0.0;
 
-        $stmtFV2->bind_param("isiiiiidd",$visita_id,$urlFoto,$usuario_id,$idCampana,$idLocal,$idMaterial,$idFQ,$latFoto,$lngFoto);
+        $stmtFV2->bind_param("isiiiiidds",$visita_id,$urlFoto,$usuario_id,$idCampana,$idLocal,$idMaterial,$idFQ,$latFoto,$lngFoto,$kindFoto);
         if (!$stmtFV2->execute()) { throw new Exception("Error insert fotoVisita (url): ".$stmtFV2->error); }
         $metrics['inserts_fv']++;
       }

@@ -220,17 +220,39 @@ $sql_materiales = "
       fq.id,
       fq.material,
       fq.categoria,
+      fq.marca,
       fq.valor_propuesto,
+      fq.etapa_material,
       MAX(fq.valor) AS valor,
       MAX(fq.fechaVisita) AS fechaVisita,
       MAX(fq.observacion) AS observacion,
-      MAX(m.ref_image) AS ref_image
+      MAX(m.ref_image) AS ref_image,
+      (
+        SELECT GROUP_CONCAT(DISTINCT CONCAT('https://visibility.cl/visibility2/app/', fv2.url) SEPARATOR '||')
+        FROM fotoVisita fv2
+        WHERE fv2.id_formularioQuestion = fq.id AND fv2.kind = 'armado'
+      ) AS urls_armado,
+      (
+        SELECT GROUP_CONCAT(DISTINCT CONCAT('https://visibility.cl/visibility2/app/', fv2.url) SEPARATOR '||')
+        FROM fotoVisita fv2
+        WHERE fv2.id_formularioQuestion = fq.id AND fv2.kind = 'entregado'
+      ) AS urls_entregado,
+      (
+        SELECT GROUP_CONCAT(DISTINCT CONCAT('https://visibility.cl/visibility2/app/', fv2.url) SEPARATOR '||')
+        FROM fotoVisita fv2
+        WHERE fv2.id_formularioQuestion = fq.id AND fv2.kind = 'implementado'
+      ) AS urls_implementado,
+      (
+        SELECT GROUP_CONCAT(DISTINCT CONCAT('https://visibility.cl/visibility2/app/', fv2.url) SEPARATOR '||')
+        FROM fotoVisita fv2
+        WHERE fv2.id_formularioQuestion = fq.id AND fv2.kind = 'retirado'
+      ) AS urls_retirado
     FROM formularioQuestion fq
     LEFT JOIN material m ON fq.material = m.nombre
     WHERE fq.id_local = ?
       AND fq.id_formulario = ?
       AND fq.id_usuario = ?
-    GROUP BY fq.id, fq.material, fq.categoria, fq.valor_propuesto
+    GROUP BY fq.id, fq.material, fq.categoria, fq.marca, fq.valor_propuesto, fq.etapa_material
 ";
 
 $rowsMateriales = dbFetchAllAssoc(
@@ -244,18 +266,109 @@ $materiales = [];
 foreach ($rowsMateriales as $mat) {
     $matNombre   = trim($mat['material']  ?? '');
     $matCategoria= trim($mat['categoria'] ?? '');
-    $matLabel    = $matCategoria !== '' ? $matNombre . ' - ' . $matCategoria : $matNombre;
+    $matMarca    = trim($mat['marca'] ?? '');
+    $matLabel    = $matNombre;
+    if ($matCategoria !== '') { $matLabel .= ' - ' . $matCategoria; }
+    if ($matMarca !== '')     { $matLabel .= ' - ' . $matMarca; }
+    $fotosPorEtapa = [];
+    foreach (['armado','entregado','implementado','retirado'] as $et) {
+        $raw = trim($mat['urls_' . $et] ?? '');
+        $fotosPorEtapa[$et] = $raw !== '' ? array_values(array_filter(explode('||', $raw))) : [];
+    }
     $materiales[] = [
         'id'              => intval($mat['id']),
         'material'        => htmlspecialchars($matNombre,    ENT_QUOTES, 'UTF-8'),
         'material_label'  => htmlspecialchars($matLabel,     ENT_QUOTES, 'UTF-8'),
         'categoria'       => htmlspecialchars($matCategoria, ENT_QUOTES, 'UTF-8'),
+        'marca'           => htmlspecialchars($matMarca,     ENT_QUOTES, 'UTF-8'),
+        'etapa_material'  => htmlspecialchars(trim($mat['etapa_material'] ?? ''), ENT_QUOTES, 'UTF-8'),
+        'fotos_por_etapa' => $fotosPorEtapa,
         'valor_propuesto' => htmlspecialchars($mat['valor_propuesto'] ?? '', ENT_QUOTES, 'UTF-8'),
         'valor'           => htmlspecialchars($mat['valor'] ?? '', ENT_QUOTES, 'UTF-8'),
         'fechaVisita'     => htmlspecialchars($mat['fechaVisita'] ?? '', ENT_QUOTES, 'UTF-8'),
         'observacion'     => htmlspecialchars($mat['observacion'] ?? '', ENT_QUOTES, 'UTF-8'),
         'ref_image'       => htmlspecialchars($mat['ref_image'] ?? '', ENT_QUOTES, 'UTF-8'),
     ];
+}
+
+/* =========================
+   Apoyos (solo modalidad implementacion_por_etapas)
+   - $ejecutores: otros usuarios activos de la empresa, para el multiselect.
+   - $apoyosPorFQ: apoyos ya registrados por material (para mostrarlos al reabrir).
+   ========================= */
+$ejecutores  = [];
+$apoyosPorFQ = [];
+if (($modalidad ?? '') === 'implementacion_por_etapas') {
+    $ejecutores = dbFetchAllAssoc(
+        $conn,
+        "SELECT id, TRIM(CONCAT(COALESCE(nombre,''),' ',COALESCE(apellido,''))) AS nombre
+           FROM usuario
+          WHERE id_empresa = ? AND activo = 1 AND id <> ?
+          ORDER BY nombre",
+        "ii",
+        [$empresa_id, $usuario_id]
+    );
+
+    $rowsApoyos = dbFetchAllAssoc(
+        $conn,
+        "SELECT ga.id_formularioQuestion AS idFQ,
+                TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS nombre
+           FROM gestion_apoyo ga
+           INNER JOIN usuario u ON u.id = ga.id_usuario_apoyo
+          WHERE ga.id_formulario = ? AND ga.id_local = ?
+          GROUP BY ga.id_formularioQuestion, ga.id_usuario_apoyo, u.nombre, u.apellido
+          ORDER BY nombre",
+        "ii",
+        [$idCampana, $idLocal]
+    );
+    foreach ($rowsApoyos as $ra) {
+        $apoyosPorFQ[(int)$ra['idFQ']][] = htmlspecialchars(trim($ra['nombre'] ?? ''), ENT_QUOTES, 'UTF-8');
+    }
+}
+
+/**
+ * Renderiza el multiselect de apoyos para un material + los apoyos ya registrados.
+ */
+function renderApoyosHtml(int $idFQ, array $ejecutores, array $apoyosPorFQ): string {
+    $opts = '';
+    foreach ($ejecutores as $e) {
+        $eid    = (int)$e['id'];
+        $enombre= htmlspecialchars(trim($e['nombre'] ?? '') ?: ('Usuario ' . $eid), ENT_QUOTES, 'UTF-8');
+        $opts  .= "<option value='{$eid}'>{$enombre}</option>";
+    }
+    $registrados = '';
+    if (!empty($apoyosPorFQ[$idFQ])) {
+        $registrados = "<small class='text-muted'>Apoyos registrados: " . implode(', ', $apoyosPorFQ[$idFQ]) . "</small>";
+    }
+    $selectHtml = $opts !== ''
+        ? "<select multiple class='form-control apoyos-select' name='apoyos[{$idFQ}][]' size='4'>{$opts}</select>"
+        : "<p class='form-control-static text-muted'>No hay otros ejecutores disponibles.</p>";
+    return "
+      <div class='form-group'>
+        <label>Apoyos (otros ejecutores que ayudaron):</label>
+        {$selectHtml}
+        {$registrados}
+      </div>";
+}
+
+/**
+ * Renderiza las fotos ya registradas de un material, agrupadas y etiquetadas por etapa.
+ * No incluye ningún input — es puramente informativo/histórico.
+ */
+function renderFotosPorEtapaHtml(array $fotosPorEtapa): string {
+    $etapaLabels = ['armado' => 'Armado', 'entregado' => 'Entregado', 'implementado' => 'Implementado', 'retirado' => 'Retirado'];
+    $html = '';
+    foreach ($etapaLabels as $et => $label) {
+        $urls = $fotosPorEtapa[$et] ?? [];
+        if (empty($urls)) continue;
+        $thumbs = '';
+        foreach ($urls as $urlFoto) {
+            $urlEsc = htmlspecialchars($urlFoto, ENT_QUOTES, 'UTF-8');
+            $thumbs .= "<div class='draft-foto-thumb'><img src='{$urlEsc}' class='draft-foto-img' style='cursor:pointer' onclick=\"verImagenGrande('{$urlEsc}')\"><span class='draft-foto-badge badge-uploaded'>Subida</span></div>";
+        }
+        $html .= "<div style='margin-bottom:6px'><small class='text-muted'><strong>Fotos de {$label}:</strong></small><div>{$thumbs}</div></div>";
+    }
+    return $html;
 }
 
 $totalSteps = $encuestaPendiente ? 3 : 2;
@@ -272,6 +385,21 @@ $totalSteps = $encuestaPendiente ? 3 : 2;
     <link rel="stylesheet" href="assets/plugins/font-awesome/css/font-awesome.min.css">
     <link rel="stylesheet" href="assets/css/main.css">
     <link rel="stylesheet" href="assets/css/main-responsive.css">
+    <link rel="stylesheet" href="assets/plugins/select2/select2.css">
+    <style>
+      /* select2 3.x viene sin los sprites (select2.png / select2-spinner.gif) en este proyecto:
+         se reemplazan los íconos por texto/estilos propios para que el multiselect sea usable. */
+      .select2-container-multi .select2-choices { min-height: 38px; border:1px solid #ccc; border-radius:4px; padding:2px 4px; }
+      .select2-container-multi .select2-choices .select2-search-choice { padding:3px 6px 3px 20px; position:relative; }
+      .select2-search-choice-close { background:none !important; width:14px; height:14px; left:4px; top:5px; text-decoration:none; }
+      .select2-search-choice-close:before { content:"\00d7"; position:absolute; left:0; top:-1px; color:#888; font-size:15px; line-height:15px; }
+      .select2-search-choice-close:hover:before { color:#c9302c; }
+      .select2-search input { background:#fff !important; }
+      .select2-container .select2-choice .select2-arrow b { background:none !important; }
+      .select2-container .select2-choice .select2-arrow b:before { content:"\25BC"; font-size:10px; color:#888; display:block; text-align:center; line-height:26px; }
+      .select2-drop { z-index: 10060; } /* por encima de modales bootstrap */
+      .select2-container { z-index: 10050; }
+    </style>
     <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@latest/dist/browser-image-compression.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
@@ -556,6 +684,10 @@ input[type=file][id^="fotoPregunta_"] {
                            <option value="solo_auditoria">Solo Auditoría</option>
                            <option value="pendiente">Pendiente</option>
                            <option value="cancelado">Cancelado</option>
+                         <?php elseif ($modalidad === 'implementacion_por_etapas'): ?>
+                           <option value="gestion_material">Gestionar materiales (por etapa)</option>
+                           <option value="pendiente">Pendiente</option>
+                           <option value="cancelado">Cancelado</option>
                          <?php endif; ?>
                        </select>
                      </div>
@@ -583,7 +715,7 @@ input[type=file][id^="fotoPregunta_"] {
                         <label>Materiales y Valores:</label><br>
                         <?php
                         if (count($materiales) === 1 && isset($materiales[0]['material']) && $materiales[0]['material'] === '-') {
-                            echo "<p>No hay materiales cargados. Use el botón <strong>Agregar Material</strong> para añadir nuevos materiales.</p>";
+                            echo "<p id='no-materiales-msg'>No hay materiales cargados. Use el botón <strong>Agregar Material</strong> para añadir nuevos materiales.</p>";
                         } elseif (!empty($materiales)) {
                             foreach ($materiales as $m) {
                                 $idFQ       = $m['id'];
@@ -595,6 +727,146 @@ input[type=file][id^="fotoPregunta_"] {
                                 $imgTag = "";
                                 if (!empty($refImage)) {
                                     $imgTag = "<img src='$refImage' style='max-width:50px; max-height:50px; cursor:pointer;' onclick=\"verImagenGrande('$refImage')\" title='Ver imagen completa'>";
+                                }
+
+                                if ($modalidad === 'implementacion_por_etapas') {
+                                    $etapaActual = $m['etapa_material'] ?? '';
+                                    $etapaLabels = ['armado' => 'Armado', 'entregado' => 'Entregado', 'implementado' => 'Implementado', 'retirado' => 'Retirado'];
+                                    $fotosPorEtapaHtml = renderFotosPorEtapaHtml($m['fotos_por_etapa']);
+                                    $apoyosHtml        = renderApoyosHtml($idFQ, $ejecutores, $apoyosPorFQ);
+
+                                    $valorActNum  = (int)$valorAct;
+                                    $valorPropNum = (int)$valorProp;
+                                    // Parcial = implementado pero todavía por debajo del propuesto: sigue editable/pendiente.
+                                    $esParcial  = ($etapaActual === 'implementado' && $valorActNum < $valorPropNum);
+                                    $esTerminal = ($etapaActual === 'retirado')
+                                               || ($etapaActual === 'implementado' && !$esParcial);
+
+                                    if ($esTerminal) {
+                                        $fechaF = $fechaImp ? date('d-m-Y H:i', strtotime($fechaImp)) : '';
+                                        echo "
+                                        <div class='form-group'>
+                                          <label>{$matName} {$imgTag} (Propuesto: {$valorProp}) — <span class='label label-success'>{$etapaLabels[$etapaActual]}</span></label>
+                                          <p class='form-control-static'>Valor: {$valorAct}</p>
+                                          <p class='form-control-static'>Fecha: {$fechaF}</p>
+                                          <p class='form-control-static'>Observación: {$m['observacion']}</p>
+                                          {$fotosPorEtapaHtml}
+                                        </div>";
+                                    } else {
+                                        $etapaLabelActual    = $etapaActual !== '' ? $etapaLabels[$etapaActual] : 'Sin acción';
+                                        $fotosPorEtapaCounts = array_map('count', $m['fotos_por_etapa']);
+                                        $fotosPorEtapaJson   = htmlspecialchars(json_encode($fotosPorEtapaCounts), ENT_QUOTES, 'UTF-8');
+                                        $parcialFlag         = $esParcial ? '1' : '0';
+                                        $faltan              = max(0, $valorPropNum - $valorActNum);
+                                        $selArm  = ($etapaActual === 'armado')      ? ' selected' : '';
+                                        $selEnt  = ($etapaActual === 'entregado')   ? ' selected' : '';
+                                        $selImpl = ($etapaActual === 'implementado')? ' selected' : '';
+
+                                        $headerLabel = $esParcial
+                                          ? "{$matName} {$imgTag} (Propuesto: {$valorProp}) — <span class='label label-warning'>Implementado parcial: {$valorActNum} de {$valorPropNum}</span>"
+                                          : "{$matName} {$imgTag} (Propuesto: {$valorProp}) — Etapa actual: <span class='label label-default'>{$etapaLabelActual}</span>";
+
+                                        echo "
+                                        <div class='form-group'>
+                                          <label>{$headerLabel}</label>
+                                          <select class='form-control etapa-material-select'
+                                                  data-id-material='{$idFQ}'
+                                                  data-etapa-original='{$etapaActual}'
+                                                  data-parcial='{$parcialFlag}'
+                                                  data-valor-actual='{$valorActNum}'
+                                                  data-valor-propuesto='{$valorPropNum}'
+                                                  data-fotos-por-etapa='{$fotosPorEtapaJson}'
+                                                  name='etapaMaterial[{$idFQ}]'>
+                                            <option value=''>Sin acción (no tocar)</option>
+                                            <option value='armado'{$selArm}>Armado</option>
+                                            <option value='entregado'{$selEnt}>Entregado</option>
+                                            <option value='implementado'{$selImpl}>Implementado</option>
+                                            <option value='retirado'>Retirado</option>
+                                          </select>
+                                        </div>";
+
+                                        if ($esParcial) {
+                                            $fechaF = $fechaImp ? date('d-m-Y H:i', strtotime($fechaImp)) : '';
+                                            echo "
+                                            <div class='alert alert-warning' style='margin-left:20px;'>
+                                              <strong>Implementado:</strong> {$valorActNum} de {$valorPropNum} — <strong>faltan {$faltan}</strong>.
+                                              <br><small>Última gestión: {$fechaF}</small>
+                                            </div>";
+                                        }
+
+                                        if ($fotosPorEtapaHtml !== '') {
+                                            echo "
+                                            <div class='form-group' style='padding-left:20px;'>
+                                              <small class='text-muted'><i class='fa fa-info-circle'></i> Fotos ya registradas para este material:</small>
+                                              {$fotosPorEtapaHtml}
+                                            </div>";
+                                        }
+
+                                        // Para parcial: la sección queda visible y habilitada desde el inicio (para sumar más).
+                                        $sectionStyle    = $esParcial ? 'display:block; padding-left:20px;' : 'display:none; padding-left:20px;';
+                                        $disabledAttr    = $esParcial ? '' : 'disabled';
+                                        $valorGroupStyle = $esParcial ? 'display:block;' : 'display:none;';
+
+                                        echo "
+                                        <div class='etapa-material-section'
+                                             id='etapa_material_section_{$idFQ}'
+                                             style='{$sectionStyle}'>
+                                          <div class='form-group etapa-valor-group' id='etapa_valor_group_{$idFQ}' style='{$valorGroupStyle}'>
+                                            <label>Cantidad (en esta visita):</label>
+                                            <input type='number'
+                                                   class='form-control valor-implementado'
+                                                   name='valor[{$idFQ}]'
+                                                   min='1'
+                                                   placeholder='Cantidad implementada en esta visita'
+                                                   data-valor-propuesto='{$valorPropNum}'
+                                                   {$disabledAttr}>
+                                          </div>
+                                          <div class='form-group motivo-parcial-group' id='motivo_parcial_group_{$idFQ}' style='display:none;'>
+                                            <label>Motivo de implementación parcial:</label>
+                                            <select class='form-control motivo-parcial' name='motivoParcial[{$idFQ}]' {$disabledAttr}>
+                                              <option value=''>Seleccione un motivo</option>
+                                              <option value='No permitieron implementar todo'>No permitieron implementar todo</option>
+                                              <option value='Material pendiente queda en bodega'>Material pendiente queda en bodega</option>
+                                            </select>
+                                          </div>
+                                          <div class='form-group'>
+                                            <label>Origen de la foto:</label>
+                                            <select class='photo-source form-control'
+                                                    data-target-input='fotos_input_{$idFQ}'
+                                                    {$disabledAttr}>
+                                              <option value='gallery' selected>Elegir de la Galería</option>
+                                              <option value='camera'>Tomar Foto</option>
+                                            </select>
+                                          </div>
+                                          <button type='button'
+                                                  class='btn btn-xs btn-default etapa-adjuntar-otra-btn'
+                                                  id='btn_adjuntar_otra_{$idFQ}'
+                                                  data-id-material='{$idFQ}'
+                                                  style='display:none; margin-bottom:8px;'>
+                                            <i class='fa fa-camera'></i> Adjuntar otra foto (opcional)
+                                          </button>
+                                          <div class='form-group' id='foto_upload_wrap_{$idFQ}'>
+                                            <label>Fotos (hasta 10):</label>
+                                            <input type='file'
+                                                   accept='image/*'
+                                                   name='fotos[{$idFQ}][]'
+                                                   multiple
+                                                   class='form-control file-input'
+                                                   {$disabledAttr}
+                                                   id='fotos_input_{$idFQ}'>
+                                            <div id='previewContainer_{$idFQ}'></div>
+                                          </div>
+                                          {$apoyosHtml}
+                                          <div class='form-group'>
+                                             <label>Observación:</label>
+                                            <textarea class='form-control'
+                                                      name='observacion[{$idFQ}]'
+                                                      {$disabledAttr}
+                                                      placeholder='Observación...'></textarea>
+                                          </div>
+                                        </div>";
+                                    }
+                                    continue;
                                 }
 
                                 if ($valorAct !== '0' && $valorAct !== null && $valorAct !== '') {
@@ -988,8 +1260,10 @@ input[type=file][id^="fotoPregunta_"] {
 
     <!-- jQuery & Bootstrap -->
 <script src="assets/plugins/jquery/jquery-3.6.0.min.js"></script>
-    
+
     <script src="assets/plugins/bootstrap/js/bootstrap.min.js"></script>
+    <script src="assets/plugins/select2/select2.min.js"></script>
+    <script src="assets/plugins/select2/select2_locale_es.js"></script>
 
     <!-- Helpers Geolocalización -->
     <script>
@@ -1912,6 +2186,11 @@ async function compressFile(file) {
   } catch (_) { return file; }
 }
 
+function etapaActualDe(idFQ) {
+  const sel = document.querySelector(`.etapa-material-select[data-id-material="${idFQ}"]`);
+  return sel ? sel.value : '';
+}
+
 async function uploadFile(file, url, idFQ, onProgress, meta = {}, extra = {}) {
   pendingUploads++;
   updateFinalizeButton();
@@ -1930,6 +2209,7 @@ async function uploadFile(file, url, idFQ, onProgress, meta = {}, extra = {}) {
       fd.append('idCampana', document.querySelector('input[name="idCampana"]').value);
       fd.append('idLocal', document.querySelector('input[name="idLocal"]').value);
       fd.append('division_id', window.campaignDivision);
+      fd.append('etapa_material', etapaActualDe(idFQ));
       if (extra.lat) fd.append('lat', extra.lat);
       if (extra.lng) fd.append('lng', extra.lng);
 
@@ -2012,6 +2292,7 @@ async function enqueueMaterialFoto({ idFQ, compressed, meta, coords, captureSour
   qfd.append('idCampana', document.querySelector('input[name="idCampana"]').value);
   qfd.append('idLocal', document.querySelector('input[name="idLocal"]').value);
   qfd.append('division_id', window.campaignDivision || 0);
+  qfd.append('etapa_material', etapaActualDe(idFQ));
   qfd.append('visita_id', document.getElementById('visita_id')?.value || '');
   qfd.append('client_guid', clientGuid);
   qfd.append('lat', coords?.lat || '');
@@ -2856,6 +3137,9 @@ $(document).ready(function(){
       } else if (val === 'solo_auditoria') {
         $('#btnAgregarMaterial').hide();
         tituloPaso2.text('Paso 2: -- Sin materiales --');
+      } else if (val === 'gestion_material') {
+        materialesDiv.show(); if (canAddMaterial()) $('#btnAgregarMaterial').show();
+        tituloPaso2.text('Paso 2: Gestionar Materiales por Etapa');
       } else if (val === 'pendiente') {
         motivosPendiente.forEach(function(m){ motivoSelect.append('<option value="'+m.value+'">'+m.text+'</option>'); });
         motivoContainer.show(); comentarioDiv.show();
@@ -2889,6 +3173,107 @@ $(document).ready(function(){
       $no.show();
       $no.find('textarea, select').attr('required', 'required');
     }
+  });
+
+  // Muestra/oculta el motivo de implementación parcial según el acumulado tras la cantidad ingresada.
+  // (acumulado = lo ya implementado + lo de esta visita). Si queda bajo el propuesto → motivo obligatorio.
+  function actualizarMotivoParcial(idFQ) {
+    const $sel = $('.etapa-material-select[data-id-material="' + idFQ + '"]');
+    if (!$sel.length) return;
+    const etapa       = $sel.val();
+    const propuesto   = parseInt($sel.data('valor-propuesto'), 10) || 0;
+    const original    = $sel.data('etapa-original') || '';
+    const prevImpl    = (original === 'implementado') ? (parseInt($sel.data('valor-actual'), 10) || 0) : 0;
+    const delta       = parseInt($('#etapa_valor_group_' + idFQ + ' .valor-implementado').val(), 10);
+    const $motivoGrp  = $('#motivo_parcial_group_' + idFQ);
+    const $motivoSel  = $motivoGrp.find('.motivo-parcial');
+
+    if (etapa !== 'implementado' || isNaN(delta) || delta < 1) {
+      $motivoGrp.hide();
+      $motivoSel.prop('disabled', true).removeAttr('required');
+      return;
+    }
+    const acumulado = prevImpl + delta;
+    if (propuesto > 0 && acumulado < propuesto) {
+      $motivoGrp.show();
+      $motivoSel.prop('disabled', false).attr('required', 'required');
+    } else {
+      $motivoGrp.hide();
+      $motivoSel.prop('disabled', true).removeAttr('required').val('');
+    }
+  }
+  window.actualizarMotivoParcial = actualizarMotivoParcial;
+
+  $(document).off('change', '.etapa-material-select').on('change', '.etapa-material-select', function () {
+    const idFQ = $(this).data('id-material');
+    const etapa = $(this).val();
+    const etapaOriginal = $(this).data('etapa-original') || '';
+    const fotosPorEtapa = $(this).data('fotos-por-etapa') || {};
+    const parcial = String($(this).data('parcial')) === '1';
+    const $section = $('#etapa_material_section_' + idFQ);
+    const $valorGroup = $('#etapa_valor_group_' + idFQ);
+    const $valorInput = $valorGroup.find('.valor-implementado');
+    const $uploadWrap = $('#foto_upload_wrap_' + idFQ);
+    const $btnAdjuntarOtra = $('#btn_adjuntar_otra_' + idFQ);
+    const $fileInput = $section.find('.file-input');
+    const $photoSource = $section.find('.photo-source');
+    const $motivoGroup = $('#motivo_parcial_group_' + idFQ);
+    const $motivoSelect = $motivoGroup.find('.motivo-parcial');
+    const $editable = $section.find('.valor-implementado, .file-input, .photo-source, textarea[name^="observacion"]');
+
+    // Un implementado parcial puede seguir sumando aunque la etapa siga siendo 'implementado':
+    // por eso, además de "etapa distinta a la original", se considera cambio el caso parcial.
+    const esImplementadoParcial = parcial && etapa === 'implementado';
+    const esCambio = etapa !== '' && (etapa !== etapaOriginal || esImplementadoParcial);
+
+    if (!esCambio) {
+      $section.hide();
+      $editable.val('').prop('disabled', true).removeAttr('required');
+      $motivoGroup.hide();
+      $motivoSelect.prop('disabled', true).removeAttr('required');
+      return;
+    }
+
+    $section.show();
+    $editable.prop('disabled', false);
+    $photoSource.attr('required', 'required');
+
+    // Foto: en el top-up de un implementado parcial SIEMPRE se exige una foto nueva (evidencia del
+    // avance), aunque ya existan fotos de 'implementado' de visitas anteriores.
+    const tieneFotoParaEstaEtapa = (fotosPorEtapa[etapa] || 0) > 0;
+    if (tieneFotoParaEstaEtapa && !esImplementadoParcial) {
+      $uploadWrap.hide();
+      $fileInput.val('').prop('disabled', true).removeAttr('required');
+      $btnAdjuntarOtra.show();
+    } else {
+      $uploadWrap.show();
+      $fileInput.prop('disabled', false).attr('required', 'required');
+      $btnAdjuntarOtra.hide();
+    }
+
+    if (etapa === 'implementado' || etapa === 'retirado') {
+      $valorGroup.show();
+      $valorInput.attr('required', 'required');
+    } else {
+      $valorGroup.hide();
+      $valorInput.val('').prop('disabled', true).removeAttr('required');
+    }
+
+    actualizarMotivoParcial(idFQ);
+  });
+
+  // Al cambiar la cantidad implementada, re-evaluar si corresponde pedir motivo de parcial.
+  $(document).off('input.parcial change.parcial', '.valor-implementado')
+    .on('input.parcial change.parcial', '.valor-implementado', function () {
+      const m = ($(this).attr('name') || '').match(/valor\[(\d+)\]/);
+      if (m) actualizarMotivoParcial(m[1]);
+    });
+
+  $(document).off('click', '.etapa-adjuntar-otra-btn').on('click', '.etapa-adjuntar-otra-btn', function () {
+    const idFQ = $(this).data('id-material');
+    $('#foto_upload_wrap_' + idFQ).show();
+    $('#fotos_input_' + idFQ).prop('disabled', false);
+    $(this).hide();
   });
 
   $(document).on('change', '.photo-source', function() {
@@ -2930,6 +3315,7 @@ $(document).ready(function(){
   async function validarMateriales() {
     const estado = $('#estadoGestion').val();
     if (estado === 'pendiente' || estado === 'cancelado' || estado === 'solo_auditoria') { return true; }
+    if (estado === 'gestion_material') { return await validarMaterialesPorEtapa(); }
 
     if (estado === 'implementado_auditado' || estado === 'solo_implementado' || estado === 'solo_retirado') {
       if ($('.implementa-material:checked').length === 0) {
@@ -2968,6 +3354,88 @@ $(document).ready(function(){
       if (hiddenUrls.length === 0 && !haveLocalFiles && !haveQueued) {
         await mcAlert('Foto requerida', 'Debes adjuntar al menos una foto para el material implementado. Si estás offline, basta con dejar los archivos cargados (se subirán cuando haya red).');
         return false;
+      }
+    }
+    return true;
+  }
+
+  async function validarMaterialesPorEtapa() {
+    // Materiales con un cambio REAL: etapa distinta a la guardada, o bien un implementado parcial
+    // al que se le ingresó una cantidad nueva (suma sobre lo previo). El resto no se procesa/valida.
+    const cambiados = $('.etapa-material-select').toArray().filter(el => {
+      const $el = $(el);
+      const etapa = $el.val();
+      if (etapa === '') return false;
+      const original = $el.data('etapa-original') || '';
+      if (etapa !== original) return true;
+      const parcial = String($el.data('parcial')) === '1';
+      if (parcial && etapa === 'implementado') {
+        const d = parseInt($('#etapa_valor_group_' + $el.data('id-material') + ' .valor-implementado').val(), 10);
+        return !isNaN(d) && d >= 1;
+      }
+      return false;
+    });
+    if (cambiados.length === 0) {
+      await mcAlert('Validación', 'Debes gestionar al menos un material (cambiar su etapa o registrar más unidades implementadas) para poder continuar.');
+      return false;
+    }
+
+    for (const el of cambiados) {
+      const $el = $(el);
+      const idFQ = $el.data('id-material');
+      const etapa = $el.val();
+      const original = $el.data('etapa-original') || '';
+      const parcial = String($el.data('parcial')) === '1';
+      const fotosPorEtapa = $el.data('fotos-por-etapa') || {};
+
+      if (etapa === 'implementado' || etapa === 'retirado') {
+        const $inputValor = $('#etapa_valor_group_' + idFQ).find('.valor-implementado');
+        const maxPropuesto = parseInt($inputValor.data('valor-propuesto'), 10);
+        const valor = parseInt($inputValor.val(), 10);
+
+        if (isNaN(valor)) {
+          await mcAlert('Cantidad requerida', 'Debes ingresar la cantidad para el material marcado como Implementado/Retirado.');
+          return false;
+        }
+        if (valor <= 0) {
+          await mcAlert('Cantidad inválida', 'La cantidad debe ser al menos 1.');
+          return false;
+        }
+
+        if (etapa === 'implementado') {
+          const prevImpl  = (original === 'implementado') ? (parseInt($el.data('valor-actual'), 10) || 0) : 0;
+          const acumulado = prevImpl + valor;
+          if (!isNaN(maxPropuesto) && acumulado > maxPropuesto) {
+            await mcAlert('Cantidad excedida', `El acumulado (${acumulado}) excede el propuesto (${maxPropuesto}).`);
+            return false;
+          }
+          if (!isNaN(maxPropuesto) && acumulado < maxPropuesto) {
+            const motivo = $('#motivo_parcial_group_' + idFQ + ' .motivo-parcial').val();
+            if (!motivo) {
+              await mcAlert('Motivo requerido', 'Indica por qué se implementó menos de lo propuesto (quedará pendiente).');
+              return false;
+            }
+          }
+        } else if (!isNaN(maxPropuesto) && valor > maxPropuesto) {
+          await mcAlert('Cantidad excedida', `La cantidad (${valor}) excede el propuesto (${maxPropuesto}).`);
+          return false;
+        }
+      }
+
+      // Foto obligatoria si: es top-up de implementado parcial (siempre), o no existe foto previa
+      // para esta etapa. Cuenta como adjuntada: foto subida en esta sesión, archivo local o en cola.
+      const esTopUpParcial = parcial && etapa === 'implementado';
+      const tieneFotoParaEstaEtapa = (fotosPorEtapa[etapa] || 0) > 0;
+      if (esTopUpParcial || !tieneFotoParaEstaEtapa) {
+        const hiddenUrls = document.querySelectorAll(`#hiddenUploadContainer_${idFQ} input[type="hidden"][name^="fotos[${idFQ}]"]`);
+        const fileInput  = document.getElementById(`fotos_input_${idFQ}`);
+        const haveLocalFiles = fileInput && fileInput.files && fileInput.files.length > 0;
+        const haveQueued = fileInput && fileInput._queuedPhotos && fileInput._queuedPhotos.length > 0;
+
+        if (hiddenUrls.length === 0 && !haveLocalFiles && !haveQueued) {
+          await mcAlert('Foto requerida', 'Debes adjuntar al menos una foto para cada material gestionado. Si estás offline, basta con dejar los archivos cargados (se subirán cuando haya red).');
+          return false;
+        }
       }
     }
     return true;
@@ -3048,6 +3516,7 @@ $(document).ready(function(){
     }
   })();
 
+  initApoyosSelect2();
   updateFinalizeButton();
 });
 
@@ -3092,10 +3561,11 @@ function onAddMaterialSuccess(ev){
     ref_image:       resp.ref_image  || ''
   };
 
-  if ($cont.find('p').length) { $cont.empty(); }
+  if ($cont.find('#no-materiales-msg').length) { $cont.empty(); }
 
   const bloque = construirBloqueMaterial(newMaterial);
   $cont.append(bloque);
+  initApoyosSelect2('#materialesContainer');
 
   const $chk = $(`#materialesContainer .implementa-material[data-id-material="${newMaterial.id}"]`);
   $chk.prop('checked', true).trigger('change');
@@ -3180,6 +3650,39 @@ $('#formAgregarMaterial').on('submit', async function (e) {
 
 const ACTION_LABEL  = <?php echo json_encode($actionLabel, JSON_UNESCAPED_UNICODE); ?>;
 const SECTION_LABEL = <?php echo json_encode($sectionLabel, JSON_UNESCAPED_UNICODE); ?>;
+const MODALIDAD     = <?php echo json_encode($modalidad, JSON_UNESCAPED_UNICODE); ?>;
+const EJECUTORES    = <?php echo json_encode($ejecutores, JSON_UNESCAPED_UNICODE); ?>;
+
+function apoyosSelectHtml(idFQ) {
+  if (!Array.isArray(EJECUTORES) || EJECUTORES.length === 0) {
+    return `<div class="form-group"><label>Apoyos (otros ejecutores que ayudaron):</label>
+      <p class="form-control-static text-muted">No hay otros ejecutores disponibles.</p></div>`;
+  }
+  const opts = EJECUTORES.map(e => {
+    const nombre = String(e.nombre || ('Usuario ' + e.id))
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<option value="${parseInt(e.id, 10)}">${nombre}</option>`;
+  }).join('');
+  return `<div class="form-group"><label>Apoyos (otros ejecutores que ayudaron):</label>
+    <select multiple class="form-control apoyos-select" name="apoyos[${idFQ}][]" size="4">${opts}</select></div>`;
+}
+
+// Convierte los <select multiple class="apoyos-select"> en un select2 con búsqueda y multi-selección.
+function initApoyosSelect2(scope) {
+  if (!window.jQuery || typeof jQuery.fn.select2 !== 'function') return;
+  const $els = scope ? jQuery(scope).find('.apoyos-select') : jQuery('.apoyos-select');
+  $els.each(function () {
+    const $el = jQuery(this);
+    if ($el.hasClass('select2-offscreen') || $el.data('select2')) return; // ya inicializado
+    $el.select2({
+      width: '100%',
+      placeholder: 'Buscar y seleccionar ejecutores…',
+      closeOnSelect: false,
+      dropdownAutoWidth: true
+    });
+  });
+}
+window.initApoyosSelect2 = initApoyosSelect2;
 
 function construirBloqueMaterial(material) {
   const idFQ      = material.id;
@@ -3189,6 +3692,57 @@ function construirBloqueMaterial(material) {
   const refImage  = material.ref_image || "";
   const imgTag    = refImage ? `<img src="${refImage}" style="max-width:50px; max-height:50px; cursor:pointer;" onclick="verImagenGrande('${refImage}')" title="Ver referencia">` : "";
   let html = "";
+
+  if (MODALIDAD === 'implementacion_por_etapas') {
+    html += `
+      <div class="form-group">
+        <label>${matName} ${imgTag} (Propuesto: ${valorProp}) — Etapa actual: <span class="label label-default">Sin acción</span></label>
+        <select class="form-control etapa-material-select" data-id-material="${idFQ}" data-etapa-original="" data-parcial="0" data-valor-actual="0" data-valor-propuesto="${valorProp}" data-fotos-por-etapa="{}" name="etapaMaterial[${idFQ}]">
+          <option value="">Sin acción (no tocar)</option>
+          <option value="armado">Armado</option>
+          <option value="entregado">Entregado</option>
+          <option value="implementado">Implementado</option>
+          <option value="retirado">Retirado</option>
+        </select>
+      </div>`;
+
+    html += `
+      <div class="etapa-material-section" id="etapa_material_section_${idFQ}" style="display:none; padding-left:20px;">
+        <div class="form-group etapa-valor-group" id="etapa_valor_group_${idFQ}" style="display:none;">
+          <label>Cantidad (en esta visita):</label>
+          <input type="number" class="form-control valor-implementado" name="valor[${idFQ}]" min="1" placeholder="Cantidad implementada en esta visita" data-valor-propuesto="${valorProp}" disabled>
+        </div>
+        <div class="form-group motivo-parcial-group" id="motivo_parcial_group_${idFQ}" style="display:none;">
+          <label>Motivo de implementación parcial:</label>
+          <select class="form-control motivo-parcial" name="motivoParcial[${idFQ}]" disabled>
+            <option value="">Seleccione un motivo</option>
+            <option value="No permitieron implementar todo">No permitieron implementar todo</option>
+            <option value="Material pendiente queda en bodega">Material pendiente queda en bodega</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Origen de la foto:</label>
+          <select class="photo-source form-control" data-target-input="fotos_input_${idFQ}" disabled>
+            <option value="gallery" selected>Elegir de la Galería</option>
+            <option value="camera">Tomar Foto</option>
+          </select>
+        </div>
+        <button type="button" class="btn btn-xs btn-default etapa-adjuntar-otra-btn" id="btn_adjuntar_otra_${idFQ}" data-id-material="${idFQ}" style="display:none; margin-bottom:8px;">
+          <i class="fa fa-camera"></i> Adjuntar otra foto (opcional)
+        </button>
+        <div class="form-group" id="foto_upload_wrap_${idFQ}">
+          <label>Fotos (hasta 10):</label>
+          <input type="file" accept="image/*" name="fotos[${idFQ}][]" multiple class="form-control file-input" disabled id="fotos_input_${idFQ}">
+          <div id="previewContainer_${idFQ}"></div>
+        </div>
+        ${apoyosSelectHtml(idFQ)}
+        <div class="form-group">
+          <label>Observación:</label>
+          <textarea class="form-control" name="observacion[${idFQ}]" placeholder="Observación..."></textarea>
+        </div>
+      </div>`;
+    return html;
+  }
 
   html += `
     <div class="form-group">

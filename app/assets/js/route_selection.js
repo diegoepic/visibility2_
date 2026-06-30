@@ -3,8 +3,10 @@
 
   /**
    * Recolecta los puntos de ruta desde las tablas visibles.
-   * Retorna { pts, isMultiDate, fechas } donde:
-   *   pts        — array de RoutePoint (máx 24 tras aplicar límite)
+   * Retorna { pts, dropped, isMultiDate, fechas } donde:
+   *   pts        — array de RoutePoint (TODOS los válidos; sin límite duro de 24)
+   *   dropped    — siempre [] (compatibilidad; ya no se descartan locales aquí — el chunking
+   *                de rutas largas lo maneja RoutePlanner, ver route_planner.js)
    *   isMultiDate — true si los puntos provienen de más de una fecha
    *   fechas      — Set con las fechas involucradas
    */
@@ -48,18 +50,10 @@
       pts.push(...norm, ...bots);
     }
 
-    // Límite de 24 puntos (Routes API / DirectionsService)
-    let dropped = [];
-    if (pts.length > 24) {
-      dropped = pts.splice(24);
-      const $w = $('#routeWarning');
-      if ($w.length) {
-        $w.html(
-          `⚠ Ruta limitada a 24 locales. <strong>${dropped.length}</strong> local(es) no incluido(s).` +
-          ` <button type="button" style="float:right;background:none;border:none;font-size:14px;line-height:1;cursor:pointer;opacity:.7" onclick="$(\'#routeWarning\').hide()">✕</button>`
-        ).stop(true).show();
-      }
-    }
+    // Sin límite duro: se devuelven TODOS los puntos válidos. Las rutas con más de 24 paradas
+    // se dividen en bloques (chunks) en RoutePlanner.planFull para respetar el límite por
+    // llamada de Routes API; ningún local se descarta silenciosamente.
+    const dropped = [];
 
     // Filtrar fechas a solo las que tienen puntos incluidos
     const fechasConPuntos = new Set(pts.map(p => p.fecha));

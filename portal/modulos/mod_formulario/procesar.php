@@ -198,6 +198,7 @@ try {
             'solo_auditoria',
             'retiro',
             'entrega',
+            'implementacion_por_etapas',
         ];
 
         if ($modalidad === '' || !in_array($modalidad, $valoresPermitidos, true)) {
@@ -553,13 +554,23 @@ try {
             VALUES ('', '', ?, ?, ?, '', ?, ?, 0, '', ?, ?, ?, 0)
         ");
 
+        $stmt_check_mat = $conn->prepare(
+            "SELECT id FROM material
+             WHERE id_division = ? AND LOWER(TRIM(nombre)) = LOWER(TRIM(?)) AND deleted_at IS NULL
+             LIMIT 1"
+        );
+        $stmt_insert_mat = $conn->prepare(
+            "INSERT INTO material (nombre, id_division) VALUES (?, ?)"
+        );
+
         $fila = 1;
         $errores = [];
         $totalErrores = 0;
         $ok = 0;
 
-        $cacheLocales = [];
-        $cacheUsuarios = [];
+        $cacheLocales   = [];
+        $cacheUsuarios  = [];
+        $cacheMateriales = [];
 
         while (($data = fgetcsv($handle, 10000, $delim)) !== false) {
             $fila++;
@@ -677,6 +688,24 @@ try {
                 continue;
             }
 
+            // Registrar material en tabla material si no existe para esta división
+            $matKey = mb_strtolower(trim($material), 'UTF-8');
+            if (!array_key_exists($matKey, $cacheMateriales)) {
+                $stmt_check_mat->bind_param('is', $id_division, $material);
+                $stmt_check_mat->execute();
+                $stmt_check_mat->bind_result($mat_id_found);
+                $mat_existe = $stmt_check_mat->fetch();
+                $stmt_check_mat->free_result();
+                $stmt_check_mat->reset();
+
+                if (!$mat_existe) {
+                    $stmt_insert_mat->bind_param('si', $material, $id_division);
+                    $stmt_insert_mat->execute();
+                    $stmt_insert_mat->reset();
+                }
+                $cacheMateriales[$matKey] = true;
+            }
+
             $stmt_insert_fq->bind_param(
                 'sssisiii',
                 $material,
@@ -696,6 +725,8 @@ try {
         $stmt_local->close();
         $stmt_usuario->close();
         $stmt_insert_fq->close();
+        $stmt_check_mat->close();
+        $stmt_insert_mat->close();
 
         if ($totalErrores > 0) {
             $mensaje = "Se detectaron {$totalErrores} errores en el CSV.";

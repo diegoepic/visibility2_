@@ -155,18 +155,42 @@ if ($rowFQ = $resExist->fetch_assoc()) {
 }
 $stmtExist->close();
 
+// ------- Heredar fechaPropuesta de los demás materiales del mismo local/campaña -------
+// (si hay varias fechas distintas entre los materiales existentes, se toma cualquiera)
+$fechaPropuesta = null;
+$sqlFecha = "
+    SELECT fechaPropuesta
+    FROM formularioQuestion
+    WHERE id_formulario = ?
+      AND id_local      = ?
+      AND id_usuario     = ?
+      AND fechaPropuesta IS NOT NULL
+    LIMIT 1
+";
+$stmtFecha = $conn->prepare($sqlFecha);
+if ($stmtFecha) {
+    $stmtFecha->bind_param('iii', $idCampana, $idLocal, $usuario_id);
+    $stmtFecha->execute();
+    $stmtFecha->bind_result($fechaPropuesta);
+    $stmtFecha->fetch();
+    $stmtFecha->close();
+}
+if (!$fechaPropuesta) {
+    $fechaPropuesta = date('Y-m-d');
+}
+
 // ------- Insertar NUEVO registro en formularioQuestion -------
 $sqlIns = "
     INSERT INTO formularioQuestion
-        (id_formulario, id_usuario, id_local, material, valor_propuesto, valor, observacion, fechaVisita)
+        (id_formulario, id_usuario, id_local, material, valor_propuesto, valor, observacion, fechaVisita, fechaPropuesta)
     VALUES
-        (?, ?, ?, ?, ?, 0, '', NULL)
+        (?, ?, ?, ?, ?, 0, '', NULL, ?)
 ";
 $stmtIns = $conn->prepare($sqlIns);
 if (!$stmtIns) {
     json_error('Error preparando inserción de material: ' . $conn->error);
 }
-$stmtIns->bind_param('iiiss', $idCampana, $usuario_id, $idLocal, $nombreMaterial, $valorPropuesto);
+$stmtIns->bind_param('iiisss', $idCampana, $usuario_id, $idLocal, $nombreMaterial, $valorPropuesto, $fechaPropuesta);
 
 if (!$stmtIns->execute()) {
     $stmtIns->close();

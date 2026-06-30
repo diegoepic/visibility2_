@@ -65,6 +65,60 @@ date_default_timezone_set('America/Santiago');
             background: #e9ecef;
         }
 
+        .map-wrapper {
+            position: relative;
+        }
+
+        .map-selection-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 4;
+            display: none;
+            cursor: crosshair;
+            user-select: none;
+            touch-action: none;
+        }
+
+        .map-selection-layer.active {
+            display: block;
+        }
+
+        .map-selection-box {
+            position: absolute;
+            display: none;
+            border: 2px solid #0d6efd;
+            background: rgba(13,110,253,.16);
+            pointer-events: none;
+        }
+
+        .map-selection-counter {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            z-index: 5;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: rgba(255,255,255,.96);
+            box-shadow: 0 4px 16px rgba(0,0,0,.18);
+            border: 1px solid #dbe4f0;
+        }
+
+        .map-selection-counter strong {
+            min-width: 24px;
+            text-align: center;
+            color: #0d6efd;
+            font-size: 1.05rem;
+        }
+
+        .selection-mode-active {
+            background: #0d6efd !important;
+            border-color: #0d6efd !important;
+            color: #fff !important;
+        }
+
         .table thead th {
             background: #004AAD;
             color: #fff;
@@ -97,6 +151,25 @@ date_default_timezone_set('America/Santiago');
             border-radius: 50%;
             margin-right: 8px;
             vertical-align: middle;
+        }
+
+        .unplanned-row {
+            background: #fff1f1 !important;
+            color: #9f1239;
+        }
+
+        .selected-row {
+            box-shadow: inset 4px 0 0 #0d6efd;
+            background: #eaf2ff !important;
+        }
+
+        .selection-toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 3;
+            background: #fff;
+            border-bottom: 1px solid #dee2e6;
+            padding: 10px 0;
         }
 
         .empty-box {
@@ -251,7 +324,7 @@ date_default_timezone_set('America/Santiago');
                             <div class="col-md-3">
                                 <div class="stat-card">
                                     <div class="stat-number" id="statFilasIgnoradas">0</div>
-                                    <div class="stat-label">Filas ignoradas</div>
+                                    <div class="stat-label">Locales sin ruta</div>
                                 </div>
                             </div>
                         </div>
@@ -299,12 +372,32 @@ date_default_timezone_set('America/Santiago');
                                             <button class="btn btn-outline-secondary" id="btnVerTodas" type="button">
                                                 <i class="fa-solid fa-layer-group"></i> Ver todo
                                             </button>
+                                            <button class="btn btn-outline-primary" id="btnModoSeleccion" type="button">
+                                                <i class="fa-solid fa-vector-square"></i> Seleccionar por área
+                                            </button>
+                                            <button class="btn btn-warning" id="btnEditarSeleccionados" type="button" disabled>
+                                                <i class="fa-solid fa-pen-to-square"></i> Editar seleccionados
+                                            </button>
+                                            <button class="btn btn-success" id="btnDescargarEditado" type="button">
+                                                <i class="fa-solid fa-file-arrow-down"></i> Descargar modificado
+                                            </button>
                                         </div>
 
                                         <hr>
 
                                         <div class="mini-note mb-2">
                                             Puedes filtrar primero por usuario, luego por fecha y finalmente por grupo de ruta.
+                                        </div>
+
+                                        <div class="mini-note mb-3">
+                                            <span class="route-color-box" style="background:#dc2626;"></span>
+                                            Rojo: local sin ruta o fecha planificada.
+                                        </div>
+
+                                        <div class="mini-note mb-3">
+                                            Activa <strong>Seleccionar por área</strong>, mantén presionado el clic y arrastra
+                                            para encerrar varios locales.
+                                            Puedes dibujar varias áreas para acumular locales.
                                         </div>
 
                                         <div id="leyendaRutas"></div>
@@ -338,7 +431,20 @@ date_default_timezone_set('America/Santiago');
                                         <span class="badge bg-light text-dark" id="badgeRutaActiva">Todas las rutas</span>
                                     </div>
                                     <div class="card-body">
-                                        <div id="mapRutas"></div>
+                                        <div class="map-wrapper">
+                                            <div id="mapRutas"></div>
+                                            <div class="map-selection-layer" id="mapSelectionLayer">
+                                                <div class="map-selection-box" id="mapSelectionBox"></div>
+                                            </div>
+                                            <div class="map-selection-counter">
+                                                <i class="fa-solid fa-location-dot text-primary"></i>
+                                                <span>Seleccionados</span>
+                                                <strong id="mapSelectedCount">0</strong>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" id="btnLimpiarSeleccion" title="Limpiar selección">
+                                                    <i class="fa-solid fa-xmark"></i>
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -347,9 +453,19 @@ date_default_timezone_set('America/Santiago');
                                         <i class="fa-solid fa-location-dot"></i> Detalle de puntos
                                     </div>
                                     <div class="card-body table-responsive">
+                                        <div class="selection-toolbar d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <input class="form-check-input me-2" type="checkbox" id="checkSeleccionarVisibles">
+                                                <label for="checkSeleccionarVisibles" class="form-check-label">
+                                                    Seleccionar visibles
+                                                </label>
+                                            </div>
+                                            <span class="badge bg-primary" id="badgeSeleccionados">0 seleccionados</span>
+                                        </div>
                                         <table class="table table-hover table-sm mb-0" id="tablaDetalleRuta">
                                             <thead>
                                                 <tr>
+                                                    <th></th>
                                                     <th>Usuario</th>
                                                     <th>Fecha</th>
                                                     <th>Grupo</th>
@@ -376,6 +492,59 @@ date_default_timezone_set('America/Santiago');
     </div>
 </div>
 
+<div class="modal fade" id="modalEditarRuta" tabindex="-1" aria-labelledby="modalEditarRutaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalEditarRutaLabel">
+                    <i class="fa-solid fa-route"></i> Editar planificación
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info py-2">
+                    Se actualizarán <strong id="modalCantidadSeleccionados">0</strong> local(es).
+                    Deja un campo vacío para conservar su valor actual.
+                </div>
+
+                <div class="mb-3">
+                    <label for="editFechaRuta" class="form-label fw-semibold">Nueva fecha</label>
+                    <input type="date" class="form-control" id="editFechaRuta">
+                </div>
+
+                <div class="mb-3">
+                    <label for="editGrupoRuta" class="form-label fw-semibold">Grupo de ruta</label>
+                    <input type="text" class="form-control" id="editGrupoRuta" list="listaGruposRuta" placeholder="Ej: RUTA 01">
+                    <datalist id="listaGruposRuta"></datalist>
+                </div>
+
+                <div class="mb-3">
+                    <label for="editOrdenVisita" class="form-label fw-semibold">Orden inicial</label>
+                    <input type="number" min="1" class="form-control" id="editOrdenVisita" placeholder="Se incrementa para varios locales">
+                </div>
+
+                <div class="mb-3">
+                    <label for="editUsuarioNombre" class="form-label fw-semibold">Usuario</label>
+                    <input type="text" class="form-control" id="editUsuarioNombre" placeholder="Nombre del usuario">
+                </div>
+
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="editQuitarRuta">
+                    <label class="form-check-label text-danger" for="editQuitarRuta">
+                        Dejar los locales sin ruta planificada
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnAplicarEdicion">
+                    <i class="fa-solid fa-check"></i> Aplicar cambios
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw&callback=initMapRutas"></script>
@@ -390,6 +559,11 @@ let planRows = [];
 let planGroups = [];
 let planSummary = {};
 let planFilters = { usuarios: [], fechas: [], grupos: [] };
+let selectedRowIds = new Set();
+let modalEditarRuta;
+let mapSelectionMode = false;
+let mapProjectionOverlay;
+let selectionDragStart = null;
 
 const routePalette = [
     '#d32f2f', '#1976d2', '#388e3c', '#f57c00', '#7b1fa2',
@@ -406,6 +580,14 @@ function initMapRutas() {
     });
 
     infoWindowRutas = new google.maps.InfoWindow();
+
+    mapProjectionOverlay = new google.maps.OverlayView();
+    mapProjectionOverlay.onAdd = function() {};
+    mapProjectionOverlay.draw = function() {};
+    mapProjectionOverlay.onRemove = function() {};
+    mapProjectionOverlay.setMap(mapaRutas);
+
+    initializeMapAreaSelection();
 }
 
 function getRouteColor(groupName) {
@@ -460,6 +642,7 @@ function getFilteredRows() {
             || String(row.fecha_ruta) === String(filters.fecha);
 
         const okGrupo = filters.grupo === '__ALL__'
+            || (filters.grupo === '__UNPLANNED__' && Boolean(row.sin_ruta))
             || String(row.grupo_ruta) === String(filters.grupo);
 
         return okUsuario && okFecha && okGrupo;
@@ -471,10 +654,11 @@ function getFilteredGroups() {
     const groupMap = {};
 
     rows.forEach(row => {
-        const key = row.grupo_ruta;
+        const key = row.sin_ruta ? '__UNPLANNED__' : row.grupo_ruta;
         if (!groupMap[key]) {
             groupMap[key] = {
-                grupo_ruta: row.grupo_ruta,
+                grupo_ruta: row.sin_ruta ? 'SIN RUTA' : row.grupo_ruta,
+                group_key: key,
                 ruta_global: row.ruta_global || '',
                 usuario_id: row.usuario_id || '',
                 usuario_login: row.usuario_login || '',
@@ -507,7 +691,7 @@ function renderSummary() {
     $('#statTotalGrupos').text(groups.length);
     $('#statTotalPuntos').text(rows.length);
     $('#statTotalKm').text(totalKm.toFixed(2));
-    $('#statFilasIgnoradas').text(planSummary.filas_ignoradas || 0);
+    $('#statFilasIgnoradas').text(planSummary.sin_ruta || 0);
 
     $('#bloqueResumen').show();
 }
@@ -536,11 +720,18 @@ function renderFechaSelect() {
 
 function renderGroupSelect() {
     const currentRows = getFilteredRows();
-    const availableGroups = [...new Set(currentRows.map(r => r.grupo_ruta))].sort((a, b) => String(a).localeCompare(String(b)));
+    const hasUnplanned = currentRows.some(row => row.sin_ruta);
+    const availableGroups = [...new Set(
+        currentRows.filter(row => !row.sin_ruta && row.grupo_ruta).map(row => row.grupo_ruta)
+    )].sort((a, b) => String(a).localeCompare(String(b)));
     const currentValue = $('#filtroGrupoRuta').val() || '__ALL__';
 
     const select = $('#filtroGrupoRuta').empty();
     select.append('<option value="__ALL__">Todas las rutas</option>');
+    if (hasUnplanned) {
+        const totalSinRuta = currentRows.filter(row => row.sin_ruta).length;
+        select.append(`<option value="__UNPLANNED__">SIN RUTA · ${totalSinRuta} locales</option>`);
+    }
 
     availableGroups.forEach(groupName => {
         const total = currentRows.filter(r => r.grupo_ruta === groupName).length;
@@ -551,7 +742,7 @@ function renderGroupSelect() {
         `);
     });
 
-    if (availableGroups.includes(currentValue)) {
+    if (availableGroups.includes(currentValue) || (currentValue === '__UNPLANNED__' && hasUnplanned)) {
         select.val(currentValue);
     } else {
         select.val('__ALL__');
@@ -563,7 +754,7 @@ function renderLegend() {
     const groups = getFilteredGroups();
 
     groups.slice(0, 12).forEach(group => {
-        const color = getRouteColor(group.grupo_ruta);
+        const color = group.group_key === '__UNPLANNED__' ? '#dc2626' : getRouteColor(group.grupo_ruta);
         container.append(`
             <div class="legend-item">
                 <span class="legend-line" style="background:${color};"></span>
@@ -582,10 +773,11 @@ function renderGroupSummaryTable() {
     const groups = getFilteredGroups();
 
     groups.forEach(group => {
-        const color = getRouteColor(group.grupo_ruta);
+        const isUnplanned = group.group_key === '__UNPLANNED__';
+        const color = isUnplanned ? '#dc2626' : getRouteColor(group.grupo_ruta);
 
         tbody.append(`
-            <tr class="clickable-row" data-group="${escapeHtml(group.grupo_ruta)}">
+            <tr class="clickable-row ${isUnplanned ? 'unplanned-row' : ''}" data-group="${escapeHtml(group.group_key || group.grupo_ruta)}">
                 <td>
                     <span class="route-color-box" style="background:${color};"></span>
                     ${escapeHtml(group.grupo_ruta)}
@@ -615,11 +807,23 @@ function renderDetalleTable() {
     const tbody = $('#tablaDetalleRuta tbody').empty();
 
     rows.forEach(row => {
+        const selected = selectedRowIds.has(row.row_id);
         tbody.append(`
-            <tr class="clickable-row" data-group="${escapeHtml(row.grupo_ruta)}" data-codigo="${escapeHtml(row.codigo_local)}">
+            <tr class="clickable-row ${row.sin_ruta ? 'unplanned-row' : ''} ${selected ? 'selected-row' : ''}"
+                data-row-id="${escapeHtml(row.row_id)}"
+                data-group="${escapeHtml(row.sin_ruta ? '__UNPLANNED__' : row.grupo_ruta)}"
+                data-codigo="${escapeHtml(row.codigo_local)}">
+                <td>
+                    <input type="checkbox" class="form-check-input row-selector"
+                        data-row-id="${escapeHtml(row.row_id)}" ${selected ? 'checked' : ''}>
+                </td>
                 <td>${escapeHtml(row.usuario_nombre || row.usuario_login || '')}</td>
                 <td>${escapeHtml(row.fecha_ruta || '')}</td>
-                <td>${escapeHtml(row.grupo_ruta)}</td>
+                <td>${escapeHtml(
+                    row.sin_ruta
+                        ? `SIN RUTA${row.grupo_ruta_sugerido ? ` · Sug: ${row.grupo_ruta_sugerido}` : ''}`
+                        : row.grupo_ruta
+                )}</td>
                 <td>${escapeHtml(row.dia_plan || '')}</td>
                 <td>${row.orden_visita ?? ''}</td>
                 <td>${escapeHtml(row.codigo_local)}</td>
@@ -631,35 +835,202 @@ function renderDetalleTable() {
             </tr>
         `);
     });
+
+    updateSelectionUi();
+}
+
+function updateSelectionUi() {
+    const count = selectedRowIds.size;
+    $('#badgeSeleccionados').text(`${count} seleccionado${count === 1 ? '' : 's'}`);
+    $('#mapSelectedCount').text(count);
+    $('#btnEditarSeleccionados').prop('disabled', count === 0);
+
+    const visibleIds = getFilteredRows().map(row => row.row_id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedRowIds.has(id));
+    $('#checkSeleccionarVisibles').prop('checked', allVisibleSelected);
+}
+
+function toggleRowSelection(rowId, forceValue = null) {
+    const shouldSelect = forceValue === null ? !selectedRowIds.has(rowId) : forceValue;
+    if (shouldSelect) {
+        selectedRowIds.add(rowId);
+    } else {
+        selectedRowIds.delete(rowId);
+    }
+    renderDetalleTable();
+    renderMap(false);
+}
+
+function selectRowsInsideBounds(bounds) {
+    let added = 0;
+
+    getFilteredRows().forEach(row => {
+        const lat = Number(row.lat);
+        const lng = Number(row.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+        const position = new google.maps.LatLng(lat, lng);
+        if (bounds.contains(position) && !selectedRowIds.has(row.row_id)) {
+            selectedRowIds.add(row.row_id);
+            added++;
+        }
+    });
+
+    renderDetalleTable();
+    renderMap(false);
+
+    if (added === 0) {
+        $('#mapSelectedCount').addClass('text-danger');
+        setTimeout(() => $('#mapSelectedCount').removeClass('text-danger'), 800);
+    }
+}
+
+function initializeMapAreaSelection() {
+    const layer = document.getElementById('mapSelectionLayer');
+    const box = document.getElementById('mapSelectionBox');
+    if (!layer || !box) return;
+
+    const pointFromEvent = event => {
+        const rect = layer.getBoundingClientRect();
+        return {
+            x: Math.max(0, Math.min(event.clientX - rect.left, rect.width)),
+            y: Math.max(0, Math.min(event.clientY - rect.top, rect.height))
+        };
+    };
+
+    const drawBox = (start, end) => {
+        const left = Math.min(start.x, end.x);
+        const top = Math.min(start.y, end.y);
+        const width = Math.abs(end.x - start.x);
+        const height = Math.abs(end.y - start.y);
+
+        box.style.display = 'block';
+        box.style.left = `${left}px`;
+        box.style.top = `${top}px`;
+        box.style.width = `${width}px`;
+        box.style.height = `${height}px`;
+    };
+
+    layer.addEventListener('mousedown', event => {
+        if (!mapSelectionMode || event.button !== 0) return;
+        event.preventDefault();
+        selectionDragStart = pointFromEvent(event);
+        drawBox(selectionDragStart, selectionDragStart);
+    });
+
+    layer.addEventListener('mousemove', event => {
+        if (!selectionDragStart) return;
+        event.preventDefault();
+        drawBox(selectionDragStart, pointFromEvent(event));
+    });
+
+    const finishSelection = event => {
+        if (!selectionDragStart) return;
+        event.preventDefault();
+
+        const end = pointFromEvent(event);
+        const start = selectionDragStart;
+        selectionDragStart = null;
+        box.style.display = 'none';
+
+        if (Math.abs(end.x - start.x) < 6 || Math.abs(end.y - start.y) < 6) {
+            return;
+        }
+
+        const projection = mapProjectionOverlay?.getProjection();
+        if (!projection) return;
+
+        const topLeft = projection.fromContainerPixelToLatLng(
+            new google.maps.Point(Math.min(start.x, end.x), Math.min(start.y, end.y))
+        );
+        const bottomRight = projection.fromContainerPixelToLatLng(
+            new google.maps.Point(Math.max(start.x, end.x), Math.max(start.y, end.y))
+        );
+
+        const bounds = new google.maps.LatLngBounds(
+            new google.maps.LatLng(bottomRight.lat(), topLeft.lng()),
+            new google.maps.LatLng(topLeft.lat(), bottomRight.lng())
+        );
+        selectRowsInsideBounds(bounds);
+    };
+
+    layer.addEventListener('mouseup', finishSelection);
+    layer.addEventListener('mouseleave', event => {
+        if (selectionDragStart) {
+            finishSelection(event);
+        }
+    });
+}
+
+function setMapSelectionMode(active) {
+    mapSelectionMode = Boolean(active);
+    const button = $('#btnModoSeleccion');
+
+    button.toggleClass('selection-mode-active', mapSelectionMode);
+    button.html(
+        mapSelectionMode
+            ? '<i class="fa-regular fa-square"></i> Dibujar área'
+            : '<i class="fa-solid fa-arrow-pointer"></i> Seleccionar por área'
+    );
+
+    if (mapaRutas) {
+        mapaRutas.setOptions({
+            draggable: !mapSelectionMode,
+            gestureHandling: mapSelectionMode ? 'none' : 'auto',
+            scrollwheel: !mapSelectionMode,
+            disableDoubleClickZoom: mapSelectionMode,
+            draggableCursor: mapSelectionMode ? 'crosshair' : null,
+            draggingCursor: mapSelectionMode ? 'crosshair' : null
+        });
+    }
+
+    $('#mapSelectionLayer').toggleClass('active', mapSelectionMode);
+    if (!mapSelectionMode) {
+        selectionDragStart = null;
+        $('#mapSelectionBox').hide();
+    }
+
+    if (infoWindowRutas) {
+        infoWindowRutas.close();
+    }
 }
 
 function createMarker(row, color) {
+    const isUnplanned = Boolean(row.sin_ruta);
+    const isSelected = selectedRowIds.has(row.row_id);
     const marker = new google.maps.Marker({
         position: { lat: Number(row.lat), lng: Number(row.lng) },
         map: mapaRutas,
         label: {
-            text: String(row.orden_visita ?? ''),
+            text: isUnplanned ? '!' : String(row.orden_visita ?? ''),
             color: '#ffffff',
             fontSize: '11px',
             fontWeight: '700'
         },
         icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 12,
-            fillColor: color,
+            scale: isSelected ? 15 : 12,
+            fillColor: isUnplanned ? '#dc2626' : color,
             fillOpacity: 1,
-            strokeColor: '#ffffff',
-            strokeWeight: 2
+            strokeColor: isSelected ? '#0d6efd' : '#ffffff',
+            strokeWeight: isSelected ? 4 : 2
         },
-        title: `${row.grupo_ruta} - ${row.codigo_local}`
+        title: `${isUnplanned ? 'SIN RUTA' : row.grupo_ruta} - ${row.codigo_local}`
     });
 
     marker.addListener('click', () => {
+        if (mapSelectionMode) {
+            toggleRowSelection(row.row_id);
+            return;
+        }
+
         infoWindowRutas.setContent(`
             <div style="min-width:260px;">
                 <div><strong>Usuario:</strong> ${escapeHtml(row.usuario_nombre || row.usuario_login || '')}</div>
                 <div><strong>Fecha ruta:</strong> ${escapeHtml(row.fecha_ruta || '')}</div>
-                <div><strong>Grupo:</strong> ${escapeHtml(row.grupo_ruta)}</div>
+                <div><strong>Estado:</strong> ${isUnplanned ? '<span style="color:#dc2626;font-weight:700;">SIN RUTA</span>' : 'PLANIFICADO'}</div>
+                <div><strong>Grupo:</strong> ${escapeHtml(row.grupo_ruta || '')}</div>
+                ${row.grupo_ruta_sugerido ? `<div><strong>Grupo sugerido:</strong> ${escapeHtml(row.grupo_ruta_sugerido)}</div>` : ''}
                 <div><strong>Día plan:</strong> ${escapeHtml(row.dia_plan || '')}</div>
                 <div><strong>Orden:</strong> ${escapeHtml(row.orden_visita)}</div>
                 <div><strong>Código:</strong> ${escapeHtml(row.codigo_local)}</div>
@@ -668,6 +1039,10 @@ function createMarker(row, color) {
                 <div><strong>Comuna:</strong> ${escapeHtml(row.comuna || '')}</div>
                 <div><strong>Día:</strong> ${escapeHtml(row.dia_semana || '')}</div>
                 <div><strong>Semana:</strong> ${escapeHtml(row.semana_plan || '')}</div>
+                <button type="button" class="btn btn-sm btn-primary mt-2"
+                    onclick="toggleRowSelection('${escapeHtml(row.row_id)}')">
+                    ${isSelected ? 'Quitar selección' : 'Seleccionar local'}
+                </button>
             </div>
         `);
         infoWindowRutas.open(mapaRutas, marker);
@@ -677,7 +1052,10 @@ function createMarker(row, color) {
     return marker;
 }
 
-function renderMap() {
+function renderMap(ajustarVista = true) {
+    const currentCenter = mapaRutas ? mapaRutas.getCenter() : null;
+    const currentZoom = mapaRutas ? mapaRutas.getZoom() : null;
+
     clearMapRutas();
 
     const rows = getFilteredRows()
@@ -691,10 +1069,11 @@ function renderMap() {
 
     const groupMap = {};
     rows.forEach(row => {
-        if (!groupMap[row.grupo_ruta]) {
-            groupMap[row.grupo_ruta] = [];
+        const groupKey = row.sin_ruta ? '__UNPLANNED__' : row.grupo_ruta;
+        if (!groupMap[groupKey]) {
+            groupMap[groupKey] = [];
         }
-        groupMap[row.grupo_ruta].push(row);
+        groupMap[groupKey].push(row);
     });
 
     const allBounds = new google.maps.LatLngBounds();
@@ -702,7 +1081,8 @@ function renderMap() {
 
     Object.keys(groupMap).sort().forEach(groupName => {
         const groupRows = groupMap[groupName].sort((a, b) => Number(a.orden_visita || 0) - Number(b.orden_visita || 0));
-        const color = getRouteColor(groupName);
+        const isUnplannedGroup = groupName === '__UNPLANNED__';
+        const color = isUnplannedGroup ? '#dc2626' : getRouteColor(groupName);
         const path = [];
 
         groupRows.forEach(row => {
@@ -712,7 +1092,7 @@ function renderMap() {
             createMarker(row, color);
         });
 
-        if (path.length > 1) {
+        if (!isUnplannedGroup && path.length > 1) {
             const polyline = new google.maps.Polyline({
                 path,
                 geodesic: true,
@@ -726,11 +1106,20 @@ function renderMap() {
         }
     });
 
-    if (!allBounds.isEmpty()) {
+    if (ajustarVista && !allBounds.isEmpty()) {
         mapaRutas.fitBounds(allBounds);
+    } else if (!ajustarVista && currentCenter) {
+        mapaRutas.setCenter(currentCenter);
+        if (currentZoom !== null && currentZoom !== undefined) {
+            mapaRutas.setZoom(currentZoom);
+        }
     }
 
-    $('#badgeRutaActiva').text(selectedGroup === '__ALL__' ? 'Vista filtrada' : selectedGroup);
+    $('#badgeRutaActiva').text(
+        selectedGroup === '__ALL__'
+            ? 'Vista filtrada'
+            : (selectedGroup === '__UNPLANNED__' ? 'SIN RUTA' : selectedGroup)
+    );
     renderDetalleTable();
 }
 
@@ -744,6 +1133,173 @@ function refreshAllViews(resetGroup = false) {
     renderLegend();
     renderGroupSummaryTable();
     renderMap();
+}
+
+function rebuildFiltersFromRows() {
+    const users = {};
+    const dates = {};
+
+    planRows.forEach(row => {
+        const userKey = row.usuario_id || row.usuario_login;
+        if (userKey) {
+            users[userKey] = {
+                usuario_id: row.usuario_id || '',
+                usuario_login: row.usuario_login || '',
+                usuario_nombre: row.usuario_nombre || ''
+            };
+        }
+        if (row.fecha_ruta_sql) {
+            dates[row.fecha_ruta_sql] = {
+                fecha_ruta: row.fecha_ruta || row.fecha_ruta_sql,
+                fecha_ruta_sql: row.fecha_ruta_sql
+            };
+        }
+    });
+
+    planFilters = {
+        usuarios: Object.values(users),
+        fechas: Object.values(dates).sort((a, b) => String(a.fecha_ruta_sql).localeCompare(String(b.fecha_ruta_sql))),
+        grupos: [...new Set(planRows.filter(row => !row.sin_ruta && row.grupo_ruta).map(row => row.grupo_ruta))].sort()
+    };
+
+    planSummary.sin_ruta = planRows.filter(row => row.sin_ruta).length;
+    planSummary.total_grupos = planFilters.grupos.length;
+    planSummary.total_usuarios = planFilters.usuarios.length;
+    planSummary.total_fechas = planFilters.fechas.length;
+}
+
+function dateMetadata(dateSql) {
+    if (!dateSql) {
+        return { display: '', dayName: '', dayNumber: '', week: '' };
+    }
+
+    const date = new Date(`${dateSql}T12:00:00`);
+    if (Number.isNaN(date.getTime())) {
+        return { display: dateSql, dayName: '', dayNumber: '', week: '' };
+    }
+
+    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const start = new Date(date.getFullYear(), 0, 1);
+    const days = Math.floor((date - start) / 86400000);
+    const week = Math.ceil((days + start.getDay() + 1) / 7);
+
+    return {
+        display: `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`,
+        dayName: dayNames[date.getDay()],
+        dayNumber: date.getDay() === 0 ? 7 : date.getDay(),
+        week: week
+    };
+}
+
+function openEditModal() {
+    if (!selectedRowIds.size) return;
+
+    const selectedRows = planRows.filter(row => selectedRowIds.has(row.row_id));
+    $('#modalCantidadSeleccionados').text(selectedRows.length);
+    $('#editFechaRuta, #editGrupoRuta, #editOrdenVisita, #editUsuarioNombre').val('');
+    if (selectedRows.length === 1 && selectedRows[0].grupo_ruta_sugerido) {
+        $('#editGrupoRuta').val(selectedRows[0].grupo_ruta_sugerido);
+    }
+    $('#editQuitarRuta').prop('checked', false);
+
+    const groups = [...new Set(planRows.map(row => row.grupo_ruta).filter(Boolean))].sort();
+    $('#listaGruposRuta').html(groups.map(group => `<option value="${escapeHtml(group)}"></option>`).join(''));
+
+    modalEditarRuta.show();
+}
+
+function applyRouteEdits() {
+    const fecha = $('#editFechaRuta').val();
+    const grupo = $('#editGrupoRuta').val().trim();
+    const ordenRaw = $('#editOrdenVisita').val();
+    const usuarioNombre = $('#editUsuarioNombre').val().trim();
+    const quitarRuta = $('#editQuitarRuta').is(':checked');
+    const metadata = dateMetadata(fecha);
+    let orderOffset = 0;
+
+    planRows.forEach(row => {
+        if (!selectedRowIds.has(row.row_id)) return;
+
+        if (quitarRuta) {
+            row.grupo_ruta = '';
+            row.fecha_ruta = '';
+            row.fecha_ruta_sql = '';
+            row.orden_visita = 0;
+            row.dia_plan = '';
+            row.dia_semana = '';
+            row.dia_semana_num = '';
+            row.semana_plan = '';
+            row.sin_ruta = true;
+            return;
+        }
+
+        if (fecha) {
+            row.fecha_ruta_sql = fecha;
+            row.fecha_ruta = metadata.display;
+            row.dia_semana = metadata.dayName;
+            row.dia_semana_num = metadata.dayNumber;
+            row.semana_plan = metadata.week;
+        }
+        if (grupo) {
+            row.grupo_ruta = grupo;
+        }
+        if (ordenRaw !== '') {
+            row.orden_visita = Number(ordenRaw) + orderOffset;
+            orderOffset++;
+        }
+        if (usuarioNombre) {
+            row.usuario_nombre = usuarioNombre;
+        }
+
+        row.sin_ruta = !row.grupo_ruta || !row.fecha_ruta_sql;
+    });
+
+    selectedRowIds.clear();
+    rebuildFiltersFromRows();
+    renderUsuarioSelect();
+    renderFechaSelect();
+    refreshAllViews(true);
+    modalEditarRuta.hide();
+}
+
+async function downloadEditedRoutes() {
+    if (!planRows.length) {
+        alert('Primero debes cargar un archivo.');
+        return;
+    }
+
+    const button = $('#btnDescargarEditado');
+    const original = button.html();
+    button.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> Generando...');
+
+    try {
+        const body = new URLSearchParams();
+        body.set('rows', JSON.stringify(planRows));
+
+        const response = await fetch('mod_descargar_rutas_editadas.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: body.toString()
+        });
+
+        if (!response.ok) {
+            throw new Error(await response.text() || 'No se pudo generar el archivo.');
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `planificacion_rutas_editada_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        alert(error.message || 'No se pudo descargar el archivo.');
+    } finally {
+        button.prop('disabled', false).html(original);
+    }
 }
 
 function activateMapView() {
@@ -791,6 +1347,7 @@ $('#formUploadPlanificacion').on('submit', function(e) {
             planGroups = Array.isArray(resp.groups) ? resp.groups : [];
             planSummary = resp.summary || {};
             planFilters = resp.filters || { usuarios: [], fechas: [], grupos: [] };
+            selectedRowIds.clear();
 
             renderUsuarioSelect();
             renderFechaSelect();
@@ -803,7 +1360,9 @@ $('#formUploadPlanificacion').on('submit', function(e) {
                 .html(`
                     <div class="alert alert-success mb-0">
                         <strong>Archivo procesado correctamente.</strong><br>
-                        Se cargaron ${planRows.length} puntos, ${planGroups.length} grupo(s), ${planSummary.total_usuarios || 0} usuario(s) y ${planSummary.total_fechas || 0} fecha(s).
+                        Se cargaron ${planRows.length} puntos, ${planGroups.length} grupo(s),
+                        ${planSummary.total_usuarios || 0} usuario(s), ${planSummary.total_fechas || 0} fecha(s)
+                        y ${planSummary.sin_ruta || 0} local(es) sin ruta.
                     </div>
                 `);
 
@@ -848,6 +1407,39 @@ $('#btnAjustarMapa').on('click', function() {
     renderMap();
 });
 
+$('#btnModoSeleccion').on('click', function() {
+    setMapSelectionMode(!mapSelectionMode);
+});
+
+$('#btnLimpiarSeleccion').on('click', function() {
+    selectedRowIds.clear();
+    renderDetalleTable();
+    renderMap(false);
+});
+
+$('#btnEditarSeleccionados').on('click', openEditModal);
+$('#btnAplicarEdicion').on('click', applyRouteEdits);
+$('#btnDescargarEditado').on('click', downloadEditedRoutes);
+
+$('#checkSeleccionarVisibles').on('change', function() {
+    const checked = $(this).is(':checked');
+    getFilteredRows().forEach(row => {
+        if (checked) {
+            selectedRowIds.add(row.row_id);
+        } else {
+            selectedRowIds.delete(row.row_id);
+        }
+    });
+    renderDetalleTable();
+    renderMap(false);
+});
+
+$(document).on('click', '.row-selector', function(event) {
+    event.stopPropagation();
+    const rowId = $(this).data('row-id');
+    toggleRowSelection(rowId, $(this).is(':checked'));
+});
+
 $(document).on('click', '#tablaGruposResumen tbody tr', function() {
     const group = $(this).data('group');
     if (!group) return;
@@ -871,6 +1463,10 @@ $(document).on('click', '#tablaDetalleRuta tbody tr', function() {
         mapaRutas.setZoom(Math.max(mapaRutas.getZoom(), 14));
         google.maps.event.trigger(marker, 'click');
     }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    modalEditarRuta = new bootstrap.Modal(document.getElementById('modalEditarRuta'));
 });
 </script>
 

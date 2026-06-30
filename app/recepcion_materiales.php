@@ -298,7 +298,6 @@ $tieneHist      = count($historial) > 0;
                            min="0"
                            step="1"
                            placeholder="0"
-                           value="0"
                            required>
                 </div>
             <?php endforeach; ?>

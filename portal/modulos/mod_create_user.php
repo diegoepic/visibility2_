@@ -26,6 +26,9 @@ if (!function_exists('upper_safe')) {
 
 $empresas = obtenerEmpresasActivas();
 $perfiles = obtenerPerfiles();
+
+$stmt_regiones = $conn->query("SELECT id, region FROM region ORDER BY region ASC");
+$regiones = $stmt_regiones ? $stmt_regiones->fetch_all(MYSQLI_ASSOC) : [];
 $usuarios = obtenerUsuarios([
     'estado'   => 'todos',
     'empresa'  => 'todos',
@@ -1400,6 +1403,34 @@ td {
                             </div>
 
                             <div class="form-group row">
+                                <label for="crear_region" class="col-sm-2 col-form-label">Región:</label>
+                                <div class="col-sm-10">
+                                    <select class="form-control" id="crear_region">
+                                        <option value="">Seleccione una región</option>
+                                        <?php foreach ($regiones as $r): ?>
+                                            <option value="<?= (int)$r['id'] ?>"><?= htmlspecialchars($r['region'], ENT_QUOTES, 'UTF-8') ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group row">
+                                <label for="crear_comuna" class="col-sm-2 col-form-label">Comuna:</label>
+                                <div class="col-sm-10">
+                                    <select class="form-control" id="crear_comuna" name="id_comuna" disabled>
+                                        <option value="">Seleccione una comuna</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group row">
+                                <label for="crear_cd" class="col-sm-2 col-form-label">Centro de distribución:</label>
+                                <div class="col-sm-10">
+                                    <input type="text" class="form-control" id="crear_cd" name="centro_distribucion" placeholder="Ej: CD CONCEPCION">
+                                </div>
+                            </div>
+
+                            <div class="form-group row">
                                 <label for="fotoPerfil" class="col-sm-2 col-form-label">Foto de perfil:</label>
                                 <div class="col-sm-10">
                                     <div class="custom-file">
@@ -1622,6 +1653,34 @@ td {
                     </div>
 
                     <div class="form-group row">
+                        <label for="editar_region" class="col-sm-2 col-form-label">Región:</label>
+                        <div class="col-sm-10">
+                            <select class="form-control" id="editar_region">
+                                <option value="">Seleccione una región</option>
+                                <?php foreach ($regiones as $r): ?>
+                                    <option value="<?= (int)$r['id'] ?>"><?= htmlspecialchars($r['region'], ENT_QUOTES, 'UTF-8') ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
+                        <label for="editar_comuna" class="col-sm-2 col-form-label">Comuna:</label>
+                        <div class="col-sm-10">
+                            <select class="form-control" id="editar_comuna" name="id_comuna" disabled>
+                                <option value="">Seleccione una comuna</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
+                        <label for="editar_cd" class="col-sm-2 col-form-label">Centro de distribución:</label>
+                        <div class="col-sm-10">
+                            <input type="text" class="form-control" id="editar_cd" name="centro_distribucion" placeholder="Ej: CD CONCEPCION">
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
                         <label class="col-sm-2 col-form-label">Contraseña:</label>
                         <div class="col-sm-10">
                             <button type="button" id="btnCambiarClave" class="btn btn-outline-secondary">
@@ -1753,6 +1812,36 @@ $(function () {
             }
         });
     }
+
+    function cargarComunas(regionId, $selectComuna, callback) {
+        if (!regionId) {
+            $selectComuna.html('<option value="">Seleccione una comuna</option>').prop('disabled', true);
+            if (typeof callback === 'function') callback(false);
+            return;
+        }
+        $selectComuna.html('<option value="">Cargando...</option>').prop('disabled', true);
+        $.ajax({
+            url: 'mod_user/obtener_comunas.php',
+            type: 'GET',
+            data: { region_id: regionId },
+            success: function (html) {
+                $selectComuna.html(html).prop('disabled', false);
+                if (typeof callback === 'function') callback(true);
+            },
+            error: function () {
+                $selectComuna.html('<option value="">Seleccione una comuna</option>').prop('disabled', true);
+                if (typeof callback === 'function') callback(false);
+            }
+        });
+    }
+
+    $('#crear_region').on('change', function () {
+        cargarComunas($(this).val(), $('#crear_comuna'));
+    });
+
+    $('#editar_region').on('change', function () {
+        cargarComunas($(this).val(), $('#editar_comuna'));
+    });
 
     function controlarCampoDivisionCrear() {
         const perfilSeleccionado = $('#selectPerfil option:selected').text();
@@ -1935,8 +2024,14 @@ $(document).on('click', '.editar-usuario-btn', function () {
                 $('#editar_perfil').val(data.id_perfil || '');
                 $('#editar_empresa').val(data.id_empresa || '');
                 $('#editar_clasificacion_usuario').val(data.clasificacion_usuario || '');
+                $('#editar_cd').val(data.centro_distribucion || '');
                 $('#actual_fotoPerfil').attr('src', data.fotoPerfil ? data.fotoPerfil : 'ruta_por_defecto.jpg');
-            
+
+                cargarComunas(data.id_region || '', $('#editar_comuna'), function () {
+                    $('#editar_comuna').val(data.id_comuna || '');
+                });
+                $('#editar_region').val(data.id_region || '');
+
                 cargarDivisiones(data.id_empresa || '', $('#editar_division'), function () {
                     $('#editar_division').val(data.id_division || '');
                     controlarCampoDivisionEditar();

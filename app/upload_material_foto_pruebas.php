@@ -140,6 +140,10 @@ $idFQ         = post_int('idFQ', 0);               // formularioQuestion.id
 $fotoLat      = post_float('lat', 0.0);
 $fotoLng      = post_float('lng', 0.0);
 $client_guid  = post_str('client_guid', '');       // para reconciliar visitas offline
+$etapaMaterial = post_str('etapa_material', null); // etapa elegida al momento de subir (armado/entregado/implementado/retirado)
+if ($etapaMaterial !== null && !in_array($etapaMaterial, ['armado','entregado','implementado','retirado'], true)) {
+  $etapaMaterial = null;
+}
 
 if ($idCampana<=0 || $idLocal<=0 || $idFQ<=0) {
   json_fail(400, 'Parámetros insuficientes (falta campaña/local/FQ)', ['error_code' => 'VALIDATION', 'retryable' => false]);
@@ -474,13 +478,13 @@ try {
   // 2) Insert en fotoVisita (URL relativa normalizada)
   $stmt = $conn->prepare("
     INSERT INTO fotoVisita
-      (visita_id, url, id_usuario, id_formulario, id_local, id_material, id_formularioQuestion, fotoLat, fotoLng)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (visita_id, url, id_usuario, id_formulario, id_local, id_material, id_formularioQuestion, fotoLat, fotoLng, kind)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ");
   if (!$stmt) throw new Exception('Prep fotoVisita: '.$conn->error);
   $stmt->bind_param(
-    'isiiiiidd',
-    $visita_id, $relUrl, $usuario_id, $idCampana, $idLocal, $idMaterial, $idFQ, $fotoLat, $fotoLng
+    'isiiiiidds',
+    $visita_id, $relUrl, $usuario_id, $idCampana, $idLocal, $idMaterial, $idFQ, $fotoLat, $fotoLng, $etapaMaterial
   );
   if (!$stmt->execute()) throw new Exception('Exec fotoVisita: '.$stmt->error);
   $idFoto = (int)$stmt->insert_id;

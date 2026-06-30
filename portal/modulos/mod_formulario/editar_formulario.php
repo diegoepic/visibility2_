@@ -46,6 +46,22 @@ function parseFechaPropuestaCsv(string $fecha): ?string {
     return null;
 }
 
+function normalizarNombreColumna(string $s): string
+{
+    $s = trim($s);
+    $s = mb_strtolower($s, 'UTF-8');
+    $s = str_replace([' ', '-', '.'], '', $s);
+    return $s;
+}
+
+function agregarErrorCsv(array &$errores, int &$totalErrores, string $mensaje, int $maxErrores = 50): void
+{
+    $totalErrores++;
+    if (count($errores) < $maxErrores) {
+        $errores[] = $mensaje;
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Parámetros base
 // -----------------------------------------------------------------------------
@@ -640,7 +656,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         exit();
     }
 
-    $header = fgetcsv($handle, 1000, ";");
+    // BOM detection
+    $firstBytes = fread($handle, 3);
+    if ($firstBytes !== "\xEF\xBB\xBF") {
+        fseek($handle, 0);
+    }
+
+    // Auto-detect delimiter
+    $sample = fgets($handle);
+    $delim  = (substr_count((string)$sample, ';') >= substr_count((string)$sample, ',')) ? ';' : ',';
+    fseek($handle, ($firstBytes === "\xEF\xBB\xBF") ? 3 : 0);
+
+    $header = fgetcsv($handle, 10000, $delim);
     if (!$header) {
         fclose($handle);
         $_SESSION['error_formulario'] = "El CSV está vacío.";
@@ -648,8 +675,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         exit();
     }
 
-$req_cols = ['codigo', 'usuario', 'material', 'categoria', 'marca', 'valor_propuesto', 'fechapropuesta'];
-    $header_norm = array_map(fn($c) => strtolower(trim($c)), $header);
+    $header_norm = array_map(function ($c) {
+        return normalizarNombreColumna((string)$c);
+    }, $header);
+
+    $req_cols  = ['codigo', 'usuario', 'material', 'categoria', 'marca', 'valor_propuesto', 'fechapropuesta'];
     $faltantes = array_diff($req_cols, $header_norm);
 
     if (!empty($faltantes)) {
@@ -659,142 +689,237 @@ $req_cols = ['codigo', 'usuario', 'material', 'categoria', 'marca', 'valor_propu
         exit();
     }
 
-    $idx_codigo          = array_search('codigo', $header_norm, true);
-    $idx_usuario         = array_search('usuario', $header_norm, true);
-    $idx_material        = array_search('material', $header_norm, true);
-    $idx_categoria       = array_search('categoria', $header_norm, true);
-    $idx_marca           = array_search('marca', $header_norm, true);
-    $idx_valor_propuesto = array_search('valor_propuesto', $header_norm, true);
-    $idx_fechaPropuesta  = array_search('fechapropuesta', $header_norm, true);
+    $idx_codigo          = (int)array_search('codigo',          $header_norm, true);
+    $idx_usuario         = (int)array_search('usuario',         $header_norm, true);
+    $idx_material        = (int)array_search('material',        $header_norm, true);
+    $idx_categoria       = (int)array_search('categoria',       $header_norm, true);
+    $idx_marca           = (int)array_search('marca',           $header_norm, true);
+    $idx_valor_propuesto = (int)array_search('valor_propuesto', $header_norm, true);
+    $idx_fechaPropuesta  = (int)array_search('fechapropuesta',  $header_norm, true);
 
-    $empresa_form = (int)$formulario['id_empresa'];
+    $empresa_form     = (int)$formulario['id_empresa'];
+    $id_division_form = (int)($formulario['id_division'] ?? 0);
     $tiene_divisiones = (contarDivisionesPorEmpresa($empresa_form) > 0);
 
     if ($tiene_divisiones) {
-        $stmt_local = $conn->prepare("SELECT id FROM local WHERE codigo = ? AND id_empresa = ?");
-        $stmt_usuario = $conn->prepare("SELECT id FROM usuario WHERE usuario = ? AND id_empresa = ?");
+        if ($id_division_form > 0) {
+            $stmt_local          = $conn->prepare("SELECT id FROM local WHERE codigo = ? AND id_empresa = ? AND id_division = ? LIMIT 1");
+            $stmt_local_fallback = $conn->prepare("SELECT id FROM local WHERE codigo = ? AND id_empresa = ? LIMIT 1");
+        } else {
+            $stmt_local          = $conn->prepare("SELECT id FROM local WHERE codigo = ? AND id_empresa = ? LIMIT 1");
+            $stmt_local_fallback = null;
+        }
+        $stmt_usuario = $conn->prepare("SELECT id FROM usuario WHERE usuario = ? AND id_empresa = ? LIMIT 1");
     } else {
-        $stmt_local = $conn->prepare("SELECT id FROM local WHERE codigo = ?");
-        $stmt_usuario = $conn->prepare("SELECT id FROM usuario WHERE usuario = ?");
+        $stmt_local          = $conn->prepare("SELECT id FROM local WHERE codigo = ? LIMIT 1");
+        $stmt_local_fallback = null;
+        $stmt_usuario        = $conn->prepare("SELECT id FROM usuario WHERE usuario = ? LIMIT 1");
     }
 
-$stmt_insert_fq = $conn->prepare("
-    INSERT INTO formularioQuestion
-    (
-        pregunta,
-        motivo,
-        material,
-        categoria,
-        marca,
-        valor,
-        valor_propuesto,
-        fechaPropuesta,
-        countVisita,
-        observacion,
-        id_formulario,
-        id_local,
-        id_usuario,
-        estado
-    )
-    VALUES ('', '', ?, ?, ?, '', ?, ?, 0, '', ?, ?, ?, 0)
-");
+    $stmt_insert_fq = $conn->prepare("
+        INSERT INTO formularioQuestion
+        (pregunta, motivo, material, categoria, marca, valor, valor_propuesto, fechaPropuesta, countVisita, observacion, id_formulario, id_local, id_usuario, estado)
+        VALUES ('', '', ?, ?, ?, '', ?, ?, 0, '', ?, ?, ?, 0)
+    ");
 
-    $fila = 1;
-    $errores_csv = [];
-    $ok = 0;
+    $stmt_check_mat = $conn->prepare(
+        "SELECT id FROM material
+         WHERE id_division = ? AND LOWER(TRIM(nombre)) = LOWER(TRIM(?)) AND deleted_at IS NULL
+         LIMIT 1"
+    );
+    $stmt_insert_mat = $conn->prepare(
+        "INSERT INTO material (nombre, id_division) VALUES (?, ?)"
+    );
 
-    while (($data = fgetcsv($handle, 1000, ";")) !== false) {
-        $fila++;
+    $fila            = 1;
+    $errores_csv     = [];
+    $totalErrores    = 0;
+    $ok              = 0;
+    $cacheLocales    = [];
+    $cacheUsuarios   = [];
+    $cacheMateriales = [];
 
-        $cod_local      = trim($data[$idx_codigo] ?? '');
-        $usr_name       = trim($data[$idx_usuario] ?? '');
-        $material       = trim($data[$idx_material] ?? '');
-        $categoria      = trim($data[$idx_categoria] ?? '');
-        $marca          = trim($data[$idx_marca] ?? '');
-        $val_prop       = trim($data[$idx_valor_propuesto] ?? '');
-        $fechaRaw       = trim($data[$idx_fechaPropuesta] ?? '');
+    $conn->begin_transaction();
 
-        if (
-            $cod_local === '' ||
-            $usr_name === '' ||
-            $material === '' ||
-            $categoria === '' ||
-            $marca === '' ||
-            $val_prop === '' ||
-            $fechaRaw === ''
-        ) {
-            $errores_csv[] = "Fila $fila: Hay campos vacíos.";
-            continue;
+    try {
+        while (($data = fgetcsv($handle, 10000, $delim)) !== false) {
+            $fila++;
+
+            if ($data === [null] || $data === false) {
+                continue;
+            }
+
+            $cod_local  = trim((string)($data[$idx_codigo]          ?? ''));
+            $usr_name   = trim((string)($data[$idx_usuario]         ?? ''));
+            $material   = trim((string)($data[$idx_material]        ?? ''));
+            $categoria  = trim((string)($data[$idx_categoria]       ?? ''));
+            $marca      = trim((string)($data[$idx_marca]           ?? ''));
+            $val_prop_s = trim((string)($data[$idx_valor_propuesto] ?? ''));
+            $fechaRaw   = trim((string)($data[$idx_fechaPropuesta]  ?? ''));
+
+            if ($cod_local === '' || $usr_name === '' || $material === '' || $categoria === '' || $marca === '' || $val_prop_s === '') {
+                agregarErrorCsv($errores_csv, $totalErrores, "Fila {$fila}: hay campos obligatorios vacíos.");
+                continue;
+            }
+
+            if (!is_numeric($val_prop_s)) {
+                agregarErrorCsv($errores_csv, $totalErrores, "Fila {$fila}: valor_propuesto debe ser numérico.");
+                continue;
+            }
+
+            $val_prop = (int)$val_prop_s;
+
+            $fechaPropuesta = parseFechaPropuestaCsv($fechaRaw);
+            if ($fechaPropuesta === null) {
+                if ($fechaRaw === '') {
+                    $fechaPropuesta = date('Y-m-d');
+                } else {
+                    agregarErrorCsv($errores_csv, $totalErrores, "Fila {$fila}: fechaPropuesta inválida.");
+                    continue;
+                }
+            }
+
+            // Local con cache
+            $localKey = $tiene_divisiones ? ($empresa_form . '|' . $id_division_form . '|' . $cod_local) : $cod_local;
+
+            if (array_key_exists($localKey, $cacheLocales)) {
+                $id_local = $cacheLocales[$localKey];
+            } else {
+                $id_local = null;
+
+                if ($tiene_divisiones) {
+                    if ($id_division_form > 0) {
+                        $stmt_local->bind_param('sii', $cod_local, $empresa_form, $id_division_form);
+                    } else {
+                        $stmt_local->bind_param('si', $cod_local, $empresa_form);
+                    }
+                } else {
+                    $stmt_local->bind_param('s', $cod_local);
+                }
+                $stmt_local->execute();
+                $stmt_local->bind_result($id_local_tmp);
+                if ($stmt_local->fetch()) {
+                    $id_local = (int)$id_local_tmp;
+                }
+                $stmt_local->free_result();
+                $stmt_local->reset();
+
+                if ($id_local === null && $stmt_local_fallback !== null) {
+                    $stmt_local_fallback->bind_param('si', $cod_local, $empresa_form);
+                    $stmt_local_fallback->execute();
+                    $stmt_local_fallback->bind_result($id_local_tmp2);
+                    if ($stmt_local_fallback->fetch()) {
+                        $id_local = (int)$id_local_tmp2;
+                    }
+                    $stmt_local_fallback->free_result();
+                    $stmt_local_fallback->reset();
+                }
+
+                $cacheLocales[$localKey] = $id_local;
+            }
+
+            if (!$id_local) {
+                agregarErrorCsv($errores_csv, $totalErrores, "Fila {$fila}: local '{$cod_local}' no encontrado.");
+                continue;
+            }
+
+            // Usuario con cache
+            $userKey = $tiene_divisiones ? ($empresa_form . '|' . $usr_name) : $usr_name;
+
+            if (array_key_exists($userKey, $cacheUsuarios)) {
+                $id_usuario_csv = $cacheUsuarios[$userKey];
+            } else {
+                if ($tiene_divisiones) {
+                    $stmt_usuario->bind_param('si', $usr_name, $empresa_form);
+                } else {
+                    $stmt_usuario->bind_param('s', $usr_name);
+                }
+                $stmt_usuario->execute();
+                $stmt_usuario->bind_result($id_usuario_tmp);
+                if ($stmt_usuario->fetch()) {
+                    $id_usuario_csv = (int)$id_usuario_tmp;
+                    $cacheUsuarios[$userKey] = $id_usuario_csv;
+                } else {
+                    $id_usuario_csv = null;
+                    $cacheUsuarios[$userKey] = null;
+                }
+                $stmt_usuario->free_result();
+                $stmt_usuario->reset();
+            }
+
+            if (!$id_usuario_csv) {
+                agregarErrorCsv($errores_csv, $totalErrores, "Fila {$fila}: usuario '{$usr_name}' no encontrado.");
+                continue;
+            }
+
+            // Upsert material en tabla material para la división del formulario
+            $matKey = mb_strtolower(trim($material), 'UTF-8');
+            if (!array_key_exists($matKey, $cacheMateriales)) {
+                $stmt_check_mat->bind_param('is', $id_division_form, $material);
+                $stmt_check_mat->execute();
+                $stmt_check_mat->bind_result($mat_id_found);
+                $mat_existe = $stmt_check_mat->fetch();
+                $stmt_check_mat->free_result();
+                $stmt_check_mat->reset();
+
+                if (!$mat_existe) {
+                    $stmt_insert_mat->bind_param('si', $material, $id_division_form);
+                    $stmt_insert_mat->execute();
+                    $stmt_insert_mat->reset();
+                }
+                $cacheMateriales[$matKey] = true;
+            }
+
+            $stmt_insert_fq->bind_param(
+                'sssisiii',
+                $material,
+                $categoria,
+                $marca,
+                $val_prop,
+                $fechaPropuesta,
+                $formulario_id,
+                $id_local,
+                $id_usuario_csv
+            );
+            $stmt_insert_fq->execute();
+            $ok++;
         }
 
-        if (!is_numeric($val_prop)) {
-            $errores_csv[] = "Fila $fila: valor_propuesto debe ser numérico.";
-            continue;
-        }
+        $conn->commit();
 
-        $fechaPropuesta = parseFechaPropuestaCsv($fechaRaw);
-        if ($fechaPropuesta === null) {
-            $errores_csv[] = "Fila $fila: fechaPropuesta inválida.";
-            continue;
-        }
-
-        if ($tiene_divisiones) {
-            $stmt_local->bind_param("si", $cod_local, $empresa_form);
-        } else {
-            $stmt_local->bind_param("s", $cod_local);
-        }
-        $stmt_local->execute();
-        $stmt_local->bind_result($id_local);
-
-        if (!$stmt_local->fetch()) {
-            $errores_csv[] = "Fila $fila: local '{$cod_local}' no encontrado.";
-            $stmt_local->reset();
-            continue;
-        }
-        $stmt_local->reset();
-
-        if ($tiene_divisiones) {
-            $stmt_usuario->bind_param("si", $usr_name, $empresa_form);
-        } else {
-            $stmt_usuario->bind_param("s", $usr_name);
-        }
-        $stmt_usuario->execute();
-        $stmt_usuario->bind_result($id_usuario_csv);
-
-        if (!$stmt_usuario->fetch()) {
-            $errores_csv[] = "Fila $fila: usuario '{$usr_name}' no encontrado.";
-            $stmt_usuario->reset();
-            continue;
-        }
-        $stmt_usuario->reset();
-
-        $stmt_insert_fq->bind_param(
-            "sssssiii",
-            $material,
-            $categoria,
-            $marca,
-            $val_prop,
-            $fechaPropuesta,
-            $formulario_id,
-            $id_local,
-            $id_usuario_csv
-        );
-        $stmt_insert_fq->execute();
-        $ok++;
-    }
-
-    fclose($handle);
-    $stmt_local->close();
-    $stmt_usuario->close();
-    $stmt_insert_fq->close();
-
-    if (!empty($errores_csv)) {
-        $_SESSION['error_formulario'] = "Errores en CSV:<br>" . implode("<br>", $errores_csv);
+    } catch (Throwable $ex) {
+        $conn->rollback();
+        fclose($handle);
+        $stmt_local->close();
+        if ($stmt_local_fallback !== null) $stmt_local_fallback->close();
+        $stmt_usuario->close();
+        $stmt_insert_fq->close();
+        $stmt_check_mat->close();
+        $stmt_insert_mat->close();
+        $_SESSION['error_formulario'] = "Error procesando CSV: " . $ex->getMessage();
         header("Location: editar_formulario.php?id=$formulario_id&active_tab=agregar-entradas");
         exit();
     }
 
-    $_SESSION['success_formulario'] = "Entradas agregadas desde CSV. Registros: $ok";
+    fclose($handle);
+    $stmt_local->close();
+    if ($stmt_local_fallback !== null) $stmt_local_fallback->close();
+    $stmt_usuario->close();
+    $stmt_insert_fq->close();
+    $stmt_check_mat->close();
+    $stmt_insert_mat->close();
+
+    if ($totalErrores > 0) {
+        $msg = "Se procesaron {$ok} entradas. Se detectaron {$totalErrores} error(es).";
+        if (!empty($errores_csv)) {
+            $msg .= "<br>Primeros " . count($errores_csv) . " errores:<br>- " . implode("<br>- ", $errores_csv);
+        }
+        $_SESSION['error_formulario'] = $msg;
+        header("Location: editar_formulario.php?id=$formulario_id&active_tab=agregar-entradas");
+        exit();
+    }
+
+    $_SESSION['success_formulario'] = "Entradas agregadas desde CSV. Registros: {$ok}";
     header("Location: editar_formulario.php?id=$formulario_id&active_tab=agregar-entradas");
     exit();
 }
@@ -1358,6 +1483,7 @@ $sets = getQuestionSets();
                     <option value="solo_implementacion"      <?php if($formulario['modalidad'] === 'solo_implementacion')      echo 'selected'; ?>>Solo Implementación</option>
                     <option value="solo_auditoria"           <?php if($formulario['modalidad'] === 'solo_auditoria')           echo 'selected'; ?>>Solo Auditoría</option>
                     <option value="retiro"                   <?php if($formulario['modalidad'] === 'retiro')                   echo 'selected'; ?>>Retiro</option>
+                    <option value="implementacion_por_etapas" <?php if($formulario['modalidad'] === 'implementacion_por_etapas') echo 'selected'; ?>>Implementación por Etapas (Armado/Entregado/Implementado/Retirado)</option>
                     <option value="complementaria"           <?php if($formulario['modalidad'] === 'complementaria')           echo 'selected'; ?>>Complementaria (IW)</option>
                   </select>
                 </div>

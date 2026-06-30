@@ -15,7 +15,7 @@ try {
             'ok' => false,
             'status' => 'no_session',
             'error_code' => 'NO_SESSION',
-            'message' => 'Sesi¨®n expirada',
+            'message' => 'Sesiï¿½ï¿½n expirada',
             'retryable' => false
         ], JSON_UNESCAPED_UNICODE);
         exit;
@@ -130,7 +130,11 @@ try {
           AND f.id_empresa  = ?
           AND (f.id_division = ? OR ? = 0)
           AND f.tipo IN (3,1)
-          AND (fq.countVisita IS NULL OR fq.countVisita = 0)
+          AND (
+                (f.modalidad <> 'implementacion_por_etapas' AND (fq.countVisita IS NULL OR fq.countVisita = 0))
+                OR
+                (f.modalidad = 'implementacion_por_etapas' AND (fq.etapa_material IS NULL OR fq.etapa_material NOT IN ('implementado','retirado') OR (fq.etapa_material = 'implementado' AND CAST(COALESCE(NULLIF(fq.valor,''),'0') AS UNSIGNED) < CAST(COALESCE(NULLIF(fq.valor_propuesto,''),'0') AS UNSIGNED))))
+              )
           AND DATE(fq.fechaPropuesta) BETWEEN ? AND ?
         ORDER BY fq.fechaPropuesta ASC, c.nombre, l.direccion
     ";
@@ -161,7 +165,11 @@ try {
           AND f.id_empresa  = ?
           AND (f.id_division = ? OR ? = 0)
           AND f.tipo IN (3,1)
-          AND (fq.countVisita IS NULL OR fq.countVisita = 0)
+          AND (
+                (f.modalidad <> 'implementacion_por_etapas' AND (fq.countVisita IS NULL OR fq.countVisita = 0))
+                OR
+                (f.modalidad = 'implementacion_por_etapas' AND (fq.etapa_material IS NULL OR fq.etapa_material NOT IN ('implementado','retirado') OR (fq.etapa_material = 'implementado' AND CAST(COALESCE(NULLIF(fq.valor,''),'0') AS UNSIGNED) < CAST(COALESCE(NULLIF(fq.valor_propuesto,''),'0') AS UNSIGNED))))
+              )
           AND DATE(fq.fechaPropuesta) < ?
           AND DATE(fq.fechaPropuesta) >= DATE_SUB(?, INTERVAL ? DAY)
         ORDER BY fq.fechaPropuesta DESC
@@ -305,16 +313,31 @@ try {
         }
     }
 
+    // Override de coordenadas por solicitudes pendientes del usuario
+    $pendingOverrides = [];
+    $stmtOvr = $conn->prepare("
+        SELECT id_local, lat_nueva AS lat, lng_nueva AS lng, dir_nueva AS direccion
+        FROM solicitud_cambio_local
+        WHERE id_usuario = ? AND estado = 'pendiente' AND deleted_at IS NULL
+    ");
+    $stmtOvr->bind_param('i', $usuario_id);
+    $stmtOvr->execute();
+    foreach ($stmtOvr->get_result()->fetch_all(MYSQLI_ASSOC) as $ovr) {
+        $pendingOverrides[(int)$ovr['id_local']] = $ovr;
+    }
+    $stmtOvr->close();
+
     $etagPayload = json_encode([
-        'usuario' => $usuario_id,
-        'empresa' => $empresa_id,
-        'division'=> $division_id,
-        'from'    => $from,
-        'to'      => $to,
-        'reag'    => $reagendadosDays,
-        'forms'   => $routeFormIds,
-        'locals'  => $routeLocalIds,
-        'max'     => $maxUpd,
+        'usuario'     => $usuario_id,
+        'empresa'     => $empresa_id,
+        'division'    => $division_id,
+        'from'        => $from,
+        'to'          => $to,
+        'reag'        => $reagendadosDays,
+        'forms'       => $routeFormIds,
+        'locals'      => $routeLocalIds,
+        'max'         => $maxUpd,
+        'pending_ovr' => array_keys($pendingOverrides),
     ], $jsonFlags);
     $etag = hash('sha256', $etagPayload ?: ''); // 64 chars hex    no truncar para evitar colisiones
 
@@ -354,6 +377,45 @@ try {
             $locales = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
             $stmt->close();
         }
+    }
+
+    // -------- 7b) Aplicar overrides de coordenadas a locales / programados / reagendados
+    if (!empty($pendingOverrides)) {
+        foreach ($locales as &$loc) {
+            $lid = (int)$loc['id'];
+            if (isset($pendingOverrides[$lid])) {
+                $ov = $pendingOverrides[$lid];
+                $loc['lat']       = $ov['lat'];
+                $loc['lng']       = $ov['lng'];
+                $loc['direccion'] = $ov['direccion'];
+                $loc['_geo_pendiente'] = true;
+            }
+        }
+        unset($loc);
+
+        foreach ($programados as &$row) {
+            $lid = (int)$row['id_local'];
+            if (isset($pendingOverrides[$lid])) {
+                $ov = $pendingOverrides[$lid];
+                $row['lat']       = $ov['lat'];
+                $row['lng']       = $ov['lng'];
+                $row['direccion'] = $ov['direccion'];
+                $row['_geo_pendiente'] = true;
+            }
+        }
+        unset($row);
+
+        foreach ($reagendados as &$row) {
+            $lid = (int)$row['id_local'];
+            if (isset($pendingOverrides[$lid])) {
+                $ov = $pendingOverrides[$lid];
+                $row['lat']       = $ov['lat'];
+                $row['lng']       = $ov['lng'];
+                $row['direccion'] = $ov['direccion'];
+                $row['_geo_pendiente'] = true;
+            }
+        }
+        unset($row);
     }
 
     // -------- 8) Preguntas + opciones por formulario

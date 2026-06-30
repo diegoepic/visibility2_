@@ -471,7 +471,7 @@ function obtenerJefesVenta() {
  * SELECT id, nombre_vendedor FROM vendedor
  ***************************************************************/
 function obtenerVendedores() {
-    $sql = "SELECT id, nombre_vendedor
+    $sql = "SELECT id, nombre_vendedor, telefono
             FROM vendedor
             ORDER BY nombre_vendedor ASC";
     return ejecutarConsulta($sql);
@@ -1056,6 +1056,7 @@ function obtenerDetalleLocal(int $local_id): ?array {
         l.id_distrito,
         l.id_jefe_venta,
         l.id_vendedor,
+        l.relevancia,
 
         co.id_region                  AS region_id,
 
@@ -1070,7 +1071,10 @@ function obtenerDetalleLocal(int $local_id): ?array {
         zn.nombre_zona,
         dt.nombre_distrito,
         jv.nombre                     AS jefe_venta_nombre,
-        vd.nombre_vendedor
+        vd.nombre_vendedor,
+
+        le.oc,
+        le.cooler
     FROM local l
     LEFT JOIN comuna     co ON co.id  = l.id_comuna
     LEFT JOIN region     r  ON r.id   = co.id_region
@@ -1082,6 +1086,7 @@ function obtenerDetalleLocal(int $local_id): ?array {
     LEFT JOIN distrito   dt ON dt.id  = l.id_distrito
     LEFT JOIN jefe_venta jv ON jv.id  = l.id_jefe_venta
     LEFT JOIN vendedor   vd ON vd.id  = l.id_vendedor
+    LEFT JOIN local_ext  le ON le.id_local = l.id
     WHERE l.id = ?
     LIMIT 1
     ";
@@ -1124,6 +1129,7 @@ function obtenerDetalleLocal(int $local_id): ?array {
         'distrito_id'       => $row['id_distrito'],
         'jefe_venta_id'     => $row['id_jefe_venta'],
         'vendedor_id'       => $row['id_vendedor'],
+        'relevancia'        => $row['relevancia'],
         'division_id'       => $row['division_id'],
 
         'nombre_canal'      => $row['nombre_canal'],
@@ -1132,6 +1138,9 @@ function obtenerDetalleLocal(int $local_id): ?array {
         'nombre_distrito'   => $row['nombre_distrito'],
         'jefe_venta_nombre' => $row['jefe_venta_nombre'],
         'nombre_vendedor'   => $row['nombre_vendedor'],
+
+        'oc'                => $row['oc'],
+        'cooler'            => $row['cooler'],
 
         // extras útiles para fallback por texto en el front
         'cuenta_nombre'     => $row['cuenta_nombre'],
@@ -1150,7 +1159,7 @@ function actualizarLocal(
     $cadena_id,
     $comuna_id,
     $empresa_id,
-    $division_id, 
+    $division_id,
     $lat,
     $lng,
     $canal_id,
@@ -1158,7 +1167,8 @@ function actualizarLocal(
     $zona_id,
     $distrito_id,
     $jefe_venta_id,
-    $vendedor_id
+    $vendedor_id,
+    $relevancia = null
 ) {
     global $conn;
 
@@ -1170,7 +1180,7 @@ function actualizarLocal(
                 id_cadena     = ?,
                 id_comuna     = ?,
                 id_empresa    = ?,
-                id_division   = NULLIF(?, 0), 
+                id_division   = NULLIF(?, 0),
                 lat           = ?,
                 lng           = ?,
                 id_canal      = ?,
@@ -1178,7 +1188,8 @@ function actualizarLocal(
                 id_zona       = ?,
                 id_distrito   = ?,
                 id_jefe_venta = ?,
-                id_vendedor   = ?
+                id_vendedor   = ?,
+                relevancia    = ?
             WHERE id = ?";
 
     $stmt = $conn->prepare($sql);
@@ -1187,10 +1198,8 @@ function actualizarLocal(
         return false;
     }
 
-    // Tipo de parámetros: 3 strings, 7 enteros, 2 double, 5 enteros, 1 entero para id final => total 16 parámetros
-    // La cadena de tipos es: "sssiiiiddiiiiiii"
     $stmt->bind_param(
-        "sssiiiiiddiiiiiii",
+        "sssiiiiiddiiiiiiii",
         $codigo,
         $nombre,
         $direccion,
@@ -1198,7 +1207,7 @@ function actualizarLocal(
         $cadena_id,
         $comuna_id,
         $empresa_id,
-        $division_id, 
+        $division_id,
         $lat,
         $lng,
         $canal_id,
@@ -1207,6 +1216,7 @@ function actualizarLocal(
         $distrito_id,
         $jefe_venta_id,
         $vendedor_id,
+        $relevancia,
         $id
     );
 

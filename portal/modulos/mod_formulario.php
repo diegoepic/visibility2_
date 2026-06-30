@@ -765,6 +765,7 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                                     <option value="solo_auditoria">Solo Auditoría</option>
                                     <option value="retiro">Retiro</option>
                                     <option value="entrega">Entrega</option>
+                                    <option value="implementacion_por_etapas">Implementación por Etapas (Armado/Entregado/Implementado/Retirado)</option>
                                 </select>
                                 <small class="form-text text-muted">
                                     Solo aplicable a campañas Programadas/IPT.

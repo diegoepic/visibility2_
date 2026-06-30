@@ -137,6 +137,7 @@ $sql_ipt = "
 
         COUNT(DISTINCT CASE
             WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','solo_retirado')
+                 OR (f.modalidad = 'implementacion_por_etapas' AND fq.etapa_material IN ('implementado','retirado'))
             THEN CONCAT(l.codigo, CAST(fq.fechaVisita AS CHAR(19)))
         END) AS locales_implementados,
 
@@ -144,6 +145,7 @@ $sql_ipt = "
             (
                 COUNT(DISTINCT CASE
                     WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','en proceso','cancelado','solo_retirado')
+                         OR (f.modalidad = 'implementacion_por_etapas' AND fq.etapa_material IS NOT NULL)
                     THEN CONCAT(l.codigo, CAST(fq.fechaVisita AS CHAR(19)))
                 END)
                 /
@@ -155,6 +157,7 @@ $sql_ipt = "
             (
                 COUNT(DISTINCT CASE
                     WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','solo_retirado')
+                         OR (f.modalidad = 'implementacion_por_etapas' AND fq.etapa_material IN ('implementado','retirado'))
                     THEN CONCAT(l.codigo, CAST(fq.fechaVisita AS CHAR(19)))
                 END)
                 /
@@ -228,6 +231,13 @@ SELECT
                     THEN fq.id
                 END
             )
+        WHEN f.modalidad = 'implementacion_por_etapas'
+            THEN COUNT(DISTINCT
+                CASE
+                    WHEN fq.etapa_material IN ('implementado','retirado')
+                    THEN l.codigo
+                END
+            )
         ELSE COUNT(DISTINCT
                 CASE
                     WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','solo_retirado')
@@ -247,6 +257,16 @@ SELECT
                 )
                 /
                 COUNT(fq.id_local)
+                * 100
+            )
+        WHEN f.modalidad = 'implementacion_por_etapas'
+            THEN ROUND(
+                COUNT(DISTINCT
+                    CASE WHEN fq.etapa_material IS NOT NULL
+                    THEN l.codigo END
+                )
+                /
+                COUNT(DISTINCT fq.id_local)
                 * 100
             )
         ELSE ROUND(
@@ -273,8 +293,18 @@ SELECT
                 COUNT(fq.id_local)
                 * 100
             )
+        WHEN f.modalidad = 'implementacion_por_etapas'
+            THEN ROUND(
+                COUNT(DISTINCT
+                    CASE WHEN fq.etapa_material IN ('implementado','retirado')
+                    THEN l.codigo END
+                )
+                /
+                COUNT(DISTINCT fq.id_local)
+                * 100
+            )
         ELSE ROUND(
-            COUNT(DISTINCT 
+            COUNT(DISTINCT
                 CASE WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','solo_retirado')
                 THEN l.codigo END
             )
@@ -3494,6 +3524,8 @@ const modalidadTieneEncuesta = (modalidad) => {
   return ['solo_auditoria', 'implementacion_auditoria'].includes(m);
 };
 
+const modalidadEsEtapas = (modalidad) => normalizarModalidad(modalidad) === 'implementacion_por_etapas';
+
 const actualizarModalDescargaExcel = (modalidades) => {
   const modosEntrada = Array.isArray(modalidades) ? modalidades : [modalidades];
   const modos = modosEntrada.map(normalizarModalidad).filter(Boolean);
@@ -3514,14 +3546,15 @@ const actualizarModalDescargaExcel = (modalidades) => {
     $('#excelFotosEncuestaLabelSin').text('Sin fotos de encuesta');
   };
 
-  const hasImpl = modos.length === 0 || modos.some(m => modalidadTieneDetalle(m));
+  const soloEtapas = modos.length > 0 && modos.every(m => modalidadEsEtapas(m));
+  const hasImpl = modos.length === 0 || modos.some(m => modalidadTieneDetalle(m) || modalidadEsEtapas(m));
   const hasEncuesta = modos.some(m => modalidadTieneEncuesta(m));
   const soloRetiro = modos.length > 0 && modos.every(m => m === 'retiro');
 
   $grupoImpl.toggle(hasImpl);
   $grupoEncuesta.toggle(hasEncuesta);
 
-  setTextosImpl(soloRetiro ? 'fotos de retiro' : 'fotos de implementación');
+  setTextosImpl(soloRetiro ? 'fotos de retiro' : (soloEtapas ? 'fotos por etapa' : 'fotos de implementación'));
   setTextosEncuesta();
 
   $('#excelPhotosMaterialCon').prop('checked', true);
@@ -3620,6 +3653,19 @@ $('#btnDescargarExcelConfirm').on('click', function () {
   const modalidad = normalizarModalidad(campanaModalidadExcel);
   const descargarDetalle = modalidadTieneDetalle(modalidad);
   const descargarEncuesta = modalidadTieneEncuesta(modalidad);
+
+  // Implementación por etapas → reporte dedicado (4 hojas: detalle+etapa, pendientes, apoyos, historial)
+  if (modalidadEsEtapas(modalidad)) {
+    const paramsEt = new URLSearchParams(params.toString());
+    const tokenEt  = generarTokenDescarga();
+    paramsEt.set('fotos', fotosMaterial);
+    paramsEt.set('download_token', tokenEt);
+
+    const urlEt = `/visibility2/portal/informes/descargar_excel_seguimiento_etapas.php?${paramsEt.toString()}`;
+    esperarDescargaReal(tokenEt, function () { ocultarOverlayDescarga(); });
+    descargarEnIframe(urlEt, 'downloadFrameEtapas');
+    return;
+  }
 
   // Si solo hay detalle
   if (descargarDetalle && !descargarEncuesta) {

@@ -1,4 +1,4 @@
-<?php
+v<?php
 session_start();
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
 
@@ -17,6 +17,10 @@ $filtro_fecha_ini = trim($_GET['fecha_ini'] ?? '');
 $filtro_fecha_fin = trim($_GET['fecha_fin'] ?? '');
 $filtro_texto     = trim($_GET['q'] ?? '');
 $filtro_ejecutor  = isset($_GET['id_ejecutor']) ? intval($_GET['id_ejecutor']) : 0;
+/* Estado de campaña: 1 = en proceso (por defecto, solo activas), 3 = finalizadas */
+$filtro_estado    = isset($_GET['estado']) ? intval($_GET['estado']) : 1;
+if (!in_array($filtro_estado, [1, 3], true)) $filtro_estado = 1;
+$eParam           = '&estado=' . $filtro_estado; // sufijo para preservar el filtro en los enlaces
 $pagina           = max(1, intval($_GET['p'] ?? 1));
 $por_pagina       = 10;
 
@@ -28,11 +32,11 @@ $stmtDiv = $conn->prepare("
     SELECT DISTINCT d.id, d.nombre
     FROM formulario f
     INNER JOIN division_empresa d ON d.id = f.id_division
-    WHERE f.id_empresa = ? AND f.estado = 1 AND f.tipo = 1
+    WHERE f.id_empresa = ? AND f.estado = ? AND f.tipo = 1
       AND f.modalidad IN ('implementacion_auditoria','solo_implementacion') AND d.estado = 1
     ORDER BY d.nombre
 ");
-$stmtDiv->bind_param('i', $empresa_id);
+$stmtDiv->bind_param('ii', $empresa_id, $filtro_estado);
 $stmtDiv->execute();
 $divisiones = $stmtDiv->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmtDiv->close();
@@ -43,8 +47,9 @@ $sqlBase = "
     WHERE f.id_empresa = ? AND f.tipo = 1
       AND f.modalidad IN ('implementacion_auditoria','solo_implementacion')
       AND f.deleted_at IS NULL
+      AND f.estado = ?
 ";
-$pBase = [$empresa_id]; $tBase = 'i';
+$pBase = [$empresa_id, $filtro_estado]; $tBase = 'ii';
 if ($filtro_division > 0) { $sqlBase .= " AND f.id_division = ?"; $pBase[] = $filtro_division; $tBase .= 'i'; }
 if ($filtro_texto !== '')  { $sqlBase .= " AND f.nombre LIKE ?"; $pBase[] = '%' . $filtro_texto . '%'; $tBase .= 's'; }
 
@@ -114,10 +119,15 @@ if ($filtro_campana > 0) {
             SELECT mr.id, mr.fecha_recepcion, mr.created_at, mr.numero_guia, mr.foto_guia_url, mr.observacion,
                    CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,'')) AS nombre_ejecutor,
                    u.usuario, u.id AS id_usuario,
+                   u.centro_distribucion,
+                   co.comuna AS nombre_comuna,
+                   r.region  AS nombre_region,
                    GROUP_CONCAT(CONCAT(mrd.nombre_material,' (',CAST(mrd.cantidad_recibida AS CHAR),')')
                        ORDER BY mrd.nombre_material SEPARATOR ', ') AS resumen_mat
             FROM material_recepcion mr
             JOIN usuario u ON u.id = mr.id_usuario
+            LEFT JOIN comuna co ON co.id = u.id_comuna
+            LEFT JOIN region r  ON r.id  = co.id_region
             LEFT JOIN material_recepcion_detalle mrd ON mrd.id_recepcion = mr.id
             WHERE mr.id_formulario = ? AND mr.id_empresa = ?
         ";
@@ -505,6 +515,7 @@ if ($filtro_campana > 0) {
 
         <!-- Búsqueda por texto -->
         <form method="GET" id="frmBusqueda" class="rm-search">
+            <input type="hidden" name="estado" value="<?= $filtro_estado ?>">
             <?php if ($filtro_division > 0): ?>
                 <input type="hidden" name="division" value="<?= $filtro_division ?>">
             <?php endif; ?>
@@ -516,10 +527,18 @@ if ($filtro_campana > 0) {
                    oninput="this.form.submit()">
         </form>
 
-        <!-- Filtro división -->
-        <?php if (count($divisiones) > 1): ?>
+        <!-- Filtros: estado (siempre) + división (si hay más de una) -->
         <div class="rm-filters">
-            <select onchange="window.location='?division='+this.value+'<?= $filtro_texto ? '&q='.urlencode($filtro_texto) : '' ?>'">
+            <!-- Estado de campaña: en proceso (activas, por defecto) / finalizadas. Al cambiar se
+                 reinicia la lista (sin campaña seleccionada). -->
+            <select aria-label="Estado de campaña"
+                    onchange="window.location='?estado='+this.value+'<?= $filtro_division ? '&division='.$filtro_division : '' ?><?= $filtro_texto ? '&q='.urlencode($filtro_texto) : '' ?>'">
+                <option value="1" <?= $filtro_estado === 1 ? 'selected' : '' ?>>En curso</option>
+                <option value="3" <?= $filtro_estado === 3 ? 'selected' : '' ?>>Finalizadas</option>
+            </select>
+            <?php if (count($divisiones) > 1): ?>
+            <select aria-label="División"
+                    onchange="window.location='?division='+this.value+'&estado=<?= $filtro_estado ?><?= $filtro_texto ? '&q='.urlencode($filtro_texto) : '' ?>'">
                 <option value="0">Todas las divisiones</option>
                 <?php foreach ($divisiones as $div): ?>
                     <option value="<?= $div['id'] ?>" <?= $filtro_division == $div['id'] ? 'selected' : '' ?>>
@@ -527,8 +546,8 @@ if ($filtro_campana > 0) {
                     </option>
                 <?php endforeach; ?>
             </select>
+            <?php endif; ?>
         </div>
-        <?php endif; ?>
 
         <!-- Lista campañas paginada -->
         <div class="rm-camp-list">
@@ -546,6 +565,7 @@ if ($filtro_campana > 0) {
                     $fi = $c['fechaInicio']  ? date('d/m/Y', strtotime($c['fechaInicio']))  : '—';
                     $ft = $c['fechaTermino'] ? date('d/m/Y', strtotime($c['fechaTermino'])) : '—';
                     $urlCamp = '?id_campana=' . $cid
+                        . $eParam
                         . ($filtro_division ? '&division='.$filtro_division : '')
                         . ($filtro_texto    ? '&q='.urlencode($filtro_texto) : '')
                         . '&p=' . $pagina;
@@ -555,7 +575,7 @@ if ($filtro_campana > 0) {
                     <div class="rm-camp-dates"><?= $fi ?> — <?= $ft ?></div>
                     <div class="rm-camp-badges">
                         <span class="badge-cob <?= $cobClass ?>"><?= $pct ?>% ejecutores</span>
-                        <span style="font-size:11px; color:#8fa0b5;"><?= $nReg ?> registro<?= $nReg !== 1 ? 's' : '' ?></span>
+              
                     </div>
                 </a>
                 <?php endforeach; ?>
@@ -568,14 +588,14 @@ if ($filtro_campana > 0) {
             <span style="color:#8fa0b5;"><?= (($pagina-1)*$por_pagina+1) ?>–<?= min($pagina*$por_pagina,$totalCampanas) ?> de <?= $totalCampanas ?></span>
             <div>
                 <?php if ($pagina > 1): ?>
-                    <a href="?p=<?= $pagina-1 ?><?= $filtro_campana ? '&id_campana='.$filtro_campana : '' ?><?= $filtro_division ? '&division='.$filtro_division : '' ?><?= $filtro_texto ? '&q='.urlencode($filtro_texto) : '' ?>">‹</a>
+                    <a href="?p=<?= $pagina-1 ?><?= $eParam ?><?= $filtro_campana ? '&id_campana='.$filtro_campana : '' ?><?= $filtro_division ? '&division='.$filtro_division : '' ?><?= $filtro_texto ? '&q='.urlencode($filtro_texto) : '' ?>">‹</a>
                 <?php endif; ?>
                 <?php for ($pg = max(1,$pagina-2); $pg <= min($totalPaginas,$pagina+2); $pg++): ?>
-                    <a href="?p=<?= $pg ?><?= $filtro_campana ? '&id_campana='.$filtro_campana : '' ?><?= $filtro_division ? '&division='.$filtro_division : '' ?><?= $filtro_texto ? '&q='.urlencode($filtro_texto) : '' ?>"
+                    <a href="?p=<?= $pg ?><?= $eParam ?><?= $filtro_campana ? '&id_campana='.$filtro_campana : '' ?><?= $filtro_division ? '&division='.$filtro_division : '' ?><?= $filtro_texto ? '&q='.urlencode($filtro_texto) : '' ?>"
                        class="<?= $pg === $pagina ? 'active-page' : '' ?>"><?= $pg ?></a>
                 <?php endfor; ?>
                 <?php if ($pagina < $totalPaginas): ?>
-                    <a href="?p=<?= $pagina+1 ?><?= $filtro_campana ? '&id_campana='.$filtro_campana : '' ?><?= $filtro_division ? '&division='.$filtro_division : '' ?><?= $filtro_texto ? '&q='.urlencode($filtro_texto) : '' ?>">›</a>
+                    <a href="?p=<?= $pagina+1 ?><?= $eParam ?><?= $filtro_campana ? '&id_campana='.$filtro_campana : '' ?><?= $filtro_division ? '&division='.$filtro_division : '' ?><?= $filtro_texto ? '&q='.urlencode($filtro_texto) : '' ?>">›</a>
                 <?php endif; ?>
             </div>
         </div>
@@ -604,6 +624,7 @@ if ($filtro_campana > 0) {
 
         $tab = $_GET['tab'] ?? 'resumen';
         $tabUrl = fn($t) => '?id_campana='.$filtro_campana.'&tab='.$t
+            . $eParam
             . ($filtro_division ? '&division='.$filtro_division : '')
             . ($filtro_texto    ? '&q='.urlencode($filtro_texto) : '')
             . ($filtro_fecha_ini ? '&fecha_ini='.$filtro_fecha_ini : '')
@@ -626,6 +647,7 @@ if ($filtro_campana > 0) {
                 <!-- Filtros de fecha -->
                 <form method="GET" style="display:flex; gap:6px; align-items:center;">
                     <input type="hidden" name="id_campana" value="<?= $filtro_campana ?>">
+                    <input type="hidden" name="estado" value="<?= $filtro_estado ?>">
                     <input type="hidden" name="tab" value="<?= htmlspecialchars($tab, ENT_QUOTES) ?>">
                     <?php if ($filtro_division): ?><input type="hidden" name="division" value="<?= $filtro_division ?>"><?php endif; ?>
                     <?php if ($filtro_texto): ?><input type="hidden" name="q" value="<?= htmlspecialchars($filtro_texto, ENT_QUOTES) ?>"><?php endif; ?>
@@ -637,7 +659,7 @@ if ($filtro_campana > 0) {
                         <i class="fa fa-filter"></i>
                     </button>
                     <?php if ($filtro_fecha_ini || $filtro_fecha_fin): ?>
-                        <a href="?id_campana=<?= $filtro_campana ?>&tab=<?= $tab ?>" class="btn btn-sm btn-default" style="border-radius:7px;">
+                        <a href="?id_campana=<?= $filtro_campana ?><?= $eParam ?>&tab=<?= $tab ?>" class="btn btn-sm btn-default" style="border-radius:7px;">
                             <i class="fa fa-times"></i>
                         </a>
                     <?php endif; ?>
@@ -905,7 +927,7 @@ if ($filtro_campana > 0) {
 
         <!-- Filtro por ejecutor -->
         <?php if (!empty($todosEjecutores)):
-            $urlHistBase = '?id_campana='.$filtro_campana.'&tab=historial'
+            $urlHistBase = '?id_campana='.$filtro_campana.'&tab=historial'.$eParam
                 .($filtro_division ? '&division='.$filtro_division : '')
                 .($filtro_fecha_ini ? '&fecha_ini='.$filtro_fecha_ini : '')
                 .($filtro_fecha_fin ? '&fecha_fin='.$filtro_fecha_fin : '');
@@ -936,6 +958,8 @@ if ($filtro_campana > 0) {
                     <tr>
                         <th>#</th>
                         <th>Ejecutor</th>
+                        <th>Región / Comuna</th>
+                        <th>CD</th>
                         <th>Fecha retiro</th>
                         <th>Registrado</th>
                         <th>Materiales recibidos</th>
@@ -958,6 +982,17 @@ if ($filtro_campana > 0) {
                             <strong><?= htmlspecialchars(trim($d['nombre_ejecutor']), ENT_QUOTES) ?></strong><br>
                             <small style="color:#8fa0b5;"><?= htmlspecialchars($d['usuario'], ENT_QUOTES) ?></small>
                         </td>
+                        <td style="font-size:12px;">
+                            <?php if (!empty($d['nombre_comuna'])): ?>
+                                <span style="color:#8fa0b5; font-size:11px;"><?= htmlspecialchars($d['nombre_region'] ?? '—', ENT_QUOTES) ?></span><br>
+                                <strong><?= htmlspecialchars($d['nombre_comuna'], ENT_QUOTES) ?></strong>
+                            <?php else: ?>
+                                <span style="color:#aaa;">—</span>
+                            <?php endif; ?>
+                        </td>
+                        <td style="font-size:12px;">
+                            <?= !empty($d['centro_distribucion']) ? htmlspecialchars($d['centro_distribucion'], ENT_QUOTES) : '<span style="color:#aaa;">—</span>' ?>
+                        </td>
                         <td style="font-weight:700; color:#217346; white-space:nowrap;">
                             <?= date('d/m/Y', strtotime($d['fecha_recepcion'])) ?>
                         </td>
@@ -972,7 +1007,15 @@ if ($filtro_campana > 0) {
                             <?php endif; ?>
                             <?= htmlspecialchars($d['resumen_mat'] ?? '—', ENT_QUOTES) ?>
                         </td>
-                        <td style="font-size:12px;"><?= htmlspecialchars($d['numero_guia'] ?? '—', ENT_QUOTES) ?></td>
+                        <td style="font-size:12px; white-space:nowrap;">
+                            <span id="guia-text-<?= $recId ?>"><?= htmlspecialchars($d['numero_guia'] ?? '—', ENT_QUOTES) ?></span>
+                            <button class="btn-edit-guia det-expand-btn"
+                                    data-id="<?= $recId ?>"
+                                    data-guia="<?= htmlspecialchars($d['numero_guia'] ?? '', ENT_QUOTES) ?>"
+                                    title="Editar N° Guía" style="margin-left:4px;">
+                                <i class="fa fa-pencil"></i>
+                            </button>
+                        </td>
                         <td>
                             <?php if (!empty($fotos)): ?>
                                 <div class="fotos-thumb-strip">
@@ -995,7 +1038,7 @@ if ($filtro_campana > 0) {
                     </tr>
                     <?php if (!empty($detLines)): ?>
                     <tr class="det-expand-row" id="det-row-<?= $recId ?>">
-                        <td colspan="8">
+                        <td colspan="10">
                             <div class="det-sub-wrap">
                                 <table class="det-sub-table">
                                     <thead><tr><th>Material</th><th>Propuesto</th><th>Recibido</th><th>Diferencia</th></tr></thead>
@@ -1028,6 +1071,33 @@ if ($filtro_campana > 0) {
     <?php endif; // fin campSelec ?>
     </div><!-- /.rm-main -->
 </div><!-- /.rm-layout -->
+
+<!-- ── Modal editar N° Guía ── -->
+<div id="modalEditGuia" style="display:none; position:fixed; inset:0; z-index:9998;
+     background:rgba(0,0,0,.55); align-items:center; justify-content:center;">
+    <div style="background:#fff; border-radius:16px; padding:26px 24px; width:100%; max-width:380px;
+                box-shadow:0 20px 50px rgba(0,0,0,.28);">
+        <h5 style="margin:0 0 6px; font-size:15px; font-weight:700; color:#1a3a5c;">
+            <i class="fa fa-pencil" style="margin-right:7px; color:#3a7bd5;"></i>Editar N° Guía
+        </h5>
+        <p style="margin:0 0 14px; font-size:12px; color:#8fa0b5;">Modifica el número de guía de despacho para este registro.</p>
+        <input type="text" id="inputEditGuia" placeholder="Ingrese el N° de guía"
+               style="width:100%; border:1px solid #d8e2ee; border-radius:9px; padding:10px 13px;
+                      font-size:14px; margin-bottom:16px; outline:none; box-sizing:border-box;">
+        <div style="display:flex; gap:10px; justify-content:flex-end;">
+            <button onclick="cerrarEditGuia()"
+                    style="border:1px solid #d8e2ee; border-radius:9px; padding:9px 18px;
+                           font-size:13px; background:#fff; cursor:pointer; color:#555; font-weight:600;">
+                Cancelar
+            </button>
+            <button onclick="guardarGuia()" id="btnGuardarGuia"
+                    style="background:#3a7bd5; border:none; border-radius:9px; padding:9px 18px;
+                           font-size:13px; color:#fff; font-weight:700; cursor:pointer;">
+                <i class="fa fa-save" style="margin-right:5px;"></i>Guardar
+            </button>
+        </div>
+    </div>
+</div>
 
 <!-- ── Modal foto guía (carrusel multi-foto) ── -->
 <div id="modalFotoGuia" style="
@@ -1144,6 +1214,64 @@ function toggleDet(id) {
     var isHidden = row.style.display === 'none' || row.style.display === '';
     row.style.display = isHidden ? 'table-row' : 'none';
 }
+
+/* ── Editar N° Guía ── */
+var _editGuiaId = null;
+
+document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.btn-edit-guia');
+    if (!btn) return;
+    _editGuiaId = btn.dataset.id;
+    document.getElementById('inputEditGuia').value = btn.dataset.guia || '';
+    document.getElementById('modalEditGuia').style.display = 'flex';
+    setTimeout(function () { document.getElementById('inputEditGuia').focus(); }, 80);
+});
+
+function cerrarEditGuia() {
+    document.getElementById('modalEditGuia').style.display = 'none';
+    _editGuiaId = null;
+}
+
+function guardarGuia() {
+    if (!_editGuiaId) return;
+    var nuevoGuia = document.getElementById('inputEditGuia').value.trim();
+    var btn = document.getElementById('btnGuardarGuia');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin" style="margin-right:5px;"></i>Guardando…';
+
+    fetch('mod_recepcion_actualizar_guia.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'id=' + encodeURIComponent(_editGuiaId) + '&numero_guia=' + encodeURIComponent(nuevoGuia)
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+        if (data.status === 'success') {
+            var span = document.getElementById('guia-text-' + _editGuiaId);
+            if (span) span.textContent = nuevoGuia || '—';
+            var editBtn = document.querySelector('.btn-edit-guia[data-id="' + _editGuiaId + '"]');
+            if (editBtn) editBtn.dataset.guia = nuevoGuia;
+            cerrarEditGuia();
+        } else {
+            alert(data.message || 'Error al guardar.');
+        }
+    })
+    .catch(function () { alert('Error de conexión.'); })
+    .finally(function () {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa fa-save" style="margin-right:5px;"></i>Guardar';
+    });
+}
+
+document.getElementById('modalEditGuia').addEventListener('click', function (e) {
+    if (e.target === this) cerrarEditGuia();
+});
+
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && document.getElementById('modalEditGuia').style.display === 'flex') {
+        guardarGuia();
+    }
+});
 </script>
 
 <?php if ($campSelec && !empty($chartMateriales)): ?>

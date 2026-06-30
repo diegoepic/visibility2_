@@ -32,7 +32,12 @@
     // Instrucciones preventivas
     PREVIEW_DISTANCE_FAR: 500,   // metros para preview lejano
     PREVIEW_DISTANCE_NEAR: 200,  // metros para preview cercano
-    PREVIEW_DISTANCE_NOW: 50     // metros para instrucción inmediata
+    PREVIEW_DISTANCE_NOW: 50,    // metros para instrucción inmediata
+
+    // Heading / GPS
+    HEADING_MIN_SPEED: 5,        // km/h mínimos para confiar en pos.coords.heading
+    HEADING_SMOOTH: 0.3,         // factor de suavizado del rumbo (0..1)
+    GPS_WEAK_THROTTLE_MS: 8000   // anti-spam del evento nav:gps_weak
   };
 
   // Iconos de maniobra
@@ -78,6 +83,14 @@
     const y = Math.sin(dLng) * Math.cos(lat2);
     const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
     return (toDeg(Math.atan2(y, x)) + 360) % 360;
+  }
+
+  // Suaviza el rumbo interpolando por el arco más corto (evita el salto 359°→0° y la vibración).
+  function smoothHeading(prev, next, factor) {
+    if (prev == null || isNaN(prev)) return next;
+    factor = (factor == null) ? 0.3 : factor;
+    const diff = ((next - prev + 540) % 360) - 180; // diferencia más corta en [-180, 180]
+    return (prev + diff * factor + 360) % 360;
   }
 
   function decode(path) {
@@ -158,6 +171,9 @@
       // Estado de reroute
       this.offRouteSince = null;
       this.lastRerouteAt = 0;
+
+      // Throttle del aviso de GPS débil
+      this._lastGpsWeakAt = 0;
 
       // Estado de cámara
       this.cameraTracking = true;
@@ -315,9 +331,11 @@
       const acc = pos.coords.accuracy || 999;
       const now = Date.now();
 
-      // Calcular velocidad
+      // Velocidad: usar pos.coords.speed (m/s) si el dispositivo la entrega; si no, derivarla.
       let speedKmh = 0;
-      if (this.lastPos && this._lastTime) {
+      if (typeof pos.coords.speed === 'number' && isFinite(pos.coords.speed) && pos.coords.speed >= 0) {
+        speedKmh = pos.coords.speed * 3.6;
+      } else if (this.lastPos && this._lastTime) {
         const dt = (now - this._lastTime) / 1000;
         if (dt > 0) {
           const dist = haversine(this.lastPos, cur);
@@ -330,19 +348,32 @@
       this.lastSpeed = speedKmh;
       this.lastAccuracy = acc;
 
-      // Calcular heading
-      if (this.path.length > 1 && speedKmh > 3) {
-        // Buscar el punto más cercano en la ruta y calcular heading hacia el siguiente
+      // Heading: preferir el rumbo del dispositivo (pos.coords.heading) cuando es fiable; si no, el
+      // rumbo del tramo de ruta más cercano. Suavizar para evitar saltos/vibración de la cámara.
+      let targetHeading = null;
+      const devHeading = pos.coords.heading;
+      if (typeof devHeading === 'number' && isFinite(devHeading) && speedKmh > CONFIG.HEADING_MIN_SPEED) {
+        targetHeading = devHeading;
+      } else if (this.path.length > 1 && speedKmh > 3) {
         const nearestIdx = this._findNearestPathIndex(cur);
         if (nearestIdx < this.path.length - 1) {
-          this.lastHeading = bearing(this.path[nearestIdx], this.path[nearestIdx + 1]);
+          targetHeading = bearing(this.path[nearestIdx], this.path[nearestIdx + 1]);
         }
       }
+      if (targetHeading != null) {
+        this.lastHeading = smoothHeading(this.lastHeading, targetHeading, CONFIG.HEADING_SMOOTH);
+      }
 
-      // Verificar precisión mínima
+      // Precisión: con GPS débil avisar (sin bloquear) y NO ejecutar avance/reroute con baja confianza.
       if (acc > CONFIG.MIN_ACCURACY_M) {
+        if (this.hooks.onGpsStatus) this.hooks.onGpsStatus('weak', acc);
+        if (now - this._lastGpsWeakAt > CONFIG.GPS_WEAK_THROTTLE_MS) {
+          this._lastGpsWeakAt = now;
+          window.dispatchEvent(new CustomEvent('nav:gps_weak', { detail: { accuracy: acc } }));
+        }
         return;
       }
+      if (this.hooks.onGpsStatus) this.hooks.onGpsStatus('ok', acc);
 
       // Notificar posición
       if (this.hooks.onPosition) {
@@ -364,6 +395,7 @@
       if (!this._isOnRoute(cur, speedKmh)) {
         if (!this.offRouteSince) {
           this.offRouteSince = now;
+          window.dispatchEvent(new CustomEvent('nav:off_route', { detail: { position: cur } }));
         }
         if (now - this.offRouteSince > CONFIG.OFF_ROUTE_PERSIST_MS) {
           this._tryReroute(cur, speedKmh, acc);
@@ -519,6 +551,7 @@
       const dist = haversine(cur, wp);
 
       if (dist < 50) {
+        const arrived = wp;
         this.waypointIdx++;
 
         const remaining = this.waypoints.length - this.waypointIdx;
@@ -529,6 +562,10 @@
         if (this.hooks.onWaypointArrival) {
           this.hooks.onWaypointArrival(this.waypointIdx - 1, remaining);
         }
+
+        window.dispatchEvent(new CustomEvent('nav:arrived_waypoint', {
+          detail: { waypoint: arrived, index: this.waypointIdx - 1, remaining }
+        }));
       }
     }
 
@@ -540,6 +577,8 @@
       if (this.hooks.onArrival) {
         this.hooks.onArrival();
       }
+
+      window.dispatchEvent(new CustomEvent('nav:arrived_destination'));
 
       // Detener navegación después de un delay
       setTimeout(() => this.stop(), 3000);
@@ -608,16 +647,26 @@
       if (speedKmh < CONFIG.MIN_SPEED_KMH) return;
       if (acc > CONFIG.MIN_ACCURACY_M) return;
 
-      this.lastRerouteAt = now;
+      return this._reroute(cur);
+    }
 
-      // Notificar reroute
+    // Recalcula desde `origin` hacia el destino con las paradas restantes. Lo usan el off-route
+    // automático (_tryReroute, con cooldown/precisión) y el "saltar parada" manual (skipCurrentStop,
+    // forzado). No reordena (optimize=false): durante la navegación se respeta el orden planificado.
+    async _reroute(origin) {
+      const cur = origin || this.lastPos;
+      if (!cur) return;
+
+      this.lastRerouteAt = Date.now();
+
       if (window.RouteEngine) {
         window.RouteEngine.markReroute();
       }
-
       if (window.VoiceController) {
         VoiceController.speakReroute();
       }
+
+      window.dispatchEvent(new CustomEvent('nav:rerouting', { detail: { origin: cur } }));
 
       // Fix #8: usar waypoints originales restantes en lugar de endpoints de pasos
       const remainingWaypoints = this.waypoints.slice(this.waypointIdx);
@@ -648,9 +697,21 @@
         window.dispatchEvent(new CustomEvent('navigation-rerouted', {
           detail: { route, steps: this.steps }
         }));
+        window.dispatchEvent(new CustomEvent('nav:rerouted', {
+          detail: { route, steps: this.steps }
+        }));
       } catch (error) {
         console.error('[Navigator3D] Reroute failed:', error);
       }
+    }
+
+    // Saltar la parada actual: avanza el índice de waypoint y recalcula el resto (reroute forzado,
+    // sin esperar el cooldown). Útil cuando el ejecutor decide omitir un local.
+    skipCurrentStop() {
+      if (!this.active) return false;
+      if (this.waypointIdx < this.waypoints.length) this.waypointIdx++;
+      this._reroute(this.lastPos);
+      return true;
     }
 
     // ==================== GETTERS ====================

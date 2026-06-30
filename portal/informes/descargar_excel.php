@@ -120,9 +120,12 @@ function getCampaignData(mysqli $conn, int $idForm): array
             de.nombre AS nombre_division,
             COUNT(DISTINCT l.codigo) AS locales_programados,
             COUNT(DISTINCT CASE
-                WHEN fq.pregunta IN (
-                    'implementado_auditado','solo_implementado','solo_auditoria',
-                    'local_cerrado','no_permitieron'
+                WHEN (
+                    fq.pregunta IN (
+                        'implementado_auditado','solo_implementado','solo_auditoria',
+                        'local_cerrado','no_permitieron'
+                    )
+                    OR (f.modalidad = 'implementacion_por_etapas' AND fq.etapa_material IS NOT NULL)
                 )
                 AND fq.fechaVisita IS NOT NULL
                 AND fq.fechaVisita <> '0000-00-00 00:00:00'
@@ -132,6 +135,7 @@ function getCampaignData(mysqli $conn, int $idForm): array
                 WHEN fq.pregunta IN (
                     'implementado_auditado','solo_implementado','solo_auditoria'
                 )
+                OR (f.modalidad = 'implementacion_por_etapas' AND fq.etapa_material IN ('implementado','retirado'))
                 THEN l.id
             END) AS locales_implementados
         FROM formulario f
@@ -196,6 +200,14 @@ function getLocalesDetails(mysqli $conn, int $idForm): array
                 ELSE 'NO VISITADO'
             END AS estado_visita,
             CASE
+                WHEN f.modalidad = 'implementacion_por_etapas' THEN
+                    CASE fq.etapa_material
+                        WHEN 'implementado' THEN 'IMPLEMENTADO'
+                        WHEN 'retirado'     THEN 'RETIRADO'
+                        WHEN 'entregado'    THEN 'ENTREGADO'
+                        WHEN 'armado'       THEN 'ARMADO'
+                        ELSE 'SIN INICIAR'
+                    END
                 WHEN f.modalidad = 'retiro' THEN
                     CASE
                         WHEN IFNULL(fq.valor, 0) >= 1 THEN 'RETIRADO'
@@ -794,6 +806,16 @@ function generarExcelPhpSpreadsheet(
         ob_end_clean();
     }
 
+    if (!empty($_GET['download_token'])) {
+        setcookie('download_token', (string)$_GET['download_token'], [
+            'expires' => time() + 300,
+            'path' => '/',
+            'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+            'httponly' => false,
+            'samesite' => 'Lax',
+        ]);
+    }
+
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     header('Content-Disposition: attachment; filename="' . $archivo . '"');
     header('Cache-Control: max-age=0');
@@ -815,12 +837,18 @@ function generarExcelPhpSpreadsheet(
 // =========================
 // Punto de entrada
 // =========================
-$formularioId = isset($_GET['id']) && filter_var($_GET['id'], FILTER_VALIDATE_INT)
-    ? (int)$_GET['id']
+$formularioIdRaw = $_GET['id']
+    ?? $_GET['id_campana']
+    ?? $_GET['id_formulario']
+    ?? $_GET['formulario_id']
+    ?? null;
+
+$formularioId = filter_var($formularioIdRaw, FILTER_VALIDATE_INT)
+    ? (int)$formularioIdRaw
     : 0;
 
 if ($formularioId <= 0) {
-    fail('ID de formulario inválido.');
+    fail('ID de formulario inválido. Debes enviar id, id_campana o id_formulario.');
 }
 
 $incluirFotosMaterial = normalizarBooleanGet('fotos', true);
@@ -836,21 +864,22 @@ $encuestaPivot = [];
 
 switch (strtolower(trim($modalidad))) {
     case 'solo_implementacion':
+    case 'implementacion_por_etapas':
         $localesDetails = getLocalesDetails($conn, $formularioId);
         break;
 
     case 'solo_auditoria':
-        $encuestaPivot = getEncuestaPivot($conn, $formularioId);
+        $encuestaPivot = function_exists('getEncuestaPivot') ? getEncuestaPivot($conn, $formularioId) : [];
         break;
 
     case 'implementacion_auditoria':
         $localesDetails = getLocalesDetails($conn, $formularioId);
-        $encuestaPivot = getEncuestaPivot($conn, $formularioId);
+        $encuestaPivot = function_exists('getEncuestaPivot') ? getEncuestaPivot($conn, $formularioId) : [];
         break;
 
     default:
         $localesDetails = getLocalesDetails($conn, $formularioId);
-        $encuestaPivot = getEncuestaPivot($conn, $formularioId);
+        $encuestaPivot = function_exists('getEncuestaPivot') ? getEncuestaPivot($conn, $formularioId) : [];
         break;
 }
 

@@ -1,0 +1,72 @@
+{
+    "exported_at": "2026-06-25T14:36:53.071Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 26_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/149.0.7827.137 Mobile/15E148 Safari/604.1",
+    "sw_version": "v7.1.1",
+    "stats": {
+        "today": {
+            "ymd": "2026-06-25",
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        },
+        "overall": {
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        }
+    },
+    "queue": {
+        "total_records": 0,
+        "last_created_at": null,
+        "last_updated_at": null
+    },
+    "recent_events": [],
+    "storage_estimate": {
+        "usage": 4044622,
+        "quota": 41231686042,
+        "percent_used": 0
+    },
+    "connection_info": null,
+    "service_worker": {
+        "active": "active",
+        "installing": null,
+        "waiting": null,
+        "scope": "https://visibility.cl/visibility2/app/"
+    },
+    "idb_databases": [
+        {
+            "name": "v2_journal",
+            "version": 9
+        },
+        {
+            "name": "v2_route_cache",
+            "version": 1
+        },
+        {
+            "name": "v2_mappings",
+            "version": 1
+        },
+        {
+            "name": "visibility2-v2",
+            "version": 9
+        },
+        {
+            "name": "v2_offline",
+            "version": 10
+        }
+    ],
+    "recent_errors": [],
+    "client_time": {
+        "local": "Thu Jun 25 2026 10:36:53 GMT-0400 (hora estándar de Chile)",
+        "timezone": "America/Santiago",
+        "offset_minutes": 240
+    },
+    "csrf_token": "d2e6b301f1677fca8d40d9bfe50e387a0d7ae55a9f033720db69741c83da3312"
+}

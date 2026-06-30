@@ -2,7 +2,8 @@
 //error_reporting(E_ALL);
 //ini_set('display_errors', 1);
 
-$perfilUser = $_SESSION['perfil_nombre'];
+$perfilUser  = $_SESSION['perfil_nombre'];
+$esEditor    = strtolower($perfilUser) === 'editor';
 
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -10,6 +11,34 @@ if (empty($_SESSION['csrf_token'])) {
 
 // Incluir la conexión a la base de datos y funciones necesarias
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
+
+// Conteo de solicitudes pendientes (solo para editores)
+$solicitudesPendientes  = 0;
+$solicitudesSospechosas = 0;
+$solicitudesVendedorPendientes  = 0;
+$solicitudesVendedorSospechosas = 0;
+if ($esEditor) {
+    $stmtSol = $conn->prepare("SELECT COUNT(*) AS total, SUM(sospechoso) AS sosp FROM solicitud_cambio_local WHERE estado='pendiente' AND deleted_at IS NULL");
+    $stmtSol->execute();
+    $rowSol = $stmtSol->get_result()->fetch_assoc();
+    $stmtSol->close();
+    $solicitudesPendientes  = (int)($rowSol['total'] ?? 0);
+    $solicitudesSospechosas = (int)($rowSol['sosp'] ?? 0);
+
+    $stmtSolV = $conn->prepare("SELECT COUNT(*) AS total, SUM(sospechoso) AS sosp FROM solicitud_cambio_vendedor WHERE estado='pendiente' AND deleted_at IS NULL");
+    $stmtSolV->execute();
+    $rowSolV = $stmtSolV->get_result()->fetch_assoc();
+    $stmtSolV->close();
+    $solicitudesVendedorPendientes  = (int)($rowSolV['total'] ?? 0);
+    $solicitudesVendedorSospechosas = (int)($rowSolV['sosp'] ?? 0);
+}
+
+// API key de Google Maps para el mapa de comparación de solicitudes geo
+$mapsApiKeyPortal = getenv('GOOGLE_MAPS_API_KEY');
+if (!$mapsApiKeyPortal) {
+    $mapsConfig = include $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/config/maps_config.php';
+    $mapsApiKeyPortal = $mapsConfig['google_maps_api_key'] ?? '';
+}
 
 
 // Obtener datos para poblar selects
@@ -168,9 +197,9 @@ $stmt_div->close();
             <section class="content">
                 <div class="container-fluid">
                     <!-- Botones para abrir los modals de creación -->
-          <?php if (strtolower($perfilUser) == 'editor' || strtolower($perfilUser) == 'coordinador'): ?>       
+          <?php if (strtolower($perfilUser) == 'editor' || strtolower($perfilUser) == 'coordinador'): ?>
                     <div class="row mb-3">
-                        <div class="col-12 d-flex justify-content-start">
+                        <div class="col-12 d-flex justify-content-start flex-wrap" style="gap:8px">
                             <button type="button" class="btn btn-secondary mr-2" data-toggle="modal" data-target="#modalCrearLocal">
                                 <i class="fas fa-plus-circle"></i> Crear Local
                             </button>
@@ -190,10 +219,123 @@ $stmt_div->close();
                             <button type="button" class="btn btn-secondary" data-toggle="modal" data-target="#modalCrearSubcanal">
                                 <i class="fas fa-plus-circle"></i> Crear Subcanal
                             </button>
-                            <!-- FIN NUEVO -->
+                            <!-- Badge de solicitudes de cambio de geo (solo editores) -->
+                            <?php if ($esEditor): ?>
+                            <button type="button" class="btn <?php echo $solicitudesSospechosas > 0 ? 'btn-danger' : ($solicitudesPendientes > 0 ? 'btn-warning' : 'btn-outline-secondary'); ?>"
+                                    id="btnSolicitudesGeo" onclick="togglePanelSolicitudes()" style="position:relative">
+                                <i class="fas fa-map-marker-alt"></i>
+                                Solicitudes geo
+                                <?php if ($solicitudesPendientes > 0): ?>
+                                <span class="badge" style="background:<?php echo $solicitudesSospechosas > 0 ? '#fff' : '#333'; ?>;color:<?php echo $solicitudesSospechosas > 0 ? '#c0392b' : '#fff'; ?>">
+                                    <?php echo $solicitudesPendientes; ?>
+                                </span>
+                                <?php endif; ?>
+                            </button>
+                            <button type="button" class="btn <?php echo $solicitudesVendedorSospechosas > 0 ? 'btn-danger' : ($solicitudesVendedorPendientes > 0 ? 'btn-warning' : 'btn-outline-secondary'); ?>"
+                                    id="btnSolicitudesVendedor" onclick="togglePanelSolicitudesVendedor()" style="position:relative">
+                                <i class="fas fa-user-tag"></i>
+                                Solicitudes vendedor
+                                <?php if ($solicitudesVendedorPendientes > 0): ?>
+                                <span class="badge" style="background:<?php echo $solicitudesVendedorSospechosas > 0 ? '#fff' : '#333'; ?>;color:<?php echo $solicitudesVendedorSospechosas > 0 ? '#c0392b' : '#fff'; ?>">
+                                    <?php echo $solicitudesVendedorPendientes; ?>
+                                </span>
+                                <?php endif; ?>
+                            </button>
+                            <?php endif; ?>
                         </div>
                     </div>
-          <?php endif; ?>  
+
+                    <!-- Panel de solicitudes de cambio geo (solo editores) -->
+                    <?php if ($esEditor): ?>
+                    <div id="panelSolicitudesGeo" style="display:none;margin-bottom:18px">
+                        <div class="card card-warning card-outline">
+                            <div class="card-header" style="background:linear-gradient(135deg,#f39c12,#e67e22);color:#fff;border-radius:6px 6px 0 0">
+                                <h3 class="card-title">
+                                    <i class="fas fa-map-marker-alt mr-2"></i>
+                                    Solicitudes de cambio de geolocalización
+                                </h3>
+                                <div class="card-tools">
+                                    <div class="btn-group btn-group-sm mr-2">
+                                        <button type="button" class="btn btn-light btn-sm" onclick="cargarSolicitudes('pendiente')" id="btnFiltPend">Pendientes</button>
+                                        <button type="button" class="btn btn-light btn-sm" onclick="cargarSolicitudes('pendiente', true)" id="btnFiltSosp">⚠️ Sospechosas</button>
+                                        <button type="button" class="btn btn-light btn-sm" onclick="cargarSolicitudes('aprobada')" id="btnFiltApro">Aprobadas</button>
+                                        <button type="button" class="btn btn-light btn-sm" onclick="cargarSolicitudes('rechazada')" id="btnFiltRech">Rechazadas</button>
+                                    </div>
+                                    <button type="button" class="btn btn-tool text-white" onclick="togglePanelSolicitudes()"><i class="fas fa-times"></i></button>
+                                </div>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered mb-0" id="tablaSolicitudesGeo">
+                                        <thead>
+                                            <tr style="background:#f8f9fa">
+                                                <th>Local</th>
+                                                <th>Dir. anterior</th>
+                                                <th>Dir. nueva</th>
+                                                <th style="white-space:nowrap">Distancia</th>
+                                                <th>Usuario</th>
+                                                <th style="white-space:nowrap">Fecha</th>
+                                                <th>Flag</th>
+                                                <th>Estado</th>
+                                                <th class="text-center">Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbodySolicitudesGeo">
+                                            <tr><td colspan="9" class="text-center text-muted py-3">Cargando...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <!-- Panel de solicitudes de cambio de vendedor (solo editores) -->
+                    <?php if ($esEditor): ?>
+                    <div id="panelSolicitudesVendedor" style="display:none;margin-bottom:18px">
+                        <div class="card card-warning card-outline">
+                            <div class="card-header" style="background:linear-gradient(135deg,#f39c12,#e67e22);color:#fff;border-radius:6px 6px 0 0">
+                                <h3 class="card-title">
+                                    <i class="fas fa-user-tag mr-2"></i>
+                                    Solicitudes de cambio de vendedor
+                                </h3>
+                                <div class="card-tools">
+                                    <div class="btn-group btn-group-sm mr-2">
+                                        <button type="button" class="btn btn-light btn-sm" onclick="cargarSolicitudesVendedor('pendiente')" id="btnFiltPendVend">Pendientes</button>
+                                        <button type="button" class="btn btn-light btn-sm" onclick="cargarSolicitudesVendedor('pendiente', true)" id="btnFiltSospVend">⚠️ Sospechosas</button>
+                                        <button type="button" class="btn btn-light btn-sm" onclick="cargarSolicitudesVendedor('aprobada')" id="btnFiltAproVend">Aprobadas</button>
+                                        <button type="button" class="btn btn-light btn-sm" onclick="cargarSolicitudesVendedor('rechazada')" id="btnFiltRechVend">Rechazadas</button>
+                                    </div>
+                                    <button type="button" class="btn btn-tool text-white" onclick="togglePanelSolicitudesVendedor()"><i class="fas fa-times"></i></button>
+                                </div>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered mb-0" id="tablaSolicitudesVendedor">
+                                        <thead>
+                                            <tr style="background:#f8f9fa">
+                                                <th>Local</th>
+                                                <th>Vendedor anterior</th>
+                                                <th>Vendedor nuevo</th>
+                                                <th>Teléfono</th>
+                                                <th>Usuario</th>
+                                                <th style="white-space:nowrap">Fecha</th>
+                                                <th>Flag</th>
+                                                <th>Estado</th>
+                                                <th class="text-center">Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbodySolicitudesVendedor">
+                                            <tr><td colspan="9" class="text-center text-muted py-3">Cargando...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+          <?php endif; ?>
                     <!-- Navegación por Pestañas -->
                     <div class="row mb-3">
                         <div class="col-12">
@@ -587,7 +729,7 @@ $stmt_div->close();
                                     <option value="">-- Seleccione un Vendedor --</option>
                                     <?php foreach ($vendedores as $vend): ?>
                                         <option value="<?php echo $vend['id']; ?>">
-                                            <?php echo htmlspecialchars($vend['nombre_vendedor'], ENT_QUOTES, 'UTF-8'); ?>
+                                            <?php echo htmlspecialchars($vend['nombre_vendedor'] . (!empty($vend['telefono']) ? ' (' . $vend['telefono'] . ')' : ''), ENT_QUOTES, 'UTF-8'); ?>
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
@@ -598,6 +740,27 @@ $stmt_div->close();
                             <label class="col-sm-2 col-form-label">RELEVANCIA:</label>
                             <div class="col-sm-10">
                                 <input type="number" name="relevancia" id="inputRelevancia" class="form-control" placeholder="Ej: 1, 2, 3..." required>
+                            </div>
+                        </div>
+
+                        <!-- OC -->
+                        <div class="form-group row">
+                            <label class="col-sm-2 col-form-label">OC:</label>
+                            <div class="col-sm-4">
+                                <select class="form-control" name="oc" id="inputOC">
+                                    <option value="">-- Sin OC --</option>
+                                    <option value="AL">AL</option>
+                                    <option value="BO">BO</option>
+                                    <option value="MA">MA</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- COOLER -->
+                        <div class="form-group row">
+                            <label class="col-sm-2 col-form-label">COOLER:</label>
+                            <div class="col-sm-6">
+                                <input type="text" class="form-control" name="cooler" id="inputCooler" placeholder="Ej: Slim Mega Cooler">
                             </div>
                         </div>
 
@@ -898,10 +1061,39 @@ $stmt_div->close();
                                 <option value="">-- Seleccione un Vendedor --</option>
                                 <?php foreach ($vendedores as $vend): ?>
                                     <option value="<?php echo $vend['id']; ?>">
-                                        <?php echo htmlspecialchars($vend['nombre_vendedor'], ENT_QUOTES, 'UTF-8'); ?>
+                                        <?php echo htmlspecialchars($vend['nombre_vendedor'] . (!empty($vend['telefono']) ? ' (' . $vend['telefono'] . ')' : ''), ENT_QUOTES, 'UTF-8'); ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                        </div>
+                    </div>
+
+                    <!-- RELEVANCIA (edit) -->
+                    <div class="form-group row">
+                        <label class="col-sm-2 col-form-label">RELEVANCIA:</label>
+                        <div class="col-sm-4">
+                            <input type="number" name="relevancia_edit" id="editRelevancia" class="form-control" placeholder="Ej: 1, 2, 3..." min="0" max="9">
+                        </div>
+                    </div>
+
+                    <!-- OC (edit) -->
+                    <div class="form-group row">
+                        <label class="col-sm-2 col-form-label">OC:</label>
+                        <div class="col-sm-4">
+                            <select class="form-control" name="oc_edit" id="editOC">
+                                <option value="">-- Sin OC --</option>
+                                <option value="AL">AL</option>
+                                <option value="BO">BO</option>
+                                <option value="MA">MA</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- COOLER (edit) -->
+                    <div class="form-group row">
+                        <label class="col-sm-2 col-form-label">COOLER:</label>
+                        <div class="col-sm-6">
+                            <input type="text" class="form-control" name="cooler_edit" id="editCooler" placeholder="Ej: Slim Mega Cooler">
                         </div>
                     </div>
 
@@ -1958,6 +2150,9 @@ $(function () {
                 $('#editZona').val(local.zona_id);
                 $('#editJefeVenta').val(local.jefe_venta_id);
                 $('#editVendedor').val(local.vendedor_id);
+                $('#editRelevancia').val(local.relevancia !== null ? local.relevancia : '');
+                $('#editOC').val(local.oc || '');
+                $('#editCooler').val(local.cooler || '');
 
                 const promesas = [];
 
@@ -2072,6 +2267,408 @@ $(function () {
     mostrarEstadoInicialTabla();
 });
 </script>
+
+<?php if ($esEditor): ?>
+<!-- ═══════════════ SOLICITUDES GEO — MODAL RECHAZO ═══════════════ -->
+<div class="modal fade" id="modalRechazarSolicitud" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-sm" role="document">
+        <div class="modal-content">
+            <div class="modal-header" style="background:#c0392b;color:#fff">
+                <button type="button" class="close" data-dismiss="modal" style="color:#fff">&times;</button>
+                <h4 class="modal-title"><i class="fas fa-times-circle"></i> Rechazar solicitud</h4>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="rechazarSolId">
+                <div class="form-group">
+                    <label>Motivo del rechazo <span class="text-muted">(opcional)</span></label>
+                    <textarea id="rechazarSolObs" class="form-control" rows="3" placeholder="Ej: coordenadas incorrectas, dirección no existe..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" onclick="confirmarRechazo()">
+                    <i class="fas fa-times-circle"></i> Rechazar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ SOLICITUDES GEO — MAPA DE COMPARACIÓN ═══════════════ -->
+<div class="modal fade" id="modalVerMapaSolicitud" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header" style="background:#1f2d3d;color:#fff">
+                <button type="button" class="close" data-dismiss="modal" style="color:#fff">&times;</button>
+                <h4 class="modal-title" id="mlMapaLocalNombre"><i class="fas fa-map-marked-alt"></i> Comparación de ubicación</h4>
+            </div>
+            <div class="modal-body">
+                <div id="mlMapaSolicitud" style="height:380px;width:100%;border-radius:8px;background:#f5f5f5"></div>
+                <div class="row" style="font-size:13px;margin-top:10px">
+                    <div class="col-md-6"><span style="color:#27ae60">●</span> Anterior: <span id="mlMapaDirAnterior">—</span></div>
+                    <div class="col-md-6"><span style="color:#c0392b">●</span> Nueva: <span id="mlMapaDirNueva">—</span></div>
+                </div>
+                <div class="text-muted" style="font-size:12px;margin-top:4px">Distancia: <span id="mlMapaDistancia">—</span></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+window.__ML_MAPS_KEY = "<?php echo htmlspecialchars($mapsApiKeyPortal, ENT_QUOTES, 'UTF-8'); ?>";
+
+var _estadoActualSolicitudes = 'pendiente';
+var _soloSospechosasActual   = false;
+
+function escapeHtml(text) {
+    return $('<div>').text(text ?? '').html();
+}
+
+function togglePanelSolicitudes() {
+    var panel = document.getElementById('panelSolicitudesGeo');
+    if (!panel) return;
+    if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        cargarSolicitudes('pendiente');
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+function cargarSolicitudes(estado, soloSosp) {
+    _estadoActualSolicitudes = estado || 'pendiente';
+    _soloSospechosasActual   = soloSosp || false;
+
+    $('#tbodySolicitudesGeo').html('<tr><td colspan="9" class="text-center text-muted"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>');
+
+    $.getJSON('mod_local/ajax_solicitudes_cambio.php', {
+        action: 'list',
+        estado: _estadoActualSolicitudes,
+        sospechoso: _soloSospechosasActual ? '1' : ''
+    }, function (resp) {
+        if (!resp.ok) {
+            $('#tbodySolicitudesGeo').html('<tr><td colspan="9" class="text-danger text-center">' + escapeHtml(resp.msg || 'Error') + '</td></tr>');
+            return;
+        }
+        renderSolicitudes(resp.data);
+    }).fail(function () {
+        $('#tbodySolicitudesGeo').html('<tr><td colspan="9" class="text-danger text-center">Error inesperado al cargar.</td></tr>');
+    });
+}
+
+function renderSolicitudes(rows) {
+    if (!rows.length) {
+        $('#tbodySolicitudesGeo').html('<tr><td colspan="9" class="text-center text-muted py-3">No hay solicitudes.</td></tr>');
+        return;
+    }
+
+    var estadoLabels = { pendiente: '<span class="badge badge-warning">Pendiente</span>', aprobada: '<span class="badge badge-success">Aprobada</span>', rechazada: '<span class="badge badge-danger">Rechazada</span>' };
+
+    window._solicitudesGeoCache = {};
+    rows.forEach(function (s) { window._solicitudesGeoCache[s.id] = s; });
+
+    var html = '';
+    rows.forEach(function (s) {
+        var sospBadge = s.sospechoso == 1
+            ? '<span class="badge badge-danger" title="' + escapeHtml(s.motivo_sospecha || '') + '">⚠️ Sospechosa</span>'
+            : '—';
+        var acciones = '<button class="btn btn-xs btn-info mr-1" onclick="mlVerMapaSolicitud(' + s.id + ')" title="Ver en mapa"><i class="fas fa-map-marked-alt"></i></button>';
+        if (s.estado === 'pendiente') {
+            acciones += '<button class="btn btn-xs btn-success mr-1" onclick="aprobarSolicitud(' + s.id + ')"><i class="fas fa-check"></i> Aprobar</button>' +
+                       '<button class="btn btn-xs btn-danger" onclick="rechazarSolicitudModal(' + s.id + ')"><i class="fas fa-times"></i> Rechazar</button>';
+        }
+        var km = s.distancia_km !== null ? parseFloat(s.distancia_km).toFixed(1) + ' km' : '—';
+        var fecha = s.created_at ? s.created_at.substring(0, 16).replace('T', ' ') : '—';
+
+        html += '<tr>' +
+            '<td><strong>' + escapeHtml(s.local_nombre) + '</strong><br><small class="text-muted">' + escapeHtml(s.local_codigo) + '</small></td>' +
+            '<td style="max-width:160px;font-size:12px">' + escapeHtml(s.dir_anterior || '—') + '</td>' +
+            '<td style="max-width:160px;font-size:12px"><strong>' + escapeHtml(s.dir_nueva) + '</strong></td>' +
+            '<td style="white-space:nowrap">' + km + '</td>' +
+            '<td style="white-space:nowrap">' + escapeHtml(s.usuario_nombre + ' ' + s.usuario_apellido) + '</td>' +
+            '<td style="white-space:nowrap;font-size:12px">' + fecha + '</td>' +
+            '<td>' + sospBadge + '</td>' +
+            '<td>' + (estadoLabels[s.estado] || s.estado) + '</td>' +
+            '<td class="text-center" style="white-space:nowrap">' + acciones + '</td>' +
+            '</tr>';
+    });
+    $('#tbodySolicitudesGeo').html(html);
+}
+
+function mlLoadGoogleMapsSdk() {
+    if (window.google && window.google.maps) return Promise.resolve(window.google.maps);
+    if (window.__mlMapsScriptPromise) return window.__mlMapsScriptPromise;
+
+    window.__mlMapsScriptPromise = new Promise(function (resolve, reject) {
+        var s = document.createElement('script');
+        s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(window.__ML_MAPS_KEY || '');
+        s.async = true;
+        s.defer = true;
+        s.onload = function () { resolve(window.google.maps); };
+        s.onerror = function () {
+            window.__mlMapsScriptPromise = null;
+            reject(new Error('No se pudo cargar Google Maps.'));
+        };
+        document.head.appendChild(s);
+    });
+
+    return window.__mlMapsScriptPromise;
+}
+
+function mlInitMapaSolicitud(maps, s) {
+    var anterior = { lat: parseFloat(s.lat_anterior), lng: parseFloat(s.lng_anterior) };
+    var nueva    = { lat: parseFloat(s.lat_nueva), lng: parseFloat(s.lng_nueva) };
+
+    var container = document.getElementById('mlMapaSolicitud');
+    container.innerHTML = '';
+
+    var map = new maps.Map(container, { zoom: 14, center: anterior });
+
+    new maps.Marker({ position: anterior, map: map, label: 'A', title: 'Dirección anterior' });
+    new maps.Marker({
+        position: nueva, map: map, title: 'Dirección nueva',
+        icon: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+    });
+    new maps.Polyline({
+        path: [anterior, nueva],
+        geodesic: true,
+        strokeColor: '#1e6df0',
+        strokeOpacity: 0.9,
+        strokeWeight: 3
+    }).setMap(map);
+
+    var bounds = new maps.LatLngBounds();
+    bounds.extend(anterior);
+    bounds.extend(nueva);
+    map.fitBounds(bounds, 60);
+}
+
+function mlVerMapaSolicitud(id) {
+    var s = (window._solicitudesGeoCache || {})[id];
+    if (!s) return;
+
+    document.getElementById('mlMapaLocalNombre').innerHTML =
+        '<i class="fas fa-map-marked-alt"></i> ' + escapeHtml(s.local_nombre) + ' <small>(' + escapeHtml(s.local_codigo) + ')</small>';
+    document.getElementById('mlMapaDirAnterior').textContent = s.dir_anterior || '—';
+    document.getElementById('mlMapaDirNueva').textContent = s.dir_nueva || '—';
+    document.getElementById('mlMapaDistancia').textContent = s.distancia_km !== null ? parseFloat(s.distancia_km).toFixed(1) + ' km' : '—';
+
+    $('#modalVerMapaSolicitud').modal('show');
+    $('#modalVerMapaSolicitud').one('shown.bs.modal', function () {
+        mlLoadGoogleMapsSdk().then(function (maps) {
+            mlInitMapaSolicitud(maps, s);
+        }).catch(function () {
+            document.getElementById('mlMapaSolicitud').innerHTML =
+                '<p class="text-danger text-center" style="padding:20px">No se pudo cargar el mapa.</p>';
+        });
+    });
+}
+
+function aprobarSolicitud(id) {
+    if (!confirm('¿Aprobar esta solicitud? La dirección y coordenadas del local serán actualizadas.')) return;
+
+    $.post('mod_local/ajax_solicitudes_cambio.php', { action: 'aprobar', id: id }, function (resp) {
+        if (!resp.ok) { alert(resp.msg || 'Error al aprobar.'); return; }
+        mostrarAlertaPrincipal('success', resp.msg || 'Solicitud aprobada.');
+        cargarSolicitudes(_estadoActualSolicitudes, _soloSospechosasActual);
+        cargarLocales(getFiltrosActuales());
+        // Actualizar badge del botón
+        actualizarBadgeSolicitudes();
+    }, 'json').fail(function () { alert('Error inesperado.'); });
+}
+
+function rechazarSolicitudModal(id) {
+    document.getElementById('rechazarSolId').value = id;
+    document.getElementById('rechazarSolObs').value = '';
+    $('#modalRechazarSolicitud').modal('show');
+}
+
+function confirmarRechazo() {
+    var id  = parseInt(document.getElementById('rechazarSolId').value, 10);
+    var obs = document.getElementById('rechazarSolObs').value.trim();
+
+    $.post('mod_local/ajax_solicitudes_cambio.php', { action: 'rechazar', id: id, observacion_revisor: obs }, function (resp) {
+        $('#modalRechazarSolicitud').modal('hide');
+        if (!resp.ok) { alert(resp.msg || 'Error al rechazar.'); return; }
+        mostrarAlertaPrincipal('success', 'Solicitud rechazada.');
+        cargarSolicitudes(_estadoActualSolicitudes, _soloSospechosasActual);
+        actualizarBadgeSolicitudes();
+    }, 'json').fail(function () { alert('Error inesperado.'); });
+}
+
+function actualizarBadgeSolicitudes() {
+    $.getJSON('mod_local/ajax_solicitudes_cambio.php', { action: 'count' }, function (resp) {
+        if (!resp.ok) return;
+        var btn = document.getElementById('btnSolicitudesGeo');
+        if (!btn) return;
+        var badge = btn.querySelector('.badge');
+        if (resp.total === 0) {
+            if (badge) badge.remove();
+            btn.className = 'btn btn-secondary';
+        } else {
+            if (!badge) { badge = document.createElement('span'); badge.className = 'badge'; btn.appendChild(badge); }
+            badge.textContent = resp.total;
+            btn.className = 'btn ' + (resp.sospechosos > 0 ? 'btn-danger' : 'btn-warning');
+        }
+    });
+}
+</script>
+
+<!-- ═══════════════ SOLICITUDES VENDEDOR — MODAL RECHAZO ═══════════════ -->
+<div class="modal fade" id="modalRechazarSolicitudVendedor" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-sm" role="document">
+        <div class="modal-content">
+            <div class="modal-header" style="background:#c0392b;color:#fff">
+                <button type="button" class="close" data-dismiss="modal" style="color:#fff">&times;</button>
+                <h4 class="modal-title"><i class="fas fa-times-circle"></i> Rechazar solicitud</h4>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="rechazarSolIdVend">
+                <div class="form-group">
+                    <label>Motivo del rechazo <span class="text-muted">(opcional)</span></label>
+                    <textarea id="rechazarSolObsVend" class="form-control" rows="3" placeholder="Ej: ya existe ese vendedor, nombre incorrecto..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" onclick="confirmarRechazoVendedor()">
+                    <i class="fas fa-times-circle"></i> Rechazar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var _estadoActualSolicitudesVendedor = 'pendiente';
+var _soloSospechosasActualVendedor   = false;
+
+function togglePanelSolicitudesVendedor() {
+    var panel = document.getElementById('panelSolicitudesVendedor');
+    if (!panel) return;
+    if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        cargarSolicitudesVendedor('pendiente');
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+function cargarSolicitudesVendedor(estado, soloSosp) {
+    _estadoActualSolicitudesVendedor = estado || 'pendiente';
+    _soloSospechosasActualVendedor   = soloSosp || false;
+
+    $('#tbodySolicitudesVendedor').html('<tr><td colspan="9" class="text-center text-muted"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>');
+
+    $.getJSON('mod_local/ajax_solicitudes_vendedor.php', {
+        action: 'list',
+        estado: _estadoActualSolicitudesVendedor,
+        sospechoso: _soloSospechosasActualVendedor ? '1' : ''
+    }, function (resp) {
+        if (!resp.ok) {
+            $('#tbodySolicitudesVendedor').html('<tr><td colspan="9" class="text-danger text-center">' + escapeHtml(resp.msg || 'Error') + '</td></tr>');
+            return;
+        }
+        renderSolicitudesVendedor(resp.data);
+    }).fail(function () {
+        $('#tbodySolicitudesVendedor').html('<tr><td colspan="9" class="text-danger text-center">Error inesperado al cargar.</td></tr>');
+    });
+}
+
+function renderSolicitudesVendedor(rows) {
+    if (!rows.length) {
+        $('#tbodySolicitudesVendedor').html('<tr><td colspan="9" class="text-center text-muted py-3">No hay solicitudes.</td></tr>');
+        return;
+    }
+
+    var estadoLabels = { pendiente: '<span class="badge badge-warning">Pendiente</span>', aprobada: '<span class="badge badge-success">Aprobada</span>', rechazada: '<span class="badge badge-danger">Rechazada</span>' };
+
+    var html = '';
+    rows.forEach(function (s) {
+        var sospBadge = s.sospechoso == 1
+            ? '<span class="badge badge-danger" title="' + escapeHtml(s.motivo_sospecha || '') + '">⚠️ Sospechosa</span>'
+            : '—';
+        var acciones = '';
+        if (s.estado === 'pendiente') {
+            acciones = '<button class="btn btn-xs btn-success mr-1" onclick="aprobarSolicitudVendedor(' + s.id + ',' + (s.es_nuevo_vendedor == 1 ? 1 : 0) + ')"><i class="fas fa-check"></i> Aprobar</button>' +
+                       '<button class="btn btn-xs btn-danger" onclick="rechazarSolicitudVendedorModal(' + s.id + ')"><i class="fas fa-times"></i> Rechazar</button>';
+        }
+        var tipoBadge = s.es_nuevo_vendedor == 1
+            ? '<span class="badge badge-warning" title="Se creará un nuevo registro de vendedor al aprobar">Nuevo</span>'
+            : '<span class="badge badge-secondary">Reasignación</span>';
+        var nuevoLabel = escapeHtml(s.nombre_vendedor_nuevo) + ' ' + tipoBadge;
+        var fecha = s.created_at ? s.created_at.substring(0, 16).replace('T', ' ') : '—';
+
+        html += '<tr>' +
+            '<td><strong>' + escapeHtml(s.local_nombre) + '</strong><br><small class="text-muted">' + escapeHtml(s.local_codigo) + '</small></td>' +
+            '<td style="max-width:160px;font-size:12px">' + escapeHtml(s.nombre_vendedor_anterior || '—') + '</td>' +
+            '<td style="max-width:160px;font-size:12px"><strong>' + nuevoLabel + '</strong></td>' +
+            '<td style="white-space:nowrap">' + escapeHtml(s.telefono_nuevo || '—') + '</td>' +
+            '<td style="white-space:nowrap">' + escapeHtml(s.usuario_nombre + ' ' + s.usuario_apellido) + '</td>' +
+            '<td style="white-space:nowrap;font-size:12px">' + fecha + '</td>' +
+            '<td>' + sospBadge + '</td>' +
+            '<td>' + (estadoLabels[s.estado] || s.estado) + '</td>' +
+            '<td class="text-center" style="white-space:nowrap">' + acciones + '</td>' +
+            '</tr>';
+    });
+    $('#tbodySolicitudesVendedor').html(html);
+}
+
+function aprobarSolicitudVendedor(id, esNuevo) {
+    var msg = esNuevo
+        ? '¿Aprobar esta solicitud?\n\nSe CREARÁ un nuevo vendedor con el nombre indicado y se asignará al local.'
+        : '¿Aprobar esta solicitud? El vendedor del local será reasignado.';
+    if (!confirm(msg)) return;
+
+    $.post('mod_local/ajax_solicitudes_vendedor.php', { action: 'aprobar', id: id }, function (resp) {
+        if (!resp.ok) { alert(resp.msg || 'Error al aprobar.'); return; }
+        mostrarAlertaPrincipal('success', resp.msg || 'Solicitud aprobada.');
+        cargarSolicitudesVendedor(_estadoActualSolicitudesVendedor, _soloSospechosasActualVendedor);
+        cargarLocales(getFiltrosActuales());
+        actualizarBadgeSolicitudesVendedor();
+    }, 'json').fail(function () { alert('Error inesperado.'); });
+}
+
+function rechazarSolicitudVendedorModal(id) {
+    document.getElementById('rechazarSolIdVend').value = id;
+    document.getElementById('rechazarSolObsVend').value = '';
+    $('#modalRechazarSolicitudVendedor').modal('show');
+}
+
+function confirmarRechazoVendedor() {
+    var id  = document.getElementById('rechazarSolIdVend').value;
+    var obs = document.getElementById('rechazarSolObsVend').value;
+
+    $.post('mod_local/ajax_solicitudes_vendedor.php', { action: 'rechazar', id: id, observacion_revisor: obs }, function (resp) {
+        if (!resp.ok) { alert(resp.msg || 'Error al rechazar.'); return; }
+        $('#modalRechazarSolicitudVendedor').modal('hide');
+        mostrarAlertaPrincipal('success', resp.msg || 'Solicitud rechazada.');
+        cargarSolicitudesVendedor(_estadoActualSolicitudesVendedor, _soloSospechosasActualVendedor);
+        actualizarBadgeSolicitudesVendedor();
+    }, 'json').fail(function () { alert('Error inesperado.'); });
+}
+
+function actualizarBadgeSolicitudesVendedor() {
+    $.getJSON('mod_local/ajax_solicitudes_vendedor.php', { action: 'count' }, function (resp) {
+        if (!resp.ok) return;
+        var btn = document.getElementById('btnSolicitudesVendedor');
+        if (!btn) return;
+        var badge = btn.querySelector('.badge');
+        if (resp.total === 0) {
+            if (badge) badge.remove();
+            btn.className = 'btn btn-outline-secondary';
+        } else {
+            if (!badge) { badge = document.createElement('span'); badge.className = 'badge'; btn.appendChild(badge); }
+            badge.textContent = resp.total;
+            btn.className = 'btn ' + (resp.sospechosos > 0 ? 'btn-danger' : 'btn-warning');
+        }
+    });
+}
+</script>
+<?php endif; ?>
 
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw&callback=initMap" async defer></script>
 </body>

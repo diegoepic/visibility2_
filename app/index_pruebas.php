@@ -51,6 +51,12 @@ $googleMapsApiKey = getenv('GOOGLE_MAPS_API_KEY');
 $googleMapsApiKey = is_string($googleMapsApiKey) ? trim($googleMapsApiKey) : '';
 
 $TEST_MODE = getenv('V2_TEST_MODE') === '1';
+// URL del proxy backend de Routes API. Por defecto activo; se puede desactivar con la env
+// ROUTES_PROXY_URL='' (rollback a llamada directa a Google). En test mode se desactiva.
+$routesProxyEnv = getenv('ROUTES_PROXY_URL');
+$routesProxyUrl = $TEST_MODE
+    ? ''
+    : ($routesProxyEnv !== false ? trim((string)$routesProxyEnv) : '/visibility2/app/api/route_compute.php');
 if ($TEST_MODE) {
     $today = date('Y-m-d');
     $campanas = [[
@@ -136,7 +142,11 @@ $sql_campaigns = "
       AND f.id_empresa = ?
       AND fq.estado = 0
       AND f.tipo in (3,1)
-      AND fq.countVisita = 0
+      AND (
+            (f.modalidad <> 'implementacion_por_etapas' AND fq.countVisita = 0)
+            OR
+            (f.modalidad = 'implementacion_por_etapas' AND (fq.etapa_material IS NULL OR fq.etapa_material NOT IN ('implementado','retirado') OR (fq.etapa_material = 'implementado' AND CAST(COALESCE(NULLIF(fq.valor,''),'0') AS UNSIGNED) < CAST(COALESCE(NULLIF(fq.valor_propuesto,''),'0') AS UNSIGNED))))
+          )
       AND f.estado = 1
     ORDER BY f.fechaInicio DESC
 ";
@@ -229,14 +239,25 @@ $sql = "
     l.direccion AS direccionLocal,
     l.nombre    AS nombreLocal,
     IFNULL(v.nombre_vendedor, '') AS vendedor,
+    l.id_vendedor AS idVendedor,
+    IFNULL(v.telefono, '') AS vendedorTelefono,
     IFNULL(co.comuna, '') AS comuna,
     l.id        AS idLocal,
     l.lat       AS latitud,
     l.lng       AS lng,
-    COUNT(CASE WHEN fq.countVisita = 0 THEN 1 END)        AS totalCampanas,
-    GROUP_CONCAT(DISTINCT CASE WHEN fq.countVisita = 0 THEN f.id END) AS campanasIds,
+    COUNT(CASE WHEN (
+                (f.modalidad <> 'implementacion_por_etapas' AND fq.countVisita = 0)
+                OR (f.modalidad = 'implementacion_por_etapas' AND (fq.etapa_material IS NULL OR fq.etapa_material NOT IN ('implementado','retirado') OR (fq.etapa_material = 'implementado' AND CAST(COALESCE(NULLIF(fq.valor,''),'0') AS UNSIGNED) < CAST(COALESCE(NULLIF(fq.valor_propuesto,''),'0') AS UNSIGNED))))
+              ) THEN 1 END)        AS totalCampanas,
+    GROUP_CONCAT(DISTINCT CASE WHEN (
+                (f.modalidad <> 'implementacion_por_etapas' AND fq.countVisita = 0)
+                OR (f.modalidad = 'implementacion_por_etapas' AND (fq.etapa_material IS NULL OR fq.etapa_material NOT IN ('implementado','retirado') OR (fq.etapa_material = 'implementado' AND CAST(COALESCE(NULLIF(fq.valor,''),'0') AS UNSIGNED) < CAST(COALESCE(NULLIF(fq.valor_propuesto,''),'0') AS UNSIGNED))))
+              ) THEN f.id END) AS campanasIds,
     MAX(cu.nombre)              AS tipo_cuenta,
-    MAX(fq.is_priority)         AS is_priority
+    MAX(fq.is_priority)         AS is_priority,
+    MAX(l.relevancia)           AS relevancia,
+    MAX(le.oc)                  AS oc,
+    MAX(le.cooler)              AS cooler
 FROM formularioQuestion fq
 INNER JOIN formulario f ON f.id        = fq.id_formulario
 INNER JOIN local      l ON l.id        = fq.id_local
@@ -244,6 +265,7 @@ INNER JOIN cadena     c ON c.id        = l.id_cadena
 INNER JOIN vendedor   v ON v.id = l.id_vendedor
 LEFT JOIN comuna     co ON co.id = l.id_comuna
 LEFT JOIN cuenta     cu ON cu.id = l.id_cuenta
+LEFT JOIN local_ext  le ON le.id_local = l.id
 WHERE fq.id_usuario    = ?
   AND f.id_empresa      = ?
   AND f.tipo           IN (3,1)
@@ -251,8 +273,11 @@ WHERE fq.id_usuario    = ?
 GROUP BY
     IFNULL(DATE(fq.fechaPropuesta), CURDATE()),
     l.codigo, c.nombre, l.direccion, l.nombre, co.comuna,
-    l.id, l.lat, l.lng, v.nombre_vendedor
-HAVING SUM(CASE WHEN fq.countVisita = 0 THEN 1 ELSE 0 END) > 0
+    l.id, l.lat, l.lng, v.nombre_vendedor, l.id_vendedor, v.telefono
+HAVING SUM(CASE WHEN (
+                (f.modalidad <> 'implementacion_por_etapas' AND fq.countVisita = 0)
+                OR (f.modalidad = 'implementacion_por_etapas' AND (fq.etapa_material IS NULL OR fq.etapa_material NOT IN ('implementado','retirado') OR (fq.etapa_material = 'implementado' AND CAST(COALESCE(NULLIF(fq.valor,''),'0') AS UNSIGNED) < CAST(COALESCE(NULLIF(fq.valor_propuesto,''),'0') AS UNSIGNED))))
+              ) THEN 1 ELSE 0 END) > 0
 ORDER BY fechaPropuesta ASC, c.nombre, l.direccion
 ";
 $stmt = $conn->prepare($sql);
@@ -270,6 +295,8 @@ while ($row = $result->fetch_assoc()) {
         'direccionLocal' => htmlspecialchars($row['direccionLocal'], ENT_QUOTES, 'UTF-8'),
         'nombreLocal'    => htmlspecialchars($row['nombreLocal'], ENT_QUOTES, 'UTF-8'),
         'vendedor'       => htmlspecialchars($row['vendedor'], ENT_QUOTES, 'UTF-8'),
+        'idVendedor'     => (int)$row['idVendedor'],
+        'vendedorTelefono' => htmlspecialchars($row['vendedorTelefono'], ENT_QUOTES, 'UTF-8'),
         'idLocal'        => (int)$row['idLocal'],
         'latitud'        => (float)$row['latitud'],
         'lng'            => (float)$row['lng'],
@@ -277,11 +304,79 @@ while ($row = $result->fetch_assoc()) {
         'campanasIds'    => $row['campanasIds'],
         'is_priority'    => (int)$row['is_priority'],
         'is_botilleria'  => (stripos($row['tipo_cuenta'] ?? '', 'botiller') !== false),
-        'comuna'         => htmlspecialchars($row['comuna'], ENT_QUOTES, 'UTF-8')
+        'comuna'         => htmlspecialchars($row['comuna'], ENT_QUOTES, 'UTF-8'),
+        'relevancia'     => $row['relevancia'] !== null ? (int)$row['relevancia'] : null,
+        'oc'             => htmlspecialchars($row['oc'] ?? '', ENT_QUOTES, 'UTF-8'),
+        'cooler'         => htmlspecialchars($row['cooler'] ?? '', ENT_QUOTES, 'UTF-8'),
     ];
 }
 
 $stmt->close();
+
+// Override de coordenadas por solicitudes pendientes del usuario actual
+$geoOverrides = [];
+$stmtOvr = $conn->prepare("SELECT id_local, lat_nueva, lng_nueva, dir_nueva FROM solicitud_cambio_local WHERE id_usuario=? AND estado='pendiente' AND deleted_at IS NULL");
+$stmtOvr->bind_param('i', $usuario_id);
+$stmtOvr->execute();
+foreach ($stmtOvr->get_result()->fetch_all(MYSQLI_ASSOC) as $ovr) {
+    $geoOverrides[(int)$ovr['id_local']] = $ovr;
+}
+$stmtOvr->close();
+
+if (!empty($geoOverrides)) {
+    foreach ($locales as &$loc) {
+        $lid = $loc['idLocal'];
+        if (isset($geoOverrides[$lid])) {
+            $ov = $geoOverrides[$lid];
+            $loc['latitud']       = (float)$ov['lat_nueva'];
+            $loc['lng']           = (float)$ov['lng_nueva'];
+            $loc['direccionLocal'] = htmlspecialchars((string)$ov['dir_nueva'], ENT_QUOTES, 'UTF-8');
+            $loc['_geo_pendiente'] = true;
+        }
+    }
+    unset($loc);
+}
+
+// Override de vendedor por solicitudes pendientes del usuario actual
+$vendedorOverrides = [];
+$stmtOvrV = $conn->prepare("SELECT id_local, nombre_vendedor_nuevo, telefono_nuevo FROM solicitud_cambio_vendedor WHERE id_usuario=? AND estado='pendiente' AND deleted_at IS NULL");
+$stmtOvrV->bind_param('i', $usuario_id);
+$stmtOvrV->execute();
+foreach ($stmtOvrV->get_result()->fetch_all(MYSQLI_ASSOC) as $ovr) {
+    $vendedorOverrides[(int)$ovr['id_local']] = $ovr;
+}
+$stmtOvrV->close();
+
+if (!empty($vendedorOverrides)) {
+    foreach ($locales as &$loc) {
+        $lid = $loc['idLocal'];
+        if (isset($vendedorOverrides[$lid])) {
+            $ov = $vendedorOverrides[$lid];
+            $loc['vendedor']         = htmlspecialchars((string)$ov['nombre_vendedor_nuevo'], ENT_QUOTES, 'UTF-8');
+            $loc['vendedorTelefono'] = htmlspecialchars((string)($ov['telefono_nuevo'] ?? ''), ENT_QUOTES, 'UTF-8');
+            $loc['_vendedor_pendiente'] = true;
+        }
+    }
+    unset($loc);
+}
+
+// Listado completo de vendedores para el selector del modal "Cambiar vendedor"
+$vendedoresDisponibles = [];
+$stmtVendList = $conn->prepare("
+    SELECT MIN(id) AS id, ANY_VALUE(nombre_vendedor) AS nombre_vendedor, IFNULL(MAX(telefono),'') AS telefono
+    FROM vendedor
+    GROUP BY BINARY nombre_vendedor
+    ORDER BY nombre_vendedor ASC
+");
+$stmtVendList->execute();
+foreach ($stmtVendList->get_result()->fetch_all(MYSQLI_ASSOC) as $v) {
+    $vendedoresDisponibles[] = [
+        'id'       => (int)$v['id'],
+        'nombre'   => $v['nombre_vendedor'],
+        'telefono' => $v['telefono'],
+    ];
+}
+$stmtVendList->close();
 
 $locales_por_dia = [];
 foreach ($locales as $local) {
@@ -301,19 +396,25 @@ SELECT
     l.direccion AS direccionLocal,
     l.nombre AS nombreLocal,
     IFNULL(v.nombre_vendedor, '') AS vendedor,
+    l.id_vendedor AS idVendedor,
+    IFNULL(v.telefono, '') AS vendedorTelefono,
     l.id AS idLocal,
     l.lat AS latitud,
     l.lng AS lng,
     COUNT(DISTINCT f.id) AS totalCampanas,
     GROUP_CONCAT(DISTINCT f.id) AS campanasIds,
     MAX(cu.nombre) AS tipo_cuenta,
-    MAX(fq.is_priority) AS is_priority
+    MAX(fq.is_priority) AS is_priority,
+    MAX(l.relevancia)   AS relevancia,
+    MAX(le.oc)          AS oc,
+    MAX(le.cooler)      AS cooler
 FROM formularioQuestion fq
 INNER JOIN formulario   f ON f.id = fq.id_formulario
 INNER JOIN local        l ON l.id = fq.id_local
 INNER JOIN cadena       c ON c.id = l.id_cadena
 INNER JOIN vendedor     v ON v.id = l.id_vendedor
 LEFT JOIN cuenta       cu ON cu.id = l.id_cuenta
+LEFT JOIN local_ext    le ON le.id_local = l.id
 WHERE fq.id_usuario = ?
   AND f.id_empresa  = ?
   AND f.tipo        IN (3,1)
@@ -322,7 +423,7 @@ WHERE fq.id_usuario = ?
 GROUP BY
     IFNULL(DATE(fq.fechaPropuesta), CURDATE()),
     l.codigo, c.nombre, l.direccion, l.nombre,
-    l.id, l.lat, l.lng, v.nombre_vendedor
+    l.id, l.lat, l.lng, v.nombre_vendedor, l.id_vendedor, v.telefono
 ORDER BY
     fechaPropuesta ASC,
     c.nombre,
@@ -344,6 +445,8 @@ while ($row = $result_reag->fetch_assoc()) {
         'direccionLocal' => htmlspecialchars($row['direccionLocal'], ENT_QUOTES, 'UTF-8'),
         'nombreLocal'    => htmlspecialchars($row['nombreLocal'], ENT_QUOTES, 'UTF-8'),
         'vendedor'       => htmlspecialchars($row['vendedor'], ENT_QUOTES, 'UTF-8'),
+        'idVendedor'     => (int)$row['idVendedor'],
+        'vendedorTelefono' => htmlspecialchars($row['vendedorTelefono'], ENT_QUOTES, 'UTF-8'),
         'idLocal'        => (int)$row['idLocal'],
         'latitud'        => (float)$row['latitud'],
         'lng'            => (float)$row['lng'],
@@ -351,10 +454,39 @@ while ($row = $result_reag->fetch_assoc()) {
         'campanasIds'    => $row['campanasIds'],
         'is_priority'    => (int)$row['is_priority'],
         'is_botilleria'  => (stripos($row['tipo_cuenta'] ?? '', 'botiller') !== false),
+        'relevancia'     => $row['relevancia'] !== null ? (int)$row['relevancia'] : null,
+        'oc'             => htmlspecialchars($row['oc'] ?? '', ENT_QUOTES, 'UTF-8'),
+        'cooler'         => htmlspecialchars($row['cooler'] ?? '', ENT_QUOTES, 'UTF-8'),
     ];
 }
 $stmt_reag->close();
 
+if (!empty($geoOverrides)) {
+    foreach ($locales_reag as &$loc) {
+        $lid = $loc['idLocal'];
+        if (isset($geoOverrides[$lid])) {
+            $ov = $geoOverrides[$lid];
+            $loc['latitud']       = (float)$ov['lat_nueva'];
+            $loc['lng']           = (float)$ov['lng_nueva'];
+            $loc['direccionLocal'] = htmlspecialchars((string)$ov['dir_nueva'], ENT_QUOTES, 'UTF-8');
+            $loc['_geo_pendiente'] = true;
+        }
+    }
+    unset($loc);
+}
+
+if (!empty($vendedorOverrides)) {
+    foreach ($locales_reag as &$loc) {
+        $lid = $loc['idLocal'];
+        if (isset($vendedorOverrides[$lid])) {
+            $ov = $vendedorOverrides[$lid];
+            $loc['vendedor']         = htmlspecialchars((string)$ov['nombre_vendedor_nuevo'], ENT_QUOTES, 'UTF-8');
+            $loc['vendedorTelefono'] = htmlspecialchars((string)($ov['telefono_nuevo'] ?? ''), ENT_QUOTES, 'UTF-8');
+            $loc['_vendedor_pendiente'] = true;
+        }
+    }
+    unset($loc);
+}
 
 $locales_reag_por_dia = [];
 foreach ($locales_reag as $local) {
@@ -372,6 +504,7 @@ foreach ($locales as $local) {
     $coordenadas_locales_programados[] = [
         'idLocal'        => $local['idLocal'],
         'nombre_local'   => $local['cadena'] . ' - ' . $local['direccionLocal'],
+        'direccion'      => $local['direccionLocal'],
         'latitud'        => $local['latitud'],
         'lng'            => $local['lng'],
         'visitado'       => false,
@@ -386,6 +519,7 @@ foreach ($locales_reag as $local) {
     $coordenadas_locales_reag[] = [
         'idLocal'        => $local['idLocal'],
         'nombre_local'   => $local['cadena'] . ' - ' . $local['direccionLocal'],
+        'direccion'      => $local['direccionLocal'],
         'latitud'        => $local['latitud'],
         'lng'            => $local['lng'],
         'visitado'       => false,
@@ -443,6 +577,9 @@ if (isset($_SESSION['success'])) {
     <button type="button" id="queueClearBtn" class="btn btn-xs btn-default">Limpiar</button>
   </div>
 </div>
+
+<!-- Contenedor de toasts no bloqueantes -->
+<div id="v2Toasts" class="v2-toasts" aria-live="polite"></div>
 
 <!-- Navbar -->
 <div class="navbar navbar-inverse navbar-fixed-top">
@@ -644,7 +781,12 @@ if (isset($_SESSION['success'])) {
                                                 <?php endif; ?>
                                             </td>
                                             <td><?php echo $row['comuna']; ?></td>
-                                            <td><?php echo htmlspecialchars($direccionLocal, ENT_QUOTES, 'UTF-8'); ?></td>
+                                            <td>
+                                                <?php echo $direccionLocal; ?>
+                                                <?php if ($row['_geo_pendiente'] ?? false): ?>
+                                                    <span style="display:inline-block;background:#f59e0b;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px;white-space:nowrap" title="Tienes una solicitud de cambio pendiente de revisión">📍 En revisión</span>
+                                                <?php endif; ?>
+                                            </td>
                                             <td class="center">
                                               <input type="checkbox" class="in-route" checked title="Incluir este local en la ruta">
                                             </td>
@@ -658,7 +800,7 @@ if (isset($_SESSION['success'])) {
                                                             </a>
                                                             <ul role="menu" class="dropdown-menu pull-right">
                                                                 <li role="presentation">
-                                                            <a role="menuitem" tabindex="-1" href="#responsiveProg<?php echo $idLocal; ?>" data-toggle="modal">
+                                                                    <a role="menuitem" tabindex="-1" href="#responsiveProg<?php echo $idLocal; ?>" data-toggle="modal">
                                                                         <i class="fa fa-edit"></i> Campañas
                                                                     </a>
                                                                 </li>
@@ -766,7 +908,12 @@ if (isset($_SESSION['success'])) {
                                                     <span class="badge-botilleria" title="Botillería: abre a las 13:00 hrs"><i class="fa fa-clock-o"></i> 13:00</span>
                                                 <?php endif; ?>
                                             </td>
-                                            <td><?php echo htmlspecialchars($direccionLocal, ENT_QUOTES, 'UTF-8'); ?></td>
+                                            <td>
+                                                <?php echo $direccionLocal; ?>
+                                                <?php if ($row['_geo_pendiente'] ?? false): ?>
+                                                    <span style="display:inline-block;background:#f59e0b;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px;white-space:nowrap" title="Tienes una solicitud de cambio pendiente de revisión">📍 En revisión</span>
+                                                <?php endif; ?>
+                                            </td>
                                             <td class="center">
                                               <input type="checkbox" class="in-route" checked title="Incluir este local en la ruta">
                                             </td>
@@ -780,7 +927,7 @@ if (isset($_SESSION['success'])) {
                                                             </a>
                                                             <ul role="menu" class="dropdown-menu pull-right">
                                                                 <li role="presentation">
-                                                            <a role="menuitem" tabindex="-1" href="#responsiveReag<?php echo $idLocal; ?>" data-toggle="modal">
+                                                                    <a role="menuitem" tabindex="-1" href="#responsiveReag<?php echo $idLocal; ?>" data-toggle="modal">
                                                                         <i class="fa fa-edit"></i> Campañas
                                                                     </a>
                                                                 </li>
@@ -973,6 +1120,8 @@ if (isset($_SESSION['success'])) {
 
 <div id="panelInfoRuta" class="panel-ruta-mobile">
 
+  <div class="sheet-handle" id="sheetHandle" title="Arrastra para expandir/contraer"></div>
+
   <div class="ruta-stats-mobile">
     <div class="stat-pill">
       <span class="stat-label">Distancia</span>
@@ -1000,10 +1149,10 @@ if (isset($_SESSION['success'])) {
       <span>Indicaciones</span>
     </button>
 
-    <!--button id="btnTraffic" class="btn-ruta-mobile btn-light">
+    <button id="btnTraffic" class="btn-ruta-mobile btn-light">
       <i class="fa fa-car"></i>
       <span>Tráfico</span>
-    </button-->
+    </button>
 
     <button id="btnVoz" class="btn-ruta-mobile btn-light">
       <i class="fa fa-volume-up"></i>
@@ -1039,28 +1188,34 @@ if (isset($_SESSION['success'])) {
 
 </div>
 
-            <!-- HUD de Navegación 
-            <div id="navHud" class="nav-hud" hidden style="display:none;">
+            <!-- HUD de Navegación -->
+            <div id="navHud" class="nav-hud" style="display:none;">
               <div class="nav-banner">
-                <div class="nav-ic" id="navIcon"><i class="fa fa-arrow-right"></i></div>
+                <div class="nav-ic" id="navIcon"><i class="fa fa-location-arrow"></i></div>
                 <div style="flex:1;">
                   <div class="nav-main" id="navPrimary">Preparando navegación…</div>
                   <div class="nav-sub" id="navSecondary">—</div>
                 </div>
               </div>
-              <div class="nav-nextnext" id="navNextNext" style="display:none;">Próxima después: —</div>
+              <div class="nav-nextnext" id="navNextNext" style="display:none;">Después: —</div>
+              <div class="nav-chips" id="navChips">
+                <span class="nav-chip nav-chip--gps" id="navGps"><i class="fa fa-location-arrow"></i> GPS</span>
+                <span class="nav-chip" id="navNet"><i class="fa fa-road"></i> —</span>
+                <span class="nav-chip" id="navNextStop"><i class="fa fa-flag-checkered"></i> —</span>
+              </div>
               <div class="nav-bottom">
-                <button id="btnExitNav" class="btn btn-default btn-sm"><i class="fa fa-times"></i> Salir</button>
+                <button id="btnExitNav" class="btn btn-default btn-sm" title="Salir de la navegación"><i class="fa fa-times"></i> Salir</button>
                 <div class="nav-stats">
-                  <div><small>Hora est. Llegada</small><span id="hudEta">—</span></div>
-                  <div><small>Arribo</small><span id="hudArrival">—</span></div>
+                  <div><small>Llegada</small><span id="hudEta">—</span></div>
                   <div><small>Restante</small><span id="hudRemain">—</span></div>
+                  <div><small>Tiempo</small><span id="hudTime">—</span></div>
                 </div>
-                <button id="btnRecenter" class="btn btn-default btn-sm"><i class="fa fa-crosshairs"></i> Recentrar</button>
+                <button id="btnVozNav" class="btn btn-default btn-sm" title="Silenciar / activar voz"><i class="fa fa-volume-up"></i></button>
+                <button id="btnSkipStop" class="btn btn-default btn-sm" title="Saltar la parada actual"><i class="fa fa-step-forward"></i> Saltar</button>
+                <button id="btnRecenter" class="btn btn-default btn-sm" title="Volver a seguir mi ubicación"><i class="fa fa-crosshairs"></i> Recentrar</button>
               </div>
             </div>
-            -->
-            
+
             
             <!-- Drawer Indicaciones -->
             <div id="drawerIndicaciones" class="route-drawer">
@@ -1101,6 +1256,22 @@ foreach ($locales as $row) {
     $nombreLocal    = $row['nombreLocal'];
     $direccionLocal = $row['direccionLocal'];
     $vendedor       = $row['vendedor'];
+    $idVendedor     = $row['idVendedor'] ?? 0;
+    $vendedorTelefono = $row['vendedorTelefono'] ?? '';
+    $vendedorPendienteBadge = ($row['_vendedor_pendiente'] ?? false)
+        ? " <span style='display:inline-block;background:#f59e0b;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px;white-space:nowrap'>🧑 En revisión</span>"
+        : '';
+    $cvPayloadProg = htmlspecialchars(json_encode([
+        'idLocal'          => $idLocal,
+        'nombreLocal'      => $nombreLocal,
+        'idVendedor'       => (int)$idVendedor,
+        'vendedorNombre'   => $vendedor,
+        'vendedorTelefono' => $vendedorTelefono,
+        'tipo'             => 'Prog',
+    ], JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+    $oc             = $row['oc'] ?? '';
+    $cooler         = $row['cooler'] ?? '';
+    $relevancia     = $row['relevancia'] ?? null;
 
     $sql_campanas = "
       SELECT DISTINCT
@@ -1116,7 +1287,10 @@ foreach ($locales as $row) {
         AND f.id_empresa   = ?
         AND f.tipo        IN (3,1)
         AND f.estado       = 1
-        AND fq.countVisita = 0
+        AND (
+              (f.modalidad <> 'implementacion_por_etapas' AND fq.countVisita = 0)
+              OR (f.modalidad = 'implementacion_por_etapas' AND (fq.etapa_material IS NULL OR fq.etapa_material NOT IN ('implementado','retirado') OR (fq.etapa_material = 'implementado' AND CAST(COALESCE(NULLIF(fq.valor,''),'0') AS UNSIGNED) < CAST(COALESCE(NULLIF(fq.valor_propuesto,''),'0') AS UNSIGNED))))
+            )
       ORDER BY f.fechaInicio DESC
     ";
 
@@ -1124,6 +1298,11 @@ foreach ($locales as $row) {
     $stmt_campanas->bind_param('iii', $usuario_id, $idLocal, $empresa_id);
     $stmt_campanas->execute();
     $result_campanas = $stmt_campanas->get_result();
+
+    $extraInfoProg = '';
+    if ($relevancia !== null) $extraInfoProg .= "<br><small><strong>Relevancia:</strong> {$relevancia}</small>";
+    if ($oc !== '')           $extraInfoProg .= "<br><small><strong>OC:</strong> {$oc}</small>";
+    if ($cooler !== '')       $extraInfoProg .= "<br><small><strong>Cooler:</strong> {$cooler}</small>";
 
     echo "
     <div id='responsiveProg{$idLocal}' class='modal fade' tabindex='-1' role='dialog' aria-labelledby='myModalLabelProg{$idLocal}' aria-hidden='true'>
@@ -1134,7 +1313,11 @@ foreach ($locales as $row) {
             <h4 class='modal-title' id='myModalLabelProg{$idLocal}'>
               Local: {$codigoLocal} - {$nombreLocal}<br>
               Dirección: {$direccionLocal}<br>
-              Vendedor: {$vendedor}
+              Vendedor: <span class='cv-vendedor-texto'>{$vendedor}</span>{$vendedorPendienteBadge}
+              <button type='button' class='btn btn-warning btn-xs' style='margin-left:4px;vertical-align:middle' onclick='abrirModalCambiarVendedor({$cvPayloadProg})' title='Cambiar vendedor'>
+                <i class='fa fa-user'></i>
+              </button>
+              {$extraInfoProg}
             </h4>
           </div>
           <div class='modal-body'>
@@ -1216,6 +1399,22 @@ foreach ($locales_reag as $row) {
     $nombreLocal    = $row['nombreLocal'];
     $direccionLocal = $row['direccionLocal'];
     $vendedor       = $row['vendedor'];
+    $idVendedor     = $row['idVendedor'] ?? 0;
+    $vendedorTelefono = $row['vendedorTelefono'] ?? '';
+    $vendedorPendienteBadge = ($row['_vendedor_pendiente'] ?? false)
+        ? " <span style='display:inline-block;background:#f59e0b;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px;white-space:nowrap'>🧑 En revisión</span>"
+        : '';
+    $cvPayloadReag = htmlspecialchars(json_encode([
+        'idLocal'          => $idLocal,
+        'nombreLocal'      => $nombreLocal,
+        'idVendedor'       => (int)$idVendedor,
+        'vendedorNombre'   => $vendedor,
+        'vendedorTelefono' => $vendedorTelefono,
+        'tipo'             => 'Reag',
+    ], JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+    $oc             = $row['oc'] ?? '';
+    $cooler         = $row['cooler'] ?? '';
+    $relevancia     = $row['relevancia'] ?? null;
 
     $sql_campanas = "
       SELECT DISTINCT
@@ -1240,6 +1439,11 @@ foreach ($locales_reag as $row) {
     $stmt_campanas->execute();
     $result_campanas = $stmt_campanas->get_result();
 
+    $extraInfoReag = '';
+    if ($relevancia !== null) $extraInfoReag .= "<br><small><strong>Relevancia:</strong> {$relevancia}</small>";
+    if ($oc !== '')           $extraInfoReag .= "<br><small><strong>OC:</strong> {$oc}</small>";
+    if ($cooler !== '')       $extraInfoReag .= "<br><small><strong>Cooler:</strong> {$cooler}</small>";
+
     echo "
     <div id='responsiveReag{$idLocal}' class='modal fade' tabindex='-1' role='dialog' aria-labelledby='myModalLabelReag{$idLocal}' aria-hidden='true'>
       <div class='modal-dialog'>
@@ -1249,7 +1453,11 @@ foreach ($locales_reag as $row) {
             <h4 class='modal-title' id='myModalLabelReag{$idLocal}'>
               Local: {$codigoLocal} - {$nombreLocal}<br>
               Dirección: {$direccionLocal}<br>
-              Vendedor: {$vendedor}
+              Vendedor: <span class='cv-vendedor-texto'>{$vendedor}</span>{$vendedorPendienteBadge}
+              <button type='button' class='btn btn-warning btn-xs' style='margin-left:4px;vertical-align:middle' onclick='abrirModalCambiarVendedor({$cvPayloadReag})' title='Cambiar vendedor'>
+                <i class='fa fa-user'></i>
+              </button>
+              {$extraInfoReag}
             </h4>
           </div>
           <div class='modal-body'>
@@ -1337,7 +1545,9 @@ foreach ($locales_reag as $row) {
 <script src="assets/plugins/bootstrap/js/bootstrap.min.js" defer></script>
 <script>
   window.__GOOGLE_MAPS_API_KEY = "<?php echo htmlspecialchars($googleMapsApiKey, ENT_QUOTES, 'UTF-8'); ?>";
+  window.__ROUTES_PROXY_URL = "<?php echo htmlspecialchars($routesProxyUrl, ENT_QUOTES, 'UTF-8'); ?>";
 </script>
+<script src="assets/js/route_preferences.js"></script>
 <script src="assets/js/route_engine.js"></script>
 <script src="assets/js/route_selection.js"></script>
 <script src="assets/js/route_planner.js"></script>
@@ -1350,6 +1560,45 @@ function debounce(fn, d){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(
 window.optimizeOrder = true;   // toggle "Optimizar"
 window.autoRecalc    = true;   // toggle "Auto"
 window.voiceEnabled  = false;  // toggle "Voz"
+window.trafficEnabled = false; // toggle "Tráfico" (capa visual + modo de cálculo 'traffic')
+
+// Toast no bloqueante reutilizable (reemplaza alerts). `actions` = [{label, cls, fn}].
+// Nota: varios modales (reportar dirección / cambiar vendedor) ya invocan mostrarToast con fallback
+// a alert; aquí queda definido de verdad.
+window.mostrarToast = function(msg, type, duration, actions){
+  const cont = document.getElementById('v2Toasts');
+  if(!cont){ if(type==='error'||type==='warn') console.warn(msg); return null; }
+  const el = document.createElement('div');
+  el.className = 'v2-toast v2-toast--' + (type || 'info');
+  const span = document.createElement('span');
+  span.className = 'v2-toast__msg';
+  span.textContent = msg;
+  el.appendChild(span);
+  (actions || []).forEach(a => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn btn-xs ' + (a.cls || 'btn-default');
+    b.textContent = a.label;
+    b.addEventListener('click', () => { try { a.fn && a.fn(); } catch(_){} dismiss(); });
+    el.appendChild(b);
+  });
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'v2-toast__close';
+  close.innerHTML = '&times;';
+  close.addEventListener('click', dismiss);
+  el.appendChild(close);
+  cont.appendChild(el);
+  let to = setTimeout(dismiss, duration || 4000);
+  function dismiss(){
+    if(!el.parentNode) return;
+    clearTimeout(to);
+    el.classList.add('v2-toast--out');
+    setTimeout(() => { if(el.parentNode) el.parentNode.removeChild(el); }, 250);
+  }
+  return el;
+};
+var mostrarToast = window.mostrarToast; // alias local
 function savePref(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 function loadPref(k,f){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):f; }catch(e){ return f; } }
 function rememberMode(m){ savePref('v2_mode', m); }
@@ -1377,9 +1626,13 @@ let isMapVisible = false; // "Maps visibility guard"
 window.startGeoWatch=window.startGeoWatch||function(){};
 window.stopGeoWatch=window.stopGeoWatch||function(){};
 
+// Contadores de API: solo en modo debug (?debug=1 o localStorage.v2_debug=1).
+const V2_DEBUG = /[?&]debug=1/.test(location.search) || localStorage.getItem('v2_debug') === '1';
 function updateApiCounters(){
   const el=document.getElementById('apiCounters');
   if(!el) return;
+  el.style.display = V2_DEBUG ? '' : 'none';
+  if(!V2_DEBUG) return;
   const stats = window.RouteEngine ? window.RouteEngine.getStats() : {};
   const routes = stats.routes_api_requests || 0;
   const fallback = stats.directions_fallback_requests || 0;
@@ -1603,7 +1856,7 @@ window.planRouteFromSelection = async function (origen, opts={}){
 
   if (!puntos.length) {
     (window.mapa.__trafficSegs||[]).forEach(s=>s.setMap(null)); window.mapa.__trafficSegs=[];
-    window.plannedRoute=null; window.lastComputedRoute=null; window._lastSelectionHash=null;
+    window.plannedRoute=null; window.lastComputedRoute=null; window._lastRouteStateHash=null; window._lastComputedOrigin=null;
     clearRouteNumbers();
     $('#distanciaTotal').text('0 km'); $('#duracionEstimada').text('0 min'); $('#listaIndicaciones').empty(); return;
   }
@@ -1616,13 +1869,45 @@ window.planRouteFromSelection = async function (origen, opts={}){
     return window.planRouteFromSelection(origen, { ...opts, trigger: 'cross_date_confirmed' });
   }
 
-  // Evitar recálculo si la selección no cambió (mismos idLocales, mismo orden)
-  const selectionHash = puntos.map(p => p.idLocal).join(',');
-  if (!force && selectionHash === window._lastSelectionHash && window.lastComputedRoute) {
-    buildTrafficPolylines(window.mapa, window.lastComputedRoute.route);
+  // routeStateHash: cambia si cambian las paradas, el ORIGEN (bucket ~50 m), el modo, la
+  // optimización, el tráfico, la fecha o el modo local. Reemplaza al antiguo selectionHash (que
+  // solo miraba ids y nunca el origen GPS, por lo que ignoraba que el ejecutor se hubiera movido).
+  const _planMode = window.trafficEnabled ? 'traffic' : 'preview';
+  const routeStateHash = window.RoutePlanner.routeStateHash({
+    ids:       puntos.map(p => p.idLocal),
+    origin:    origen,
+    mode:      _planMode,
+    optimize:  window.optimizeOrder,
+    traffic:   window.trafficEnabled,
+    fecha:     $(selId).val(),
+    modoLocal: modo
+  });
+
+  // Triggers que SIEMPRE recalculan (no se saltan aunque el hash no cambie): recálculo manual,
+  // centrar, abrir modal y reroute de navegación.
+  const ALWAYS_RECALC = new Set(['manual_recalc', 'center', 'modal_open', 'navigation-reroute']);
+  let shouldRecalc;
+  if (force || ALWAYS_RECALC.has(trigger)) {
+    shouldRecalc = true;
+  } else if (trigger === 'gps_move') {
+    // Movimiento GPS: solo si Auto está activo y el ejecutor se movió de forma significativa
+    // (>75 m respecto al último origen calculado) o cambió el bucket de origen (hash distinto).
+    if (!window.autoRecalc) {
+      shouldRecalc = false;
+    } else {
+      const last  = window._lastComputedOrigin;
+      const moved = !last || window.RoutePlanner.haversine(last, origen) > 75;
+      shouldRecalc = moved || (routeStateHash !== window._lastRouteStateHash);
+    }
+  } else {
+    shouldRecalc = (routeStateHash !== window._lastRouteStateHash);
+  }
+
+  if (!shouldRecalc) {
+    if (window.lastComputedRoute) buildTrafficPolylines(window.mapa, window.lastComputedRoute.route);
     return;
   }
-  window._lastSelectionHash = selectionHash;
+  window._lastRouteStateHash = routeStateHash;
 
   const horaMinActual = new Date().getHours() * 60 + new Date().getMinutes();
   const hayBotillerias = puntos.some(p => p.isBotilleria);
@@ -1642,10 +1927,11 @@ window.planRouteFromSelection = async function (origen, opts={}){
       optimize:      window.optimizeOrder,
       mode,
       bypassThrottle: force,
-      bypassCache:    false
+      bypassCache:    force   // recálculo manual ("Recalcular") fuerza ruta fresca, sin caché
     });
     window.plannedRoute      = plan.route;
-    window.lastComputedRoute = { orderedPts: plan.orderedPts, route: plan.route, chunks: plan.chunks };
+    window.lastComputedRoute = { orderedPts: plan.orderedPts, route: plan.route, chunks: plan.chunks, totals: plan.totals };
+    window._lastComputedOrigin = origen; // base para el umbral de movimiento del próximo gps_move
 
     // Reordenar tabla y numerar marcadores del mapa con el orden final
     renderTableOrder(plan.orderedPts);
@@ -1657,10 +1943,9 @@ window.planRouteFromSelection = async function (origen, opts={}){
       const $w = $('#routeWarning');
       if ($w.length) {
         $w.html(
-          `📍 Ruta dividida en <strong>${plan.chunks.length} bloques</strong> (${plan.orderedPts.length} locales). ` +
-          plan.chunks.map((c, i) =>
-            `<button type="button" class="btn btn-xs btn-primary v2-export-chunk" data-chunk="${i}">Exportar bloque ${i+1}</button>`
-          ).join(' ')
+          `<i class="fa fa-map-signs"></i> Ruta larga dividida en <strong>${plan.chunks.length} bloques</strong> ` +
+          `de cálculo (${plan.orderedPts.length} locales). Usa <strong>“Abrir en Google Maps”</strong> ` +
+          `para exportarla en enlaces encadenados.`
         ).stop(true).show();
       }
     } else {
@@ -1668,16 +1953,24 @@ window.planRouteFromSelection = async function (origen, opts={}){
     }
 
     buildTrafficPolylines(window.mapa, plan.route);
-    const km  = ((plan.route.distanceMeters||0)/1000).toFixed(2);
-    const min = Math.round(secondsFromDuration(plan.route.duration)/60);
+    // Distancia/duración = TOTALES agregados de todos los bloques (no solo el primero).
+    const totDist = (plan.totals && plan.totals.distanceMeters)  || plan.route.distanceMeters || 0;
+    const totSecs = (plan.totals && plan.totals.durationSeconds) || secondsFromDuration(plan.route.duration);
+    const km  = (totDist/1000).toFixed(2);
+    const min = Math.round(totSecs/60);
     $('#distanciaTotal').text(`${km} km`);
     $('#duracionEstimada').text(`${min} min`);
     renderIndicacionesFromRoute(plan.route);
+    if (!navigator.onLine && (trigger === 'manual_recalc' || trigger === 'modal_open')) {
+      mostrarToast('Usando ruta guardada sin conexión.', 'info');
+    }
     logRouteEvent({trigger, apiUsed: plan.apiUsed});
     speak(`Ruta actualizada. ${km} kilómetros, ${min} minutos.`);
   }catch(err){
     logRouteEvent({trigger, error:String(err)});
-    if (!err.message?.includes('Sin conexión')) {
+    if (err.message?.includes('Sin conexión')) {
+      mostrarToast('Sin conexión y sin ruta guardada para mostrar.', 'warn');
+    } else {
       const $w = $('#routeWarning');
       if ($w.length) $w.text('Error al calcular ruta: ' + (err.message || 'Error desconocido')).stop(true).show();
     }
@@ -1703,7 +1996,7 @@ function setMode(mode){
   else { $('#panelProgramados').hide(); $('#panelReagendados').show(); }
   clearRouteNumbers(); // limpiar números del modo anterior antes de ocultar marcadores
   hideAllMarkers(window.markersProg); hideAllMarkers(window.markersReag);
-  window.lastComputedRoute = null; window._lastSelectionHash = null;
+  window.lastComputedRoute = null; window._lastRouteStateHash = null; window._lastComputedOrigin = null;
   ensureDateSelectedFor(finalMode); applyFilters();
   const pos = window.ejecutorMarker?.getPosition();
   if (isMapVisible && pos && !(window.navigator3D && window.navigator3D.active)) { window.debouncedPlanRoute(pos.toJSON()); }
@@ -1814,8 +2107,9 @@ window.applyFilters = function(){
     });
   }
   Object.entries(markers).forEach(([id,m])=>{
-    const fecha = m.fechaPropuesta;
-    const visibleRow = $(`${container} table[data-fechaTabla="${fecha}"] tbody tr[data-idlocal="${id}"]:visible:not([data-done="1"])`).length > 0;
+    // Un local puede estar programado en varias fechas; mostrar su (único) marcador si tiene
+    // CUALQUIER fila visible en el contenedor, no solo en la fecha guardada en el marcador.
+    const visibleRow = $(`${container} table[data-fechaTabla] tbody tr[data-idlocal="${id}"]:visible:not([data-done="1"])`).length > 0;
     m.marker.setMap(visibleRow ? window.mapa : null);
   });
   const visibles = Object.values(markers).filter(m=>m.marker.getMap()!==null);
@@ -1850,6 +2144,9 @@ window.initMap=function(){
 
   // Marcadores Programados
   coordenadasProg.forEach(local=>{
+    // Dedup por idLocal: un local puede venir repetido (varias fechas). Crear más de un marcador
+    // por local deja marcadores huérfanos en el mapa (sin número y sin ocultar). Uno por local.
+    if (window.markersProg[local.idLocal]) return;
     let iconUrl = 'assets/images/marker_red1.png';
     if (local.markerColor === 'orange') iconUrl = orangeMarkerSvg;
     else if (local.markerColor === 'blue') iconUrl = 'assets/images/marker_blue1.png';
@@ -1861,10 +2158,14 @@ window.initMap=function(){
     const botNote = local.is_botilleria
       ? `<span style="color:#e67e22;font-size:12px;font-weight:600;"><i class="fa fa-clock-o"></i> Botillería: abre a las 13:00 hrs</span><br><br>`
       : '';
+    const _snProg = local.nombre_local.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const _sdProg = (local.direccion||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     const iw=new google.maps.InfoWindow({content:
-      `<div style="min-width:180px;"><strong>${local.nombre_local}</strong><br><br>${botNote}
-       <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#responsiveProg${local.idLocal}">
-       <i class="fa fa-cog"></i> Gestionar Local</button></div>`});
+      `<div style="min-width:200px;"><strong>${local.nombre_local}</strong><br><br>${botNote}
+       <button type="button" class="btn btn-primary btn-sm" style="width:100%;margin-bottom:5px" data-toggle="modal" data-target="#responsiveProg${local.idLocal}">
+       <i class="fa fa-cog"></i> Gestionar Local</button>
+       <button type="button" class="btn btn-warning btn-sm" style="width:100%" onclick="abrirModalReportarDir(${local.idLocal},'${_snProg}','${_sdProg}',${local.latitud},${local.lng})">
+       <i class="fa fa-map-marker"></i> Reportar dirección</button></div>`});
     marker.addListener('click',()=>iw.open(window.mapa,marker));
     // originalIcon permite restaurar el ícono tras limpiar numeración
     window.markersProg[local.idLocal]={ marker, fechaPropuesta: local.fechaPropuesta, markerColor: local.markerColor, originalIcon: iconObj };
@@ -1872,6 +2173,7 @@ window.initMap=function(){
 
   // Marcadores Reagendados
   coordenadasReag.forEach(local=>{
+    if (window.markersReag[local.idLocal]) return; // dedup por idLocal (ver nota en Programados)
     let iconUrl = (local.markerColor === 'orange') ? orangeMarkerSvg : 'assets/images/marker_red1.png';
     if (local.markerColor === 'blue') iconUrl = 'assets/images/marker_blue1.png';
     const iconObj = { url:iconUrl, scaledSize:new google.maps.Size(30,30) };
@@ -1882,10 +2184,14 @@ window.initMap=function(){
     const botNote = local.is_botilleria
       ? `<span style="color:#e67e22;font-size:12px;font-weight:600;"><i class="fa fa-clock-o"></i> Botillería: abre a las 13:00 hrs</span><br><br>`
       : '';
+    const _snReag = local.nombre_local.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const _sdReag = (local.direccion||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     const iw=new google.maps.InfoWindow({content:
-      `<div style="min-width:180px;"><strong>${local.nombre_local}</strong><br><br>${botNote}
-       <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#responsiveReag${local.idLocal}">
-       <i class="fa fa-cog"></i> Gestionar Local</button></div>`});
+      `<div style="min-width:200px;"><strong>${local.nombre_local}</strong><br><br>${botNote}
+       <button type="button" class="btn btn-primary btn-sm" style="width:100%;margin-bottom:5px" data-toggle="modal" data-target="#responsiveReag${local.idLocal}">
+       <i class="fa fa-cog"></i> Gestionar Local</button>
+       <button type="button" class="btn btn-warning btn-sm" style="width:100%" onclick="abrirModalReportarDir(${local.idLocal},'${_snReag}','${_sdReag}',${local.latitud},${local.lng})">
+       <i class="fa fa-map-marker"></i> Reportar dirección</button></div>`});
     marker.addListener('click',()=>iw.open(window.mapa,marker));
     window.markersReag[local.idLocal]={ marker, fechaPropuesta: local.fechaPropuesta, markerColor: local.markerColor, originalIcon: iconObj };
   });
@@ -1910,7 +2216,7 @@ window.initMap=function(){
         if (window.navigator3D && window.navigator3D.active) return;
         if (window.autoRecalc && isMapVisible) window.debouncedPlanRoute(json);
       }
-    },err=>{ console.error(err); if(isMapVisible) alert('No se pudo obtener tu ubicación.'); },
+    },err=>{ console.error(err); if(isMapVisible) mostrarToast('No se pudo obtener tu ubicación.', 'warn'); },
     { enableHighAccuracy:true, maximumAge:2000, timeout:10000 });
   }
   window.startGeoWatch=startGeoWatch; window.stopGeoWatch=stopGeoWatch;
@@ -1937,7 +2243,7 @@ window.initMap=function(){
       window.ejecutorMarker.setPosition(cur); window.mapa.setCenter(cur); window.mapa.setZoom(15);
       if(isMapVisible && !(window.navigator3D && window.navigator3D.active)) window.debouncedPlanRoute(cur.toJSON());
       $('#loadingIndicator').hide();
-    }, ()=>{ $('#loadingIndicator').hide(); alert('No se pudo centrar.'); }, { enableHighAccuracy:true, maximumAge:0, timeout:10000 });
+    }, ()=>{ $('#loadingIndicator').hide(); mostrarToast('No se pudo centrar tu ubicación.', 'warn'); }, { enableHighAccuracy:true, maximumAge:0, timeout:10000 });
   });
   $('#btnRecalcular').on('click', ()=>{
     const pos=window.ejecutorMarker?.getPosition();
@@ -1945,32 +2251,65 @@ window.initMap=function(){
   });
   $('#btnIndicaciones').on('click', ()=> $('#drawerIndicaciones').toggleClass('open'));
   $('#btnCloseDrawer').on('click', ()=> $('#drawerIndicaciones').removeClass('open'));
-  $('#btnTraffic').on('click', function(){ const isOn=!!window.trafficLayer.getMap(); window.trafficLayer.setMap(isOn?null:window.mapa); });
+  $('#btnTraffic').on('click', function(){
+    const turningOn = !window.trafficEnabled;
+    window.trafficEnabled = turningOn;
+    // 1) Capa visual de tráfico de Google
+    if (window.trafficLayer) window.trafficLayer.setMap(turningOn ? window.mapa : null);
+    $(this).toggleClass('btn-info', turningOn);
+    // 2) Recalcular en modo 'traffic' (TRAFFIC_AWARE + departureTime) — salvo navegando
+    const pos = window.ejecutorMarker?.getPosition();
+    if (isMapVisible && pos && !(window.navigator3D && window.navigator3D.active)) {
+      window.planRouteFromSelection(pos.toJSON(), { force:true, trigger:'traffic_toggle' });
+    }
+    mostrarToast(turningOn ? 'Tráfico en vivo activado.' : 'Tráfico desactivado.', 'info');
+  });
   $('#optimizeOrder').on('change', function(){ window.optimizeOrder=$(this).is(':checked'); const pos=window.ejecutorMarker?.getPosition(); if (isMapVisible && pos && !(window.navigator3D && window.navigator3D.active)) window.planRouteFromSelection(pos.toJSON(),{trigger:'optimize_toggle'}); });
   $('#autoRecalc').on('change', function(){ window.autoRecalc=$(this).is(':checked'); });
   $('#btnVoz').on('click', function(){ window.voiceEnabled=!window.voiceEnabled; $(this).toggleClass('btn-info', window.voiceEnabled); if (window.voiceEnabled) speak('Voz activada.'); else { try{ speechSynthesis.cancel(); }catch(_){}} });
-  function buildMapsUrl(originLatLng, pts){
-    const dest = pts[pts.length-1];
-    const ways = pts.slice(0,-1).map(p=>`${p.lat},${p.lng}`).join('|');
-    return `https://www.google.com/maps/dir/?api=1&origin=${originLatLng.lat},${originLatLng.lng}&destination=${dest.lat},${dest.lng}&travelmode=driving` +
-           (ways ? `&waypoints=${encodeURIComponent(ways)}` : ``);
+  // ---- Export a Google Maps por bloques (respeta el límite de waypoints por URL: 3 móvil / 9 desktop) ----
+  function detectExportEnv(){
+    return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '') ? 'mobile' : 'desktop';
+  }
+  function buildExportLinks(){
+    const pos = window.ejecutorMarker?.getPosition();
+    if (!pos) return { error: 'No se pudo obtener tu ubicación.' };
+    // Orden optimizado si existe; si no, recolectar desde la tabla. El GPS encabeza la secuencia.
+    const pts = (window.lastComputedRoute?.orderedPts?.length ? window.lastComputedRoute.orderedPts : collectCurrentPoints());
+    if (!pts.length) return { error: 'Selecciona al menos un local en la columna Ruta.' };
+    const seq   = [pos.toJSON(), ...pts];
+    const links = window.RoutePlanner.buildGoogleMapsExportChunks(seq, detectExportEnv());
+    return { links };
   }
   $('#btnExportar').on('click', function(){
-    const pos = window.ejecutorMarker?.getPosition(); if (!pos){ alert('No se pudo obtener tu ubicación.'); return; }
-    // Usar el orden optimizado si está disponible; si no, recolectar desde la tabla
-    const pts = (window.lastComputedRoute?.orderedPts?.length ? window.lastComputedRoute.orderedPts : collectCurrentPoints());
-    if (!pts.length){ alert('Selecciona al menos un local en la columna Ruta.'); return; }
-    window.open(buildMapsUrl(pos.toJSON(), pts), '_blank');
+    const { links, error } = buildExportLinks();
+    if (error){ mostrarToast(error, 'warn'); return; }
+    if (!links || !links.length){ mostrarToast('No hay paradas para exportar.', 'warn'); return; }
+    if (links.length === 1){ window.open(links[0].url, '_blank'); return; }
+    // Varios bloques: mostrar los enlaces encadenados (no abrir muchas pestañas a la vez → el
+    // navegador bloquearía los popups). Cada bloque continúa donde terminó el anterior.
+    window._mapsExportLinks = links;
+    const env   = detectExportEnv();
+    const maxWp = env === 'mobile' ? 3 : 9;
+    const $w = $('#routeWarning');
+    if ($w.length){
+      $w.html(
+        `<i class="fa fa-external-link"></i> La ruta supera el límite de Google Maps (${maxWp} paradas por enlace). ` +
+        `Ábrela en <strong>${links.length} bloques</strong> encadenados:<br>` +
+        links.map((l, i) =>
+          `<button type="button" class="btn btn-xs ${i===0?'btn-success':'btn-default'} v2-maps-block" style="margin:2px" data-idx="${i}">` +
+          `Bloque ${i+1}/${links.length} (${l.waypoints.length+1} paradas)</button>`
+        ).join(' ')
+      ).stop(true).show();
+    } else {
+      window.open(links[0].url, '_blank');
+    }
   });
-  // Export de chunk individual (ruta larga dividida en bloques)
-  $(document).on('click', '.v2-export-chunk', function(){
-    const pos = window.ejecutorMarker?.getPosition(); if (!pos){ alert('No se pudo obtener tu ubicación.'); return; }
-    const chunkIdx = parseInt($(this).data('chunk'), 10);
-    const chunks   = window._routeChunks;
-    if (!chunks || !chunks[chunkIdx]) return;
-    const pts = chunks[chunkIdx].points;
-    const chunkOrigin = chunkIdx === 0 ? pos.toJSON() : { lat: chunks[chunkIdx-1].points[chunks[chunkIdx-1].points.length-1].lat, lng: chunks[chunkIdx-1].points[chunks[chunkIdx-1].points.length-1].lng };
-    window.open(buildMapsUrl(chunkOrigin, pts), '_blank');
+  $(document).on('click', '.v2-maps-block', function(){
+    const idx = parseInt($(this).data('idx'), 10);
+    const l = (window._mapsExportLinks || [])[idx];
+    if (l && l.url) window.open(l.url, '_blank');
+    $(this).removeClass('btn-success btn-default').addClass('btn-primary'); // marcar bloque abierto
   });
 
   // Modo inicial — fix #2: listeners de btnVer* movidos a document.ready (evita doble binding)
@@ -1987,20 +2326,61 @@ window.initMap=function(){
   setTimeout(()=>$('#filtroFechaProg').trigger('change'), 200);
 };
 
-// ======= Navegación 3D compacta =======
+// ======= Navegación 3D compacta + HUD =======
 (function(){
-  // Fix #20: eliminadas funciones dead code (bearing, dist, getArrivalLocalTime)
-  //          — reemplazadas por las equivalentes en nav_engine.js
-    function iconForText(t){
-      const s=t||''; if(/derecha/i.test(s)) return 'fa-arrow-right';
-      if(/izquierda/i.test(s)) return 'fa-arrow-left';
-      if(/u\-?turn|retorno/i.test(s)) return 'fa-undo';
-      if(/rotonda|glorieta/i.test(s)) return 'fa-circle-o';
-      if(/incorp|salga|salida/i.test(s)) return 'fa-sign-out';
-      if(/continúe|recto|siga/i.test(s)) return 'fa-long-arrow-up';
-      return 'fa-location-arrow';
+    let navigator3D=null; let navSteps=[]; let navLastPos=null;
+
+    function escapeHtmlLite(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+    // Etiqueta legible del local (código · cadena) a partir de su fila en la tabla.
+    function localLabel(idLocal){
+      const $tr = $(`tr[data-idlocal="${idLocal}"]`).first();
+      if(!$tr.length) return null;
+      const $tds = $tr.find('td');
+      const codigo = $tds.eq(0).text().trim();
+      const cadena = $tds.eq(1).clone().children().remove().end().text().trim(); // solo texto, sin iconos/badges
+      return [codigo, cadena].filter(Boolean).join(' · ') || null;
     }
-    let navigator3D=null; let navTrack=true; let navSteps=[];
+
+    function setChip($el, html, cls){
+      if(!$el.length) return;
+      $el.removeClass('nav-chip--ok nav-chip--warn nav-chip--bad');
+      if(cls) $el.addClass(cls);
+      $el.html(html);
+    }
+
+    // Actualiza solo los nodos de texto del HUD (sin reconstruir innerHTML por tick).
+    function renderNavHud(){
+      const nav = window.navigator3D;
+      if(!nav || !nav.active) return;
+      const U = NavEngine.utils;
+      const step = nav.getCurrentStep();
+      const next = nav.getNextStep();
+
+      $('#navPrimary').text(step ? (step.text || 'Sigue la vía') : 'Calculando…');
+      $('#navIcon').html(`<i class="fa ${step ? U.getManeuverIcon(step.maneuver) : 'fa-location-arrow'}"></i>`);
+      $('#navSecondary').text((step && navLastPos) ? U.formatDistance(U.haversine(navLastPos, step.end)) : '—');
+
+      if(next){ $('#navNextNext').show().text('Después: ' + (next.text || '')); }
+      else { $('#navNextNext').hide(); }
+
+      $('#hudEta').text(nav.getETA().toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit' }));
+      $('#hudRemain').text(U.formatDistance(nav.getRemainingDistance()));
+      $('#hudTime').text(U.formatDuration(nav.getRemainingDuration()));
+
+      const wp = nav.waypoints && nav.waypoints[nav.waypointIdx];
+      let stopTxt = 'Destino final';
+      if(wp){ stopTxt = (wp.idLocal && localLabel(wp.idLocal)) || ('Parada ' + (nav.waypointIdx + 1) + '/' + nav.waypoints.length); }
+      setChip($('#navNextStop'), `<i class="fa fa-flag-checkered"></i> ${escapeHtmlLite(stopTxt)}`, '');
+    }
+    window.renderNavHud = renderNavHud;
+
+    // Muestra/oculta el HUD y colapsa el bottom sheet durante la navegación.
+    function showHud(show){
+      $('#navHud').css('display', show ? 'block' : 'none');
+      $('#panelInfoRuta').toggleClass('sheet-collapsed', !!show);
+    }
+
     function ensureNav(){
       if(!navigator3D){
         navigator3D = new NavEngine.Navigator3D(window.mapa, {
@@ -2008,44 +2388,106 @@ window.initMap=function(){
             window.plannedRoute = route; navSteps = steps||[];
             buildTrafficPolylines(window.mapa, route);
             renderIndicacionesFromRoute(route);
+            renderNavHud();
             if(isReroute) speak('Ruta recalculada');
           },
-          onPosition:(cur)=>{ if(window.ARViewLite) ARViewLite.updatePosition(cur); },
-          onStep:(idx, step)=>{ if(step && window.voiceEnabled){ window.speechSynthesis.cancel(); speak(step.text||''); } },
-          onStop:()=>{
-            navTrack=true; $('#btnRecenter').removeClass('show');
-            if(window.ARViewLite) ARViewLite.stop();
-            // Fix #1: sincronizar window.navigator3D (active=false tras stop)
-            window.navigator3D = navigator3D;
+          onPosition:(cur)=>{ navLastPos = cur; if(window.ARViewLite) ARViewLite.updatePosition(cur); renderNavHud(); },
+          onStep:(idx, step)=>{ renderNavHud(); if(step && window.voiceEnabled){ window.speechSynthesis.cancel(); speak(step.text||''); } },
+          onGpsStatus:(status)=>{
+            const $g = $('#navGps');
+            if(status==='weak') setChip($g, '<i class="fa fa-exclamation-triangle"></i> GPS débil', 'nav-chip--warn');
+            else setChip($g, '<i class="fa fa-location-arrow"></i> GPS OK', 'nav-chip--ok');
           },
-          onCamera:(cur, speed)=>{
-            if(!navTrack || !window.mapa) return;
+          // cameraTracking de nav_engine es la única fuente: alterna el botón Recentrar.
+          onCameraTrackingChanged:(tracking)=>{ $('#btnRecenter').toggleClass('show', !tracking); },
+          onStop:()=>{
+            showHud(false);
+            $('#btnRecenter').removeClass('show');
+            if(window.ARViewLite) ARViewLite.stop();
+            window.navigator3D = navigator3D; // active=false tras stop
+          },
+          onCamera:(cur, speed, heading)=>{
+            if(!window.mapa) return;
             const zoom = speed>45 ? 16 : 17;
-            window.mapa.moveCamera({ center: cur, zoom, tilt:55 });
+            window.mapa.moveCamera({ center: cur, zoom, tilt:55, heading: heading || 0 }); // rota con el avance
           }
         });
-        if(window.mapa){ window.mapa.addListener('dragstart', ()=>{ navTrack=false; $('#btnRecenter').addClass('show'); }); }
-        // Fix #1: exponer navigator3D en window para que los guards externos funcionen
-        window.navigator3D = navigator3D;
+        window.navigator3D = navigator3D; // exponer para guards externos
       }
       return navigator3D;
     }
+
     $('#btnStartNav').on('click', async ()=>{
-      if(!window.mapa){ alert('Mapa no listo.'); return; }
+      if(!window.mapa){ mostrarToast('El mapa aún no está listo.', 'warn'); return; }
       const nav=ensureNav();
-      // Preferir el orden optimizado del último plan; fallback a recolección desde tabla
       const pts = (window.lastComputedRoute?.orderedPts?.length ? window.lastComputedRoute.orderedPts : collectCurrentPoints());
       const pos=window.ejecutorMarker?.getPosition();
-      if(!pos || !pts.length){ alert('Necesitas al menos 1 parada y la ubicación actual.'); return; }
+      if(!pos || !pts.length){ mostrarToast('Necesitas al menos 1 parada y tu ubicación.', 'warn'); return; }
       const origin=pos.toJSON(); const destination=pts[pts.length-1]; const waypoints=pts.slice(0,-1);
-      try{ await nav.startFromSelection({ origin, destination, waypoints, optimize:window.optimizeOrder }); navTrack=true; $('#btnRecenter').removeClass('show'); }
-      catch(_){ alert('No se pudo iniciar navegación.'); }
+      try{
+        await nav.startFromSelection({ origin, destination, waypoints, optimize:window.optimizeOrder });
+        navLastPos = origin;
+        showHud(true);
+        $('#btnRecenter').removeClass('show');
+        renderNavHud();
+      }
+      catch(_){ mostrarToast('No se pudo iniciar la navegación.', 'error'); }
     });
     $('#btnExitNav').on('click', ()=>{ const nav=ensureNav(); nav.stop(); });
-    $('#btnRecenter').on('click', ()=>{ navTrack=true; $('#btnRecenter').removeClass('show'); });
-    $('#btnLiveView').on('click', ()=>{ if(window.plannedRoute && navSteps.length){ ARViewLite.start(window.plannedRoute, navSteps); } });
+    $('#btnRecenter').on('click', ()=>{ const nav=window.navigator3D; if(nav) nav.recenter(); $('#btnRecenter').removeClass('show'); });
+    $('#btnVozNav').on('click', function(){
+      window.voiceEnabled = !window.voiceEnabled;
+      $(this).find('i').attr('class', window.voiceEnabled ? 'fa fa-volume-up' : 'fa fa-volume-off');
+      $('#btnVoz').toggleClass('btn-info', window.voiceEnabled);
+      if(window.voiceEnabled) speak('Voz activada.'); else { try{ speechSynthesis.cancel(); }catch(_){} }
+    });
+    $('#btnSkipStop').on('click', ()=>{ const nav=window.navigator3D; if(nav && nav.active){ nav.skipCurrentStop(); } });
+
+    // ---- Eventos de navegación → HUD + mensajes no bloqueantes ----
+    window.addEventListener('nav:rerouting', ()=>{ setChip($('#navNet'), '<i class="fa fa-refresh fa-spin"></i> Recalculando…', 'nav-chip--warn'); mostrarToast('Recalculando ruta…', 'info'); });
+    window.addEventListener('nav:rerouted', ()=>{ setChip($('#navNet'), '<i class="fa fa-road"></i> Ruta lista', ''); renderNavHud(); });
+    window.addEventListener('nav:off_route', ()=>{ mostrarToast('Te saliste de la ruta. Recalculando si continúas…', 'warn'); });
+    window.addEventListener('nav:gps_weak', ()=>{ mostrarToast('GPS débil: la posición puede ser imprecisa.', 'warn'); });
+    window.addEventListener('nav:gps_denied', (e)=>{ mostrarToast((e.detail && e.detail.message) || 'Activa la ubicación para navegar.', 'error', 6000); });
+    window.addEventListener('nav:arrived_destination', ()=>{ mostrarToast('Has llegado a tu destino final.', 'success', 6000); });
+    window.addEventListener('nav:arrived_waypoint', (e)=>{
+      const wp = e.detail && e.detail.waypoint;
+      const id = wp && wp.idLocal;
+      const lbl = id ? (localLabel(id) || ('local ' + id)) : 'la parada';
+      const actions = [];
+      if(id){
+        const modo = window.modoLocal || 'prog';
+        const modalId = (modo==='prog' ? '#responsiveProg' : '#responsiveReag') + id;
+        actions.push({ label:'Gestionar', cls:'btn-info', fn:()=>{ $(modalId).modal('show'); } });
+      }
+      actions.push({ label:'Saltar', cls:'btn-default', fn:()=>{ const nav=window.navigator3D; if(nav) nav.skipCurrentStop(); } });
+      mostrarToast('Llegaste a ' + lbl + '.', 'success', 9000, actions);
+    });
   })();
 
+
+// ======= Bottom sheet del panel de ruta =======
+(function(){
+  const sheet  = document.getElementById('panelInfoRuta');
+  const handle = document.getElementById('sheetHandle');
+  if(!sheet || !handle) return;
+  const SNAPS = ['sheet-peek','sheet-half','sheet-full'];
+  function curSnap(){ const i = SNAPS.findIndex(c=>sheet.classList.contains(c)); return i<0 ? 1 : i; }
+  function setSnap(i){ i=Math.max(0,Math.min(SNAPS.length-1,i)); SNAPS.forEach(c=>sheet.classList.remove(c)); sheet.classList.add(SNAPS[i]); }
+  setSnap(1); // "media" por defecto
+  let startY=null, moved=0;
+  handle.addEventListener('pointerdown', e=>{ startY=e.clientY; moved=0; try{ handle.setPointerCapture(e.pointerId); }catch(_){} });
+  handle.addEventListener('pointermove', e=>{ if(startY!=null) moved=e.clientY-startY; });
+  function end(){
+    if(startY==null) return;
+    const d=moved; startY=null; const i=curSnap();
+    if(d < -25)      setSnap(i+1);                 // arrastrar arriba → expandir
+    else if(d > 25)  setSnap(i-1);                 // arrastrar abajo → contraer
+    else             setSnap((i+1)%SNAPS.length);  // tap → ciclar peek/half/full
+  }
+  handle.addEventListener('pointerup', end);
+  handle.addEventListener('pointercancel', ()=>{ startY=null; });
+})();
 
 // ======= Wire-up básico =======
 $(document).ready(function(){
@@ -2057,7 +2499,7 @@ $(document).ready(function(){
   $('#btnVerProgramados').on('click', function(){ $('#filtroLocalesProg').val(''); setMode('prog'); });
   $('#modalMapa').on('show.bs.modal', function(){
     ensureMapReady().catch(()=>{
-      alert('No se pudo cargar Google Maps. Reintentaremos cuando haya conexión.');
+      mostrarToast('No se pudo cargar Google Maps. Reintentaremos cuando haya conexión.', 'error', 6000);
     });
   });
   // filtros de texto -> aplica filtros completos
@@ -2081,6 +2523,7 @@ $(document).ready(function(){
   window.__GESTIONAR_PRECACHE_TARGETS = <?php echo json_encode($precacheTargets, JSON_UNESCAPED_UNICODE); ?>;
   window.__GESTIONAR_PRECACHE_LIMIT   = <?php echo (int)$precacheLimit; ?>;
   window.__GESTIONAR_PRECACHE_USER    = <?php echo (int)$usuario_id; ?>;
+  window.vendedoresDisponibles = <?php echo json_encode($vendedoresDisponibles, JSON_UNESCAPED_UNICODE); ?>;
 </script>
 
 <script>
@@ -2478,7 +2921,7 @@ if ('serviceWorker' in navigator) {
       if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
       reg.addEventListener('updatefound', function(){
         var nw = reg.installing;
-        if (!nw) return;A
+        if (!nw) return;
         nw.addEventListener('statechange', function(){
           if (nw.state === 'installed' && navigator.serviceWorker.controller) {
             reg.waiting && reg.waiting.postMessage({ type: 'SKIP_WAITING' });
@@ -2491,6 +2934,451 @@ if ('serviceWorker' in navigator) {
 </script>
 
 
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODAL REPORTAR DIRECCIÓN INCORRECTA
+════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalReportarDir" tabindex="-1" role="dialog" aria-labelledby="modalReportarDirLabel">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header" style="background:#1f2d3d;color:#fff">
+                <button type="button" class="close" data-dismiss="modal" style="color:#fff;opacity:.8">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+                <h4 class="modal-title" id="modalReportarDirLabel">
+                    <i class="fa fa-map-marker"></i> Reportar dirección incorrecta
+                </h4>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted" style="font-size:13px">
+                    <strong id="rdNombreLocal"></strong><br>
+                    Dirección actual: <span id="rdDirActual" style="font-style:italic"></span>
+                </p>
+
+                <div class="form-group">
+                    <label style="font-weight:700">Nueva dirección</label>
+                    <div class="input-group">
+                        <input type="text" id="rdDirNueva" class="form-control" placeholder="Ej: Av. Providencia 1234, Santiago">
+                        <span class="input-group-btn">
+                            <button class="btn btn-default" type="button" onclick="rdGeocodeDir()">
+                                <i class="fa fa-search"></i> Buscar
+                            </button>
+                        </span>
+                    </div>
+                </div>
+
+                <div id="rdMiniMap" style="height:260px;width:100%;border-radius:10px;border:1px solid #ddd;margin-bottom:12px"></div>
+
+                <div class="row">
+                    <div class="col-xs-6">
+                        <label style="font-weight:700;font-size:13px">Latitud</label>
+                        <input type="number" id="rdLat" class="form-control input-sm" step="0.0000001" readonly>
+                    </div>
+                    <div class="col-xs-6">
+                        <label style="font-weight:700;font-size:13px">Longitud</label>
+                        <input type="number" id="rdLng" class="form-control input-sm" step="0.0000001" readonly>
+                    </div>
+                </div>
+
+                <div id="rdDistancia" class="text-muted" style="font-size:12px;margin-top:8px"></div>
+                <div id="rdError" class="text-danger" style="font-size:13px;margin-top:6px;display:none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning" id="rdBtnEnviar" onclick="rdEnviarSolicitud()">
+                    <i class="fa fa-paper-plane"></i> Enviar solicitud
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var rdIdLocal     = 0;
+    var rdLatActual   = 0;
+    var rdLngActual   = 0;
+    var rdMap         = null;
+    var rdMarker      = null;
+    var rdGeocoder    = null;
+
+    function rdHaversine(lat1, lng1, lat2, lng2) {
+        var R = 6371;
+        var dLat = (lat2 - lat1) * Math.PI / 180;
+        var dLng = (lng2 - lng1) * Math.PI / 180;
+        var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+                Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+                Math.sin(dLng/2)*Math.sin(dLng/2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    function rdActualizarDistancia() {
+        var lat = parseFloat(document.getElementById('rdLat').value);
+        var lng = parseFloat(document.getElementById('rdLng').value);
+        if (!lat || !lng) return;
+        var km = rdHaversine(rdLatActual, rdLngActual, lat, lng);
+        document.getElementById('rdDistancia').textContent =
+            'Distancia desde dirección actual: ' + km.toFixed(2) + ' km' +
+            (km > 5 ? '  ⚠️ (será marcada como sospechosa)' : '');
+    }
+
+    function rdInitMap() {
+        loadGoogleMapsSdk().then(function (maps) {
+            var center = { lat: rdLatActual, lng: rdLngActual };
+            rdMap = new maps.Map(document.getElementById('rdMiniMap'), {
+                center: center,
+                zoom: 16,
+                mapTypeControl: false,
+                streetViewControl: false,
+                fullscreenControl: false,
+            });
+            rdMarker = new maps.Marker({ position: center, map: rdMap, draggable: true, title: 'Arrastrar para ajustar' });
+            rdGeocoder = new maps.Geocoder();
+
+            rdMarker.addListener('dragend', function (ev) {
+                document.getElementById('rdLat').value = ev.latLng.lat().toFixed(7);
+                document.getElementById('rdLng').value = ev.latLng.lng().toFixed(7);
+                rdActualizarDistancia();
+            });
+        }).catch(function () {
+            document.getElementById('rdMiniMap').innerHTML = '<p class="text-danger text-center" style="padding:20px">No se pudo cargar el mapa.</p>';
+        });
+    }
+
+    window.rdGeocodeDir = function () {
+        var dir = document.getElementById('rdDirNueva').value.trim();
+        if (!dir || !rdGeocoder) return;
+        rdGeocoder.geocode({ address: dir + ', Chile' }, function (results, status) {
+            if (status === 'OK' && results[0]) {
+                var loc = results[0].geometry.location;
+                var lat = loc.lat(), lng = loc.lng();
+                document.getElementById('rdLat').value = lat.toFixed(7);
+                document.getElementById('rdLng').value = lng.toFixed(7);
+                rdMap.setCenter({ lat: lat, lng: lng });
+                rdMarker.setPosition({ lat: lat, lng: lng });
+                rdActualizarDistancia();
+            } else {
+                document.getElementById('rdError').textContent = 'No se encontró la dirección. Intenta ser más específico.';
+                document.getElementById('rdError').style.display = 'block';
+                setTimeout(function(){ document.getElementById('rdError').style.display='none'; }, 3000);
+            }
+        });
+    };
+
+    window.abrirModalReportarDir = function (idLocal, nombre, dirActual, lat, lng) {
+        rdIdLocal   = idLocal;
+        rdLatActual = lat;
+        rdLngActual = lng;
+
+        document.getElementById('rdNombreLocal').textContent = nombre;
+        document.getElementById('rdDirActual').textContent   = dirActual;
+        document.getElementById('rdDirNueva').value          = '';
+        document.getElementById('rdLat').value               = lat;
+        document.getElementById('rdLng').value               = lng;
+        document.getElementById('rdDistancia').textContent   = '';
+        document.getElementById('rdError').style.display     = 'none';
+
+        $('#modalReportarDir').modal('show');
+
+        // Inicializar el mapa cuando el modal esté visible
+        $('#modalReportarDir').one('shown.bs.modal', function () {
+            if (!rdMap) {
+                rdInitMap();
+            } else {
+                rdMap.setCenter({ lat: lat, lng: lng });
+                rdMarker.setPosition({ lat: lat, lng: lng });
+                google.maps.event.trigger(rdMap, 'resize');
+            }
+        });
+    };
+
+    window.rdEnviarSolicitud = function () {
+        var dirNueva = document.getElementById('rdDirNueva').value.trim();
+        var lat      = parseFloat(document.getElementById('rdLat').value);
+        var lng      = parseFloat(document.getElementById('rdLng').value);
+
+        if (!dirNueva) {
+            document.getElementById('rdError').textContent = 'Ingresa la nueva dirección.';
+            document.getElementById('rdError').style.display = 'block';
+            return;
+        }
+        if (!lat || !lng) {
+            document.getElementById('rdError').textContent = 'Ajusta la ubicación en el mapa.';
+            document.getElementById('rdError').style.display = 'block';
+            return;
+        }
+
+        document.getElementById('rdBtnEnviar').disabled = true;
+        document.getElementById('rdBtnEnviar').innerHTML = '<i class="fa fa-spinner fa-spin"></i> Enviando...';
+        document.getElementById('rdError').style.display = 'none';
+
+        var fd = new FormData();
+        fd.append('action',   'crear');
+        fd.append('id_local', rdIdLocal);
+        fd.append('dir_nueva', dirNueva);
+        fd.append('lat_nueva', lat);
+        fd.append('lng_nueva', lng);
+
+        fetch('/visibility2/app/api/solicitud_cambio_local.php', { method: 'POST', body: fd })
+            .then(function(r){ return r.json(); })
+            .then(function(resp) {
+                var newLat = parseFloat(document.getElementById('rdLat').value);
+                var newLng = parseFloat(document.getElementById('rdLng').value);
+                var newDir = document.getElementById('rdDirNueva').value.trim();
+
+                $('#modalReportarDir').modal('hide');
+
+                // Mover el pin en el mapa inmediatamente
+                var markerEntry = (window.markersProg && window.markersProg[rdIdLocal])
+                               || (window.markersReag && window.markersReag[rdIdLocal]);
+                if (markerEntry && window.google && window.google.maps) {
+                    markerEntry.marker.setPosition({ lat: newLat, lng: newLng });
+                    // Actualizar la posición de referencia para numeración y recálculo
+                    if (markerEntry.originalIcon) {
+                        markerEntry.marker.setIcon(markerEntry.originalIcon);
+                    }
+                }
+
+                // Actualizar data-lat/data-lng en las filas de tabla y mostrar badge
+                $('tr[data-idlocal="' + rdIdLocal + '"]').each(function() {
+                    $(this).attr('data-lat', newLat).attr('data-lng', newLng);
+                    // Añadir badge "En revisión" en celda de dirección si no existe
+                    var $dirCell = $(this).find('td').filter(function() {
+                        return $(this).text().trim().length > 0 && !$(this).find('input,button,a,.circulo').length;
+                    }).first();
+                    if ($dirCell.length && !$dirCell.find('.badge-geo-pendiente').length) {
+                        $dirCell.append('<span class="badge-geo-pendiente" style="display:inline-block;background:#f59e0b;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px;white-space:nowrap" title="Solicitud de cambio pendiente de revisión">📍 En revisión</span>');
+                    }
+                });
+
+                // Recalcular ruta con la nueva posición
+                var pos = window.ejecutorMarker && window.ejecutorMarker.getPosition();
+                if (pos && typeof window.planRouteFromSelection === 'function' && window.isMapVisible !== false) {
+                    window.planRouteFromSelection(pos.toJSON(), { trigger: 'geo_report', force: true });
+                }
+
+                var msg = 'Solicitud enviada. Tu ruta usará esta dirección hasta que sea revisada.';
+                if (resp.sospechoso) {
+                    msg += ' (marcada para revisión prioritaria)';
+                }
+                if (typeof mostrarToast === 'function') {
+                    mostrarToast(msg, 'success');
+                } else {
+                    alert(msg);
+                }
+            })
+            .catch(function() {
+                document.getElementById('rdError').textContent = 'Error al enviar. Intenta nuevamente.';
+                document.getElementById('rdError').style.display = 'block';
+            })
+            .finally(function() {
+                document.getElementById('rdBtnEnviar').disabled = false;
+                document.getElementById('rdBtnEnviar').innerHTML = '<i class="fa fa-paper-plane"></i> Enviar solicitud';
+            });
+    };
+
+    // Tecla Enter en el campo de dirección dispara la búsqueda
+    document.getElementById('rdDirNueva').addEventListener('keydown', function(e){
+        if (e.key === 'Enter') { e.preventDefault(); rdGeocodeDir(); }
+    });
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODAL CAMBIAR VENDEDOR
+════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalCambiarVendedor" tabindex="-1" role="dialog" aria-labelledby="modalCambiarVendedorLabel">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header" style="background:#1f2d3d;color:#fff">
+                <button type="button" class="close" data-dismiss="modal" style="color:#fff;opacity:.8">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+                <h4 class="modal-title" id="modalCambiarVendedorLabel">
+                    <i class="fa fa-user"></i> Cambiar vendedor
+                </h4>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted" style="font-size:13px">
+                    <strong id="cvNombreLocal"></strong><br>
+                    Vendedor actual: <span id="cvVendedorActual" style="font-style:italic"></span>
+                </p>
+
+                <div class="form-group">
+                    <label style="font-weight:700">Vendedor</label>
+                    <select id="cvSelectVendedor" class="form-control"></select>
+                </div>
+
+                <div style="margin-bottom:10px">
+                    <button type="button" class="btn btn-xs btn-default" onclick="cvSeleccionarNuevo()">
+                        <i class="fa fa-plus-circle"></i> El vendedor no está en la lista — solicitar alta nueva
+                    </button>
+                </div>
+
+                <div class="form-group" id="cvNuevoVendedorBox" style="display:none">
+                    <div class="alert alert-info" style="padding:6px 10px;font-size:12px;margin-bottom:8px">
+                        <i class="fa fa-info-circle"></i>
+                        Esta solicitud será revisada por un editor, quien creará el vendedor si corresponde.
+                    </div>
+                    <label style="font-weight:700">Nombre del nuevo vendedor</label>
+                    <input type="text" id="cvNuevoNombre" class="form-control" placeholder="Ej: Juan Pérez">
+                </div>
+
+                <div class="form-group">
+                    <label style="font-weight:700">Teléfono <span class="text-muted">(opcional)</span></label>
+                    <input type="text" id="cvTelefono" class="form-control" placeholder="+56 9 1234 5678">
+                </div>
+
+                <div id="cvError" class="text-danger" style="font-size:13px;margin-top:6px;display:none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning" id="cvBtnEnviar" onclick="cvEnviarSolicitud()">
+                    <i class="fa fa-paper-plane"></i> Enviar solicitud
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var cvIdLocal = 0;
+    var cvTipo    = 'Prog';
+    var cvOpcionesCargadas = false;
+
+    function cvCargarOpciones() {
+        var $select = $('#cvSelectVendedor');
+        $select.empty();
+        $select.append($('<option>').val('0').text('➕ Crear nuevo vendedor'));
+        (window.vendedoresDisponibles || []).forEach(function (v) {
+            var label = v.nombre + (v.telefono ? ' (' + v.telefono + ')' : '');
+            $select.append($('<option>').val(v.id).attr('data-tel', v.telefono || '').attr('data-nombre', v.nombre).text(label));
+        });
+        cvOpcionesCargadas = true;
+    }
+
+    function cvAplicarSeleccion() {
+        var val = $('#cvSelectVendedor').val();
+        if (val === '0') {
+            $('#cvNuevoVendedorBox').show();
+            $('#cvNuevoNombre').val('');
+        } else {
+            $('#cvNuevoVendedorBox').hide();
+            var tel = $('#cvSelectVendedor option:selected').attr('data-tel') || '';
+            $('#cvTelefono').val(tel);
+        }
+    }
+
+    window.cvSeleccionarNuevo = function () {
+        $('#cvSelectVendedor').val('0');
+        cvAplicarSeleccion();
+        $('#cvNuevoNombre').focus();
+    };
+
+    $(document).on('change', '#cvSelectVendedor', cvAplicarSeleccion);
+
+    window.abrirModalCambiarVendedor = function (payload) {
+        if (!cvOpcionesCargadas) cvCargarOpciones();
+
+        cvIdLocal = payload.idLocal;
+        cvTipo    = payload.tipo;
+
+        document.getElementById('cvNombreLocal').textContent   = payload.nombreLocal;
+        document.getElementById('cvVendedorActual').textContent = payload.vendedorNombre || 'no aplica';
+        document.getElementById('cvError').style.display = 'none';
+
+        var $select = $('#cvSelectVendedor');
+        if (payload.idVendedor && $select.find('option[value="' + payload.idVendedor + '"]').length) {
+            $select.val(String(payload.idVendedor));
+        } else {
+            $select.val('0');
+        }
+        cvAplicarSeleccion();
+        if ($select.val() !== '0') {
+            $('#cvTelefono').val(payload.vendedorTelefono || '');
+        }
+
+        $('#modalCambiarVendedor').modal('show');
+    };
+
+    window.cvEnviarSolicitud = function () {
+        var idVendedorNuevo = $('#cvSelectVendedor').val();
+        var esNuevo = idVendedorNuevo === '0';
+        var nombreNuevo = esNuevo
+            ? document.getElementById('cvNuevoNombre').value.trim()
+            : ($('#cvSelectVendedor option:selected').attr('data-nombre') || '');
+        var telefonoNuevo = document.getElementById('cvTelefono').value.trim();
+
+        if (esNuevo && !nombreNuevo) {
+            document.getElementById('cvError').textContent = 'Ingresa el nombre del nuevo vendedor.';
+            document.getElementById('cvError').style.display = 'block';
+            return;
+        }
+
+        if (esNuevo) {
+            var nombreNormalizado = nombreNuevo.trim().toLowerCase();
+            var existente = (window.vendedoresDisponibles || []).find(function (v) {
+                return String(v.nombre || '').trim().toLowerCase() === nombreNormalizado;
+            });
+            if (existente) {
+                document.getElementById('cvError').textContent = 'Ya existe un vendedor con ese nombre: "' + existente.nombre + '". Selecciónalo de la lista en vez de crear uno nuevo.';
+                document.getElementById('cvError').style.display = 'block';
+                return;
+            }
+        }
+
+        document.getElementById('cvBtnEnviar').disabled = true;
+        document.getElementById('cvBtnEnviar').innerHTML = '<i class="fa fa-spinner fa-spin"></i> Enviando...';
+        document.getElementById('cvError').style.display = 'none';
+
+        var fd = new FormData();
+        fd.append('action', 'crear');
+        fd.append('id_local', cvIdLocal);
+        fd.append('id_vendedor_nuevo', esNuevo ? 0 : idVendedorNuevo);
+        fd.append('nombre_vendedor_nuevo', nombreNuevo);
+        fd.append('telefono_nuevo', telefonoNuevo);
+
+        fetch('/visibility2/app/api/solicitud_cambio_vendedor.php', { method: 'POST', body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (resp) {
+                if (!resp.ok) {
+                    document.getElementById('cvError').textContent = resp.msg || 'Error al enviar.';
+                    document.getElementById('cvError').style.display = 'block';
+                    return;
+                }
+
+                $('#modalCambiarVendedor').modal('hide');
+
+                var $h4 = $('#myModalLabel' + cvTipo + cvIdLocal);
+                $h4.find('.cv-vendedor-texto').text(nombreNuevo);
+                if (!$h4.find('.badge-vendedor-pendiente').length) {
+                    $h4.find('.cv-vendedor-texto').after(
+                        '<span class="badge-vendedor-pendiente" style="display:inline-block;background:#f59e0b;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px;white-space:nowrap">🧑 En revisión</span>'
+                    );
+                }
+
+                var msg = 'Solicitud enviada. El vendedor será actualizado cuando se revise.';
+                if (resp.sospechoso) {
+                    msg += ' (marcada para revisión prioritaria)';
+                }
+                if (typeof mostrarToast === 'function') {
+                    mostrarToast(msg, 'success');
+                } else {
+                    alert(msg);
+                }
+            })
+            .catch(function () {
+                document.getElementById('cvError').textContent = 'Error al enviar. Intenta nuevamente.';
+                document.getElementById('cvError').style.display = 'block';
+            })
+            .finally(function () {
+                document.getElementById('cvBtnEnviar').disabled = false;
+                document.getElementById('cvBtnEnviar').innerHTML = '<i class="fa fa-paper-plane"></i> Enviar solicitud';
+            });
+    };
+})();
+</script>
 
 </body>
 </html>

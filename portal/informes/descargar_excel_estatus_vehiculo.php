@@ -199,6 +199,11 @@ function slotKeyFromDateTime(?string $dt): string
     }
 }
 
+function normalizarPatente(string $p): string
+{
+    return strtoupper(preg_replace('/[^A-Z0-9]/i', '', $p));
+}
+
 $ES_DAYS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 $ES_DAYS_SHORT = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
@@ -390,6 +395,19 @@ if (!empty($nonPhotoQuestions)) {
         ];
     }
     $stmtNPR->close();
+}
+
+/* Detectar QIDs de patente y km restantes dinámicamente */
+$qid_patente_encuesta = null;
+$qid_km_restantes     = null;
+foreach ($nonPhotoQuestions as $qid => $qdef) {
+    $t = mb_strtolower($qdef['text'], 'UTF-8');
+    if ($qid_patente_encuesta === null && str_contains($t, 'patente')) {
+        $qid_patente_encuesta = $qid;
+    }
+    if ($qid_km_restantes === null && str_contains($t, 'restantes')) {
+        $qid_km_restantes = $qid;
+    }
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -722,7 +740,7 @@ $title = 'INFORME ESTATUS VEHÍCULO — ' . $modoTitleLabel . ' — ' . fmtDate(
  * ═════════════════════════════════════════════════════════════ */
 $ws1 = $spreadsheet->getActiveSheet();
 $ws1->setTitle('Resumen');
-$ws1LastLetter = 'L';
+$ws1LastLetter = 'N';
 
 /* Cabecera informativa */
 $ws1->mergeCells('A1:' . $ws1LastLetter . '1');
@@ -767,7 +785,8 @@ if (!empty($feriados)) {
 $hdr1 = ['Usuario', 'RUT ejecutor', 'Nombre completo', 'Email',
           'Patente', 'Modelo vehículo', 'División',
           'Subidas esperadas', 'Subidas realizadas', 'Subidas pendientes',
-          '% Cumplimiento', 'Con duplicados'];
+          '% Cumplimiento', 'Con duplicados',
+          'Km rest. (último)', '# Días patente distinta'];
 $hdrRow1 = $dataStartRow1;
 foreach ($hdr1 as $i => $h) {
     setVal($ws1, $i + 1, $hdrRow1, $h);
@@ -796,6 +815,39 @@ foreach ($userStats as $uid => $stats) {
         ->setFormatCode('0.0%');
     setStr($ws1, 12, $r, $stats['has_dups'] ? 'Sí' : 'No');
 
+    /* Km restantes (último valor registrado) y días con patente distinta */
+    $kmRestantesUltimo = '—';
+    $diasPatenteDist   = 0;
+    $patenteAsignada   = normalizarPatente($vdata['patente'] ?? '');
+
+    $fechasOrdenadas = array_keys($uploads[$uid] ?? []);
+    sort($fechasOrdenadas);
+    foreach ($fechasOrdenadas as $fecha) {
+        if ($qid_km_restantes !== null) {
+            $ansKR = $textNumAnswers[$uid][$fecha][$qid_km_restantes] ?? null;
+            if ($ansKR !== null) {
+                $txtKR = trim((string)($ansKR['answer_text'] ?? ''));
+                if ($txtKR !== '') {
+                    $kmRestantesUltimo = $txtKR;
+                } elseif ($ansKR['valor'] !== null) {
+                    $kmRestantesUltimo = (string)$ansKR['valor'];
+                }
+            }
+        }
+        if ($qid_patente_encuesta !== null && $patenteAsignada !== '') {
+            $ansP = $textNumAnswers[$uid][$fecha][$qid_patente_encuesta] ?? null;
+            if ($ansP !== null) {
+                $pEnc = normalizarPatente(trim((string)($ansP['answer_text'] ?? '')));
+                if ($pEnc !== '' && $pEnc !== $patenteAsignada) {
+                    $diasPatenteDist++;
+                }
+            }
+        }
+    }
+
+    setStr($ws1, 13, $r, $kmRestantesUltimo);
+    setVal($ws1, 14, $r, $diasPatenteDist);
+
     applyDataBorders($ws1, 'A' . $r . ':' . $ws1LastLetter . $r);
 
     [$bg, $fg] = complianceColors($stats['pct']);
@@ -807,6 +859,13 @@ foreach ($userStats as $uid => $stats) {
         ]);
     }
 
+    if ($diasPatenteDist > 0) {
+        $ws1->getStyle('N' . $r)->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['argb' => 'FF9C0006']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFFC7CE']],
+        ]);
+    }
+
     $r++;
 }
 
@@ -814,7 +873,7 @@ foreach ($userStats as $uid => $stats) {
 foreach (['A' => 18, 'B' => 14, 'C' => 28, 'D' => 28,
           'E' => 18, 'F' => 24, 'G' => 22,
           'H' => 15, 'I' => 15, 'J' => 16,
-          'K' => 16, 'L' => 14] as $col => $w) {
+          'K' => 16, 'L' => 14, 'M' => 18, 'N' => 16] as $col => $w) {
     $ws1->getColumnDimension($col)->setWidth($w);
 }
 $ws1->freezePane('A' . ($hdrRow1 + 1));
@@ -971,8 +1030,8 @@ $ws3 = $spreadsheet->createSheet()->setTitle('Detalle Subidas');
 /** @var Worksheet $ws3 */
 $ws3 = $spreadsheet->getSheetByName('Detalle Subidas');
 
-/* Calcular número total de columnas en Hoja 3 (13 fijas + extra por cada pregunta) */
-$ws3TotalCols  = 13 + count($nonPhotoQuestions);
+/* Calcular número total de columnas en Hoja 3 (15 fijas + extra por cada pregunta) */
+$ws3TotalCols  = 15 + count($nonPhotoQuestions);
 $ws3LastLetter = Coordinate::stringFromColumnIndex($ws3TotalCols);
 
 $ws3->mergeCells('A1:' . $ws3LastLetter . '1');
@@ -986,9 +1045,10 @@ $ws3->getStyle('A1')->applyFromArray([
 $ws3->getRowDimension(1)->setRowHeight(26);
 
 $hdr3 = ['Usuario', 'RUT ejecutor', 'Nombre', 'Fecha', 'Día semana',
-          'Patente', 'Modelo vehículo', 'División',
+          'Patente asignada', 'Modelo vehículo', 'División',
           'Primera subida', 'Última subida',
-          '# Fotos', '¿Día esperado?', 'Tipo'];
+          '# Fotos', '¿Día esperado?', 'Tipo',
+          'Patente ingresada', '¿Coincide patente?'];
 foreach ($nonPhotoQuestions as $qdef) {
     $hdr3[] = $qdef['text'];
 }
@@ -1029,8 +1089,32 @@ foreach ($allUploadRows as $urow) {
     setStr($ws3, 12, $r3, $isExpected ? 'Sí' : 'No');
     setStr($ws3, 13, $r3, $tipos ?: '—');
 
+    /* Col 14: patente ingresada en encuesta; Col 15: ¿coincide con asignada? */
+    $patenteAsig3 = $vdata['patente'] ?? '';
+    $patenteEnc3  = '';
+    if ($qid_patente_encuesta !== null) {
+        $ansP3 = $textNumAnswers[$uid][$date][$qid_patente_encuesta] ?? null;
+        if ($ansP3 !== null) {
+            $patenteEnc3 = trim((string)($ansP3['answer_text'] ?? ''));
+        }
+    }
+    setStr($ws3, 14, $r3, $patenteEnc3 !== '' ? $patenteEnc3 : '—');
+
+    if ($patenteEnc3 !== '' && $patenteAsig3 !== '' && $patenteAsig3 !== '—') {
+        $plateMatch = normalizarPatente($patenteEnc3) === normalizarPatente($patenteAsig3);
+        setVal($ws3, 15, $r3, $plateMatch ? '✓' : '✗');
+        $ws3->getStyle(cellRef(15, $r3))->applyFromArray([
+            'font'      => ['bold' => true, 'color' => ['argb' => $plateMatch ? 'FF276221' : 'FF9C0006']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID,
+                            'startColor' => ['argb' => $plateMatch ? 'FFC6EFCE' : 'FFFFC7CE']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+        ]);
+    } else {
+        setStr($ws3, 15, $r3, '—');
+    }
+
     /* Columnas extra: respuestas texto/numéricas */
-    $extraCol = 14;
+    $extraCol = 16;
     foreach ($nonPhotoQuestions as $qid => $qdef) {
         $ans = $textNumAnswers[$uid][$date][$qid] ?? null;
         if ($ans === null) {
@@ -1074,11 +1158,11 @@ if ($r3 === $hdrRow3 + 1) {
 foreach (['A' => 18, 'B' => 14, 'C' => 26, 'D' => 12, 'E' => 12,
           'F' => 18, 'G' => 24, 'H' => 22,
           'I' => 18, 'J' => 18, 'K' => 9,
-          'L' => 14, 'M' => 14] as $col => $w) {
+          'L' => 14, 'M' => 14, 'N' => 18, 'O' => 14] as $col => $w) {
     $ws3->getColumnDimension($col)->setWidth($w);
 }
 /* Anchos para columnas de preguntas extra */
-for ($c = 14; $c <= $ws3TotalCols; $c++) {
+for ($c = 16; $c <= $ws3TotalCols; $c++) {
     $ws3->getColumnDimension(Coordinate::stringFromColumnIndex($c))->setWidth(22);
 }
 $ws3->freezePane('A' . ($hdrRow3 + 1));
@@ -1153,7 +1237,7 @@ $ws5 = $spreadsheet->createSheet()->setTitle('Fotos Vehículo');
 /** @var Worksheet $ws5 */
 $ws5 = $spreadsheet->getSheetByName('Fotos Vehículo');
 
-$fixedCols5 = 11;
+$fixedCols5 = 12;
 $ws5TotalCols = $fixedCols5 + count($photoQuestions);
 $ws5LastLetter = Coordinate::stringFromColumnIndex(max(1, $ws5TotalCols));
 
@@ -1167,8 +1251,8 @@ $ws5->getStyle('A1')->applyFromArray([
 ]);
 $ws5->getRowDimension(1)->setRowHeight(26);
 
-$hdr5 = ['Usuario', 'RUT ejecutor', 'Nombre', 'Fecha', 'Patente',
-          'Modelo vehículo', 'Kilometraje', 'División', 'Día', 'Tipo', 'Rango subida'];
+$hdr5 = ['Usuario', 'RUT ejecutor', 'Nombre', 'Fecha', 'Patente asignada',
+          'Modelo vehículo', 'Kilometraje', 'Km rest. mantención', 'División', 'Día', 'Tipo', 'Rango subida'];
 $qColMap = [];
 $col5 = $fixedCols5 + 1;
 foreach ($photoQuestions as $qid => $qdef) {
@@ -1223,6 +1307,19 @@ foreach ($users as $uid => $udata) {
                 }
             }
 
+            $kmRestantes5 = '—';
+            if ($qid_km_restantes !== null) {
+                $ansKmR = $textNumAnswers[$uid][$date][$qid_km_restantes] ?? null;
+                if ($ansKmR !== null) {
+                    $txtKmR = trim((string)($ansKmR['answer_text'] ?? ''));
+                    if ($txtKmR !== '') {
+                        $kmRestantes5 = $txtKmR;
+                    } elseif ($ansKmR['valor'] !== null && (float)$ansKmR['valor'] !== 0.0) {
+                        $kmRestantes5 = (string)$ansKmR['valor'];
+                    }
+                }
+            }
+
             setStr($ws5, 1, $r5, $udata['usuario']);
             setStr($ws5, 2, $r5, $udata['rut'] ?: '—');
             setStr($ws5, 3, $r5, $udata['nombre_completo']);
@@ -1230,10 +1327,11 @@ foreach ($users as $uid => $udata) {
             setStr($ws5, 5, $r5, $vdata['patente']);
             setStr($ws5, 6, $r5, $vdata['modelo']);
             setStr($ws5, 7, $r5, $kilometraje);
-            setStr($ws5, 8, $r5, $udata['division'] ?? '—');
-            setStr($ws5, 9, $r5, $dowName);
-            setStr($ws5, 10, $r5, $group['tipo'] ?: '—');
-            setStr($ws5, 11, $r5, $rango);
+            setStr($ws5, 8, $r5, $kmRestantes5);
+            setStr($ws5, 9, $r5, $udata['division'] ?? '—');
+            setStr($ws5, 10, $r5, $dowName);
+            setStr($ws5, 11, $r5, $group['tipo'] ?: '—');
+            setStr($ws5, 12, $r5, $rango);
 
             $maxFotosInRow = 1;
             foreach ($photoQuestions as $qid => $_qdef) {
@@ -1281,7 +1379,7 @@ if ($r5 === $hdrRow5 + 1) {
 }
 
 foreach (['A' => 18, 'B' => 14, 'C' => 26, 'D' => 12, 'E' => 18,
-          'F' => 24, 'G' => 14, 'H' => 22, 'I' => 12, 'J' => 12, 'K' => 35] as $col => $w) {
+          'F' => 24, 'G' => 14, 'H' => 16, 'I' => 22, 'J' => 12, 'K' => 12, 'L' => 35] as $col => $w) {
     $ws5->getColumnDimension($col)->setWidth($w);
 }
 for ($c = $fixedCols5 + 1; $c <= $ws5TotalCols; $c++) {

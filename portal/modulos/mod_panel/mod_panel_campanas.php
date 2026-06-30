@@ -104,6 +104,13 @@ while ($row = $resC->fetch_assoc()) {
 }
 $stmtC->close();
 
+$idsCampanasActivas = array_map('intval', array_column($campanas, 'id'));
+$urlDescargaMasivaActivas = '/visibility2/portal/informes/descarga_excel_masivo_gantt.php?activas=1'
+    . '&id_empresa=' . urlencode((string)$id_empresa)
+    . '&id_division=' . urlencode((string)$division_filtro)
+    . '&id_subdivision=' . urlencode((string)$subdivision_filtro)
+    . '&fotos=0&fotos_encuesta=0';
+
 
 /* ======================================================
    CALCULO KPI GENERALES
@@ -289,6 +296,17 @@ $conn->close();
 .modern-btn-primary {
     background: linear-gradient(135deg, #4d7eff, #6a73ff) !important;
     color: #fff !important;
+}
+
+.modern-btn-success {
+    background: linear-gradient(135deg, #16a34a, #22c55e) !important;
+    color: #fff !important;
+}
+
+.modern-btn.disabled,
+.modern-btn:disabled {
+    opacity: .55;
+    pointer-events: none;
 }
 
 .modern-kpi-card {
@@ -2120,6 +2138,16 @@ $conn->close();
           <button type="submit" class="btn modern-btn modern-btn-primary w-100">
             <i class="fas fa-filter mr-2"></i> Filtrar
           </button>
+        </div>
+
+        <div class="col-md-2 mb-3">
+          <a
+            href="<?= htmlspecialchars($urlDescargaMasivaActivas, ENT_QUOTES, 'UTF-8') ?>"
+            class="btn modern-btn modern-btn-success w-100 <?= empty($idsCampanasActivas) ? 'disabled' : '' ?>"
+            <?= empty($idsCampanasActivas) ? 'aria-disabled="true" tabindex="-1"' : '' ?>
+          >
+            <i class="fas fa-file-excel mr-2"></i> Descargar gantt
+          </a>
         </div>
       </form>
     </div>

@@ -608,7 +608,7 @@ body {
 
 .fleet-kpi-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 18px;
 }
 
@@ -1338,6 +1338,44 @@ body.fleet-photo-open {
         padding: 10px;
     }
 }
+
+/* =========================================================
+   DOCUMENTOS & MANTENCIONES
+========================================================= */
+.doc-badge-rojo   { background: #fee2e2 !important; color: #991b1b !important; }
+.doc-badge-naranja { background: #fff7e6 !important; color: #92400e !important; }
+.doc-badge-amarillo { background: #fffbeb !important; color: #b45309 !important; }
+.doc-badge-verde  { background: #d7f2df !important; color: #0f8a4d !important; }
+
+.tipo-doc-label {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+}
+
+.doc-alerta-item {
+    border-radius: 14px;
+    padding: 10px 14px;
+    cursor: pointer;
+    min-width: 140px;
+    font-size: 13px;
+    font-weight: 700;
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+.doc-alerta-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(70,95,140,.14);
+}
+
+.panel-alertas-card {
+    border-radius: 28px;
+    border: 1px solid rgba(215,228,246,.95);
+    background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(255,250,235,.88));
+    box-shadow: 0 14px 34px rgba(70,95,140,.08), inset 0 1px 0 rgba(255,255,255,.9);
+    padding: 20px 22px;
+    margin-bottom: 22px;
+}
     </style>
 </head>
 
@@ -1355,7 +1393,11 @@ body.fleet-photo-open {
             <button class="btn btn-outline-light btn-main" onclick="abrirModalReporte()">
                 <i class="fa-solid fa-chart-table me-1"></i> Reporte
             </button>
-        
+
+            <button class="btn btn-outline-light btn-main" onclick="abrirModalDescargaExcel()">
+                <i class="fa-solid fa-file-excel me-1"></i> Descargar Excel
+            </button>
+
             <a href="mod_vehiculos_carga_masiva.php" class="btn btn-outline-light btn-main">
                 <i class="fa-solid fa-file-arrow-up me-1"></i> Carga masiva
             </a>
@@ -1365,6 +1407,20 @@ body.fleet-photo-open {
             </button>
         </div>
             </div>
+
+<!-- PANEL ALERTAS DOCUMENTOS -->
+<div id="panelAlertas" class="panel-alertas-card" style="display:none">
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <strong style="font-size:15px;color:#92400e">
+            <i class="fa-solid fa-triangle-exclamation me-2" style="color:#f59e0b"></i>
+            Alertas de documentos
+        </strong>
+        <button class="btn btn-sm btn-outline-secondary" style="border-radius:10px;font-size:12px" onclick="togglePanelAlertas()">
+            <i class="fa-solid fa-eye-slash me-1"></i> Ocultar
+        </button>
+    </div>
+    <div id="contenedorAlertas"></div>
+</div>
 
 <div class="fleet-kpi-grid mb-4">
 
@@ -1412,6 +1468,17 @@ body.fleet-photo-open {
         </div>
     </div>
 
+    <div class="fleet-kpi-card" style="cursor:pointer" onclick="togglePanelAlertas()">
+        <div class="fleet-kpi-icon" style="background: linear-gradient(135deg, #f6b93b, #f59e0b)">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <div>
+            <span class="fleet-kpi-label">Alertas docs</span>
+            <strong id="kpiAlertasDocs">0</strong>
+            <small>Vencidos o por vencer</small>
+        </div>
+    </div>
+
 </div>
 
     <div class="card card-modern">
@@ -1448,7 +1515,7 @@ body.fleet-photo-open {
                     </thead>
                     <tbody id="tbodyVehiculos">
                     <tr>
-                        <td colspan="11" class="text-center text-muted py-4">Cargando vehículos...</td>
+                        <td colspan="13" class="text-center text-muted py-4">Cargando vehículos...</td>
                     </tr>
                     </tbody>
                 </table>
@@ -1701,6 +1768,234 @@ body.fleet-photo-open {
     </div>
 </div>
 
+<!-- MODAL DOCUMENTOS LEGALES -->
+<div class="modal fade" id="modalDocumentos" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fa-solid fa-file-lines me-2"></i>
+                    Documentos — <span id="docPatente"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+
+                <!-- Lista -->
+                <div id="docListSection">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="text-muted small">Documentos legales del vehículo (SOAP, revisión técnica, permiso, etc.)</span>
+                        <button class="btn btn-dark btn-main" onclick="mostrarFormDoc()">
+                            <i class="fa-solid fa-plus me-1"></i> Nuevo documento
+                        </button>
+                    </div>
+                    <div id="docLista"></div>
+                </div>
+
+                <!-- Formulario agregar/editar -->
+                <div id="docFormSection" style="display:none">
+                    <form id="formDocumento" enctype="multipart/form-data">
+                        <input type="hidden" name="action" value="save">
+                        <input type="hidden" name="id_vehiculo" id="docIdVehiculo">
+                        <input type="hidden" name="id" id="docId" value="">
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Tipo de documento <span class="text-danger">*</span></label>
+                                <select name="tipo" class="form-select" required>
+                                    <option value="">Seleccione...</option>
+                                    <option value="soap">SOAP</option>
+                                    <option value="revision_tecnica">Revisión técnica</option>
+                                    <option value="permiso_circulacion">Permiso de circulación</option>
+                                    <option value="seguro">Seguro</option>
+                                    <option value="otro">Otro</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">N° documento</label>
+                                <input type="text" name="numero_documento" class="form-control" placeholder="Opcional">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Fecha emisión</label>
+                                <input type="date" name="fecha_emision" class="form-control">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Fecha vencimiento <span class="text-danger">*</span></label>
+                                <input type="date" name="fecha_vencimiento" class="form-control" required>
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label">Archivo (PDF, JPG, PNG — máx. 5 MB)</label>
+                                <input type="file" name="archivo" id="docArchivoInput" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+                                <small id="docArchivoActual" class="text-muted mt-1 d-block"></small>
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label">Observación</label>
+                                <textarea name="observacion" class="form-control" rows="2" placeholder="Opcional"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2 mt-4">
+                            <button type="button" class="btn btn-outline-secondary btn-main" onclick="ocultarFormDoc()">
+                                <i class="fa-solid fa-arrow-left me-1"></i> Volver
+                            </button>
+                            <button type="submit" class="btn btn-dark btn-main">
+                                <i class="fa-solid fa-floppy-disk me-1"></i> Guardar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL MANTENCIONES -->
+<div class="modal fade" id="modalMantenciones" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fa-solid fa-wrench me-2"></i>
+                    Mantenciones — <span id="mantPatente"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+
+                <!-- Lista -->
+                <div id="mantListSection">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="text-muted small">Historial de mantenciones del vehículo</span>
+                        <button class="btn btn-dark btn-main" onclick="mostrarFormMant()">
+                            <i class="fa-solid fa-plus me-1"></i> Registrar mantención
+                        </button>
+                    </div>
+                    <div id="mantLista"></div>
+                </div>
+
+                <!-- Formulario agregar/editar -->
+                <div id="mantFormSection" style="display:none">
+                    <form id="formMantencion">
+                        <input type="hidden" name="action" value="save">
+                        <input type="hidden" name="id_vehiculo" id="mantIdVehiculo">
+                        <input type="hidden" name="id" id="mantId" value="">
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Tipo <span class="text-danger">*</span></label>
+                                <select name="tipo" class="form-select" required>
+                                    <option value="">Seleccione...</option>
+                                    <option value="preventiva">Preventiva</option>
+                                    <option value="correctiva">Correctiva</option>
+                                    <option value="revision">Revisión general</option>
+                                    <option value="neumaticos">Neumáticos</option>
+                                    <option value="frenos">Frenos</option>
+                                    <option value="aceite">Cambio de aceite</option>
+                                    <option value="otro">Otro</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Fecha <span class="text-danger">*</span></label>
+                                <input type="date" name="fecha" class="form-control" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">KM al momento</label>
+                                <input type="number" name="km_en_mantencion" class="form-control" placeholder="Opcional" min="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Costo (CLP)</label>
+                                <input type="number" name="costo" class="form-control" placeholder="Opcional" min="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Proveedor / Taller</label>
+                                <input type="text" name="proveedor" class="form-control" placeholder="Opcional">
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label">Descripción</label>
+                                <textarea name="descripcion" class="form-control" rows="2" placeholder="Trabajo realizado, repuestos, etc."></textarea>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2 mt-4">
+                            <button type="button" class="btn btn-outline-secondary btn-main" onclick="ocultarFormMant()">
+                                <i class="fa-solid fa-arrow-left me-1"></i> Volver
+                            </button>
+                            <button type="submit" class="btn btn-dark btn-main">
+                                <i class="fa-solid fa-floppy-disk me-1"></i> Guardar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL DESCARGA EXCEL ESTATUS VEHÍCULO -->
+<div class="modal fade" id="modalDescargaExcel" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:460px">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fa-solid fa-file-excel me-2"></i> Descargar Informe Estatus Vehículo
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form id="formDescargaExcel" method="POST"
+                  action="/visibility2/portal/informes/descargar_excel_estatus_vehiculo.php"
+                  target="_blank">
+                <div class="modal-body">
+
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label">Fecha inicio</label>
+                            <input type="date" name="start_date" id="excelStartDate" class="form-control" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Fecha fin</label>
+                            <input type="date" name="end_date" id="excelEndDate" class="form-control" required>
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <label class="form-label">Modo del informe</label>
+                        <div class="d-flex gap-3 mt-1">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="modo"
+                                       id="modoClasico" value="clasico" checked>
+                                <label class="form-check-label" for="modoClasico">Clásico</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="modo"
+                                       id="modoDiario" value="diario">
+                                <label class="form-check-label" for="modoDiario">Diario</label>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-main"
+                            data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-dark btn-main">
+                        <i class="fa-solid fa-file-arrow-down me-1"></i> Descargar
+                    </button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -1719,13 +2014,24 @@ let catalogos = {
 let modalVehiculo = null;
 let modalHistorial = null;
 let modalReporte = null;
+let modalDescargaExcel = null;
+let modalDocumentos = null;
+let modalMantenciones = null;
+
+let vehiculosConAlerta = new Set();
+let alertasData = { vencidos: [], proximos_15: [], proximos_30: [] };
+let docVehiculoActual  = { id: null, patente: '' };
+let mantVehiculoActual = { id: null, patente: '' };
 
 let reporteVehiculos = [];
 let reportePreguntas = [];
 
 $(document).ready(function () {
-    modalVehiculo = new bootstrap.Modal(document.getElementById('modalVehiculo'));
-    modalHistorial = new bootstrap.Modal(document.getElementById('modalHistorial'));
+    modalVehiculo     = new bootstrap.Modal(document.getElementById('modalVehiculo'));
+    modalHistorial    = new bootstrap.Modal(document.getElementById('modalHistorial'));
+    modalDescargaExcel = new bootstrap.Modal(document.getElementById('modalDescargaExcel'));
+    modalDocumentos   = new bootstrap.Modal(document.getElementById('modalDocumentos'));
+    modalMantenciones = new bootstrap.Modal(document.getElementById('modalMantenciones'));
     const modalReporteEl = document.getElementById('modalReporte');
     
     if (modalReporteEl) {
@@ -1734,6 +2040,17 @@ $(document).ready(function () {
 
     cargarCatalogos();
     cargarVehiculos();
+    cargarAlertas();
+
+    $('#formDocumento').on('submit', function (e) {
+        e.preventDefault();
+        guardarDocumento();
+    });
+
+    $('#formMantencion').on('submit', function (e) {
+        e.preventDefault();
+        guardarMantencion();
+    });
 
     $('#estado').on('change', function () {
         controlarMerchanPorEstado();
@@ -1944,26 +2261,11 @@ function filtrarSubdivisiones(selectedValue = '') {
 }
 
 function filtrarMerchans(selectedValue = '') {
-    const idDivision = $('#id_division').val();
-    const idSubdivision = $('#id_subdivision').val();
-
     destruirSelect2Merchan();
 
-    const merchans = catalogos.merchans.filter(u => {
-        const matchDivision =
-            !idDivision ||
-            !u.id_division ||
-            String(u.id_division) === String(idDivision);
-
-        const matchSubdivision =
-            !idSubdivision ||
-            !u.id_subdivision ||
-            String(u.id_subdivision) === String(idSubdivision);
-
-        return matchDivision && matchSubdivision;
-    });
-
-    llenarSelect('#id_merchan', merchans, 'id', 'nombre_completo', selectedValue);
+    // Se muestran todos los usuarios activos sin filtrar por división ni subdivisión,
+    // porque un vehículo puede ser asignado temporalmente a alguien de otra división.
+    llenarSelect('#id_merchan', catalogos.merchans, 'id', 'nombre_completo', selectedValue);
 
     $('#id_merchan').val(selectedValue || '').trigger('change');
 
@@ -2073,13 +2375,18 @@ function renderVehiculos() {
             ? '<span class="badge-soft badge-activo">Activo</span>'
             : '<span class="badge-soft badge-inactivo">Inactivo</span>';
 
+        const tieneAlerta = vehiculosConAlerta.has(Number(v.id));
+        const alertaBadge = tieneAlerta
+            ? `<span class="ms-1" style="color:#f59e0b;font-size:13px" title="Tiene documentos por vencer"><i class="fa-solid fa-triangle-exclamation"></i></span>`
+            : '';
+
         html += `
             <tr>
                 <td>
                     <span class="vehicle-plate">
                         <i class="fa-solid fa-car"></i>
                         ${escapeHtml(v.patente)}
-                    </span>
+                    </span>${alertaBadge}
                 </td>
 
                 <td>${escapeHtml(v.modelo || '-')}</td>
@@ -2092,8 +2399,32 @@ function renderVehiculos() {
                 <td>${escapeHtml(v.fecha_inicio || '-')}</td>
                 <td>${estadoBadge}</td>
 
+                <td>
+                    <button
+                        type="button"
+                        class="btn btn-sm"
+                        style="background:linear-gradient(135deg,#2fb8d8,#1a9db5);color:#fff"
+                        onclick="verDocumentos(${Number(v.id)}, '${escapeHtml(v.patente)}')"
+                        title="Documentos legales"
+                    >
+                        <i class="fa-solid fa-file-lines"></i>
+                    </button>
+                </td>
+
+                <td>
+                    <button
+                        type="button"
+                        class="btn btn-sm"
+                        style="background:linear-gradient(135deg,#7d5fff,#5f47ff);color:#fff"
+                        onclick="verMantenciones(${Number(v.id)}, '${escapeHtml(v.patente)}')"
+                        title="Mantenciones"
+                    >
+                        <i class="fa-solid fa-wrench"></i>
+                    </button>
+                </td>
+
                 <td class="text-end">
-                    <button 
+                    <button
                         type="button"
                         class="btn btn-sm btn-outline-dark"
                         onclick="abrirModalEditar(${Number(v.id)})"
@@ -2102,7 +2433,7 @@ function renderVehiculos() {
                         <i class="fa-solid fa-pen-to-square"></i>
                     </button>
 
-                    <button 
+                    <button
                         type="button"
                         class="btn btn-sm btn-outline-primary"
                         onclick="verHistorial(${Number(v.id)})"
@@ -2569,6 +2900,420 @@ $(document).on('click', '#visorFotoReporte', function (e) {
         cerrarFotoReporte();
     }
 });
+
+// ═══════════════════════════════════════════════
+// ALERTAS
+// ═══════════════════════════════════════════════
+function cargarAlertas() {
+    $.getJSON('ajax_vehiculos_alertas.php', function (resp) {
+        if (!resp || !resp.ok) return;
+
+        alertasData = resp.data;
+        const total = alertasData.vencidos.length + alertasData.proximos_15.length + alertasData.proximos_30.length;
+
+        $('#kpiAlertasDocs').text(total);
+
+        vehiculosConAlerta = new Set();
+        [...alertasData.vencidos, ...alertasData.proximos_15, ...alertasData.proximos_30].forEach(a => {
+            vehiculosConAlerta.add(Number(a.id_vehiculo));
+        });
+
+        renderAlertas(alertasData);
+
+        if (total > 0) {
+            $('#panelAlertas').show();
+        }
+
+        renderVehiculos();
+    });
+}
+
+function togglePanelAlertas() {
+    const $panel = $('#panelAlertas');
+    if ($panel.is(':visible')) {
+        $panel.hide();
+    } else {
+        $panel.show();
+    }
+}
+
+const TIPO_DOC_LABELS = {
+    soap: 'SOAP',
+    revision_tecnica: 'Rev. Técnica',
+    permiso_circulacion: 'Permiso Circ.',
+    seguro: 'Seguro',
+    otro: 'Otro',
+};
+
+function renderAlertas(data) {
+    let html = '';
+
+    function buildGroup(items, cssClass, icono, titulo) {
+        if (!items.length) return '';
+        let g = `<div class="mb-3">
+            <strong class="d-block mb-2" style="font-size:13px">${icono} ${titulo} (${items.length})</strong>
+            <div class="d-flex flex-wrap gap-2">`;
+        items.forEach(a => {
+            const dias = parseInt(a.dias_restantes);
+            const diasTxt = dias < 0
+                ? `Venció hace ${Math.abs(dias)}d`
+                : `Vence: ${escapeHtml(a.fecha_vencimiento)} (${dias}d)`;
+            const merchan = (a.nombre && a.apellido) ? `${escapeHtml(a.nombre)} ${escapeHtml(a.apellido)}` : '';
+            g += `<div class="doc-alerta-item ${cssClass}" onclick="verDocumentos(${a.id_vehiculo}, '${escapeHtml(a.patente)}')">
+                <strong>${escapeHtml(a.patente)}</strong>
+                <span class="d-block">${escapeHtml(TIPO_DOC_LABELS[a.tipo] || a.tipo)}</span>
+                <span class="d-block" style="font-size:11px">${diasTxt}</span>
+                ${merchan ? `<span class="d-block" style="font-size:11px;opacity:.8">${merchan}</span>` : ''}
+            </div>`;
+        });
+        g += `</div></div>`;
+        return g;
+    }
+
+    html += buildGroup(data.vencidos,    'doc-badge-rojo',     '<i class="fa-solid fa-circle-xmark" style="color:#991b1b"></i>', 'Vencidos');
+    html += buildGroup(data.proximos_15, 'doc-badge-naranja',  '<i class="fa-solid fa-triangle-exclamation" style="color:#92400e"></i>', 'Vencen en ≤ 15 días');
+    html += buildGroup(data.proximos_30, 'doc-badge-amarillo', '<i class="fa-solid fa-clock" style="color:#b45309"></i>', 'Vencen en ≤ 30 días');
+
+    if (!html) {
+        html = `<p class="text-muted text-center py-2 mb-0">
+            <i class="fa-solid fa-circle-check me-1 text-success"></i>
+            No hay documentos con alertas activas.
+        </p>`;
+    }
+
+    $('#contenedorAlertas').html(html);
+}
+
+// ═══════════════════════════════════════════════
+// DOCUMENTOS
+// ═══════════════════════════════════════════════
+function verDocumentos(id, patente) {
+    docVehiculoActual = { id, patente };
+    document.getElementById('docPatente').textContent = patente;
+    document.getElementById('docIdVehiculo').value = id;
+    ocultarFormDoc();
+    cargarDocumentos(id);
+    modalDocumentos.show();
+}
+
+function cargarDocumentos(idVehiculo) {
+    $('#docLista').html('<p class="text-muted text-center py-3"><i class="fa-solid fa-spinner fa-spin me-1"></i> Cargando...</p>');
+
+    $.getJSON('ajax_vehiculos_documentos.php?action=list&id_vehiculo=' + idVehiculo, function (resp) {
+        if (!resp.ok) {
+            $('#docLista').html(`<p class="text-danger">${escapeHtml(resp.msg || 'Error.')}</p>`);
+            return;
+        }
+        renderDocumentos(resp.data);
+    }).fail(function () {
+        $('#docLista').html('<p class="text-danger">Error inesperado al cargar documentos.</p>');
+    });
+}
+
+function renderDocumentos(docs) {
+    if (!docs.length) {
+        $('#docLista').html('<p class="text-muted text-center py-4">Este vehículo no tiene documentos registrados.</p>');
+        return;
+    }
+
+    let html = `<div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr>
+                <th>Tipo</th><th>N° Documento</th><th>Emisión</th>
+                <th>Vencimiento</th><th>Estado</th><th>Archivo</th>
+                <th class="text-end">Acciones</th>
+            </tr></thead><tbody>`;
+
+    docs.forEach(d => {
+        const dias = parseInt(d.dias_restantes);
+        let badgeHtml;
+        if (dias < 0) {
+            badgeHtml = `<span class="badge-soft doc-badge-rojo">Vencido (${Math.abs(dias)}d)</span>`;
+        } else if (dias <= 15) {
+            badgeHtml = `<span class="badge-soft doc-badge-naranja">${dias}d restantes</span>`;
+        } else if (dias <= 30) {
+            badgeHtml = `<span class="badge-soft doc-badge-amarillo">${dias}d restantes</span>`;
+        } else {
+            badgeHtml = `<span class="badge-soft doc-badge-verde">${dias}d restantes</span>`;
+        }
+
+        const archivoHtml = d.archivo
+            ? `<a href="/visibility2/portal/uploads/vehiculos_docs/${docVehiculoActual.id}/${escapeHtml(d.archivo)}"
+                  target="_blank"
+                  class="btn btn-sm"
+                  style="background:linear-gradient(135deg,#4d7eff,#6a73ff);color:#fff"
+                  title="Ver archivo">
+                    <i class="fa-solid fa-file-arrow-down"></i>
+               </a>`
+            : '<span class="text-muted small">—</span>';
+
+        html += `<tr>
+            <td><span class="tipo-doc-label">${escapeHtml(TIPO_DOC_LABELS[d.tipo] || d.tipo)}</span></td>
+            <td>${escapeHtml(d.numero_documento || '—')}</td>
+            <td>${escapeHtml(d.fecha_emision || '—')}</td>
+            <td>${escapeHtml(d.fecha_vencimiento)}</td>
+            <td>${badgeHtml}</td>
+            <td>${archivoHtml}</td>
+            <td class="text-end">
+                <button class="btn btn-sm btn-outline-dark" onclick="editarDocumento(${d.id})" title="Editar">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                </button>
+                <button class="btn btn-sm"
+                        style="background:linear-gradient(135deg,#ef6f6c,#dc3545);color:#fff"
+                        onclick="eliminarDocumento(${d.id})" title="Eliminar">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </td>
+        </tr>`;
+    });
+
+    html += '</tbody></table></div>';
+    $('#docLista').html(html);
+}
+
+function mostrarFormDoc() {
+    document.getElementById('docId').value = '';
+    document.getElementById('formDocumento').reset();
+    document.getElementById('docIdVehiculo').value = docVehiculoActual.id;
+    document.getElementById('docArchivoActual').textContent = '';
+    $('#docListSection').hide();
+    $('#docFormSection').show();
+}
+
+function ocultarFormDoc() {
+    $('#docFormSection').hide();
+    $('#docListSection').show();
+}
+
+function editarDocumento(id) {
+    $.getJSON('ajax_vehiculos_documentos.php?action=list&id_vehiculo=' + docVehiculoActual.id, function (resp) {
+        if (!resp.ok) return;
+        const doc = resp.data.find(d => Number(d.id) === Number(id));
+        if (!doc) return;
+
+        mostrarFormDoc();
+        document.getElementById('docId').value = doc.id;
+        document.querySelector('#formDocumento [name="tipo"]').value              = doc.tipo;
+        document.querySelector('#formDocumento [name="numero_documento"]').value  = doc.numero_documento || '';
+        document.querySelector('#formDocumento [name="fecha_emision"]').value     = doc.fecha_emision || '';
+        document.querySelector('#formDocumento [name="fecha_vencimiento"]').value = doc.fecha_vencimiento;
+        document.querySelector('#formDocumento [name="observacion"]').value       = doc.observacion || '';
+
+        if (doc.archivo) {
+            document.getElementById('docArchivoActual').textContent =
+                'Archivo actual: ' + doc.archivo + ' — sube uno nuevo para reemplazarlo';
+        }
+    });
+}
+
+function guardarDocumento() {
+    const formData = new FormData(document.getElementById('formDocumento'));
+
+    $.ajax({
+        url: 'ajax_vehiculos_documentos.php',
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        dataType: 'json',
+        beforeSend() {
+            $('#formDocumento button[type="submit"]')
+                .prop('disabled', true)
+                .html('<i class="fa-solid fa-spinner fa-spin me-1"></i> Guardando...');
+        },
+        success(resp) {
+            if (!resp.ok) { alert(resp.msg || 'Error al guardar.'); return; }
+            ocultarFormDoc();
+            cargarDocumentos(docVehiculoActual.id);
+            cargarAlertas();
+        },
+        error() { alert('Error inesperado al guardar el documento.'); },
+        complete() {
+            $('#formDocumento button[type="submit"]')
+                .prop('disabled', false)
+                .html('<i class="fa-solid fa-floppy-disk me-1"></i> Guardar');
+        },
+    });
+}
+
+function eliminarDocumento(id) {
+    if (!confirm('¿Eliminar este documento?')) return;
+
+    $.post('ajax_vehiculos_documentos.php', { action: 'delete', id }, function (resp) {
+        if (!resp.ok) { alert(resp.msg); return; }
+        cargarDocumentos(docVehiculoActual.id);
+        cargarAlertas();
+    }, 'json');
+}
+
+// ═══════════════════════════════════════════════
+// MANTENCIONES
+// ═══════════════════════════════════════════════
+function verMantenciones(id, patente) {
+    mantVehiculoActual = { id, patente };
+    document.getElementById('mantPatente').textContent = patente;
+    document.getElementById('mantIdVehiculo').value = id;
+    ocultarFormMant();
+    cargarMantenciones(id);
+    modalMantenciones.show();
+}
+
+function cargarMantenciones(idVehiculo) {
+    $('#mantLista').html('<p class="text-muted text-center py-3"><i class="fa-solid fa-spinner fa-spin me-1"></i> Cargando...</p>');
+
+    $.getJSON('ajax_vehiculos_mantenciones.php?action=list&id_vehiculo=' + idVehiculo, function (resp) {
+        if (!resp.ok) {
+            $('#mantLista').html(`<p class="text-danger">${escapeHtml(resp.msg || 'Error.')}</p>`);
+            return;
+        }
+        renderMantenciones(resp.data);
+    }).fail(function () {
+        $('#mantLista').html('<p class="text-danger">Error inesperado al cargar mantenciones.</p>');
+    });
+}
+
+const TIPO_MANT_LABELS = {
+    preventiva:  'Preventiva',
+    correctiva:  'Correctiva',
+    revision:    'Revisión General',
+    neumaticos:  'Neumáticos',
+    frenos:      'Frenos',
+    aceite:      'Cambio Aceite',
+    otro:        'Otro',
+};
+
+function renderMantenciones(mantenciones) {
+    if (!mantenciones.length) {
+        $('#mantLista').html('<p class="text-muted text-center py-4">No hay mantenciones registradas para este vehículo.</p>');
+        return;
+    }
+
+    let html = `<div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr>
+                <th>Tipo</th><th>Fecha</th><th>KM</th>
+                <th>Proveedor</th><th>Costo</th><th>Descripción</th>
+                <th class="text-end">Acciones</th>
+            </tr></thead><tbody>`;
+
+    mantenciones.forEach(m => {
+        const costoFmt = m.costo
+            ? '$' + Number(m.costo).toLocaleString('es-CL')
+            : '—';
+        html += `<tr>
+            <td><span class="tipo-doc-label">${escapeHtml(TIPO_MANT_LABELS[m.tipo] || m.tipo)}</span></td>
+            <td>${escapeHtml(m.fecha)}</td>
+            <td>${m.km_en_mantencion ? Number(m.km_en_mantencion).toLocaleString('es-CL') + ' km' : '—'}</td>
+            <td>${escapeHtml(m.proveedor || '—')}</td>
+            <td>${escapeHtml(costoFmt)}</td>
+            <td>
+                <div class="report-cell-text" style="max-width:220px">
+                    ${escapeHtml(m.descripcion || '—')}
+                </div>
+            </td>
+            <td class="text-end">
+                <button class="btn btn-sm btn-outline-dark" onclick="editarMantencion(${m.id})" title="Editar">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                </button>
+                <button class="btn btn-sm"
+                        style="background:linear-gradient(135deg,#ef6f6c,#dc3545);color:#fff"
+                        onclick="eliminarMantencion(${m.id})" title="Eliminar">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </td>
+        </tr>`;
+    });
+
+    html += '</tbody></table></div>';
+    $('#mantLista').html(html);
+}
+
+function mostrarFormMant() {
+    document.getElementById('mantId').value = '';
+    document.getElementById('formMantencion').reset();
+    document.getElementById('mantIdVehiculo').value = mantVehiculoActual.id;
+
+    const hoy = new Date();
+    const y = hoy.getFullYear();
+    const m = String(hoy.getMonth() + 1).padStart(2, '0');
+    const d = String(hoy.getDate()).padStart(2, '0');
+    document.querySelector('#formMantencion [name="fecha"]').value = `${y}-${m}-${d}`;
+
+    $('#mantListSection').hide();
+    $('#mantFormSection').show();
+}
+
+function ocultarFormMant() {
+    $('#mantFormSection').hide();
+    $('#mantListSection').show();
+}
+
+function editarMantencion(id) {
+    $.getJSON('ajax_vehiculos_mantenciones.php?action=list&id_vehiculo=' + mantVehiculoActual.id, function (resp) {
+        if (!resp.ok) return;
+        const mant = resp.data.find(m => Number(m.id) === Number(id));
+        if (!mant) return;
+
+        mostrarFormMant();
+        document.getElementById('mantId').value = mant.id;
+        document.querySelector('#formMantencion [name="tipo"]').value              = mant.tipo;
+        document.querySelector('#formMantencion [name="fecha"]').value             = mant.fecha;
+        document.querySelector('#formMantencion [name="km_en_mantencion"]').value  = mant.km_en_mantencion || '';
+        document.querySelector('#formMantencion [name="costo"]').value             = mant.costo || '';
+        document.querySelector('#formMantencion [name="proveedor"]').value         = mant.proveedor || '';
+        document.querySelector('#formMantencion [name="descripcion"]').value       = mant.descripcion || '';
+    });
+}
+
+function guardarMantencion() {
+    const formData = new FormData(document.getElementById('formMantencion'));
+
+    $.ajax({
+        url: 'ajax_vehiculos_mantenciones.php',
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        dataType: 'json',
+        beforeSend() {
+            $('#formMantencion button[type="submit"]')
+                .prop('disabled', true)
+                .html('<i class="fa-solid fa-spinner fa-spin me-1"></i> Guardando...');
+        },
+        success(resp) {
+            if (!resp.ok) { alert(resp.msg || 'Error al guardar.'); return; }
+            ocultarFormMant();
+            cargarMantenciones(mantVehiculoActual.id);
+        },
+        error() { alert('Error inesperado al guardar la mantención.'); },
+        complete() {
+            $('#formMantencion button[type="submit"]')
+                .prop('disabled', false)
+                .html('<i class="fa-solid fa-floppy-disk me-1"></i> Guardar');
+        },
+    });
+}
+
+function eliminarMantencion(id) {
+    if (!confirm('¿Eliminar este registro de mantención?')) return;
+
+    $.post('ajax_vehiculos_mantenciones.php', { action: 'delete', id }, function (resp) {
+        if (!resp.ok) { alert(resp.msg); return; }
+        cargarMantenciones(mantVehiculoActual.id);
+    }, 'json');
+}
+
+function abrirModalDescargaExcel() {
+    const hoy = new Date();
+    const y   = hoy.getFullYear();
+    const m   = String(hoy.getMonth() + 1).padStart(2, '0');
+    const d   = String(hoy.getDate()).padStart(2, '0');
+
+    document.getElementById('excelStartDate').value = `${y}-${m}-01`;
+    document.getElementById('excelEndDate').value   = `${y}-${m}-${d}`;
+
+    modalDescargaExcel.show();
+}
 
 </script>
 

@@ -430,6 +430,60 @@
     border-top: 1px solid #ececec;
 }
 
+/* ===== Pase 2: HUD (chips/voz/saltar), toasts y bottom sheet ===== */
+
+/* Chips de estado del HUD (GPS / tráfico-cache / próximo local) */
+.nav-hud .nav-nextnext{ top:96px; }            /* deja espacio bajo los chips */
+.nav-chips{
+    position:absolute; top:64px; left:10px; right:10px;
+    display:flex; gap:6px; flex-wrap:wrap; pointer-events:none;
+}
+.nav-chip{
+    pointer-events:auto; background:#ffffff; border:1px solid #d9dee6; border-radius:999px;
+    padding:3px 9px; font-size:11px; font-weight:700; color:#0f172a;
+    box-shadow:0 4px 14px rgba(0,0,0,.10); white-space:nowrap;
+    max-width:60%; overflow:hidden; text-overflow:ellipsis;
+}
+.nav-chip--ok{ color:#15803d; border-color:#bbf7d0; }
+.nav-chip--warn{ color:#b45309; border-color:#fde68a; }
+.nav-chip--bad{ color:#b91c1c; border-color:#fecaca; }
+.nav-hud .nav-bottom{ flex-wrap:wrap; }
+#btnVozNav, #btnSkipStop{
+    pointer-events:auto; border-radius:12px; border:1px solid #d9dee6; background:#ffffff;
+    box-shadow:0 6px 24px rgba(0,0,0,.12); padding:8px 10px; font-weight:700;
+}
+
+/* Toasts no bloqueantes */
+.v2-toasts{
+    position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:20000;
+    display:flex; flex-direction:column; gap:8px; width:min(92vw,420px); pointer-events:none;
+}
+.v2-toast{
+    pointer-events:auto; display:flex; align-items:center; gap:10px;
+    background:#1f2937; color:#fff; border-radius:12px; padding:10px 12px;
+    box-shadow:0 10px 30px rgba(0,0,0,.28); font-size:13px; animation:v2ToastIn .2s ease;
+}
+.v2-toast__msg{ flex:1; }
+.v2-toast .btn{ flex:none; }
+.v2-toast__close{ background:none; border:none; color:#fff; opacity:.7; font-size:18px; line-height:1; cursor:pointer; }
+.v2-toast--success{ background:#166534; }
+.v2-toast--warn{ background:#9a6700; }
+.v2-toast--error{ background:#991b1b; }
+.v2-toast--info{ background:#1f2937; }
+.v2-toast--out{ opacity:0; transform:translateY(8px); transition:opacity .25s ease, transform .25s ease; }
+@keyframes v2ToastIn{ from{ opacity:0; transform:translateY(8px); } to{ opacity:1; transform:none; } }
+
+/* Bottom sheet del panel de ruta (handle + snap points) */
+.panel-ruta-mobile{ transition: transform .25s ease, max-height .25s ease, opacity .2s ease; overflow:hidden; }
+.sheet-handle{
+    width:42px; height:5px; border-radius:3px; background:#cbd2d9;
+    margin:2px auto 8px; cursor:grab; touch-action:none; flex:none;
+}
+.panel-ruta-mobile.sheet-peek{ max-height:80px; overflow:hidden; }
+.panel-ruta-mobile.sheet-half{ max-height:48%; overflow-y:auto; }
+.panel-ruta-mobile.sheet-full{ max-height:88%; overflow-y:auto; }
+.panel-ruta-mobile.sheet-collapsed{ transform:translateY(135%); opacity:0; pointer-events:none; }
+
 #modalMapa .modal-footer .btn{
     border-radius: 10px;
     min-width: 90px;

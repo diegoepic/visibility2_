@@ -72,6 +72,8 @@ $id_empresa             = (int) ($_POST['id_empresa'] ?? 0);
 $id_division            = (isset($_POST['id_division']) && $_POST['id_division'] !== '') ? (int) $_POST['id_division'] : null;
 $id_subdivision         = (isset($_POST['id_subdivision']) && $_POST['id_subdivision'] !== '') ? (int) $_POST['id_subdivision'] : null;
 $clasificacion_usuario  = trim($_POST['clasificacion_usuario'] ?? '');
+$id_comuna              = (isset($_POST['id_comuna']) && $_POST['id_comuna'] !== '') ? (int) $_POST['id_comuna'] : null;
+$centro_distribucion    = mb_strtoupper(trim($_POST['centro_distribucion'] ?? ''), 'UTF-8');
 
 // 6) Validaciones
 $errors = [];
@@ -247,7 +249,9 @@ $campos = "
     id_empresa = ?,
     id_division = ?,
     id_subdivision = ?,
-    clasificacion_usuario = ?
+    clasificacion_usuario = ?,
+    id_comuna = ?,
+    centro_distribucion = ?
 ";
 
 $params = [
@@ -261,10 +265,12 @@ $params = [
     $id_empresa,
     $id_division,
     $id_subdivision,
-    $clasificacion_usuario
+    $clasificacion_usuario,
+    $id_comuna,
+    $centro_distribucion
 ];
 
-$tipos = "ssssssiiiis";
+$tipos = "ssssssiiiisis";
 
 // Contraseña
 if ($clave !== null) {

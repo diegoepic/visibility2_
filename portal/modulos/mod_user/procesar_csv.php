@@ -248,6 +248,11 @@ $email_idx    = array_search('email', $header_normalizado, true);
 $usuario_idx  = array_search('usuario', $header_normalizado, true);
 $password_idx = array_search('password', $header_normalizado, true);
 
+// Columnas opcionales — false si no existen (compatibilidad con CSVs sin estas columnas)
+$region_idx = array_search('region',              $header_normalizado, true);
+$comuna_idx = array_search('comuna',              $header_normalizado, true);
+$cd_idx     = array_search('centro_distribucion', $header_normalizado, true);
+
 /* =========================================================
    SQL
 ========================================================= */
@@ -269,10 +274,12 @@ $stmt_insert = $conn->prepare("
             id_subdivision,
             login_count,
             last_login,
-            clasificacion_usuario
+            clasificacion_usuario,
+            id_comuna,
+            centro_distribucion
         )
     VALUES
-        (?, ?, ?, ?, ?, ?, ?, NOW(), 1, ?, ?, ?, ?, 1, NOW(), ?)
+        (?, ?, ?, ?, ?, ?, ?, NOW(), 1, ?, ?, ?, ?, 1, NOW(), ?, ?, ?)
 ");
 
 if (!$stmt_insert) {
@@ -367,11 +374,53 @@ try {
 
         $hashed_password = password_hash($clave, PASSWORD_DEFAULT);
 
-        $divisionFinal = ($id_division_csv > 0) ? $id_division_csv : null;
+        $divisionFinal    = ($id_division_csv > 0) ? $id_division_csv : null;
         $subdivisionFinal = ($id_subdivision_csv > 0) ? $id_subdivision_csv : null;
 
+        // Resolver región/comuna por fila (columnas opcionales del CSV)
+        $region_raw = ($region_idx !== false) ? obtenerValorFila($data, (int)$region_idx) : '';
+        $comuna_raw = ($comuna_idx !== false) ? obtenerValorFila($data, (int)$comuna_idx) : '';
+        $cd_val     = ($cd_idx !== false)
+            ? mb_strtoupper(obtenerValorFila($data, (int)$cd_idx), 'UTF-8')
+            : '';
+
+        $id_comuna_fila = null;
+
+        if ($region_raw !== '' || $comuna_raw !== '') {
+            if ($region_raw === '' || $comuna_raw === '') {
+                $errores[] = "Fila {$fila}: si se especifica región o comuna, ambas son obligatorias.";
+                continue;
+            }
+
+            $stmt_reg = $conn->prepare("SELECT id FROM region WHERE UPPER(region) = UPPER(?) LIMIT 1");
+            $stmt_reg->bind_param('s', $region_raw);
+            $stmt_reg->execute();
+            $stmt_reg->bind_result($id_region_fila);
+            $found_region = $stmt_reg->fetch();
+            $stmt_reg->close();
+
+            if (!$found_region) {
+                $errores[] = "Fila {$fila}: la región '{$region_raw}' no existe en el sistema.";
+                continue;
+            }
+
+            $stmt_com = $conn->prepare(
+                "SELECT id FROM comuna WHERE UPPER(comuna) = UPPER(?) AND id_region = ? LIMIT 1"
+            );
+            $stmt_com->bind_param('si', $comuna_raw, $id_region_fila);
+            $stmt_com->execute();
+            $stmt_com->bind_result($id_comuna_fila);
+            $found_comuna = $stmt_com->fetch();
+            $stmt_com->close();
+
+            if (!$found_comuna) {
+                $errores[] = "Fila {$fila}: la comuna '{$comuna_raw}' no pertenece a la región '{$region_raw}' o no existe.";
+                continue;
+            }
+        }
+
         $stmt_insert->bind_param(
-            'sssssssiiiis',
+            'sssssssiiiisis',
             $rut_estandarizado,
             $nombre,
             $apellido,
@@ -383,7 +432,9 @@ try {
             $id_empresa_csv,
             $divisionFinal,
             $subdivisionFinal,
-            $clasificacion_usuario_csv
+            $clasificacion_usuario_csv,
+            $id_comuna_fila,
+            $cd_val
         );
 
         if ($stmt_insert->execute()) {
