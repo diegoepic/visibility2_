@@ -96,7 +96,7 @@ function collectRows(array &$q, string $prefix, int $idx,
     $dep  = isset($q['id_dependency_option']) ? (int)$q['id_dependency_option'] : 0;
     $opts = $q['options'];
 
-    // Condición en lenguaje natural
+    // Condición en lenguaje natural (con id de la opción disparadora, para referencia)
     $condicion = '(siempre visible)';
     if ($dep && isset($optTextById[$dep])) {
         $parentId  = $optionParents[$dep] ?? 0;
@@ -104,16 +104,21 @@ function collectRows(array &$q, string $prefix, int $idx,
         $condicion = $parentTxt
             ? '"' . $parentTxt . '" = "' . $optTextById[$dep] . '"'
             : 'Cuando se responde "' . $optTextById[$dep] . '"';
+        $condicion .= ' [id_opcion:' . $dep . ']';
     }
 
-    // Opciones como lista simple
+    // Opciones como lista simple, cada una con su id
     $opcionesTxt = '';
     if ($opts) {
-        $opcionesTxt = implode(' / ', array_map(fn($o) => $o['option_text'], $opts));
+        $opcionesTxt = implode(' / ', array_map(
+            fn($o) => $o['option_text'] . ' (id:' . (int)$o['id'] . ')',
+            $opts
+        ));
     }
 
     $rows[] = [
         $num,
+        (int)$q['id'],
         $q['question_text'],
         tipoTexto((int)$q['id_question_type']),
         (int)$q['is_required'] ? 'Sí' : 'No',
@@ -164,6 +169,7 @@ if ($formato === 'html') {
             $condHtml = '<div class="q-cond">'
                 . ($pt ? '<em>' . $pt . '</em> &rarr; ' : '')
                 . 'Solo aparece si se responde <strong>"' . htmlspecialchars($optTextById[$dep]) . '"</strong>'
+                . ' <span class="idtag">id_opcion:' . $dep . '</span>'
                 . '</div>';
         }
 
@@ -171,11 +177,13 @@ if ($formato === 'html') {
         if ($opts) {
             $optsHtml = '<div class="q-opts"><span class="opts-lbl">Opciones</span><div class="chips">';
             foreach ($opts as $op)
-                $optsHtml .= '<span class="chip">' . htmlspecialchars($op['option_text']) . '</span>';
+                $optsHtml .= '<span class="chip">' . htmlspecialchars($op['option_text'])
+                    . '<span class="chip-id">#' . (int)$op['id'] . '</span></span>';
             $optsHtml .= '</div></div>';
         }
 
-        $badges = '<span class="btipo" style="background:' . $tipoColor . '">' . $tipoLabel . '</span>';
+        $badges = '<span class="idtag qid">ID ' . (int)$q['id'] . '</span>';
+        $badges .= '<span class="btipo" style="background:' . $tipoColor . '">' . $tipoLabel . '</span>';
         if ((int)$q['is_required']) $badges .= '<span class="breq">Requerida</span>';
         if ((int)$q['is_valued'])   $badges .= '<span class="bval">Valorizada</span>';
 
@@ -220,6 +228,10 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef1f7;color:#222;paddi
 .q-opts{margin-top:5px}.opts-lbl{display:block;font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#aaa;margin-bottom:4px}
 .chips{display:flex;flex-wrap:wrap;gap:4px}
 .chip{background:#f0f4ff;border:1px solid #c5cae9;color:#3949ab;padding:2px 10px;border-radius:20px;font-size:.76rem;font-weight:500}
+.chip-id{margin-left:5px;color:#9fa8da;font-size:.64rem;font-weight:700;font-family:'Consolas','Courier New',monospace}
+.idtag{display:inline-block;padding:1px 6px;border-radius:5px;background:#eceff1;color:#78909c;font-size:.62rem;font-weight:700;font-family:'Consolas','Courier New',monospace;letter-spacing:.3px}
+.qid{background:#e8eaf6;color:#5c6bc0}
+.q-cond .idtag{background:#fff3cd;color:#a1887f}
 .ftr{margin-top:28px;text-align:center;font-size:.72rem;color:#bbb}
 @media print{body{background:#fff;padding:10px}
 .hdr{background:#1a237e!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -262,7 +274,7 @@ fputcsv($out, [$set['nombre_set']], $sep);
 if (trim($set['description'] ?? '')) fputcsv($out, [$set['description']], $sep);
 fputcsv($out, [''], $sep);
 
-fputcsv($out, ['N°', 'Pregunta', 'Tipo de respuesta', 'Requerida', 'Valorizada', 'Solo aparece cuando...', 'Opciones de respuesta'], $sep);
+fputcsv($out, ['N°', 'ID', 'Pregunta', 'Tipo de respuesta', 'Requerida', 'Valorizada', 'Solo aparece cuando...', 'Opciones de respuesta'], $sep);
 
 foreach ($rows as $row)
     fputcsv($out, $row, $sep);

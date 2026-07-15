@@ -128,6 +128,7 @@ if (!isset($conn) || !($conn instanceof mysqli)) {
 
 /* ---------------- Idempotencia ---------------- */
 require_once __DIR__ . '/lib/idempotency.php';
+require_once __DIR__ . '/lib/foto_hash.php'; // detección de fotos duplicadas (sha256 + dHash perceptual)
 sanitize_idempotency_key();
 idempo_claim_or_fail($conn, 'upload_material_foto'); // responde si ya existe para esa key
 
@@ -452,6 +453,35 @@ try {
   $savedPath = $destFinal;
   @chmod($savedPath, 0644);
 
+  // 0.5) Hashes de contenido (sha256) y perceptual (dHash) sobre el archivo ya almacenado.
+  //      Server-side: los valores del cliente son falsificables. Best-effort: si falla, no bloquea.
+  $contentSha = v2_sha256_file($savedPath);          // '' si no se pudo leer
+  $phashHex   = v2_dhash($savedPath);                // null si no se pudo decodificar
+  $shaParam   = $contentSha !== '' ? $contentSha : null;
+
+  // 0.6) BLOQUEO de duplicado EXACTO: misma foto (mismos bytes) ya usada en OTRA sala de la campaña.
+  //      Mismo local → no se bloquea (lo cubre la idempotencia por visita+FQ+URL más abajo).
+  if ($shaParam !== null) {
+    $dupExacto = v2_buscar_dup_exacto($conn, $shaParam, $idCampana, $idLocal);
+    if ($dupExacto) {
+      $conn->rollback();
+      if ($savedPath && is_file($savedPath))               @unlink($savedPath);
+      if (isset($stagingPath) && is_file($stagingPath))    @unlink($stagingPath);
+      if ($savedPath && is_file($savedPath . '.json'))     @unlink($savedPath . '.json');
+      $dupLocal = trim(((string)($dupExacto['local_codigo'] ?? '')) . ' ' . ((string)($dupExacto['local_nombre'] ?? '')));
+      $msgDup   = 'Foto duplicada: esta misma imagen ya fue cargada'
+                . ($dupLocal !== '' ? ' en el local ' . $dupLocal : ' en otra sala')
+                . '. Debes tomar una foto real de este local.';
+      v2_log_intento_duplicado($conn, $idCampana, $idLocal, $usuario_id, 'material', $shaParam, $phashHex, (int)$dupExacto['id'], (int)($dupExacto['id_local'] ?? 0), null, $matName);
+      json_fail(409, $msgDup, [
+        'error_code' => 'DUPLICATE_PHOTO',
+        'retryable'  => false,
+        'dup_of'     => (int)$dupExacto['id'],
+        'dup_local'  => $dupLocal,
+      ]);
+    }
+  }
+
   // 1) Verificar duplicado (misma visita + FQ + URL) antes de insertar (DI-06)
   if ($idFQ > 0 && $visita_id > 0) {
     $dupChk = $conn->prepare("SELECT id FROM fotoVisita WHERE visita_id=? AND id_formularioQuestion=? AND url=? LIMIT 1");
@@ -475,20 +505,30 @@ try {
     }
   }
 
-  // 2) Insert en fotoVisita (URL relativa normalizada)
+  // 2) Insert en fotoVisita (URL relativa normalizada + hashes de dedup)
   $stmt = $conn->prepare("
     INSERT INTO fotoVisita
-      (visita_id, url, id_usuario, id_formulario, id_local, id_material, id_formularioQuestion, fotoLat, fotoLng, kind)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (visita_id, url, id_usuario, id_formulario, id_local, id_material, id_formularioQuestion, fotoLat, fotoLng, kind, content_sha256, phash)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ");
   if (!$stmt) throw new Exception('Prep fotoVisita: '.$conn->error);
   $stmt->bind_param(
-    'isiiiiidds',
-    $visita_id, $relUrl, $usuario_id, $idCampana, $idLocal, $idMaterial, $idFQ, $fotoLat, $fotoLng, $etapaMaterial
+    'isiiiiiddsss',
+    $visita_id, $relUrl, $usuario_id, $idCampana, $idLocal, $idMaterial, $idFQ, $fotoLat, $fotoLng, $etapaMaterial, $shaParam, $phashHex
   );
   if (!$stmt->execute()) throw new Exception('Exec fotoVisita: '.$stmt->error);
   $idFoto = (int)$stmt->insert_id;
   $stmt->close();
+
+  // 2.1) MARCA (no bloquea): foto casi idéntica ya cargada en OTRA sala de la campaña.
+  //      Se deja para revisión en el portal; el bloqueo duro queda sólo para el duplicado exacto.
+  if ($phashHex !== null) {
+    $parecida = v2_buscar_parecida($conn, $phashHex, $idCampana, $idLocal, 8);
+    if ($parecida) {
+      $um = $conn->prepare("UPDATE fotoVisita SET dup_flag = 1, dup_ref_id = ? WHERE id = ?");
+      if ($um) { $refId = (int)$parecida['id']; $um->bind_param('ii', $refId, $idFoto); @$um->execute(); $um->close(); }
+    }
+  }
 
   // 2) EXIF/meta si existe tabla; si no, sidecar junto al archivo REAL
   $has_meta_table = false;

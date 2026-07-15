@@ -4,6 +4,7 @@ ini_set('display_errors', 1);
 
 
 require_once __DIR__ . '/_session_guard.php';
+require_once __DIR__ . '/includes/permisos.php';
 // Verificar si el usuario ha iniciado sesi車n
 if (!isset($_SESSION['usuario_id'])) {
     header("Location: index.php");
@@ -81,6 +82,8 @@ if ($division_id > 0) {
     $stmt->fetch();
     $stmt->close();
 }
+
+$esUsuarioMC = strtoupper(trim($division_nombre)) === 'MC';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1161,7 +1164,7 @@ body.layout-fixed {
           </li>
 
           <li class="nav-header">MODULOS</li>
-          <?php if (strtolower($perfilUser) == 'editor' || strtolower($perfilUser) == 'coordinador'): ?>
+          <?php if (puedeVerModulo($conn, 'usuarios') || puedeVerModulo($conn, 'usuarios.crear_editar') || puedeVerModulo($conn, 'usuarios.estadisticas') || puedeVerModulo($conn, 'usuarios.descargar')): ?>
           <li class="nav-item">
             <a href="#" class="nav-link">
               <i class="nav-icon far fa-user"></i>
@@ -1171,28 +1174,36 @@ body.layout-fixed {
               </p>
             </a>
             <ul class="nav nav-treeview">
+              <?php if (puedeVerModulo($conn, 'usuarios.crear_editar')): ?>
               <li class="nav-item">
                 <a href="modulos/mod_create_user.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Crear/Editar usuarios</p>
                 </a>
               </li>
+              <?php endif; ?>
+              <?php if (puedeVerModulo($conn, 'usuarios.estadisticas')): ?>
               <li class="nav-item">
                 <a href="modulos/mod_statistic_user.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Estadisticas de usuarios</p>
                 </a>
               </li>              
+              <?php endif; ?>
+              <?php if (puedeVerModulo($conn, 'usuarios.descargar')): ?>
               <li class="nav-item">
                   <a href="#" class="nav-link" data-toggle="modal" data-target="#modalDataUsuarios">
                       <i class="far fa-circle nav-icon"></i>
                       <p>Descargar Usuarios</p>
                   </a>
               </li>              
+              <?php endif; ?>
             </ul>
           </li>
 
 
+          <?php endif; ?>
+          <?php if (puedeVerModulo($conn, 'flota') || puedeVerModulo($conn, 'flota.crear_editar') || puedeVerModulo($conn, 'flota.descargar')): ?>
           <li class="nav-item">
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-car"></i>
@@ -1202,23 +1213,28 @@ body.layout-fixed {
               </p>
             </a>
             <ul class="nav nav-treeview">
+              <?php if (puedeVerModulo($conn, 'flota.crear_editar')): ?>
               <li class="nav-item">
                 <a href="modulos/mod_vehiculos/mod_vehiculos.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Crear/Editar vehiculos</p>
                 </a>
               </li>
+              <?php endif; ?>
+              <?php if (puedeVerModulo($conn, 'flota.descargar')): ?>
                 <li class="nav-item">
                     <a href="#" class="nav-link" data-toggle="modal" data-target="#modalDescargarVehiculos">
                         <i class="far fa-circle nav-icon"></i>
                         <p>Descargar vehículos</p>
                     </a>
                 </li>             
+              <?php endif; ?>
             </ul>
           </li>
 
           
           <?php endif; ?>
+          <?php if (puedeVerModulo($conn, 'locales') || puedeVerModulo($conn, 'locales.crear_editar') || puedeVerModulo($conn, 'locales.descargar') || puedeVerModulo($conn, 'locales.ultima_gestion') || puedeVerModulo($conn, 'locales.historico_gestiones')): ?>
           <li class="nav-item">
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-building"></i>
@@ -1228,7 +1244,7 @@ body.layout-fixed {
               </p>
             </a>
             <ul class="nav nav-treeview">
-              <?php if (strtolower($perfilUser) == 'editor' || strtolower($perfilUser) == 'coordinador'): ?>
+              <?php if (puedeVerModulo($conn, 'locales.crear_editar')): ?>
               <li class="nav-item">
                 <a href="modulos/mod_local.php" class="nav-link">
                   <i class="fas fa-plus-circle nav-icon"></i>
@@ -1236,19 +1252,23 @@ body.layout-fixed {
                 </a>
               </li>
               <?php endif; ?>
+              <?php if (puedeVerModulo($conn, 'locales.descargar')): ?>
               <li class="nav-item">
                   <a href="#" class="nav-link" data-toggle="modal" data-target="#modalDataLocales">
                       <i class="far fa-circle nav-icon"></i>
                       <p>Descargar Locales</p>
                   </a>
               </li>
-              <?php if (strtolower($perfilUser) == 'editor' || strtolower($perfilUser) == 'coordinador'): ?>              
+              <?php endif; ?>
+              <?php if (puedeVerModulo($conn, 'locales.ultima_gestion')): ?>              
               <li class="nav-item">
                   <a href="#" class="nav-link" data-toggle="modal" data-target="#modalDataLocalesUltimaGestion">
                       <i class="far fa-circle nav-icon"></i>
                       <p>Estado Ultima Gestion</p>
                   </a>
               </li> 
+              <?php endif; ?>
+              <?php if (puedeVerModulo($conn, 'locales.historico_gestiones')): ?>
               <li class="nav-item">
                   <a href="#" class="nav-link" data-toggle="modal" data-target="#modalDataLocalesHistoricoGestion">
                       <i class="fas fa-database nav-icon"></i>
@@ -1258,6 +1278,8 @@ body.layout-fixed {
               <?php endif; ?>              
             </ul>
           </li>
+          <?php endif; ?>
+          <?php if (puedeVerModulo($conn, 'reportes') || puedeVerModulo($conn, 'reportes.campanas') || puedeVerModulo($conn, 'reportes.adicionales') || puedeVerModulo($conn, 'reportes.ruta_planificada') || puedeVerModulo($conn, 'reportes.temporada_2024_2025') || puedeVerModulo($conn, 'reportes.temporada_2025_2026')): ?>
           <li class="nav-item">
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-cloud-download-alt"></i>
@@ -1267,40 +1289,52 @@ body.layout-fixed {
               </p>
             </a>
             <ul class="nav nav-treeview">
+              <?php if (puedeVerModulo($conn, 'reportes.campanas')): ?>
               <li class="nav-item">
                 <a href="#" class="nav-link" data-toggle="modal" data-target="#modalDataProgramados">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Campañas</p>
                 </a>
               </li>
+              <?php endif; ?>
+              <?php if (puedeVerModulo($conn, 'reportes.adicionales')): ?>
               <li class="nav-item">
                 <a href="#" class="nav-link" data-toggle="modal" data-target="#modalDataAdicionales">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Adicionales</p>
                 </a>
               </li>
+              <?php endif; ?>
+              <?php if (puedeVerModulo($conn, 'reportes.ruta_planificada')): ?>
               <li class="nav-item">
                   <a href="#" class="nav-link" data-toggle="modal" data-target="#modalDataIPT">
                       <i class="far fa-circle nav-icon"></i>
                       <p>Ruta Planificada</p>
                   </a>
               </li>
+              <?php endif; ?>
             <?php if (in_array(strtoupper(trim($division_nombre)), ['SAVORY', 'MC'], true)): ?>              
+                <?php if (puedeVerModulo($conn, 'reportes.temporada_2024_2025')): ?>
                 <li class="nav-item">
                     <a href="https://visibility.cl/visibility2/portal/repositorio/SAVORY/SAVORY_TEMPORADA_2024-2025.xlsx" class="nav-link">
                         <i class="far fa-circle nav-icon"></i>
                         <p>Temporada 2024-2025</p>
                     </a>
                 </li>
+                <?php endif; ?>
+                <?php if (puedeVerModulo($conn, 'reportes.temporada_2025_2026')): ?>
                 <li class="nav-item">
-                    <a href="https://visibility.cl/visibility2/portal/repositorio/SAVORY/SAVORY_TEMPORADA_2023-2024.xlsx" class="nav-link">
+                    <a href="https://visibility.cl/visibility2/portal/repositorio/SAVORY/SAVORY_TEMPORADA_2025-2026.xlsx" class="nav-link">
                         <i class="far fa-circle nav-icon"></i>
-                        <p>Temporada 2023-2024</p>
+                        <p>Temporada 2025-2026</p>
                     </a>
                 </li>
+                <?php endif; ?>
             <?php endif; ?>              
             </ul>
           </li>
+          <?php endif; ?>
+          <?php if (puedeVerModulo($conn, 'galeria') || puedeVerModulo($conn, 'galeria.imagenes') || puedeVerModulo($conn, 'galeria.campanas')): ?>
           <li class="nav-item">
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-images"></i>
@@ -1310,20 +1344,26 @@ body.layout-fixed {
               </p>
             </a>
             <ul class="nav nav-treeview">
-              <!--li class="nav-item">
+              <?php if (puedeVerModulo($conn, 'galeria.campanas')): ?>
+              <li class="nav-item">
                  <a href="modulos/mod_galeria/mod_galeria_programadas.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Campañas</p>
                 </a>
-              </li-->
+              </li>
+              <?php endif; ?>
+              <?php if (puedeVerModulo($conn, 'galeria.imagenes')): ?>
               <li class="nav-item">
                    <a href="modulos/mod_galeria/mod_galeria_ipt.php" class="nav-link">
                       <i class="far fa-circle nav-icon"></i>
                       <p>Galeria de imagenes</p>
                   </a>
               </li>
+              <?php endif; ?>
             </ul>
           </li>
+          <?php endif; ?>
+          <?php if (puedeVerModulo($conn, 'mapa') || puedeVerModulo($conn, 'mapa.panel_rutas') || puedeVerModulo($conn, 'mapa.visor_rutas')): ?>
           <li class="nav-item">
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-route"></i>
@@ -1333,21 +1373,26 @@ body.layout-fixed {
               </p>
             </a>
             <ul class="nav nav-treeview">
+              <?php if (puedeVerModulo($conn, 'mapa.panel_rutas')): ?>
               <li class="nav-item">
                  <a href="modulos/mod_panel/mod_panel_detalle_locales_rutas.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Panel Rutas</p>
                 </a>
               </li>
+              <?php endif; ?>
+              <?php if (puedeVerModulo($conn, 'mapa.visor_rutas')): ?>
               <li class="nav-item">
                  <a href="modulos/mod_panel/mod_visualizar_ruta_excel.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Visor de rutas</p>
                 </a>
               </li>              
+              <?php endif; ?>
             </ul>
           </li>           
-          <?php if (strtolower($perfilUser) == 'editor' || strtolower($perfilUser) == 'coordinador'): ?>
+          <?php endif; ?>
+          <?php if (puedeVerModulo($conn, 'formularios') || puedeVerModulo($conn, 'formularios.crear_editar') || puedeVerModulo($conn, 'formularios.seguimiento_etapas') || puedeVerModulo($conn, 'formularios.generador_rutas')): ?>
           <li class="nav-item">
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-edit"></i>
@@ -1357,20 +1402,34 @@ body.layout-fixed {
               </p>
             </a>
             <ul class="nav nav-treeview">
+              <?php if (puedeVerModulo($conn, 'formularios.crear_editar')): ?>
               <li class="nav-item">
                 <a href="modulos/mod_formulario.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Crear/Editar Formulario</p>
                 </a>
               </li>
-                        <li class="nav-item">
+              <?php endif; ?>
+          <?php if (puedeVerModulo($conn, 'formularios.seguimiento_etapas')): ?>
+          <li class="nav-item">
             <a href="modulos/mod_seguimiento_etapas.php" class="nav-link">
               <i class="nav-icon fas fa-layer-group"></i>
               <p>Seguimiento por Etapas</p>
             </a>
           </li>
+          <?php endif; ?>
+              <?php if (puedeVerModulo($conn, 'formularios.generador_rutas')): ?>
+              <li class="nav-item">
+                <a href="mod_planificador_fecha_propuesta.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Generador de rutas campañas</p>
+                </a>
+              </li>
+              <?php endif; ?>
             </ul>
           </li>
+          <?php endif; ?>
+          <?php if (puedeVerModulo($conn, 'panel_control') || puedeVerModulo($conn, 'panel_control.merchan') || puedeVerModulo($conn, 'panel_control.campanas') || puedeVerModulo($conn, 'panel_control.trademarketing') || puedeVerModulo($conn, 'panel_control.recepcion_materiales')): ?>
           <li class="nav-item">
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-users-cog"></i>
@@ -1380,28 +1439,46 @@ body.layout-fixed {
               </p>
             </a>
             <ul class="nav nav-treeview">
+              <?php if (puedeVerModulo($conn, 'panel_control.merchan')): ?>
               <li class="nav-item">
                 <a href="modulos/mod_panel/mod_panel.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Merchan</p>
                 </a>
               </li>
+              <?php endif; ?>
+              <?php if (puedeVerModulo($conn, 'panel_control.campanas')): ?>
               <li class="nav-item">
                 <a href="modulos/mod_panel/mod_panel_campanas.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Campaña/Actividades</p>
                 </a>
               </li>
+              <?php endif; ?>
+              <?php if (puedeVerModulo($conn, 'panel_control.trademarketing')): ?>
+              <li class="nav-item">
+                <a href="mod_formularios_prioridad_cliente.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Modulo Trademarketing</p>
+                </a>
+              </li>              
+              <?php endif; ?>
+              <?php if (puedeVerModulo($conn, 'panel_control.recepcion_materiales')): ?>
               <li class="nav-item">
                 <a href="modulos/mod_recepcion_materiales.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Recepción de Materiales</p>
                 </a>
               </li>
+              <?php endif; ?>
             </ul>
           </li>
+          <?php endif; ?>
           
+          <?php if ($esUsuarioMC && (puedeVerModulo($conn, 'control_gestion') || puedeVerModulo($conn, 'dashboard_admin'))): ?>
           <li class="nav-header">CONTROL DE GESTION</li>
+          <?php endif; ?>
+          <?php if ($esUsuarioMC && puedeVerModulo($conn, 'control_gestion')): ?>
           <li class="nav-item">
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-chart-line"></i>
@@ -1419,6 +1496,8 @@ body.layout-fixed {
               </li>
             </ul>
           </li>          
+          <?php endif; ?>
+          <?php if ($esUsuarioMC && puedeVerModulo($conn, 'dashboard_admin')): ?>
           <li class="nav-item">
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-chart-line"></i>
@@ -1454,6 +1533,8 @@ body.layout-fixed {
             </li>               
             </ul>
           </li>
+          <?php endif; ?>
+          <?php if ($esUsuarioMC && puedeVerModulo($conn, 'desarrollo_testing')): ?>
           <li class="nav-item">
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-code"></i>
@@ -1477,6 +1558,8 @@ body.layout-fixed {
               </li>              
             </ul>
           </li> 
+          <?php endif; ?>
+          <?php if ($esUsuarioMC && puedeVerModulo($conn, 'analisis_datos')): ?>
           <li class="nav-item">
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-database"></i>
@@ -1514,10 +1597,12 @@ body.layout-fixed {
               <li class="nav-item">
                 <a href="ui_changelog.php" class="nav-link">
                   <i class="fas fa-sliders-h nav-icon"></i>
-                  <p>Changelog</p>
-                </a>
-              </li>            
+                <p>Changelog</p>
+              </a>
+              </li>
+          <?php endif; ?>
           
+          <?php if ($esUsuarioMC && puedeVerModulo($conn, 'elementos_portal')): ?>
           <li class="nav-header">ELEMENTOS PORTAL</li>
           <li class="nav-item">
             <a href="#" class="nav-link">
@@ -1539,7 +1624,15 @@ body.layout-fixed {
                   <i class="far fa-circle nav-icon"></i>
                   <p>Crear division</p>
                 </a>
-              </li>              
+              </li>
+              <?php if (puedeVerModulo($conn, 'permisos.admin')): ?>
+              <li class="nav-item">
+                <a href="modulos/mod_permisos.php" class="nav-link">
+                  <i class="fas fa-user-shield nav-icon"></i>
+                  <p>Permisos de modulos</p>
+                </a>
+              </li>
+              <?php endif; ?>
             </ul>
           </li>
             <li class="nav-item">
@@ -1781,7 +1874,7 @@ body.layout-fixed {
 <!-- AdminLTE App -->
 <script src="dist/js/adminlte.js"></script>
 <script>
-  window.ES_USUARIO_MC = <?php echo json_encode(strtoupper(trim($division_nombre)) == 'MC'); ?>;
+  window.ES_USUARIO_MC = <?php echo json_encode($esUsuarioMC); ?>;
   window.ID_MC = "1";
 </script>
 <script src="js/home.js" defer></script>

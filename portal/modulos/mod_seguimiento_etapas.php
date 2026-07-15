@@ -105,6 +105,7 @@ $esEditor   = strtolower($perfilUser) === 'editor';
         <div class="col-md-2 col-4 mb-2"><div class="kpi-card kpi-purple"><div class="inner"><h3 id="kpiApoyos">0</h3><p>Apoyos</p></div></div></div>
         <div class="col-md-2 col-4 mb-2"><div class="kpi-card kpi-teal"><div class="inner"><h3 id="kpiCobertura">0%</h3><p>Cobertura uds</p></div></div></div>
         <div class="col-md-2 col-4 mb-2"><div class="kpi-card kpi-red"><div class="inner"><h3 id="kpiFotosFuera">0</h3><p>Fotos fuera de sala</p></div></div></div>
+        <div class="col-md-2 col-4 mb-2"><div class="kpi-card kpi-red"><div class="inner"><h3 id="kpiFotosDup">0</h3><p>Fotos duplicadas</p></div></div></div>
       </div>
 
       <div id="viewControls" class="btn-group btn-group-sm mb-2" role="group" style="display:none;">
@@ -246,9 +247,11 @@ let mapEjecucion = null, mapMarkers = [], mapsLoaded = false, mapInfo = null;
 const GMAPS_KEY = 'AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw';
 
 function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function estadoBadge(e){
-  const map = { 'Completo':'success','Parcial':'warning','En proceso':'info','Sin iniciar':'secondary' };
-  return `<span class="badge badge-${map[e]||'secondary'} badge-estado">${escapeHtml(e)}</span>`;
+function estadoBadge(e, obs){
+  const map = { 'Completo':'success','Parcial':'warning','En proceso':'info','Sin iniciar':'secondary',
+                'Pendiente (visitado)':'danger','Cancelado':'dark' };
+  const t = obs ? ` title="${escapeHtml(obs)}"` : '';
+  return `<span class="badge badge-${map[e]||'secondary'} badge-estado"${t}>${escapeHtml(e)}</span>`;
 }
 async function postAccion(payload){
   const fd = new FormData();
@@ -322,6 +325,7 @@ async function cargarResumen(idForm){
   $('#kpiApoyos').text(k.apoyos);
   $('#kpiCobertura').text(`${k.pct_unidades}% (${k.uds_impl}/${k.uds_prop})`);
   $('#kpiFotosFuera').text(k.fotos_fuera);
+  $('#kpiFotosDup').text(k.fotos_duplicadas || 0);
   $('#kpiRow').show();
   $('#viewControls').show();
 
@@ -334,7 +338,8 @@ async function cargarResumen(idForm){
     escapeHtml(d.codigo_local), escapeHtml(d.local_nombre), escapeHtml(d.comuna || ''),
     escapeHtml(d.material), escapeHtml(d.categoria || ''), escapeHtml(d.marca || ''), escapeHtml(d.ejecutor || ''),
     escapeHtml(d.etapa_label), d.propuesto, d.implementado, d.faltante,
-    estadoBadge(d.estado), d.n_fotos, d.n_apoyos,
+    estadoBadge(d.estado, (d.estado === 'Pendiente (visitado)' || d.estado === 'Cancelado') ? (d.observacion || '') : ''),
+    d.n_fotos, d.n_apoyos,
     `<button class="btn btn-xs btn-primary btn-ver" data-id="${d.idFQ}"><i class="fas fa-eye"></i> Ver</button>`
   ]));
 
@@ -527,7 +532,10 @@ async function abrirDetalle(idFQ){
           ? `<span class="foto-badge bad" title="Foto tomada a ${f.dist_m} m del local">⚠ a ${f.dist_m} m</span>`
           : `<span class="foto-badge ok" title="Foto tomada dentro del rango del local">✓ en sala</span>`;
       }
-      fotosHtml += `<span class="se-foto-wrap"><img src="${escapeHtml(f.url)}" class="se-thumb" data-full="${escapeHtml(f.url)}">${del}${badge}</span>`;
+      const dupBadge = f.dup_flag
+        ? `<span class="foto-badge bad" title="Imagen casi idéntica a otra cargada en una sala distinta de esta campaña">⚠ posible duplicada</span>`
+        : '';
+      fotosHtml += `<span class="se-foto-wrap"><img src="${escapeHtml(f.url)}" class="se-thumb" data-full="${escapeHtml(f.url)}">${del}${badge}${dupBadge}</span>`;
     });
     fotosHtml += `</div>`;
   });

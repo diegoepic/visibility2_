@@ -79,6 +79,23 @@ $ids  = array_map(fn($r)=>(int)$r['id'],$flat);
 $optionsMap = getOptionsForQuestions($conn,$ids);
 $tree = buildTree($flat, $optionsMap, $conn);
 
+/* Badge de cadena: si la campaña tiene preguntas con id_cadena (sets por cadena,
+   migración scripts/17), mostrar a qué cadena pertenece cada pregunta.
+   Si la columna no existe aún, $flat no trae la clave y no se muestran badges. */
+$cadenaNombres = [];
+$idsCadenaQ = array_values(array_unique(array_filter(array_map(
+    fn($r) => isset($r['id_cadena']) ? (int)$r['id_cadena'] : 0,
+    $flat
+))));
+if (!empty($idsCadenaQ)) {
+    $inCad = implode(',', $idsCadenaQ);
+    if ($resCadN = $conn->query("SELECT id, nombre FROM cadena WHERE id IN ($inCad)")) {
+        while ($r = $resCadN->fetch_assoc()) { $cadenaNombres[(int)$r['id']] = $r['nombre']; }
+        $resCadN->close();
+    }
+}
+$hayCadenasEnPreguntas = !empty($idsCadenaQ);
+
 /* --- Mapa de dependencias por opción --- */
 $depCountsByOption = [];
 $depChildrenByOption = [];
@@ -329,6 +346,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='add_questio
               echo '          <span class="badge badge-light">'.htmlspecialchars($tipo,ENT_QUOTES).'</span>';
               if ($req) echo ' <span class="badge badge-danger">Requerida</span>';
               if ($val && in_array((int)$node['id_question_type'],[2,3],true)) echo ' <span class="badge badge-info">Valorizada</span>';
+              // Badge de cadena (sets por cadena): solo si la campaña usa scoping
+              if (!empty($GLOBALS['hayCadenasEnPreguntas'])) {
+                $qCad = isset($node['id_cadena']) && $node['id_cadena'] !== null ? (int)$node['id_cadena'] : 0;
+                if ($qCad > 0) {
+                  $nomCad = $GLOBALS['cadenaNombres'][$qCad] ?? ('Cadena #'.$qCad);
+                  echo ' <span class="badge badge-warning" title="Solo la ven los locales de esta cadena">Cadena: '.htmlspecialchars($nomCad,ENT_QUOTES).'</span>';
+                } else {
+                  echo ' <span class="badge badge-secondary" title="La ven los locales de cadenas sin set propio">General</span>';
+                }
+              }
               if ($totalHijos>0) echo ' <span class="badge badge-primary js-badge-children" data-qid="'.$qid.'" data-toggle="tooltip" title="Total de dependientes de sus opciones">'.$totalHijos.' '.($totalHijos===1?'hijo':'hijos').'</span>';
               echo '        </div>';
               echo '      </div>';

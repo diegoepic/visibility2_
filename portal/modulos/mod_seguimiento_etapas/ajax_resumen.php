@@ -57,6 +57,7 @@ $sql = "
         fq.marca,
         u.usuario                   AS ejecutor,
         fq.etapa_material,
+        fq.pregunta,
         CAST(COALESCE(NULLIF(fq.valor_propuesto,''),'0') AS UNSIGNED) AS propuesto,
         CAST(COALESCE(NULLIF(fq.valor,''),'0') AS UNSIGNED)          AS implementado,
         fq.fechaVisita,
@@ -94,6 +95,8 @@ $kpi = [
     'retirados'     => 0,
     'parciales'     => 0,
     'sin_iniciar'   => 0,
+    'visita_pendiente' => 0,
+    'cancelados'    => 0,
     'apoyos'        => 0,
     'uds_prop'      => 0,
     'uds_impl'      => 0,
@@ -118,7 +121,19 @@ while ($r = $res->fetch_assoc()) {
     } elseif ($etapa === 'entregado') {
         $estado = 'En proceso';    $kpi['entregados']++;
     } else {
-        $estado = 'Sin iniciar';   $kpi['sin_iniciar']++;
+        // Sin etapa registrada: distinguir visitas que quedaron Pendiente/Cancelado.
+        // El flujo general de estado (procesar_gestion_pruebas.php) escribe
+        // pregunta='en proceso' (pendiente) o 'cancelado' SIN tocar etapa_material,
+        // por lo que antes estas salas visitadas aparecían como "Sin iniciar".
+        $preg = strtolower(trim((string)($r['pregunta'] ?? '')));
+        if ($preg === 'cancelado') {
+            $estado = 'Cancelado';            $kpi['cancelados']++;
+        } elseif ($preg === 'en proceso') {
+            $estado = 'Pendiente (visitado)'; $kpi['visita_pendiente']++;
+        } else {
+            $estado = 'Sin iniciar';
+        }
+        $kpi['sin_iniciar']++; // los 3 casos siguen contando como no-iniciados para el KPI Pendientes
     }
 
     $r['propuesto']      = $prop;
@@ -170,6 +185,28 @@ try {
     $fotosFuera = 0; // si la BBDD no soporta ST_Distance_Sphere, no rompe el resumen
 }
 
+// KPI: fotos marcadas como posible duplicada (dup_flag=1). Tolerante si la columna no existe aún
+// (BBDD sin la migración 12_fotos_duplicadas.sql).
+$fotosDup = 0;
+try {
+    $stmtFD = $conn->prepare("
+        SELECT COUNT(*) AS c
+        FROM fotoVisita fv
+        WHERE fv.id_formulario = ?
+          AND fv.dup_flag = 1
+          AND fv.kind IN ('armado','entregado','implementado','retirado')
+    ");
+    if ($stmtFD) {
+        $stmtFD->bind_param('i', $idForm);
+        $stmtFD->execute();
+        $rowFD = $stmtFD->get_result()->fetch_assoc();
+        $fotosDup = (int)($rowFD['c'] ?? 0);
+        $stmtFD->close();
+    }
+} catch (Throwable $e) {
+    $fotosDup = 0;
+}
+
 echo json_encode([
     'ok'       => true,
     'campania' => ['id' => $idForm, 'nombre' => $campania['nombre']],
@@ -182,11 +219,14 @@ echo json_encode([
         'retirados'     => $kpi['retirados'],
         'parciales'     => $kpi['parciales'],
         'pendientes'    => $pendientes,
+        'visita_pendiente' => $kpi['visita_pendiente'],
+        'cancelados'    => $kpi['cancelados'],
         'apoyos'        => $kpi['apoyos'],
         'uds_prop'      => $kpi['uds_prop'],
         'uds_impl'      => $kpi['uds_impl'],
         'pct_unidades'  => $kpi['uds_prop'] > 0 ? round($kpi['uds_impl'] * 100 / $kpi['uds_prop']) : 0,
         'fotos_fuera'   => $fotosFuera,
+        'fotos_duplicadas' => $fotosDup,
         'pct'           => $kpi['materiales'] > 0 ? round($completos * 100 / $kpi['materiales']) : 0,
     ],
     'data'     => $rows,

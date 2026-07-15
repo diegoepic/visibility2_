@@ -23,6 +23,7 @@ $baseUrl = 'https://visibility.cl/visibility2/app/';
 
 $preguntasPermitidas = [
     'INGRESE KILOMETRAJE DE LA CAMIONETA:',
+    'INGRESE PATENTE DEL VEHÍCULO (FORMATO ABCD-12)',
     'FOTO ODOMETRO',
     'FOTO FRONTAL DEL VEHICULO',
     'FOTO LATERAL DERECHO DEL VEHICULO',

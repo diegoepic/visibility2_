@@ -78,6 +78,8 @@ if (isset($_GET['division'
   ]);
 }
 // 6) Armar la parte de la cláusula WHERE para filtrar
+$trade_seleccionado = isset($_GET['trade']) ? intval($_GET['trade']) : 0;
+$categoria_seleccionada = isset($_GET['categoria']) ? intval($_GET['categoria']) : 0;
 $filtros_sql = "";
 $parametros  = [];
 $tipos_param = "";
@@ -105,6 +107,74 @@ if ($estado_seleccionado > 0) {
     $filtros_sql   .= " AND f.estado = ?";
     $parametros[]   = $estado_seleccionado;
     $tipos_param   .= "i";
+}
+
+$trades_formulario = [];
+$trade_filtros_sql = $filtros_sql;
+$trade_parametros = $parametros;
+$trade_tipos_param = $tipos_param;
+$sql_trades_formulario = "
+    SELECT DISTINCT
+        f.id_trade,
+        COALESCE(NULLIF(TRIM(t.nombre), ''), CONCAT('TRADE ', f.id_trade)) AS nombre_trade
+    FROM formulario f
+    LEFT JOIN trade t ON t.id = f.id_trade
+    WHERE f.id_trade IS NOT NULL
+      AND f.id_trade > 0
+      {$trade_filtros_sql}
+    ORDER BY nombre_trade ASC
+";
+$stmt_trades_formulario = $conn->prepare($sql_trades_formulario);
+if ($stmt_trades_formulario) {
+    if (!empty($trade_parametros)) {
+        $stmt_trades_formulario->bind_param($trade_tipos_param, ...$trade_parametros);
+    }
+    $stmt_trades_formulario->execute();
+    $res_trades_formulario = $stmt_trades_formulario->get_result();
+    while ($rowTrade = $res_trades_formulario->fetch_assoc()) {
+        $trades_formulario[] = $rowTrade;
+    }
+    $stmt_trades_formulario->close();
+}
+
+$categorias_formulario = [];
+$categoria_filtros_sql = $filtros_sql;
+$categoria_parametros = $parametros;
+$categoria_tipos_param = $tipos_param;
+$sql_categorias_formulario = "
+    SELECT DISTINCT
+        f.id_categoria_formulario,
+        COALESCE(NULLIF(TRIM(cf.nombre), ''), CONCAT('CATEGORIA ', f.id_categoria_formulario)) AS nombre_categoria
+    FROM formulario f
+    LEFT JOIN categoria_formulario cf ON cf.id = f.id_categoria_formulario
+    WHERE f.id_categoria_formulario IS NOT NULL
+      AND f.id_categoria_formulario > 0
+      {$categoria_filtros_sql}
+    ORDER BY nombre_categoria ASC
+";
+$stmt_categorias_formulario = $conn->prepare($sql_categorias_formulario);
+if ($stmt_categorias_formulario) {
+    if (!empty($categoria_parametros)) {
+        $stmt_categorias_formulario->bind_param($categoria_tipos_param, ...$categoria_parametros);
+    }
+    $stmt_categorias_formulario->execute();
+    $res_categorias_formulario = $stmt_categorias_formulario->get_result();
+    while ($rowCategoria = $res_categorias_formulario->fetch_assoc()) {
+        $categorias_formulario[] = $rowCategoria;
+    }
+    $stmt_categorias_formulario->close();
+}
+
+if ($trade_seleccionado > 0) {
+    $filtros_sql .= " AND f.id_trade = ?";
+    $parametros[] = $trade_seleccionado;
+    $tipos_param .= "i";
+}
+
+if ($categoria_seleccionada > 0) {
+    $filtros_sql .= " AND f.id_categoria_formulario = ?";
+    $parametros[] = $categoria_seleccionada;
+    $tipos_param .= "i";
 }
 // ----------------------------------------------------------------------------
 // 7) Consulta para campañas IPT (tipo=3)
@@ -1224,8 +1294,8 @@ $estadoKpiLabel = ((int)$estado_seleccionado === 3) ? 'Finalizadas' : 'Activas';
 
 .modern-plan-top {
     position: relative;
-    min-height: 175px;
-    padding: 20px 18px 72px 18px;
+    min-height: 205px;
+    padding: 20px 18px 76px 18px;
     background:
         radial-gradient(circle at 50% 0%, rgba(255,255,255,.30), rgba(255,255,255,0) 38%),
         linear-gradient(135deg, #25b6c9 0%, #249fc7 45%, #4b82ff 100%);
@@ -1287,18 +1357,21 @@ $estadoKpiLabel = ((int)$estado_seleccionado === 3) ? 'Finalizadas' : 'Activas';
 .modern-plan-title {
     position: relative;
     z-index: 2;
-    margin: 14px auto 10px auto;
+    margin: 12px auto 12px auto;
     max-width: calc(100% - 76px);
-    min-height: 46px;
+    min-height: 62px;
+    height: 62px;
     font-size: 15px;
-    line-height: 1.28;
+    line-height: 1.32;
     font-weight: 900;
     letter-spacing: .25px;
     text-transform: uppercase;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    overflow-wrap: anywhere;
+    word-break: normal;
     text-shadow: 0 1px 10px rgba(0,0,0,.12);
 }
 
@@ -1317,7 +1390,8 @@ $estadoKpiLabel = ((int)$estado_seleccionado === 3) ? 'Finalizadas' : 'Activas';
     font-weight: 850;
     letter-spacing: .75px;
     text-transform: uppercase;
-    margin-bottom: 9px;
+    margin: 0 0 9px 0;
+    flex-shrink: 0;
 }
 
 .modern-plan-dates {
@@ -2187,6 +2261,30 @@ body.modal-open {
       </div>
 
     <?php endif; ?>
+
+    <div class="modern-filter-field">
+      <label for="trade_filter">Trade:</label>
+      <select name="trade" id="trade_filter">
+        <option value="0" <?= $trade_seleccionado===0 ? 'selected':'' ?>>Todos</option>
+        <?php foreach ($trades_formulario as $trade): ?>
+          <option value="<?= (int)$trade['id_trade'] ?>" <?= $trade_seleccionado===(int)$trade['id_trade'] ? 'selected':'' ?>>
+            <?= htmlspecialchars($trade['nombre_trade'], ENT_QUOTES, 'UTF-8') ?>
+          </option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+
+    <div class="modern-filter-field">
+      <label for="categoria_filter">Categoría:</label>
+      <select name="categoria" id="categoria_filter">
+        <option value="0" <?= $categoria_seleccionada===0 ? 'selected':'' ?>>Todas</option>
+        <?php foreach ($categorias_formulario as $categoria): ?>
+          <option value="<?= (int)$categoria['id_categoria_formulario'] ?>" <?= $categoria_seleccionada===(int)$categoria['id_categoria_formulario'] ? 'selected':'' ?>>
+            <?= htmlspecialchars($categoria['nombre_categoria'], ENT_QUOTES, 'UTF-8') ?>
+          </option>
+        <?php endforeach; ?>
+      </select>
+    </div>
 
   </form>
 </div>
@@ -3363,7 +3461,7 @@ $('#btnAplicarFiltro').off('click').on('click', function () {
 // Filtros de formulario
 $('#empresa_filter').on('change', function(){ $('#filterForm').submit();
 });
-  $('#division_filter, #estado_filter')
+  $('#division_filter, #estado_filter, #trade_filter, #categoria_filter')
     .on('change', function(){ $('#filterForm').submit();
 });
 

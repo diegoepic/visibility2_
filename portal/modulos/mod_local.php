@@ -362,6 +362,16 @@ $stmt_div->close();
                 <form id="filtrosLocales" class="mb-4">
                     <div class="container-fluid">
                         <div class="row g-3">
+                            <div class="col-12">
+                                <label for="filtroBusqueda" class="form-label">
+                                    <i class="fas fa-search"></i> Búsqueda rápida
+                                    <small class="text-muted">(código, nombre o dirección)</small>
+                                </label>
+                                <input type="text" class="form-control" id="filtroBusqueda" name="busqueda"
+                                       placeholder="Ej: 1234, ALVI, o Av. Vitacura 3535" autocomplete="off">
+                                <small class="text-muted">Busca en código, nombre y dirección a la vez. Puedes combinar palabras (ej: “alvi vitacura”).</small>
+                            </div>
+
                             <div class="col-md-3">
                                 <label for="filtroID" class="form-label">ID Local</label>
                                 <input type="number" class="form-control" id="filtroID" name="id_local" placeholder="ID del local">
@@ -1456,7 +1466,8 @@ $(function () {
             subcanal_id: $('#filtroSubcanal').val(),
             nombre: $('#filtroNombre').val().trim(),
             codigo: $('#filtroCodigo').val().trim(),
-            id_local: $('#filtroID').val().trim()
+            id_local: $('#filtroID').val().trim(),
+            busqueda: $('#filtroBusqueda').val().trim()
         };
     }
 
@@ -2094,6 +2105,28 @@ $(function () {
     $('#filtroNombre, #filtroCodigo, #filtroID').on('keydown', function (e) {
         if (e.key === 'Enter') {
             e.preventDefault();
+            currentOffset = 0;
+            cargarLocales(getFiltrosActuales());
+        }
+    });
+
+    // Búsqueda rápida en vivo (código / nombre / dirección), estilo gestionarIW.
+    // Debounce de 300ms; dispara desde 2 caracteres o cuando se limpia el campo.
+    let busquedaTimeout = null;
+    $('#filtroBusqueda').on('input', function () {
+        clearTimeout(busquedaTimeout);
+        const val = $(this).val().trim();
+        if (val.length > 0 && val.length < 2) return; // ignora 1 solo carácter
+        busquedaTimeout = setTimeout(function () {
+            currentOffset = 0;
+            cargarLocales(getFiltrosActuales());
+        }, 300);
+    });
+
+    $('#filtroBusqueda').on('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            clearTimeout(busquedaTimeout);
             currentOffset = 0;
             cargarLocales(getFiltrosActuales());
         }

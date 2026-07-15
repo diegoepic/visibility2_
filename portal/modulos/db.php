@@ -1290,6 +1290,33 @@ function obtenerComunasPorRegion($region_id) {
 }
 
 
+/**
+ * Búsqueda rápida de locales por tokens (código / nombre / dirección), estilo gestionarIW.
+ * Cada palabra debe aparecer (AND entre tokens) y puede matchear en cualquiera de los 3
+ * campos (OR dentro del token). Asume que la tabla local está aliaseada como `l`.
+ * Modifica $sql, $params y $tipos por referencia.
+ */
+function aplicarBusquedaLocal(&$sql, array &$params, &$tipos, $busqueda) {
+    $busqueda = trim((string)$busqueda);
+    if ($busqueda === '') return;
+
+    $tokens = preg_split('/\s+/u', $busqueda, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $tokens = array_values(array_filter($tokens, function ($t) {
+        return mb_strlen($t, 'UTF-8') >= 2;
+    }));
+    if (empty($tokens)) return;
+
+    foreach ($tokens as $tok) {
+        // Escapar comodines LIKE (\ es el carácter de escape por defecto en MySQL)
+        $like = '%' . strtr($tok, ['%' => '\%', '_' => '\_']) . '%';
+        $sql .= " AND (l.codigo LIKE ? OR l.nombre LIKE ? OR l.direccion LIKE ?)";
+        $tipos   .= 'sss';
+        $params[] = $like;
+        $params[] = $like;
+        $params[] = $like;
+    }
+}
+
 function obtenerLocalesFiltrados($filtros = [], $offset = 0, $limit = 50) {
     global $conn;
     $locales = [];
@@ -1374,6 +1401,11 @@ function obtenerLocalesFiltrados($filtros = [], $offset = 0, $limit = 50) {
         $sql .= " AND l.nombre LIKE ?";
         $params[] = '%' . $filtros['nombre'] . '%';
         $tipos   .= 's';
+    }
+
+    // Búsqueda rápida combinada (código / nombre / dirección)
+    if (!empty($filtros['busqueda'])) {
+        aplicarBusquedaLocal($sql, $params, $tipos, $filtros['busqueda']);
     }
 
     // Orden y paginación

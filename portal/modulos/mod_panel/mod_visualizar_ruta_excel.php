@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Visualizador de Ruta Excel</title>
+  <title>Visualizador de Rutas Excel</title>
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css">
   <style>
@@ -30,7 +30,7 @@
     .app-shell {
       min-height: 100vh;
       display: grid;
-      grid-template-columns: minmax(340px, 420px) 1fr;
+      grid-template-columns: minmax(360px, 460px) 1fr;
     }
 
     .side {
@@ -38,6 +38,7 @@
       border-right: 1px solid var(--line);
       padding: 22px;
       overflow-y: auto;
+      max-height: 100vh;
     }
 
     .brand {
@@ -63,7 +64,6 @@
       font-size: 1.15rem;
       font-weight: 800;
       margin: 0;
-      letter-spacing: 0;
     }
 
     .brand p {
@@ -72,9 +72,7 @@
       font-size: .9rem;
     }
 
-    .upload-box,
-    .stats-box,
-    .route-list {
+    .box {
       background: rgba(20, 41, 75, .78);
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -90,23 +88,15 @@
       margin-bottom: 8px;
     }
 
-    .file-control {
+    .file-control,
+    .select-control,
+    .text-control {
       background: #0b1930;
       border: 1px solid var(--line);
       color: var(--text);
       border-radius: 8px;
       padding: 10px;
       width: 100%;
-    }
-
-    .select-control {
-      background: #0b1930;
-      border: 1px solid var(--line);
-      color: var(--text);
-      border-radius: 8px;
-      padding: 10px;
-      width: 100%;
-      margin-top: 12px;
     }
 
     .hint {
@@ -115,6 +105,16 @@
       line-height: 1.45;
       margin: 10px 0 0;
     }
+
+    .status {
+      color: var(--muted);
+      font-size: .88rem;
+      min-height: 24px;
+      margin-top: 12px;
+    }
+
+    .status.ok { color: var(--green); }
+    .status.bad { color: var(--danger); }
 
     .stat-grid {
       display: grid;
@@ -152,16 +152,14 @@
 
     .point-row {
       display: grid;
-      grid-template-columns: 34px 1fr;
+      grid-template-columns: 26px 34px 1fr 78px;
       gap: 10px;
       padding: 10px 0;
       border-top: 1px solid rgba(125, 170, 230, .14);
       cursor: pointer;
     }
 
-    .point-row:first-of-type {
-      border-top: 0;
-    }
+    .point-row:first-of-type { border-top: 0; }
 
     .point-num {
       width: 28px;
@@ -188,6 +186,48 @@
       line-height: 1.35;
     }
 
+    .move-buttons {
+      display: flex;
+      gap: 4px;
+      justify-content: flex-end;
+      align-items: start;
+    }
+
+    .move-buttons button {
+      width: 32px;
+      height: 30px;
+      border-radius: 6px;
+      border: 1px solid rgba(125, 170, 230, .28);
+      background: #0b1930;
+      color: var(--text);
+    }
+
+    .move-buttons button:disabled {
+      opacity: .35;
+      cursor: not-allowed;
+    }
+
+    .bulk-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      padding: 10px;
+      background: rgba(7, 18, 37, .72);
+      border: 1px solid rgba(125, 170, 230, .16);
+      border-radius: 8px;
+    }
+
+    .bulk-bar strong {
+      color: #fff;
+    }
+
+    .row-check {
+      margin-top: 7px;
+      accent-color: var(--accent);
+    }
+
     .map-wrap {
       position: relative;
       min-height: 100vh;
@@ -212,35 +252,15 @@
       box-shadow: 0 12px 34px rgba(0, 0, 0, .24);
     }
 
-    .status {
-      color: var(--muted);
-      font-size: .88rem;
-      min-height: 24px;
-      margin-top: 12px;
-    }
-
-    .status.ok {
-      color: var(--green);
-    }
-
-    .status.bad {
-      color: var(--danger);
-    }
-
     @media (max-width: 980px) {
-      .app-shell {
-        grid-template-columns: 1fr;
-      }
-
+      .app-shell { grid-template-columns: 1fr; }
       .side {
         border-right: 0;
         border-bottom: 1px solid var(--line);
+        max-height: none;
       }
-
       #map,
-      .map-wrap {
-        min-height: 62vh;
-      }
+      .map-wrap { min-height: 62vh; }
     }
   </style>
 </head>
@@ -250,29 +270,48 @@
     <div class="brand">
       <div class="brand-icon"><i class="fa fa-route"></i></div>
       <div>
-        <h1>Visualizador de ruta</h1>
-        <p>Sube el Excel exportado y revisa el orden sugerido.</p>
+        <h1>Visualizador de rutas</h1>
+        <p>Sube el Excel, revisa el orden y descarga la ruta editada.</p>
       </div>
     </div>
 
-    <div class="upload-box">
+    <div class="box">
       <label class="upload-label" for="archivoRuta">Archivo Excel o CSV</label>
       <input class="file-control" type="file" id="archivoRuta" accept=".xlsx,.xls,.csv">
       <p class="hint">
-        El mapa usa las columnas LAT y LNG cuando existen. Si el archivo no las trae, intentara ubicar por direccion, comuna y region.
+        Formato esperado: Codigo Local, Nombre, Lat, Lng, Usuario Nombre, Fecha Ruta, Grupo Ruta y Orden Visita.
       </p>
+      <p class="hint">
+        Rojo con !: error o sin ruta. Amarillo con !: sin ruta asignada con sugerencia. Colores neon: rutas planificadas.
+      </p>
+
       <label class="upload-label mt-3" for="selectorUsuario">Usuario</label>
       <select class="select-control" id="selectorUsuario" disabled>
         <option value="">Seleccionar usuario</option>
       </select>
-      <label class="upload-label mt-3" for="selectorFecha">Fecha planificada</label>
-      <select class="select-control" id="selectorFecha" disabled>
-        <option value="">Seleccionar fecha</option>
+
+      <label class="upload-label mt-3" for="selectorRuta">Ruta</label>
+      <select class="select-control" id="selectorRuta" disabled>
+        <option value="">Seleccionar ruta</option>
       </select>
+
+      <button class="btn btn-success btn-block mt-3" id="btnDescargarRuta" type="button" disabled>
+        <i class="fa fa-file-excel"></i> Descargar rutas editadas
+      </button>
+
+      <label class="upload-label mt-3" for="selectorMesMensual">Ruta mensual</label>
+      <input class="text-control" type="month" id="selectorMesMensual">
+      <button class="btn btn-info btn-block mt-2" id="btnDescargarMensual" type="button" disabled>
+        <i class="fa fa-calendar-alt"></i> Descargar como ruta mensual
+      </button>
+      <p class="hint">
+        Repite el patron de dias planificados sobre los dias habiles del mes. Evita repetir el mismo cliente en menos de 5 dias cuando existe alternativa.
+      </p>
+
       <div class="status" id="estadoCarga">Esperando archivo...</div>
     </div>
 
-    <div class="stats-box">
+    <div class="box">
       <div class="stat-grid">
         <div class="stat">
           <span>Leidos</span>
@@ -293,10 +332,16 @@
       </div>
     </div>
 
-    <div class="route-list">
-      <h2>Locales sugeridos</h2>
+    <div class="box route-list">
+      <h2>Locales de la ruta</h2>
+      <div class="bulk-bar">
+        <span><strong id="selectedCount">0</strong> seleccionados</span>
+        <button class="btn btn-sm btn-primary" id="btnEditarSeleccion" type="button" disabled>
+          <i class="fa fa-user-edit"></i> Reasignar
+        </button>
+      </div>
       <div id="listaLocales">
-        <div class="hint">Los locales apareceran aqui numerados como 1, 2, 3, 4...</div>
+        <div class="hint">Los locales apareceran aqui numerados. Usa las flechas para cambiar el orden.</div>
       </div>
     </div>
   </aside>
@@ -304,22 +349,61 @@
   <main class="map-wrap">
     <div id="map"></div>
     <div class="map-empty" id="mapHint">
-      Carga un archivo para dibujar los puntos en el mapa. El numero del marcador corresponde al orden sugerido del archivo.
+      Carga un archivo para dibujar los puntos en el mapa. El numero del marcador corresponde al orden de visita.
     </div>
   </main>
 </div>
 
+<div class="modal fade" id="modalReasignar" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content" style="background:#0f1f3b;color:#e8f2ff;border:1px solid rgba(125,170,230,.22);">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa fa-route"></i> Reasignar locales</h5>
+        <button type="button" class="close text-light" data-dismiss="modal" aria-label="Cerrar">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="hint mt-0">Se actualizaran <strong id="modalSelectedCount">0</strong> local(es).</p>
+        <label class="upload-label" for="modalUsuario">Usuario destino</label>
+        <select class="select-control" id="modalUsuario"></select>
+
+        <label class="upload-label mt-3" for="modalRuta">Ruta destino</label>
+        <select class="select-control" id="modalRuta"></select>
+
+        <label class="upload-label mt-3" for="modalOrdenInicial">Orden inicial</label>
+        <input class="text-control" type="number" min="1" id="modalOrdenInicial" placeholder="Automatico al final de la ruta">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-light" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success" id="btnAplicarReasignacion">
+          <i class="fa fa-check"></i> Aplicar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
 <script>
 let map;
 let bounds;
 let infoWindow;
-let geocoder;
 let markers = [];
 let markerByPointId = new Map();
-let routeLine = null;
+let routeLines = [];
 let currentPoints = [];
 let loadedPoints = [];
+let loadedHeaders = [];
+let currentFileBaseName = 'rutas_editadas';
+let selectedPointIds = new Set();
+const routePalette = [
+  '#25c2ff', '#25d685', '#ffb020', '#ff6b6b', '#9b7bff',
+  '#00a6a6', '#f97316', '#84cc16', '#ec4899', '#38bdf8',
+  '#a16207', '#14b8a6', '#ef4444', '#6366f1', '#22c55e'
+];
 
 function initMap() {
   map = new google.maps.Map(document.getElementById('map'), {
@@ -332,7 +416,6 @@ function initMap() {
 
   bounds = new google.maps.LatLngBounds();
   infoWindow = new google.maps.InfoWindow();
-  geocoder = new google.maps.Geocoder();
 }
 
 function normalizeHeader(text) {
@@ -342,6 +425,29 @@ function normalizeHeader(text) {
     .trim()
     .toUpperCase()
     .replace(/\s+/g, ' ');
+}
+
+function escapeHtml(text) {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function hashCode(text) {
+  let hash = 0;
+  const safe = String(text || '');
+  for (let i = 0; i < safe.length; i++) {
+    hash = ((hash << 5) - hash) + safe.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function routeColor(routeName) {
+  return routePalette[hashCode(routeName) % routePalette.length];
 }
 
 function findValue(row, names) {
@@ -360,6 +466,124 @@ function findValue(row, names) {
   return '';
 }
 
+function getSourceKey(point, candidates) {
+  const source = point.sourceRow || {};
+  const normalized = {};
+  Object.keys(source).forEach(key => {
+    normalized[normalizeHeader(key)] = key;
+  });
+
+  for (const candidate of candidates) {
+    const key = normalized[normalizeHeader(candidate)];
+    if (key) return key;
+  }
+
+  const fallback = candidates[0];
+  if (!loadedHeaders.includes(fallback)) loadedHeaders.push(fallback);
+  return fallback;
+}
+
+function setSourceValue(point, candidates, value) {
+  point.sourceRow[getSourceKey(point, candidates)] = value;
+}
+
+function clonePointRow(point) {
+  const clone = {};
+  Object.keys(point.sourceRow || {}).forEach(key => {
+    clone[key] = point.sourceRow[key];
+  });
+  return clone;
+}
+
+function excelDateSerial(date) {
+  const epoch = Date.UTC(1899, 11, 30);
+  const value = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  return Math.round((value - epoch) / 86400000);
+}
+
+function formatDateSql(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function businessDaysInMonth(monthValue) {
+  const [yearRaw, monthRaw] = String(monthValue || '').split('-');
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  if (!year || !month) return [];
+
+  const days = [];
+  const date = new Date(year, month - 1, 1, 12, 0, 0);
+  while (date.getMonth() === month - 1) {
+    const day = date.getDay();
+    if (day >= 1 && day <= 5) {
+      days.push(new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0));
+    }
+    date.setDate(date.getDate() + 1);
+  }
+  return days;
+}
+
+function dayNameEs(date) {
+  return ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'][date.getDay()];
+}
+
+function businessWeekOfMonth(date) {
+  const first = new Date(date.getFullYear(), date.getMonth(), 1, 12, 0, 0);
+  let count = 0;
+  while (first <= date) {
+    const day = first.getDay();
+    if (day >= 1 && day <= 5) count++;
+    first.setDate(first.getDate() + 1);
+  }
+  return Math.max(1, Math.ceil(count / 5));
+}
+
+function setRowValue(row, candidates, value) {
+  const normalized = {};
+  Object.keys(row).forEach(key => {
+    normalized[normalizeHeader(key)] = key;
+  });
+  let target = candidates[0];
+  for (const candidate of candidates) {
+    const key = normalized[normalizeHeader(candidate)];
+    if (key) {
+      target = key;
+      break;
+    }
+  }
+  row[target] = value;
+  if (!loadedHeaders.includes(target)) loadedHeaders.push(target);
+}
+
+function routePointsFor(userName, routeName) {
+  return loadedPoints
+    .filter(point => point.usuarioNombre === userName)
+    .filter(point => point.grupoRuta === routeName)
+    .filter(point => point.lat !== null && point.lng !== null)
+    .sort((a, b) => a.order - b.order);
+}
+
+function routesForUser(userName) {
+  return [...new Set(
+    loadedPoints
+      .filter(point => point.usuarioNombre === userName)
+      .map(point => point.grupoRuta || 'SIN RUTA')
+  )].sort((a, b) => a.localeCompare(b, 'es'));
+}
+
+function updateSelectionUi() {
+  const count = selectedPointIds.size;
+  document.getElementById('selectedCount').textContent = count;
+  document.getElementById('btnEditarSeleccion').disabled = count === 0;
+}
+
+function setPointUserAndRoute(point, userName, routeName) {
+  point.usuarioNombre = userName;
+  point.grupoRuta = routeName;
+  setSourceValue(point, ['Usuario Nombre', 'USUARIO NOMBRE', 'Usuario'], userName);
+  setSourceValue(point, ['Grupo Ruta', 'GRUPO RUTA', 'Ruta'], routeName);
+}
+
 function rowsFromWorksheet(sheet) {
   const matrix = XLSX.utils.sheet_to_json(sheet, {
     header: 1,
@@ -369,16 +593,17 @@ function rowsFromWorksheet(sheet) {
 
   const headerIndex = matrix.findIndex(row => {
     const headers = row.map(normalizeHeader);
-    return headers.includes('LOCAL')
+    return (headers.includes('CODIGO LOCAL') || headers.includes('CODIGO') || headers.includes('NOMBRE'))
       && (headers.includes('LAT') || headers.includes('LATITUD'))
       && (headers.includes('LNG') || headers.includes('LONGITUD') || headers.includes('LON'));
   });
 
   if (headerIndex < 0) {
+    loadedHeaders = [];
     return XLSX.utils.sheet_to_json(sheet, { defval: '' });
   }
 
-  const headers = matrix[headerIndex].map(header => String(header || '').trim());
+  loadedHeaders = matrix[headerIndex].map(header => String(header || '').trim()).filter(Boolean);
   const rows = [];
 
   for (let i = headerIndex + 1; i < matrix.length; i++) {
@@ -386,16 +611,13 @@ function rowsFromWorksheet(sheet) {
     const row = {};
     let hasValue = false;
 
-    headers.forEach((header, index) => {
-      if (!header) return;
+    loadedHeaders.forEach((header, index) => {
       const value = source[index] ?? '';
       row[header] = value;
       if (value !== '') hasValue = true;
     });
 
-    if (hasValue) {
-      rows.push(row);
-    }
+    if (hasValue) rows.push(row);
   }
 
   return rows;
@@ -405,36 +627,6 @@ function parseCoord(value) {
   if (value === null || value === undefined || value === '') return null;
   const parsed = parseFloat(String(value).replace(',', '.').trim());
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function distanceKm(a, b) {
-  const r = 6371;
-  const dLat = (b.lat - a.lat) * Math.PI / 180;
-  const dLng = (b.lng - a.lng) * Math.PI / 180;
-  const lat1 = a.lat * Math.PI / 180;
-  const lat2 = b.lat * Math.PI / 180;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * r * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-}
-
-function estimateKm(points) {
-  let total = 0;
-  for (let i = 1; i < points.length; i++) {
-    total += distanceKm(points[i - 1], points[i]);
-  }
-  return total;
-}
-
-function getOrder(row, fallback) {
-  const raw = findValue(row, ['ORDEN VISITA', 'ORDEN_VISITA', 'ORDEN', '#', 'N']);
-  const num = parseInt(raw, 10);
-  return Number.isFinite(num) && num > 0 ? num : fallback;
-}
-
-function hasExplicitOrder(row) {
-  const raw = findValue(row, ['ORDEN VISITA', 'ORDEN_VISITA', 'ORDEN', '#', 'N']);
-  const num = parseInt(raw, 10);
-  return Number.isFinite(num) && num > 0;
 }
 
 function normalizeDateValue(value) {
@@ -447,9 +639,7 @@ function normalizeDateValue(value) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     const parsed = XLSX.SSF.parse_date_code(value);
     if (parsed) {
-      const month = String(parsed.m).padStart(2, '0');
-      const day = String(parsed.d).padStart(2, '0');
-      return `${parsed.y}-${month}-${day}`;
+      return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
     }
   }
 
@@ -473,69 +663,59 @@ function formatDateLabel(value) {
   return match ? `${match[3]}-${match[2]}-${match[1]}` : (normalized || 'SIN FECHA');
 }
 
+function getOrder(row, fallback) {
+  const raw = findValue(row, ['ORDEN VISITA', 'ORDEN_VISITA', 'ORDEN', '#', 'N']);
+  const num = parseInt(raw, 10);
+  return Number.isFinite(num) && num > 0 ? num : fallback;
+}
+
 function rowToPoint(row, index) {
-  const lat = parseCoord(findValue(row, ['LAT', 'LATITUD', 'LATITUDE']));
-  const lng = parseCoord(findValue(row, ['LNG', 'LONGITUD', 'LONGITUDE', 'LON']));
-  const fechaPlanificadaRaw = findValue(row, ['FECHA PLANIFICADA', 'FECHA_PROPUESTA', 'FECHAPROPUESTA', 'FECHA RUTA', 'FECHA']);
-  const codigo = String(findValue(row, ['CODIGO', 'CODIGO LOCAL', 'CÓDIGO LOCAL']) || '').trim();
+  const fechaRaw = findValue(row, ['FECHA RUTA', 'FECHA PLANIFICADA', 'FECHA_PROPUESTA', 'FECHAPROPUESTA', 'FECHA']);
+  const codigo = String(findValue(row, ['CODIGO LOCAL', 'CODIGO', 'CÓDIGO LOCAL']) || '').trim();
 
   return {
     id: `${codigo || 'row'}-${index}`,
     order: getOrder(row, index + 1),
     codigo,
-    nombre: String(findValue(row, ['LOCAL', 'NOMBRE', 'NOMBRE LOCAL']) || '').trim(),
+    nombre: String(findValue(row, ['NOMBRE', 'LOCAL', 'NOMBRE LOCAL']) || '').trim(),
     direccion: String(findValue(row, ['DIRECCION', 'DIRECCIÓN']) || '').trim(),
-    region: String(findValue(row, ['REGION', 'REGIÓN']) || '').trim(),
     comuna: String(findValue(row, ['COMUNA']) || '').trim(),
-    merchan: String(findValue(row, ['MERCHAN', 'USUARIO', 'EJECUTOR']) || '').trim(),
-    fechaPlanificada: normalizeDateValue(fechaPlanificadaRaw),
-    fechaPlanificadaLabel: formatDateLabel(fechaPlanificadaRaw),
-    lat,
-    lng,
-    hasOrder: hasExplicitOrder(row),
+    lat: parseCoord(findValue(row, ['LAT', 'LATITUD', 'LATITUDE'])),
+    lng: parseCoord(findValue(row, ['LNG', 'LONGITUD', 'LONGITUDE', 'LON'])),
+    cantidadObjetivoDia: findValue(row, ['CANTIDAD OBJETIVO DIA', 'CANTIDAD OBJETIVO DÍA']),
+    grupoRuta: String(findValue(row, ['GRUPO RUTA', 'RUTA', 'GRUPO']) || '').trim() || 'SIN RUTA',
+    grupoRutaSugerido: String(findValue(row, ['GRUPO RUTA SUGERIDO']) || '').trim(),
+    observacion: String(findValue(row, ['OBSERVACION', 'OBSERVACIÓN', 'ERROR', 'ESTADO']) || '').trim(),
+    fechaRuta: normalizeDateValue(fechaRaw) || 'SIN FECHA',
+    fechaRutaLabel: formatDateLabel(fechaRaw),
+    usuarioId: String(findValue(row, ['USUARIO ID', 'ID USUARIO']) || '').trim(),
+    usuarioLogin: String(findValue(row, ['USUARIO LOGIN', 'LOGIN']) || '').trim(),
+    usuarioNombre: String(findValue(row, ['USUARIO NOMBRE', 'MERCHAN', 'USUARIO', 'EJECUTOR']) || '').trim() || 'SIN USUARIO',
+    diaPlan: findValue(row, ['DIA PLAN', 'DÍA PLAN']),
+    semanaPlan: findValue(row, ['SEMANA PLAN']),
+    diaSemanaNum: findValue(row, ['DIA SEMANA Nº', 'DÍA SEMANA Nº', 'DIA SEMANA NUM']),
+    diaSemana: findValue(row, ['DIA SEMANA', 'DÍA SEMANA']),
     sourceRow: row
   };
 }
 
-function suggestRouteOrder(points) {
-  if (points.length <= 2) return [...points];
+function distanceKm(a, b) {
+  if (![a?.lat, a?.lng, b?.lat, b?.lng].every(Number.isFinite)) return 0;
+  const r = 6371;
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLng = (b.lng - a.lng) * Math.PI / 180;
+  const lat1 = a.lat * Math.PI / 180;
+  const lat2 = b.lat * Math.PI / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * r * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
 
-  const centroid = points.reduce((acc, point) => ({
-    lat: acc.lat + point.lat / points.length,
-    lng: acc.lng + point.lng / points.length
-  }), { lat: 0, lng: 0 });
-
-  let startIndex = 0;
-  let farthest = -1;
-
-  points.forEach((point, index) => {
-    const dist = distanceKm(point, centroid);
-    if (dist > farthest) {
-      farthest = dist;
-      startIndex = index;
-    }
-  });
-
-  const remaining = [...points];
-  const ordered = [remaining.splice(startIndex, 1)[0]];
-
-  while (remaining.length) {
-    const current = ordered[ordered.length - 1];
-    let bestIndex = 0;
-    let bestDistance = Infinity;
-
-    remaining.forEach((candidate, index) => {
-      const dist = distanceKm(current, candidate);
-      if (dist < bestDistance) {
-        bestDistance = dist;
-        bestIndex = index;
-      }
-    });
-
-    ordered.push(remaining.splice(bestIndex, 1)[0]);
+function estimateKm(points) {
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    total += distanceKm(points[i - 1], points[i]);
   }
-
-  return ordered;
+  return total;
 }
 
 function clearMap() {
@@ -545,89 +725,93 @@ function clearMap() {
   currentPoints = [];
   bounds = new google.maps.LatLngBounds();
 
-  if (routeLine) {
-    routeLine.setMap(null);
-    routeLine = null;
-  }
+  routeLines.forEach(line => line.setMap(null));
+  routeLines = [];
 }
 
-function markerIcon(number) {
+function pointStatus(point) {
+  const route = normalizeHeader(point.grupoRuta || '');
+  const suggested = normalizeHeader(point.grupoRutaSugerido || '');
+  const note = normalizeHeader(point.observacion || '');
+
+  if (note.includes('ERROR') || route.includes('ERROR')) {
+    return { type: 'error', color: '#ff2d55', label: '!', title: 'Error de ruta' };
+  }
+
+  if (route === '' || route === 'SIN RUTA' || route === 'SIN RUTA O FECHA' || route === 'NO PLANIFICADO') {
+    return { type: suggested ? 'unassigned' : 'error', color: suggested ? '#ffd60a' : '#ff2d55', label: '!', title: suggested ? 'Sin ruta asignada' : 'Sin ruta o con error' };
+  }
+
+  return { type: 'ok', color: routeColor(point.grupoRuta), label: null, title: 'Planificado' };
+}
+
+function visibleOrder(point, fallback) {
+  const order = Number(point.order || 0);
+  return Number.isFinite(order) && order > 0 ? order : fallback;
+}
+
+function neonMarkerIcon(color) {
+  const safeColor = color || '#25c2ff';
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">
+      <defs>
+        <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="3.2" result="blur"/>
+          <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .9 0"/>
+          <feMerge>
+            <feMergeNode/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
+      <circle cx="22" cy="22" r="16" fill="${safeColor}" opacity=".28" filter="url(#glow)"/>
+      <circle cx="22" cy="22" r="13" fill="#061225" stroke="${safeColor}" stroke-width="3"/>
+      <circle cx="22" cy="22" r="8" fill="${safeColor}"/>
+    </svg>`;
   return {
-    path: google.maps.SymbolPath.CIRCLE,
-    fillColor: '#25c2ff',
-    fillOpacity: 1,
-    strokeColor: '#061225',
-    strokeWeight: 2,
-    scale: 15,
-    labelOrigin: new google.maps.Point(0, 0)
+    url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+    scaledSize: new google.maps.Size(44, 44),
+    anchor: new google.maps.Point(22, 22),
+    labelOrigin: new google.maps.Point(22, 22)
   };
-}
-
-function refreshMapSize() {
-  if (!map || typeof google === 'undefined' || !google.maps) return;
-  google.maps.event.trigger(map, 'resize');
-}
-
-function fitRouteBounds(path) {
-  if (!path.length) return;
-
-  refreshMapSize();
-
-  if (path.length === 1) {
-    map.setCenter(path[0]);
-    map.setZoom(16);
-    return;
-  }
-
-  map.fitBounds(bounds, {
-    top: 70,
-    right: 70,
-    bottom: 70,
-    left: 70
-  });
-
-  setTimeout(() => {
-    refreshMapSize();
-    map.fitBounds(bounds, {
-      top: 70,
-      right: 70,
-      bottom: 70,
-      left: 70
-    });
-  }, 120);
 }
 
 function drawPoints(points) {
   clearMap();
   currentPoints = points;
-
-  const path = [];
+  const groupedPaths = {};
 
   points.forEach((point, index) => {
     const position = { lat: point.lat, lng: point.lng };
-    path.push(position);
+    const routeName = point.grupoRuta || 'SIN RUTA';
+    if (!groupedPaths[routeName]) groupedPaths[routeName] = [];
+    groupedPaths[routeName].push(position);
     bounds.extend(position);
+    const status = pointStatus(point);
+    const color = status.color;
+    const markerLabel = status.label || String(visibleOrder(point, index + 1));
 
     const marker = new google.maps.Marker({
       position,
       map,
       title: point.nombre || point.codigo || `Local ${index + 1}`,
       label: {
-        text: String(index + 1),
-        color: '#061225',
+        text: markerLabel,
+        color: status.type === 'ok' ? '#ffffff' : '#061225',
         fontWeight: '800',
         fontSize: '12px'
       },
-      icon: markerIcon(index + 1)
+      icon: neonMarkerIcon(color)
     });
 
     marker.addListener('click', () => {
       infoWindow.setContent(`
         <div style="min-width:240px;color:#13233b;">
-          <strong>Local ${index + 1}</strong><br>
+          <strong>${escapeHtml(routeName)} · Orden ${index + 1}</strong><br>
           <b>${escapeHtml(point.nombre || '-')}</b><br>
+          Codigo: ${escapeHtml(point.codigo || '-')}<br>
           ${escapeHtml(point.direccion || '')}<br>
-          ${escapeHtml([point.comuna, point.region].filter(Boolean).join(', '))}
+          ${escapeHtml(point.comuna || '')}
         </div>
       `);
       infoWindow.open(map, marker);
@@ -637,37 +821,69 @@ function drawPoints(points) {
     markerByPointId.set(String(point.id), marker);
   });
 
-  if (path.length > 1) {
-    routeLine = new google.maps.Polyline({
+  Object.keys(groupedPaths).forEach(routeName => {
+    const path = groupedPaths[routeName];
+    if (path.length <= 1) return;
+    const line = new google.maps.Polyline({
       path,
       map,
-      strokeColor: '#25d685',
+      strokeColor: routeColor(routeName),
       strokeOpacity: .95,
       strokeWeight: 4
     });
-  }
+    routeLines.push(line);
+  });
 
-  fitRouteBounds(path);
+  const path = points.map(point => ({ lat: point.lat, lng: point.lng }));
+  if (path.length === 1) {
+    map.setCenter(path[0]);
+    map.setZoom(16);
+  } else if (path.length > 1 && !bounds.isEmpty()) {
+    map.fitBounds(bounds, { top: 70, right: 70, bottom: 70, left: 70 });
+  }
 }
 
 function focusPoint(pointId) {
   const marker = markerByPointId.get(String(pointId));
   if (!marker) return;
-
   const position = marker.getPosition();
-  refreshMapSize();
   map.setCenter(position);
   map.setZoom(16);
+  google.maps.event.trigger(marker, 'click');
+}
 
-  setTimeout(() => {
-    map.setCenter(position);
-    google.maps.event.trigger(marker, 'click');
-  }, 80);
+function updateSourceOrder(points) {
+  points.forEach((point, index) => {
+    const order = index + 1;
+    point.order = order;
+    setSourceValue(point, ['Orden Visita', 'ORDEN VISITA', 'ORDEN'], order);
+    setSourceValue(point, ['Tamaño Ruta', 'TAMANO RUTA'], points.length);
+  });
+
+  const totalKm = estimateKm(points);
+  points.forEach((point, index) => {
+    const prev = index > 0 ? points[index - 1] : null;
+    const legKm = prev ? distanceKm(prev, point) : '';
+    setSourceValue(point, ['Distancia Desde Anterior (KM)'], legKm === '' ? '' : Number(legKm.toFixed(2)));
+    setSourceValue(point, ['Distancia Total Ruta (KM)'], Number(totalKm.toFixed(2)));
+  });
+}
+
+function movePoint(pointId, direction) {
+  const index = currentPoints.findIndex(point => String(point.id) === String(pointId));
+  const nextIndex = index + direction;
+  if (index < 0 || nextIndex < 0 || nextIndex >= currentPoints.length) return;
+
+  const moved = currentPoints.splice(index, 1)[0];
+  currentPoints.splice(nextIndex, 0, moved);
+  updateSourceOrder(currentPoints);
+  renderCurrentRoute();
 }
 
 function renderList(points) {
   const container = document.getElementById('listaLocales');
-
+  const routeSelectorValue = document.getElementById('selectorRuta').value;
+  const canReorder = routeSelectorValue && routeSelectorValue !== '__ALL__';
   if (!points.length) {
     container.innerHTML = '<div class="hint">No hay locales con ubicacion para mostrar.</div>';
     return;
@@ -675,36 +891,56 @@ function renderList(points) {
 
   container.innerHTML = points.map((point, index) => `
     <div class="point-row" data-point-id="${escapeHtml(point.id)}">
-      <div class="point-num">${index + 1}</div>
+      <input class="row-check" type="checkbox" data-select="${escapeHtml(point.id)}" ${selectedPointIds.has(point.id) ? 'checked' : ''}>
+      <div class="point-num" style="background:${pointStatus(point).color}; box-shadow:0 0 14px ${pointStatus(point).color};">
+        ${pointStatus(point).label || visibleOrder(point, index + 1)}
+      </div>
       <div>
         <div class="point-title">${escapeHtml(point.nombre || `Local ${index + 1}`)}</div>
         <div class="point-meta">
-          ${escapeHtml(point.codigo ? `Codigo ${point.codigo}` : '')}
-          ${point.codigo ? '<br>' : ''}
-          ${escapeHtml(point.direccion || '')}
-          ${point.direccion ? '<br>' : ''}
-          ${escapeHtml([point.comuna, point.region].filter(Boolean).join(', '))}
-          ${point.fechaPlanificada ? '<br>' : ''}
-          ${escapeHtml(point.fechaPlanificada ? `Fecha ${point.fechaPlanificadaLabel}` : '')}
+          Ruta ${escapeHtml(point.grupoRuta || 'SIN RUTA')}<br>
+          Estado ${escapeHtml(pointStatus(point).title)}<br>
+          Codigo ${escapeHtml(point.codigo || '-')}<br>
+          ${escapeHtml(point.direccion || '')}<br>
+          ${escapeHtml(point.comuna || '')}
         </div>
+      </div>
+      <div class="move-buttons">
+        <button type="button" data-move="${escapeHtml(point.id)}" data-dir="-1" ${!canReorder || index === 0 ? 'disabled' : ''}>
+          <i class="fa fa-arrow-up"></i>
+        </button>
+        <button type="button" data-move="${escapeHtml(point.id)}" data-dir="1" ${!canReorder || index === points.length - 1 ? 'disabled' : ''}>
+          <i class="fa fa-arrow-down"></i>
+        </button>
       </div>
     </div>
   `).join('');
 
   container.querySelectorAll('.point-row').forEach(row => {
-    row.addEventListener('click', () => {
+    row.addEventListener('click', event => {
+      if (event.target.closest('button') || event.target.closest('input')) return;
       focusPoint(row.dataset.pointId);
     });
   });
-}
 
-function escapeHtml(text) {
-  return String(text ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+  container.querySelectorAll('[data-select]').forEach(check => {
+    check.addEventListener('change', () => {
+      if (check.checked) {
+        selectedPointIds.add(check.dataset.select);
+      } else {
+        selectedPointIds.delete(check.dataset.select);
+      }
+      updateSelectionUi();
+    });
+  });
+
+  container.querySelectorAll('[data-move]').forEach(button => {
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      movePoint(button.dataset.move, Number(button.dataset.dir));
+    });
+  });
+  updateSelectionUi();
 }
 
 function setStatus(text, type = '') {
@@ -720,204 +956,418 @@ function updateStats(total, mapped, missing) {
   document.getElementById('statKm').textContent = mapped > 1 ? estimateKm(currentPoints).toFixed(1) : '0';
 }
 
-function geocodeAddress(point) {
-  const address = [point.direccion, point.comuna, point.region, 'Chile'].filter(Boolean).join(', ');
-  if (!address.trim()) return Promise.resolve(point);
-
-  return new Promise(resolve => {
-    geocoder.geocode({ address }, (results, status) => {
-      if (status === 'OK' && results && results[0]) {
-        const loc = results[0].geometry.location;
-        point.lat = loc.lat();
-        point.lng = loc.lng();
-      }
-      resolve(point);
-    });
-  });
-}
-
-async function ensureCoordinates(points) {
-  const output = [];
-
-  for (let i = 0; i < points.length; i++) {
-    const point = points[i];
-
-    if (point.lat === null || point.lng === null) {
-      setStatus(`Buscando coordenadas ${i + 1} de ${points.length}...`);
-      await geocodeAddress(point);
-      await new Promise(resolve => setTimeout(resolve, 180));
-    }
-
-    output.push(point);
-  }
-
-  return output;
-}
-
-function normalizeUser(value) {
-  const text = String(value || '').trim();
-  return text === '' ? 'SIN USUARIO' : text;
-}
-
-function resetVisualization(message = 'Selecciona un usuario para visualizar su ruta.') {
+function resetVisualization(message) {
   clearMap();
   renderList([]);
+  selectedPointIds.clear();
+  updateSelectionUi();
   updateStats(loadedPoints.length, 0, 0);
   document.getElementById('mapHint').style.display = 'block';
-  setStatus(message);
+  setStatus(message || 'Selecciona usuario, fecha y ruta.');
 }
 
-function populateUserSelector(points) {
+function populateUserSelector() {
   const selector = document.getElementById('selectorUsuario');
   const counts = new Map();
-
-  points.forEach(point => {
-    const user = normalizeUser(point.merchan);
-    counts.set(user, (counts.get(user) || 0) + 1);
+  loadedPoints.forEach(point => {
+    counts.set(point.usuarioNombre, (counts.get(point.usuarioNombre) || 0) + 1);
   });
 
-  const users = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0], 'es'));
-
   selector.innerHTML = '<option value="">Seleccionar usuario</option>';
-  users.forEach(([user, count]) => {
+  [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0], 'es')).forEach(([user, count]) => {
     const option = document.createElement('option');
     option.value = user;
     option.textContent = `${user} (${count})`;
     selector.appendChild(option);
   });
-
-  selector.disabled = users.length === 0;
+  selector.disabled = counts.size === 0;
 }
 
-function populateDateSelector(user) {
-  const selector = document.getElementById('selectorFecha');
+function populateRouteSelector(user) {
+  const selector = document.getElementById('selectorRuta');
   const counts = new Map();
-
   loadedPoints
-    .filter(point => normalizeUser(point.merchan) === user)
+    .filter(point => point.usuarioNombre === user)
     .forEach(point => {
-      const value = point.fechaPlanificada || 'SIN FECHA';
-      const label = point.fechaPlanificadaLabel || 'SIN FECHA';
-      const current = counts.get(value) || { label, count: 0 };
-      current.count++;
-      counts.set(value, current);
+      counts.set(point.grupoRuta, (counts.get(point.grupoRuta) || 0) + 1);
     });
 
-  const dates = [...counts.entries()].sort((a, b) => {
-    if (a[0] === 'SIN FECHA') return 1;
-    if (b[0] === 'SIN FECHA') return -1;
-    return a[0].localeCompare(b[0]);
-  });
-
-  selector.innerHTML = '<option value="">Seleccionar fecha</option>';
-  dates.forEach(([value, info]) => {
+  selector.innerHTML = '<option value="">Seleccionar ruta</option>';
+  if (counts.size > 1) {
+    const total = [...counts.values()].reduce((acc, count) => acc + count, 0);
     const option = document.createElement('option');
-    option.value = value;
-    option.textContent = `${info.label} (${info.count})`;
+    option.value = '__ALL__';
+    option.textContent = `TODAS LAS RUTAS (${total})`;
+    selector.appendChild(option);
+  }
+  [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0], 'es')).forEach(([route, count]) => {
+    const option = document.createElement('option');
+    option.value = route;
+    option.textContent = `${route} (${count})`;
+    selector.appendChild(option);
+  });
+  selector.disabled = counts.size === 0;
+}
+
+function selectedRoutePoints() {
+  const user = document.getElementById('selectorUsuario').value;
+  const route = document.getElementById('selectorRuta').value;
+
+  return loadedPoints
+    .filter(point => point.usuarioNombre === user)
+    .filter(point => route === '__ALL__' || point.grupoRuta === route)
+    .filter(point => point.lat !== null && point.lng !== null)
+    .sort((a, b) => a.grupoRuta.localeCompare(b.grupoRuta, 'es') || a.order - b.order);
+}
+
+function renderCurrentRoute() {
+  const points = currentPoints.length ? currentPoints : selectedRoutePoints();
+  if (document.getElementById('selectorRuta').value !== '__ALL__') {
+    updateSourceOrder(points);
+  }
+  drawPoints(points);
+  renderList(points);
+  updateStats(selectedRoutePoints().length || points.length, points.length, Math.max(0, (selectedRoutePoints().length || points.length) - points.length));
+  document.getElementById('mapHint').style.display = points.length ? 'none' : 'block';
+  setStatus(points.length ? `Ruta cargada con ${points.length} locales.` : 'No hay locales con coordenadas para esta ruta.', points.length ? 'ok' : 'bad');
+}
+
+function populateModalUsers() {
+  const selector = document.getElementById('modalUsuario');
+  const users = [...new Set(loadedPoints.map(point => point.usuarioNombre || 'SIN USUARIO'))]
+    .sort((a, b) => a.localeCompare(b, 'es'));
+  const currentUser = document.getElementById('selectorUsuario').value;
+
+  selector.innerHTML = '';
+  users.forEach(user => {
+    const option = document.createElement('option');
+    option.value = user;
+    option.textContent = user;
+    selector.appendChild(option);
+  });
+  if (currentUser && users.includes(currentUser)) selector.value = currentUser;
+  populateModalRoutes(selector.value);
+}
+
+function populateModalRoutes(userName) {
+  const selector = document.getElementById('modalRuta');
+  const routes = routesForUser(userName);
+  const currentRoute = document.getElementById('selectorRuta').value;
+
+  selector.innerHTML = '';
+  routes.forEach(route => {
+    const option = document.createElement('option');
+    option.value = route;
+    option.textContent = route;
     selector.appendChild(option);
   });
 
-  selector.disabled = dates.length === 0;
+  const custom = document.createElement('option');
+  custom.value = '__NEW__';
+  custom.textContent = 'Crear nueva ruta...';
+  selector.appendChild(custom);
+
+  if (currentRoute && currentRoute !== '__ALL__' && routes.includes(currentRoute)) {
+    selector.value = currentRoute;
+  }
 }
 
-function handleRows(rows) {
-  if (!rows.length) {
-    loadedPoints = [];
-    populateUserSelector([]);
-    populateDateSelector('');
-    resetVisualization('El archivo no contiene filas para visualizar.');
-    setStatus('El archivo no contiene filas para visualizar.', 'bad');
-    return;
-  }
-
-  loadedPoints = rows
-    .map(rowToPoint)
-    .filter(point => point.nombre || point.codigo || point.direccion)
-    .sort((a, b) => a.order - b.order);
-
-  populateUserSelector(loadedPoints);
-  populateDateSelector('');
-  resetVisualization(`Archivo cargado con ${loadedPoints.length} locales. Selecciona un usuario para dibujar la ruta.`);
+function openReassignModal() {
+  if (!selectedPointIds.size) return;
+  document.getElementById('modalSelectedCount').textContent = selectedPointIds.size;
+  document.getElementById('modalOrdenInicial').value = '';
+  populateModalUsers();
+  $('#modalReasignar').modal('show');
 }
 
-async function renderSelectedUserRoute(user, dateValue) {
-  if (!user) {
-    resetVisualization('Selecciona un usuario para visualizar su ruta.');
+function applyReassignment() {
+  const userName = document.getElementById('modalUsuario').value;
+  let routeName = document.getElementById('modalRuta').value;
+  const orderRaw = document.getElementById('modalOrdenInicial').value;
+
+  if (!userName) {
+    alert('Selecciona un usuario destino.');
     return;
   }
-
-  if (!dateValue) {
-    resetVisualization('Selecciona una fecha para visualizar la ruta del usuario.');
+  if (routeName === '__NEW__') {
+    routeName = prompt('Nombre de la nueva ruta:', 'RUTA NUEVA');
+    if (!routeName) return;
+  }
+  if (!routeName) {
+    alert('Selecciona una ruta destino.');
+    return;
+  }
+  if (orderRaw !== '' && (!Number.isFinite(Number(orderRaw)) || Number(orderRaw) < 1)) {
+    alert('El orden inicial debe ser mayor o igual a 1.');
     return;
   }
 
   const selected = loadedPoints
-    .filter(point => normalizeUser(point.merchan) === user)
-    .filter(point => (point.fechaPlanificada || 'SIN FECHA') === dateValue)
+    .filter(point => selectedPointIds.has(point.id))
     .sort((a, b) => a.order - b.order);
+  const selectedSet = new Set(selected.map(point => point.id));
+  const targetExisting = routePointsFor(userName, routeName)
+    .filter(point => !selectedSet.has(point.id));
+  const startOrder = orderRaw !== ''
+    ? Number(orderRaw)
+    : targetExisting.length + 1;
 
-  if (!selected.length) {
-    resetVisualization('No hay locales para el usuario seleccionado.');
+  selected.forEach(point => setPointUserAndRoute(point, userName, routeName));
+
+  const before = targetExisting.filter(point => point.order < startOrder);
+  const after = targetExisting.filter(point => point.order >= startOrder);
+  const merged = [...before, ...selected, ...after];
+  updateSourceOrder(merged);
+
+  selectedPointIds.clear();
+  populateUserSelector();
+  document.getElementById('selectorUsuario').value = userName;
+  populateRouteSelector(userName);
+  document.getElementById('selectorRuta').value = routeName;
+  currentPoints = selectedRoutePoints();
+  renderCurrentRoute();
+  $('#modalReasignar').modal('hide');
+}
+
+function handleRows(rows) {
+  loadedPoints = rows
+    .map(rowToPoint)
+    .filter(point => point.nombre || point.codigo || point.direccion)
+    .sort((a, b) => a.usuarioNombre.localeCompare(b.usuarioNombre, 'es')
+      || String(a.fechaRuta).localeCompare(String(b.fechaRuta))
+      || a.grupoRuta.localeCompare(b.grupoRuta, 'es')
+      || a.order - b.order);
+
+  populateUserSelector();
+  document.getElementById('selectorRuta').innerHTML = '<option value="">Seleccionar ruta</option>';
+  document.getElementById('selectorRuta').disabled = true;
+  document.getElementById('btnDescargarRuta').disabled = loadedPoints.length === 0;
+  document.getElementById('btnDescargarMensual').disabled = loadedPoints.length === 0;
+
+  resetVisualization(`Archivo cargado con ${loadedPoints.length} locales. Selecciona usuario y ruta.`);
+}
+
+function downloadEditedWorkbook() {
+  if (!loadedPoints.length) return;
+
+  const headers = loadedHeaders.length
+    ? loadedHeaders
+    : Object.keys(loadedPoints[0].sourceRow || {});
+  const rows = loadedPoints.map(point => {
+    const output = {};
+    headers.forEach(header => {
+      output[header] = point.sourceRow[header] ?? '';
+    });
+    return output;
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(rows, { header: headers });
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Rutas Editadas');
+  XLSX.writeFile(workbook, `${currentFileBaseName}_editado.xlsx`);
+}
+
+function routeSortValue(routeName, points, fallbackIndex) {
+  const planDays = points
+    .map(point => Number(point.diaPlan || 0))
+    .filter(day => Number.isFinite(day) && day > 0);
+  if (planDays.length) return Math.min(...planDays);
+
+  const numberInRoute = String(routeName || '').match(/\d+/);
+  if (numberInRoute) return Number(numberInRoute[0]);
+
+  return fallbackIndex + 1;
+}
+
+function buildMonthlyTemplates() {
+  const users = new Map();
+  loadedPoints.forEach((point, index) => {
+    const status = pointStatus(point);
+    if (status.type !== 'ok') return;
+
+    const user = point.usuarioNombre || 'SIN USUARIO';
+    const routeName = point.grupoRuta || 'SIN RUTA';
+    const normalizedRoute = normalizeHeader(routeName);
+    if (!routeName || normalizedRoute === 'SIN RUTA' || normalizedRoute.includes('ERROR')) return;
+
+    if (!users.has(user)) users.set(user, new Map());
+    if (!users.get(user).has(routeName)) {
+      users.get(user).set(routeName, {
+        key: routeName,
+        routeName,
+        firstIndex: index,
+        points: []
+      });
+    }
+    users.get(user).get(routeName).points.push(point);
+  });
+
+  const output = new Map();
+  users.forEach((templateMap, user) => {
+    const templates = [...templateMap.values()]
+      .map(template => ({
+        ...template,
+        sort: routeSortValue(template.routeName, template.points, template.firstIndex),
+        points: template.points.slice().sort((a, b) => a.order - b.order)
+      }))
+      .sort((a, b) => a.sort - b.sort || a.routeName.localeCompare(b.routeName, 'es'));
+    output.set(user, templates);
+  });
+  return output;
+}
+
+function hasRecentClientConflict(template, lastVisitByClient, date, minDays) {
+  return template.points.some(point => {
+    const key = point.codigo || point.nombre || point.id;
+    const last = lastVisitByClient.get(key);
+    if (!last) return false;
+    return ((date - last) / 86400000) < minDays;
+  });
+}
+
+function chooseMonthlyTemplate(templates, preferredIndex, lastVisitByClient, date) {
+  if (!templates.length) return null;
+  for (let offset = 0; offset < templates.length; offset++) {
+    const candidate = templates[(preferredIndex + offset) % templates.length];
+    if (!hasRecentClientConflict(candidate, lastVisitByClient, date, 5)) {
+      return { template: candidate, nextIndex: (preferredIndex + offset + 1) % templates.length };
+    }
+  }
+  return { template: templates[preferredIndex % templates.length], nextIndex: (preferredIndex + 1) % templates.length };
+}
+
+function monthlyRowsForTemplate(userName, template, date, dayIndex) {
+  const dateSql = formatDateSql(date);
+  const fechaExcel = excelDateSerial(date);
+  const week = businessWeekOfMonth(date);
+  const dayNum = date.getDay() === 0 ? 7 : date.getDay();
+  const totalKm = estimateKm(template.points.filter(point => point.lat !== null && point.lng !== null));
+
+  return template.points.map((point, index) => {
+    const row = clonePointRow(point);
+    setRowValue(row, ['Usuario Nombre', 'USUARIO NOMBRE', 'Usuario'], userName);
+    setRowValue(row, ['Grupo Ruta', 'GRUPO RUTA', 'Ruta'], template.routeName || point.grupoRuta);
+    setRowValue(row, ['Fecha Ruta', 'FECHA RUTA', 'Fecha'], fechaExcel);
+    setRowValue(row, ['Dia Plan', 'Día Plan', 'DIA PLAN'], dayIndex + 1);
+    setRowValue(row, ['Semana Plan', 'SEMANA PLAN'], week);
+    setRowValue(row, ['Dia Semana Nº', 'Día Semana Nº', 'DIA SEMANA Nº'], dayNum);
+    setRowValue(row, ['Dia Semana', 'Día Semana', 'DIA SEMANA'], dayNameEs(date));
+    setRowValue(row, ['Orden Visita', 'ORDEN VISITA', 'Orden'], index + 1);
+    setRowValue(row, ['Tamaño Ruta', 'Tamano Ruta'], template.points.length);
+    setRowValue(row, ['Distancia Desde Anterior (KM)'], index === 0 ? '' : Number(distanceKm(template.points[index - 1], point).toFixed(2)));
+    setRowValue(row, ['Distancia Total Ruta (KM)'], Number(totalKm.toFixed(2)));
+    setRowValue(row, ['Observación', 'OBSERVACION'], `Ruta mensual ${dateSql}. Patron base ${template.key}.`);
+    return row;
+  });
+}
+
+function downloadMonthlyWorkbook() {
+  const monthValue = document.getElementById('selectorMesMensual').value;
+  if (!monthValue) {
+    alert('Selecciona el mes para generar la ruta mensual.');
+    return;
+  }
+  if (!loadedPoints.length) {
+    alert('Primero debes cargar un archivo.');
     return;
   }
 
-  clearMap();
-  renderList([]);
-  updateStats(selected.length, 0, 0);
-  setStatus(`Preparando ruta de ${user}...`);
+  const days = businessDaysInMonth(monthValue);
+  if (!days.length) {
+    alert('El mes seleccionado no tiene dias habiles para generar.');
+    return;
+  }
 
-  const withCoords = await ensureCoordinates(selected);
-  let mapped = withCoords.filter(point => point.lat !== null && point.lng !== null);
-  const hasFileOrder = mapped.some(point => point.hasOrder);
-  mapped = hasFileOrder
-    ? mapped.sort((a, b) => a.order - b.order)
-    : suggestRouteOrder(mapped);
-  const missing = withCoords.length - mapped.length;
+  const templatesByUser = buildMonthlyTemplates();
+  let totalTemplates = 0;
+  templatesByUser.forEach(templates => {
+    totalTemplates += templates.length;
+  });
+  if (!totalTemplates) {
+    alert('No hay rutas planificadas validas para generar mensual.');
+    return;
+  }
 
-  drawPoints(mapped);
-  renderList(mapped);
-  updateStats(withCoords.length, mapped.length, missing);
+  const rows = [];
 
-  document.getElementById('mapHint').style.display = mapped.length ? 'none' : 'block';
-  setStatus(mapped.length ? `Ruta de ${user} cargada con ${mapped.length} locales.` : 'No se pudieron ubicar locales en el mapa.', mapped.length ? 'ok' : 'bad');
+  templatesByUser.forEach((templates, userName) => {
+    let templateIndex = 0;
+    const lastVisitByClient = new Map();
+    days.forEach((date, dayIndex) => {
+      const chosen = chooseMonthlyTemplate(templates, templateIndex, lastVisitByClient, date);
+      if (!chosen) return;
+      templateIndex = chosen.nextIndex;
+      rows.push(...monthlyRowsForTemplate(userName, chosen.template, date, dayIndex));
+      chosen.template.points.forEach(point => {
+        const key = point.codigo || point.nombre || point.id;
+        lastVisitByClient.set(key, date);
+      });
+    });
+  });
+
+  const headers = loadedHeaders.length
+    ? loadedHeaders
+    : Object.keys(rows[0] || {});
+  const normalizedRows = rows.map(row => {
+    const output = {};
+    headers.forEach(header => {
+      output[header] = row[header] ?? '';
+    });
+    return output;
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(normalizedRows, { header: headers });
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Ruta Mensual');
+  XLSX.writeFile(workbook, `${currentFileBaseName}_mensual_${monthValue}.xlsx`);
 }
 
 document.getElementById('archivoRuta').addEventListener('change', event => {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
 
+  currentFileBaseName = file.name.replace(/\.[^.]+$/, '') || 'rutas_editadas';
   setStatus('Procesando archivo...');
-  document.getElementById('selectorUsuario').value = '';
-  document.getElementById('selectorFecha').value = '';
-  document.getElementById('selectorFecha').disabled = true;
-
   const reader = new FileReader();
-  reader.onload = async evt => {
+
+  reader.onload = evt => {
     try {
       const data = new Uint8Array(evt.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = rowsFromWorksheet(sheet);
-      await handleRows(rows);
+      handleRows(rowsFromWorksheet(sheet));
     } catch (error) {
       console.error(error);
       setStatus('No fue posible leer el archivo. Revisa que sea Excel o CSV valido.', 'bad');
     }
   };
+
   reader.readAsArrayBuffer(file);
 });
 
+document.getElementById('selectorMesMensual').value = new Date().toISOString().slice(0, 7);
+
 document.getElementById('selectorUsuario').addEventListener('change', event => {
-  const user = event.target.value;
-  populateDateSelector(user);
-  document.getElementById('selectorFecha').value = '';
-  resetVisualization(user ? 'Selecciona una fecha para visualizar la ruta del usuario.' : 'Selecciona un usuario para visualizar su ruta.');
+  selectedPointIds.clear();
+  currentPoints = [];
+  populateRouteSelector(event.target.value);
+  resetVisualization(event.target.value ? 'Selecciona una ruta.' : 'Selecciona un usuario.');
 });
 
-document.getElementById('selectorFecha').addEventListener('change', event => {
-  renderSelectedUserRoute(document.getElementById('selectorUsuario').value, event.target.value);
+document.getElementById('selectorRuta').addEventListener('change', () => {
+  selectedPointIds.clear();
+  currentPoints = selectedRoutePoints();
+  renderCurrentRoute();
 });
+
+document.getElementById('btnDescargarRuta').addEventListener('click', downloadEditedWorkbook);
+document.getElementById('btnDescargarMensual').addEventListener('click', downloadMonthlyWorkbook);
+document.getElementById('btnEditarSeleccion').addEventListener('click', openReassignModal);
+document.getElementById('modalUsuario').addEventListener('change', event => populateModalRoutes(event.target.value));
+document.getElementById('btnAplicarReasignacion').addEventListener('click', applyReassignment);
+
+window.initMap = initMap;
 </script>
-<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw&callback=initMap"></script>
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw&callback=initMap&loading=async"></script>
 </body>
 </html>

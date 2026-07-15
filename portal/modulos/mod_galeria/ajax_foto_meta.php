@@ -17,8 +17,15 @@ if (!$empresa_id || !$resp_id || !$formulario_id) {
 mysqli_set_charset($conn, 'utf8mb4');
 $conn->query("SET time_zone = 'America/Santiago'");
 
+
+// dup_flag puede no existir aún (BBDD sin la migración 13_fotos_duplicadas_encuesta.sql) → seleccionar 0.
+$fqpmHasDup = false;
+try { $cdup = $conn->query("SHOW COLUMNS FROM form_question_photo_meta LIKE 'dup_flag'"); $fqpmHasDup = ($cdup && $cdup->num_rows > 0); if ($cdup) { $cdup->close(); } } catch (Throwable $e) { $fqpmHasDup = false; }
+$dupSel = $fqpmHasDup ? 'm.dup_flag' : '0 AS dup_flag';
+
 $stmt = $conn->prepare("
     SELECT
+        {$dupSel},
         m.created_at          AS subida_at,
         m.capture_source,
         m.exif_datetime,

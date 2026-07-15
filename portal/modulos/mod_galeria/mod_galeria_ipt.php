@@ -11,6 +11,12 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/session_da
 $division_id       = (int)($_SESSION['division_id'] ?? 0);
 $divisionLogin     = $division_id;
 $division          = (int)($_GET['division'] ?? $division_id);
+
+// Scoping por división: solo MC (división 1) puede consultar otras divisiones;
+// el resto queda fijo a la división de su sesión aunque manipulen el GET.
+if ($divisionLogin !== 1 && $divisionLogin > 0) {
+    $division = $divisionLogin;
+}
 $subdivision       = (int)($_GET['subdivision'] ?? 0);
 $region            = (int)($_GET['region'] ?? 0);
 $zona              = (int)($_GET['zona'] ?? 0);
@@ -19,7 +25,7 @@ $comuna            = (int)($_GET['comuna'] ?? 0);
 $usuarioFiltro     = (int)($_GET['usuario'] ?? 0);
 $jefeVentaFiltro   = (int)($_GET['jefe_venta'] ?? 0);
 $codigoLocalFiltro = trim($_GET['codigo_local'] ?? '');
-$view              = in_array(trim($_GET['view'] ?? 'implementacion'), ['implementacion','encuesta'], true)
+$view              = in_array(trim($_GET['view'] ?? 'implementacion'), ['implementacion','encuesta','duplicados'], true)
     ? trim($_GET['view'] ?? 'implementacion')
     : 'implementacion';
 
@@ -127,6 +133,13 @@ if ($puedeVerFiltroPregunta) {
         <a class="nav-link <?= $view==='encuesta'?'active':'' ?>"
            href="?view=encuesta&page=1">
           Fotos Encuesta
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link <?= $view==='duplicados'?'active':'' ?>"
+           href="?view=duplicados&page=1"
+           style="<?= $view==='duplicados' ? '' : 'color:#c0392b;' ?>">
+          Duplicadas / Sospechosas
         </a>
       </li>
     </ul>
@@ -288,6 +301,7 @@ if ($puedeVerFiltroPregunta) {
     </div>
   </div>
 
+  <?php if ($view !== 'duplicados'): // la vista de duplicadas no tiene selección/descarga ?>
   <div class="gallery-actions-row">
     <form id="zipForm" method="POST" action="download_zip.php" style="display:none">
       <input type="hidden" name="jsonFotos" id="jsonFotos">
@@ -297,6 +311,7 @@ if ($puedeVerFiltroPregunta) {
       Descargar seleccionadas <i class="fas fa-download ml-2"></i>
     </button>
   </div>
+  <?php endif; ?>
 
   <div class="gallery-table-card">
     <div id="galeriaTableContainer">
@@ -691,6 +706,11 @@ $(function () {
         if ($.fn.DataTable.isDataTable('#example')) {
             $('#example').DataTable().destroy();
         }
+        $('.js-dup-table').each(function () {
+            if ($.fn.DataTable.isDataTable(this)) {
+                $(this).DataTable().destroy();
+            }
+        });
     }
 
     function initTabla() {
@@ -721,6 +741,29 @@ $(function () {
         });
     }
 
+    // Tablas de la vista "Duplicadas / Sospechosas" (dos tablas por respuesta)
+    function initDupTablas() {
+        $('.js-dup-table').each(function () {
+            $(this).DataTable({
+                paging: true,
+                searching: true,
+                ordering: true,
+                info: true,
+                autoWidth: false,
+                pageLength: 25,
+                lengthMenu: [[25, 50, 100], [25, 50, 100]],
+                order: [],
+                language: {
+                    url: 'https://cdn.datatables.net/plug-ins/1.13.8/i18n/es-ES.json',
+                    emptyTable: 'Sin registros disponibles'
+                },
+                columnDefs: [
+                    { targets: 'no-sort', orderable: false, searchable: false }
+                ]
+            });
+        });
+    }
+
     function cargarTablaGaleria(reintento = 0) {
         if (galeriaRequest) {
             galeriaRequest.abort();
@@ -739,6 +782,7 @@ $(function () {
             destruirTabla();
             $('#galeriaTableContainer').html(html);
             initTabla();
+            initDupTablas();
         })
         .fail(function (xhr, textStatus) {
             const esRecuperable =
@@ -768,6 +812,11 @@ $(function () {
         e.preventDefault();
         cargarTablaGaleria();
     });
+
+    <?php if ($view === 'duplicados'): ?>
+    // La vista de duplicadas carga de inmediato (sin exigir aplicar filtros)
+    cargarTablaGaleria();
+    <?php endif; ?>
 });
 </script>
 

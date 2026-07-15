@@ -114,6 +114,7 @@ $sqlDet = "
         UPPER(COALESCE(fq.categoria,'')) AS categoria, UPPER(COALESCE(fq.marca,'')) AS marca,
         UPPER(COALESCE(u.usuario,'')) AS ejecutor,
         fq.etapa_material,
+        fq.pregunta,
         CAST(COALESCE(NULLIF(fq.valor_propuesto,''),'0') AS UNSIGNED) AS propuesto,
         CAST(COALESCE(NULLIF(fq.valor,''),'0') AS UNSIGNED) AS implementado,
         DATE(fq.fechaVisita) AS fecha_visita, DATE(fq.fechaPropuesta) AS fecha_propuesta,
@@ -200,7 +201,14 @@ foreach ($detalle as $d) {
     if ($etapa === 'retirado' || ($etapa === 'implementado' && $impl >= $prop && $prop > 0)) { $estado = 'COMPLETO'; }
     elseif ($etapa === 'implementado' && $impl < $prop) { $estado = 'PARCIAL'; }
     elseif ($etapa === 'armado' || $etapa === 'entregado') { $estado = 'EN PROCESO'; }
-    else { $estado = 'SIN INICIAR'; }
+    else {
+        // Sin etapa: si la sala fue visitada y quedó Pendiente/Cancelada, reflejarlo
+        // (el flujo de estado escribe pregunta='en proceso'/'cancelado' sin tocar etapa_material)
+        $pregEstado = strtolower(trim((string)($d['pregunta'] ?? '')));
+        if ($pregEstado === 'cancelado')      { $estado = 'CANCELADO'; }
+        elseif ($pregEstado === 'en proceso') { $estado = 'PENDIENTE (VISITADO)'; }
+        else                                  { $estado = 'SIN INICIAR'; }
+    }
 
     $fotos = $fotosPorFQ[$idFQ] ?? [];
     $col = 1;
@@ -258,7 +266,12 @@ foreach ($detalle as $d) {
     $falt = max(0, $prop - $impl);
     if ($etapa === 'implementado' && $impl < $prop) { $estado = 'PARCIAL'; }
     elseif ($etapa === 'armado' || $etapa === 'entregado') { $estado = 'EN PROCESO'; }
-    else { $estado = 'SIN INICIAR'; }
+    else {
+        $pregEstado = strtolower(trim((string)($d['pregunta'] ?? '')));
+        if ($pregEstado === 'cancelado')      { $estado = 'CANCELADO'; }
+        elseif ($pregEstado === 'en proceso') { $estado = 'PENDIENTE (VISITADO)'; }
+        else                                  { $estado = 'SIN INICIAR'; }
+    }
 
     $dias = '';
     if (!empty($d['fecha_propuesta'])) {

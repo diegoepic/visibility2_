@@ -84,6 +84,177 @@ function cacheRemember(string $namespace, array $payload, int $ttl, callable $re
     return $data;
 }
 
+function normalizarCatalogoFormulario(string $valor, int $maxLength = 150): string {
+    $valor = trim($valor);
+    $map = [
+        'Á' => 'A', 'À' => 'A', 'Â' => 'A', 'Ä' => 'A', 'Ã' => 'A', 'á' => 'A', 'à' => 'A', 'â' => 'A', 'ä' => 'A', 'ã' => 'A',
+        'É' => 'E', 'È' => 'E', 'Ê' => 'E', 'Ë' => 'E', 'é' => 'E', 'è' => 'E', 'ê' => 'E', 'ë' => 'E',
+        'Í' => 'I', 'Ì' => 'I', 'Î' => 'I', 'Ï' => 'I', 'í' => 'I', 'ì' => 'I', 'î' => 'I', 'ï' => 'I',
+        'Ó' => 'O', 'Ò' => 'O', 'Ô' => 'O', 'Ö' => 'O', 'Õ' => 'O', 'ó' => 'O', 'ò' => 'O', 'ô' => 'O', 'ö' => 'O', 'õ' => 'O',
+        'Ú' => 'U', 'Ù' => 'U', 'Û' => 'U', 'Ü' => 'U', 'ú' => 'U', 'ù' => 'U', 'û' => 'U', 'ü' => 'U',
+        'Ñ' => 'N', 'ñ' => 'N', 'Ç' => 'C', 'ç' => 'C'
+    ];
+    $valor = strtr($valor, $map);
+    $valor = strtoupper($valor);
+    $valor = preg_replace('/[^A-Z0-9 ]+/', ' ', $valor);
+    $valor = preg_replace('/\s+/', ' ', $valor);
+    return substr(trim($valor), 0, $maxLength);
+}
+
+function limpiarCacheModuloFormulario(): void {
+    $dir = __DIR__ . '/cache_mod_formulario';
+    if (!is_dir($dir)) {
+        return;
+    }
+
+    foreach (glob($dir . '/*.cache') ?: [] as $file) {
+        @unlink($file);
+    }
+}
+
+function crearCatalogoFormulario(string $tabla, string $nombre, string $descripcion = ''): void {
+    global $conn;
+
+    if (!in_array($tabla, ['categoria_formulario', 'trade'], true)) {
+        throw new Exception('Catálogo no permitido.');
+    }
+
+    $nombre = normalizarCatalogoFormulario($nombre, 150);
+    $descripcion = normalizarCatalogoFormulario($descripcion, 255);
+
+    if ($nombre === '') {
+        throw new Exception('El nombre es obligatorio.');
+    }
+
+    $existentes = ejecutarConsulta(
+        "SELECT id FROM {$tabla} WHERE nombre = ? AND deleted_at IS NULL LIMIT 1",
+        [$nombre],
+        's'
+    );
+
+    if (!empty($existentes)) {
+        throw new Exception('Ya existe un registro con ese nombre.');
+    }
+
+    $sql = "INSERT INTO {$tabla} (nombre, descripcion, estado, created_at, updated_at)
+            VALUES (?, ?, 1, NOW(), NOW())";
+    $stmt = mysqli_prepare($conn, $sql);
+    if (!$stmt) {
+        throw new Exception('Error preparando guardado: ' . mysqli_error($conn));
+    }
+
+    mysqli_stmt_bind_param($stmt, 'ss', $nombre, $descripcion);
+    if (!mysqli_stmt_execute($stmt)) {
+        $error = mysqli_stmt_error($stmt);
+        mysqli_stmt_close($stmt);
+        throw new Exception('Error al guardar: ' . $error);
+    }
+
+    mysqli_stmt_close($stmt);
+    limpiarCacheModuloFormulario();
+}
+
+function actualizarCatalogoFormulario(string $tabla, int $id, string $nombre, string $descripcion = ''): void {
+    global $conn;
+
+    if (!in_array($tabla, ['categoria_formulario', 'trade'], true)) {
+        throw new Exception('Catálogo no permitido.');
+    }
+
+    $id = intval($id);
+    $nombre = normalizarCatalogoFormulario($nombre, 150);
+    $descripcion = normalizarCatalogoFormulario($descripcion, 255);
+
+    if ($id <= 0) {
+        throw new Exception('Registro no válido.');
+    }
+
+    if ($nombre === '') {
+        throw new Exception('El nombre es obligatorio.');
+    }
+
+    $existentes = ejecutarConsulta(
+        "SELECT id FROM {$tabla} WHERE nombre = ? AND id <> ? AND deleted_at IS NULL LIMIT 1",
+        [$nombre, $id],
+        'si'
+    );
+
+    if (!empty($existentes)) {
+        throw new Exception('Ya existe otro registro con ese nombre.');
+    }
+
+    $sql = "UPDATE {$tabla}
+            SET nombre = ?, descripcion = ?, estado = 1, updated_at = NOW()
+            WHERE id = ? AND deleted_at IS NULL";
+    $stmt = mysqli_prepare($conn, $sql);
+    if (!$stmt) {
+        throw new Exception('Error preparando actualización: ' . mysqli_error($conn));
+    }
+
+    mysqli_stmt_bind_param($stmt, 'ssi', $nombre, $descripcion, $id);
+    if (!mysqli_stmt_execute($stmt)) {
+        $error = mysqli_stmt_error($stmt);
+        mysqli_stmt_close($stmt);
+        throw new Exception('Error al actualizar: ' . $error);
+    }
+
+    mysqli_stmt_close($stmt);
+    limpiarCacheModuloFormulario();
+}
+
+function desactivarCatalogoFormulario(string $tabla, int $id): void {
+    global $conn;
+
+    if (!in_array($tabla, ['categoria_formulario', 'trade'], true)) {
+        throw new Exception('Catálogo no permitido.');
+    }
+
+    $id = intval($id);
+    if ($id <= 0) {
+        throw new Exception('Registro no válido.');
+    }
+
+    $sql = "UPDATE {$tabla}
+            SET estado = 0, updated_at = NOW()
+            WHERE id = ? AND deleted_at IS NULL";
+    $stmt = mysqli_prepare($conn, $sql);
+    if (!$stmt) {
+        throw new Exception('Error preparando desactivación: ' . mysqli_error($conn));
+    }
+
+    mysqli_stmt_bind_param($stmt, 'i', $id);
+    if (!mysqli_stmt_execute($stmt)) {
+        $error = mysqli_stmt_error($stmt);
+        mysqli_stmt_close($stmt);
+        throw new Exception('Error al desactivar: ' . $error);
+    }
+
+    mysqli_stmt_close($stmt);
+    limpiarCacheModuloFormulario();
+}
+
+function obtenerCatalogoActivoFormulario(string $tabla): array {
+    if (!in_array($tabla, ['categoria_formulario', 'trade'], true)) {
+        throw new Exception('Catálogo no permitido.');
+    }
+
+    return cacheRemember(
+        'form_catalogo_' . $tabla . '_v1',
+        [],
+        1800,
+        function () use ($tabla) {
+            return ejecutarConsulta(
+                "SELECT id, nombre, descripcion
+                 FROM {$tabla}
+                 WHERE estado = 1 AND deleted_at IS NULL
+                 ORDER BY nombre ASC",
+                [],
+                ''
+            );
+        }
+    );
+}
+
 /* =========================================================
    Filtros
 ========================================================= */
@@ -92,8 +263,47 @@ $division_seleccionada     = isset($_GET['division']) ? intval($_GET['division']
 $estado_campana            = isset($_GET['estado_campana']) ? trim($_GET['estado_campana']) : '1';
 $tipo_campana              = isset($_GET['tipo_campana']) ? intval($_GET['tipo_campana']) : 0;
 $subdivision_seleccionada  = isset($_GET['subdivision']) ? intval($_GET['subdivision']) : 0;
+$categoria_seleccionada    = isset($_GET['categoria_formulario']) ? intval($_GET['categoria_formulario']) : 0;
+$trade_seleccionado        = isset($_GET['trade']) ? intval($_GET['trade']) : 0;
 
 $empresa_id = intval($_SESSION['empresa_id'] ?? 0);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['catalog_action'])) {
+    try {
+        $action = trim((string)$_POST['catalog_action']);
+        $catalog_id = intval($_POST['catalog_id'] ?? 0);
+        $nombre = (string)($_POST['catalog_nombre'] ?? '');
+        $descripcion = (string)($_POST['catalog_descripcion'] ?? '');
+
+        if ($action === 'actualizar_categoria_formulario') {
+            actualizarCatalogoFormulario('categoria_formulario', $catalog_id, $nombre, $descripcion);
+            $_SESSION['success_formulario'] = 'Categoría actualizada correctamente.';
+        } elseif ($action === 'desactivar_categoria_formulario') {
+            desactivarCatalogoFormulario('categoria_formulario', $catalog_id);
+            $_SESSION['success_formulario'] = 'Categoría desactivada correctamente.';
+        } elseif ($action === 'actualizar_trade') {
+            actualizarCatalogoFormulario('trade', $catalog_id, $nombre, $descripcion);
+            $_SESSION['success_formulario'] = 'Trade actualizado correctamente.';
+        } elseif ($action === 'desactivar_trade') {
+            desactivarCatalogoFormulario('trade', $catalog_id);
+            $_SESSION['success_formulario'] = 'Trade desactivado correctamente.';
+        } elseif ($action === 'crear_categoria_formulario') {
+            crearCatalogoFormulario('categoria_formulario', $nombre, $descripcion);
+            $_SESSION['success_formulario'] = 'Categoría creada correctamente.';
+        } elseif ($action === 'crear_trade') {
+            crearCatalogoFormulario('trade', $nombre, $descripcion);
+            $_SESSION['success_formulario'] = 'Trade creado correctamente.';
+        } else {
+            throw new Exception('Acción no válida.');
+        }
+    } catch (Exception $e) {
+        $_SESSION['error_formulario'] = $e->getMessage();
+    }
+
+    $qs = $_SERVER['QUERY_STRING'] ?? '';
+    header('Location: mod_formulario.php' . ($qs !== '' ? '?' . $qs : ''));
+    exit();
+}
 
 /* =========================================================
    Empresa usuario
@@ -173,6 +383,21 @@ try {
 }
 
 $divisiones_modal = $divisiones;
+
+try {
+    $categorias_formulario = obtenerCatalogoActivoFormulario('categoria_formulario');
+} catch (Exception $e) {
+    $categorias_formulario = [];
+    $_SESSION['error_formulario'] = "Error al obtener categorías: " . $e->getMessage();
+}
+
+try {
+    $trades = obtenerCatalogoActivoFormulario('trade');
+} catch (Exception $e) {
+    $trades = [];
+    $_SESSION['error_formulario'] = "Error al obtener trades: " . $e->getMessage();
+}
+
 /* =========================================================
    Consulta formularios
 ========================================================= */
@@ -192,11 +417,17 @@ if ($ejecutarBusqueda) {
             f.estado,
             f.tipo,
             f.id_division,
+            f.id_categoria_formulario,
+            f.id_trade,
             d.nombre  AS division_nombre,
-            sd.nombre AS subdivision_nombre
+            sd.nombre AS subdivision_nombre,
+            cf.nombre AS categoria_nombre,
+            tr.nombre AS trade_nombre
         FROM formulario AS f
         LEFT JOIN division_empresa AS d ON d.id = f.id_division
         LEFT JOIN subdivision AS sd ON sd.id = f.id_subdivision
+        LEFT JOIN categoria_formulario AS cf ON cf.id = f.id_categoria_formulario
+        LEFT JOIN trade AS tr ON tr.id = f.id_trade
     ";
 
     $conditions = [];
@@ -240,6 +471,18 @@ if ($ejecutarBusqueda) {
         $param_types .= "i";
     }
 
+    if ($categoria_seleccionada > 0) {
+        $conditions[] = "f.id_categoria_formulario = ?";
+        $params[] = $categoria_seleccionada;
+        $param_types .= "i";
+    }
+
+    if ($trade_seleccionado > 0) {
+        $conditions[] = "f.id_trade = ?";
+        $params[] = $trade_seleccionado;
+        $param_types .= "i";
+    }
+
     if (!empty($conditions)) {
         $query .= " WHERE " . implode(" AND ", $conditions);
     }
@@ -256,6 +499,8 @@ if ($ejecutarBusqueda) {
             'estado_campana'           => $estado_campana,
             'tipo_campana'             => $tipo_campana,
             'subdivision_seleccionada' => $subdivision_seleccionada,
+            'categoria_seleccionada'   => $categoria_seleccionada,
+            'trade_seleccionado'       => $trade_seleccionado,
             'empresa_id'               => $empresa_id,
             'es_mentecreativa'         => $es_mentecreativa ? 1 : 0,
             'buscar'                   => 1
@@ -555,6 +800,30 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                             </select>
                         </div>
 
+                        <div class="form-group col-md-3">
+                            <label for="categoria_formulario_filter">Categoría</label>
+                            <select id="categoria_formulario_filter" name="categoria_formulario" class="form-control">
+                                <option value="0" <?php echo ($categoria_seleccionada === 0) ? 'selected' : ''; ?>>-- Todas --</option>
+                                <?php foreach ($categorias_formulario as $categoria): ?>
+                                    <option value="<?php echo e($categoria['id']); ?>" <?php echo ($categoria_seleccionada === intval($categoria['id'])) ? 'selected' : ''; ?>>
+                                        <?php echo e($categoria['nombre']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="form-group col-md-3">
+                            <label for="trade_filter">Trade</label>
+                            <select id="trade_filter" name="trade" class="form-control">
+                                <option value="0" <?php echo ($trade_seleccionado === 0) ? 'selected' : ''; ?>>-- Todos --</option>
+                                <?php foreach ($trades as $trade): ?>
+                                    <option value="<?php echo e($trade['id']); ?>" <?php echo ($trade_seleccionado === intval($trade['id'])) ? 'selected' : ''; ?>>
+                                        <?php echo e($trade['nombre']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
                         <div class="form-group col-md-3 d-flex align-items-end">
                             <button type="submit" name="buscar" value="1" class="btn btn-dark btn-modern btn-block">
                                 <i class="fas fa-search mr-1"></i> Filtrar
@@ -577,6 +846,14 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
             <a href="mod_formulario_habilitar.php" class="btn btn-soft-secondary btn-modern">
                 <i class="fas fa-car mr-1"></i> Gestionar complementarios
             </a>            
+
+            <button type="button" class="btn btn-soft-secondary btn-modern" data-toggle="modal" data-target="#gestionarCategoriasModal">
+                <i class="fas fa-tags mr-1"></i> Gestionar Categorías
+            </button>
+
+            <button type="button" class="btn btn-soft-secondary btn-modern" data-toggle="modal" data-target="#gestionarTradeModal">
+                <i class="fas fa-store mr-1"></i> Gestionar Trade
+            </button>
 
             <button type="button" class="btn btn-primary btn-modern" data-toggle="modal" data-target="#crearFormularioModal">
                 <i class="fas fa-plus-circle mr-1"></i> Crear Nuevo Formulario
@@ -656,6 +933,28 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                                 </select>
                             </div>
         
+                            <div class="form-row">
+                                <div class="form-group col-md-6">
+                                    <label for="id_categoria_formulario">Categoría</label>
+                                    <select id="id_categoria_formulario" name="id_categoria_formulario" class="form-control">
+                                        <option value="0">-- Sin categoría --</option>
+                                        <?php foreach ($categorias_formulario as $categoria): ?>
+                                            <option value="<?php echo e($categoria['id']); ?>"><?php echo e($categoria['nombre']); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+
+                                <div class="form-group col-md-6">
+                                    <label for="id_trade">Trade</label>
+                                    <select id="id_trade" name="id_trade" class="form-control">
+                                        <option value="0">-- Sin trade --</option>
+                                        <?php foreach ($trades as $trade): ?>
+                                            <option value="<?php echo e($trade['id']); ?>"><?php echo e($trade['nombre']); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            </div>
+
                             <div class="form-group" id="csvUploadContainer" style="display:none;">
                                 <label for="csvFile">Subir Archivo CSV</label>
                                 <input type="file" id="csvFile" name="csvFile" class="form-control-file" accept=".csv">
@@ -789,6 +1088,172 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                             <button type="button" class="btn btn-light btn-modern" data-dismiss="modal">Cerrar</button>
                             <button type="submit" class="btn btn-primary btn-modern" id="btnSubmitFormulario">
                                 <i class="fas fa-save mr-1"></i> Crear Formulario
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="modal fade" id="gestionarCategoriasModal" tabindex="-1" role="dialog" aria-labelledby="gestionarCategoriasModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg" role="document">
+                <form method="post" action="mod_formulario.php<?php echo !empty($_SERVER['QUERY_STRING']) ? '?' . e($_SERVER['QUERY_STRING']) : ''; ?>" class="catalog-form">
+                    <input type="hidden" name="catalog_action" value="crear_categoria_formulario">
+                    <input type="hidden" name="catalog_id" value="0">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="gestionarCategoriasModalLabel">
+                                <i class="fas fa-tags mr-1"></i> Gestionar Categorías
+                            </h5>
+                            <button type="button" class="close text-white" data-dismiss="modal" aria-label="Cerrar">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="form-row">
+                                <div class="form-group col-md-6">
+                                    <label for="categoria_nombre">Nombre</label>
+                                    <input type="text" id="categoria_nombre" name="catalog_nombre" class="form-control catalog-normalize" maxlength="150" required>
+                                    <small class="form-text text-muted">Se guardará en mayúsculas y sin caracteres especiales.</small>
+                                </div>
+                                <div class="form-group col-md-6">
+                                    <label for="categoria_descripcion">Descripción</label>
+                                    <input type="text" id="categoria_descripcion" name="catalog_descripcion" class="form-control catalog-normalize" maxlength="255">
+                                </div>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Categoría</th>
+                                            <th>Descripción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php if (empty($categorias_formulario)): ?>
+                                            <tr><td colspan="2" class="text-muted">Sin categorías registradas.</td></tr>
+                                        <?php else: ?>
+                                            <?php foreach ($categorias_formulario as $categoria): ?>
+                                                <tr>
+                                                    <td><?php echo e($categoria['nombre']); ?></td>
+                                                    <td>
+                                                        <?php echo e($categoria['descripcion'] ?? ''); ?>
+                                                        <div class="mt-2">
+                                                            <button type="button"
+                                                                    class="btn btn-sm btn-outline-primary catalog-edit-btn"
+                                                                    data-action="actualizar_categoria_formulario"
+                                                                    data-id="<?php echo e($categoria['id']); ?>"
+                                                                    data-name="<?php echo e($categoria['nombre']); ?>"
+                                                                    data-description="<?php echo e($categoria['descripcion'] ?? ''); ?>">
+                                                                <i class="fas fa-pen"></i> Editar
+                                                            </button>
+                                                            <button type="button"
+                                                                    class="btn btn-sm btn-outline-danger catalog-disable-btn"
+                                                                    data-action="desactivar_categoria_formulario"
+                                                                    data-id="<?php echo e($categoria['id']); ?>"
+                                                                    data-name="<?php echo e($categoria['nombre']); ?>">
+                                                                <i class="fas fa-eye-slash"></i> Ocultar
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-light btn-modern" data-dismiss="modal">Cerrar</button>
+                            <button type="button" class="btn btn-outline-secondary btn-modern catalog-cancel-edit" style="display:none;">
+                                Cancelar edición
+                            </button>
+                            <button type="submit" class="btn btn-primary btn-modern catalog-submit-btn">
+                                <i class="fas fa-save mr-1"></i> Crear Categoría
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="modal fade" id="gestionarTradeModal" tabindex="-1" role="dialog" aria-labelledby="gestionarTradeModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg" role="document">
+                <form method="post" action="mod_formulario.php<?php echo !empty($_SERVER['QUERY_STRING']) ? '?' . e($_SERVER['QUERY_STRING']) : ''; ?>" class="catalog-form">
+                    <input type="hidden" name="catalog_action" value="crear_trade">
+                    <input type="hidden" name="catalog_id" value="0">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="gestionarTradeModalLabel">
+                                <i class="fas fa-store mr-1"></i> Gestionar Trade
+                            </h5>
+                            <button type="button" class="close text-white" data-dismiss="modal" aria-label="Cerrar">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="form-row">
+                                <div class="form-group col-md-6">
+                                    <label for="trade_nombre">Nombre</label>
+                                    <input type="text" id="trade_nombre" name="catalog_nombre" class="form-control catalog-normalize" maxlength="150" required>
+                                    <small class="form-text text-muted">Se guardará en mayúsculas y sin caracteres especiales.</small>
+                                </div>
+                                <div class="form-group col-md-6">
+                                    <label for="trade_descripcion">Descripción</label>
+                                    <input type="text" id="trade_descripcion" name="catalog_descripcion" class="form-control catalog-normalize" maxlength="255">
+                                </div>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Trade</th>
+                                            <th>Descripción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php if (empty($trades)): ?>
+                                            <tr><td colspan="2" class="text-muted">Sin trades registrados.</td></tr>
+                                        <?php else: ?>
+                                            <?php foreach ($trades as $trade): ?>
+                                                <tr>
+                                                    <td><?php echo e($trade['nombre']); ?></td>
+                                                    <td>
+                                                        <?php echo e($trade['descripcion'] ?? ''); ?>
+                                                        <div class="mt-2">
+                                                            <button type="button"
+                                                                    class="btn btn-sm btn-outline-primary catalog-edit-btn"
+                                                                    data-action="actualizar_trade"
+                                                                    data-id="<?php echo e($trade['id']); ?>"
+                                                                    data-name="<?php echo e($trade['nombre']); ?>"
+                                                                    data-description="<?php echo e($trade['descripcion'] ?? ''); ?>">
+                                                                <i class="fas fa-pen"></i> Editar
+                                                            </button>
+                                                            <button type="button"
+                                                                    class="btn btn-sm btn-outline-danger catalog-disable-btn"
+                                                                    data-action="desactivar_trade"
+                                                                    data-id="<?php echo e($trade['id']); ?>"
+                                                                    data-name="<?php echo e($trade['nombre']); ?>">
+                                                                <i class="fas fa-eye-slash"></i> Ocultar
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-light btn-modern" data-dismiss="modal">Cerrar</button>
+                            <button type="button" class="btn btn-outline-secondary btn-modern catalog-cancel-edit" style="display:none;">
+                                Cancelar edición
+                            </button>
+                            <button type="submit" class="btn btn-primary btn-modern catalog-submit-btn">
+                                <i class="fas fa-save mr-1"></i> Crear Trade
                             </button>
                         </div>
                     </div>
@@ -1166,6 +1631,111 @@ function addOptionRow(questionIndex) {
 }
 
 document.addEventListener('DOMContentLoaded', function(){
+    function normalizeCatalogInput(value) {
+        return String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase()
+            .replace(/[^A-Z0-9 ]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trimStart();
+    }
+
+    document.querySelectorAll('.catalog-normalize').forEach(function(input) {
+        input.addEventListener('input', function() {
+            const normalized = normalizeCatalogInput(this.value);
+            if (this.value !== normalized) {
+                this.value = normalized;
+            }
+        });
+        input.addEventListener('blur', function() {
+            this.value = normalizeCatalogInput(this.value).trim();
+        });
+    });
+
+    document.querySelectorAll('.catalog-form').forEach(function(formCatalog) {
+        const actionInput = formCatalog.querySelector('[name="catalog_action"]');
+        const defaultAction = actionInput ? actionInput.value : '';
+        formCatalog.dataset.defaultAction = defaultAction;
+
+        formCatalog.addEventListener('submit', function(event) {
+            this.querySelectorAll('.catalog-normalize').forEach(function(input) {
+                input.value = normalizeCatalogInput(input.value).trim();
+            });
+
+            const nombre = this.querySelector('[name="catalog_nombre"]');
+            if (!nombre || nombre.value.trim() === '') {
+                event.preventDefault();
+                alert('El nombre es obligatorio.');
+            }
+        });
+    });
+
+    document.querySelectorAll('.catalog-edit-btn').forEach(function(button) {
+        button.addEventListener('click', function() {
+            const formCatalog = this.closest('.catalog-form');
+            if (!formCatalog) return;
+
+            const actionInput = formCatalog.querySelector('[name="catalog_action"]');
+            const idInput = formCatalog.querySelector('[name="catalog_id"]');
+            const nameInput = formCatalog.querySelector('[name="catalog_nombre"]');
+            const descriptionInput = formCatalog.querySelector('[name="catalog_descripcion"]');
+            const submitButton = formCatalog.querySelector('.catalog-submit-btn');
+            const cancelButton = formCatalog.querySelector('.catalog-cancel-edit');
+
+            if (actionInput) actionInput.value = this.dataset.action || formCatalog.dataset.defaultAction || '';
+            if (idInput) idInput.value = this.dataset.id || '0';
+            if (nameInput) nameInput.value = normalizeCatalogInput(this.dataset.name || '').trim();
+            if (descriptionInput) descriptionInput.value = normalizeCatalogInput(this.dataset.description || '').trim();
+            if (submitButton) submitButton.innerHTML = '<i class="fas fa-save mr-1"></i> Actualizar';
+            if (cancelButton) cancelButton.style.display = '';
+
+            if (nameInput) nameInput.focus();
+        });
+    });
+
+    document.querySelectorAll('.catalog-cancel-edit').forEach(function(button) {
+        button.addEventListener('click', function() {
+            const formCatalog = this.closest('.catalog-form');
+            if (!formCatalog) return;
+
+            const actionInput = formCatalog.querySelector('[name="catalog_action"]');
+            const idInput = formCatalog.querySelector('[name="catalog_id"]');
+            const nameInput = formCatalog.querySelector('[name="catalog_nombre"]');
+            const descriptionInput = formCatalog.querySelector('[name="catalog_descripcion"]');
+            const submitButton = formCatalog.querySelector('.catalog-submit-btn');
+
+            if (actionInput) actionInput.value = formCatalog.dataset.defaultAction || '';
+            if (idInput) idInput.value = '0';
+            if (nameInput) nameInput.value = '';
+            if (descriptionInput) descriptionInput.value = '';
+            if (submitButton) {
+                submitButton.innerHTML = formCatalog.dataset.defaultAction === 'crear_trade'
+                    ? '<i class="fas fa-save mr-1"></i> Crear Trade'
+                    : '<i class="fas fa-save mr-1"></i> Crear Categoría';
+            }
+            this.style.display = 'none';
+        });
+    });
+
+    document.querySelectorAll('.catalog-disable-btn').forEach(function(button) {
+        button.addEventListener('click', function() {
+            const formCatalog = this.closest('.catalog-form');
+            if (!formCatalog) return;
+
+            const name = this.dataset.name || 'este registro';
+            if (!confirm(`¿Quieres ocultar ${name}? Dejará de aparecer en los filtros y selectores.`)) {
+                return;
+            }
+
+            const actionInput = formCatalog.querySelector('[name="catalog_action"]');
+            const idInput = formCatalog.querySelector('[name="catalog_id"]');
+            if (actionInput) actionInput.value = this.dataset.action || '';
+            if (idInput) idInput.value = this.dataset.id || '0';
+            formCatalog.submit();
+        });
+    });
+
     function showGlobalSpinner() {
         document.getElementById('globalSpinner').classList.add('show');
     }

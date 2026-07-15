@@ -95,12 +95,32 @@ while ($row = $res_existing->fetch_assoc()) {
 $stmt_existing_map->close();
 
 // -----------------------------------------------------------------------------
-// IMPORTAR / SINCRONIZAR SET DE PREGUNTAS
+// ¿Existe form_questions.id_cadena? (migración scripts/17_form_questions_cadena.sql)
+// NULL = pregunta general (todas las cadenas); <id> = solo locales de esa cadena.
+// -----------------------------------------------------------------------------
+$fqTieneCadena = false;
+try {
+    $resColCad = $conn->query("SHOW COLUMNS FROM form_questions LIKE 'id_cadena'");
+    $fqTieneCadena = ($resColCad && $resColCad->num_rows > 0);
+    if ($resColCad) {
+        $resColCad->close();
+    }
+} catch (Throwable $e) {
+    $fqTieneCadena = false;
+}
+
+// -----------------------------------------------------------------------------
+// IMPORTAR / SINCRONIZAR SET DE PREGUNTAS (general o por cadena)
 // -----------------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'import_set') {
     $set_id = (int)($_POST['selected_set_id'] ?? 0);
+    // Cadena destino: 0/vacío = set general (id_cadena NULL)
+    $cadena_set_id = (int)($_POST['id_cadena'] ?? 0);
+    $cadena_set    = $cadena_set_id > 0 ? $cadena_set_id : null;
 
-    if ($set_id <= 0) {
+    if (!$fqTieneCadena) {
+        $error = "Falta ejecutar la migración scripts/17_form_questions_cadena.sql (columna form_questions.id_cadena).";
+    } elseif ($set_id <= 0) {
         $error = "Selecciona un set de preguntas válido.";
     } else {
         $preguntas_set = getQuestionsFromSet($set_id);
@@ -117,13 +137,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     FROM form_questions
                     WHERE id_formulario = ?
                       AND id_question_set_question IS NOT NULL
+                      AND id_cadena <=> ?
                 ";
                 $stmt_existing = $conn->prepare($sql);
                 if (!$stmt_existing) {
                     throw new Exception("Error preparando lectura de preguntas existentes: " . $conn->error);
                 }
 
-                $stmt_existing->bind_param("i", $formulario_id);
+                $stmt_existing->bind_param("ii", $formulario_id, $cadena_set);
                 $stmt_existing->execute();
                 $result_existing = $stmt_existing->get_result();
 
@@ -139,6 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     INSERT INTO form_questions
                     (
                         id_formulario,
+                        id_cadena,
                         question_text,
                         id_question_type,
                         sort_order,
@@ -147,7 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         id_dependency_option,
                         is_valued
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ";
                 $stmt_ins_q = $conn->prepare($sql_ins_q);
                 if (!$stmt_ins_q) {
@@ -219,8 +241,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         $stmt_upd_q->execute();
                     } else {
                         $stmt_ins_q->bind_param(
-                            "isiiiiii",
+                            "iisiiiiii",
                             $formulario_id,
+                            $cadena_set,
                             $question_text,
                             $id_question_type,
                             $current_sort,
@@ -331,6 +354,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         FROM form_question_options fqo
                         INNER JOIN form_questions fq ON fq.id = fqo.id_form_question
                         WHERE fq.id_formulario = ?
+                          AND fq.id_cadena <=> ?
                           AND fq.id_question_set_question IS NOT NULL
                           AND fq.id_question_set_question NOT IN ($set_q_ids_str)
                     ";
@@ -338,13 +362,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     if (!$stDel) {
                         throw new Exception("Error preparando borrado de opciones huérfanas: " . $conn->error);
                     }
-                    $stDel->bind_param("i", $formulario_id);
+                    $stDel->bind_param("ii", $formulario_id, $cadena_set);
                     $stDel->execute();
                     $stDel->close();
 
                     $sqlDeleteQuestions = "
                         DELETE FROM form_questions
                         WHERE id_formulario = ?
+                          AND id_cadena <=> ?
                           AND id_question_set_question IS NOT NULL
                           AND id_question_set_question NOT IN ($set_q_ids_str)
                     ";
@@ -352,7 +377,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     if (!$stDelQuestions) {
                         throw new Exception("Error preparando borrado de preguntas fuera del set: " . $conn->error);
                     }
-                    $stDelQuestions->bind_param("i", $formulario_id);
+                    $stDelQuestions->bind_param("ii", $formulario_id, $cadena_set);
                     $stDelQuestions->execute();
                     $stDelQuestions->close();
                 }
@@ -426,6 +451,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $conn->rollback();
                 $error = "Error al importar el set: " . $e->getMessage();
             }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// QUITAR SET DE UNA CADENA (borra las preguntas/opciones con id_cadena = X;
+// sus locales vuelven a ver el set general)
+// -----------------------------------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'remove_set_cadena') {
+    $cadena_del_id = (int)($_POST['id_cadena'] ?? 0);
+
+    if (!$fqTieneCadena) {
+        $error = "Falta ejecutar la migración scripts/17_form_questions_cadena.sql.";
+    } elseif ($cadena_del_id <= 0) {
+        $error = "Cadena inválida.";
+    } else {
+        $conn->begin_transaction();
+        try {
+            $stDelOpts = $conn->prepare("
+                DELETE fqo
+                FROM form_question_options fqo
+                INNER JOIN form_questions fq ON fq.id = fqo.id_form_question
+                WHERE fq.id_formulario = ?
+                  AND fq.id_cadena = ?
+            ");
+            $stDelOpts->bind_param("ii", $formulario_id, $cadena_del_id);
+            $stDelOpts->execute();
+            $stDelOpts->close();
+
+            $stDelQs = $conn->prepare("
+                DELETE FROM form_questions
+                WHERE id_formulario = ?
+                  AND id_cadena = ?
+            ");
+            $stDelQs->bind_param("ii", $formulario_id, $cadena_del_id);
+            $stDelQs->execute();
+            $stDelQs->close();
+
+            $conn->commit();
+            header("Location: editar_formulario.php?id=$formulario_id&active_tab=import-set");
+            exit();
+        } catch (Throwable $e) {
+            $conn->rollback();
+            $error = "Error al quitar el set de la cadena: " . $e->getMessage();
         }
     }
 }
@@ -1292,6 +1361,126 @@ $stmt_group->close();
 // Sets de preguntas
 // -----------------------------------------------------------------------------
 $sets = getQuestionSets();
+
+// Opciones <option> reutilizables para los selects de set (general y por cadena)
+$setsOptionsHtml = '<option value="">-- Seleccionar --</option>';
+if (!empty($sets)) {
+    foreach ($sets as $s) {
+        $setsOptionsHtml .= '<option value="' . (int)$s['id'] . '">' . h($s['nombre_set']) . '</option>';
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Sets por cadena: cadenas presentes en la campaña + set asignado + respuestas
+// (solo campañas con locales: tipo 1 Programada / tipo 3 IPT)
+// -----------------------------------------------------------------------------
+$esCampanaConLocales = ((int)$formulario['tipo'] === 1 || (int)$formulario['tipo'] === 3);
+$cadenasCampana  = [];
+$setGeneralInfo  = ['num_preguntas' => 0, 'set_nombre' => null, 'num_sets' => 0];
+
+if ($fqTieneCadena && $esCampanaConLocales) {
+    // Cadenas con locales cargados en la campaña (entradas formularioQuestion)
+    $stmtCad = $conn->prepare("
+        SELECT ca.id, ca.nombre AS cadena, COALESCE(cu.nombre, '') AS cuenta,
+               COUNT(DISTINCT l.id) AS locales
+        FROM formularioQuestion fq
+        INNER JOIN local l   ON l.id  = fq.id_local
+        INNER JOIN cadena ca ON ca.id = l.id_cadena
+        LEFT JOIN cuenta cu  ON cu.id = ca.id_cuenta
+        WHERE fq.id_formulario = ?
+        GROUP BY ca.id, ca.nombre, cu.nombre
+        ORDER BY cuenta ASC, cadena ASC
+    ");
+    $stmtCad->bind_param("i", $formulario_id);
+    $stmtCad->execute();
+    $resCad = $stmtCad->get_result();
+    while ($r = $resCad->fetch_assoc()) {
+        $r['num_preguntas'] = 0;
+        $r['set_nombre']    = null;
+        $r['num_sets']      = 0;
+        $r['respuestas']    = 0;
+        $cadenasCampana[(int)$r['id']] = $r;
+    }
+    $stmtCad->close();
+
+    // Set asignado / nº de preguntas por cadena (id_cadena NULL = set general)
+    $stmtAsig = $conn->prepare("
+        SELECT fq.id_cadena,
+               COUNT(*) AS num_preguntas,
+               MIN(qs.nombre_set) AS set_nombre,
+               COUNT(DISTINCT qsq.id_question_set) AS num_sets
+        FROM form_questions fq
+        LEFT JOIN question_set_questions qsq ON qsq.id = fq.id_question_set_question
+        LEFT JOIN question_set qs ON qs.id = qsq.id_question_set
+        WHERE fq.id_formulario = ?
+        GROUP BY fq.id_cadena
+    ");
+    $stmtAsig->bind_param("i", $formulario_id);
+    $stmtAsig->execute();
+    $resAsig = $stmtAsig->get_result();
+    $cadenasHuerfanas = [];
+    while ($r = $resAsig->fetch_assoc()) {
+        if ($r['id_cadena'] === null) {
+            $setGeneralInfo = [
+                'num_preguntas' => (int)$r['num_preguntas'],
+                'set_nombre'    => $r['set_nombre'],
+                'num_sets'      => (int)$r['num_sets'],
+            ];
+        } elseif (isset($cadenasCampana[(int)$r['id_cadena']])) {
+            $cadenasCampana[(int)$r['id_cadena']]['num_preguntas'] = (int)$r['num_preguntas'];
+            $cadenasCampana[(int)$r['id_cadena']]['set_nombre']    = $r['set_nombre'];
+            $cadenasCampana[(int)$r['id_cadena']]['num_sets']      = (int)$r['num_sets'];
+        } else {
+            // Cadena con preguntas cargadas pero sin locales en la campaña
+            // (p.ej. se quitaron sus entradas): mostrarla igual para poder quitar el set.
+            $cadenasHuerfanas[(int)$r['id_cadena']] = $r;
+        }
+    }
+    $stmtAsig->close();
+
+    if (!empty($cadenasHuerfanas)) {
+        $idsHuerfanas = implode(',', array_map('intval', array_keys($cadenasHuerfanas)));
+        $resNom = $conn->query("
+            SELECT ca.id, ca.nombre AS cadena, COALESCE(cu.nombre, '') AS cuenta
+            FROM cadena ca
+            LEFT JOIN cuenta cu ON cu.id = ca.id_cuenta
+            WHERE ca.id IN ($idsHuerfanas)
+        ");
+        while ($r = $resNom->fetch_assoc()) {
+            $h = $cadenasHuerfanas[(int)$r['id']];
+            $cadenasCampana[(int)$r['id']] = [
+                'id'            => (int)$r['id'],
+                'cadena'        => $r['cadena'],
+                'cuenta'        => $r['cuenta'],
+                'locales'       => 0,
+                'num_preguntas' => (int)$h['num_preguntas'],
+                'set_nombre'    => $h['set_nombre'],
+                'num_sets'      => (int)$h['num_sets'],
+                'respuestas'    => 0,
+            ];
+        }
+        $resNom->close();
+    }
+
+    // Respuestas ya registradas por cadena (para la advertencia al quitar/re-sincronizar)
+    $stmtResp = $conn->prepare("
+        SELECT fq.id_cadena, COUNT(*) AS respuestas
+        FROM form_question_responses r
+        INNER JOIN form_questions fq ON fq.id = r.id_form_question
+        WHERE fq.id_formulario = ?
+          AND fq.id_cadena IS NOT NULL
+        GROUP BY fq.id_cadena
+    ");
+    $stmtResp->bind_param("i", $formulario_id);
+    $stmtResp->execute();
+    $resResp = $stmtResp->get_result();
+    while ($r = $resResp->fetch_assoc()) {
+        if (isset($cadenasCampana[(int)$r['id_cadena']])) {
+            $cadenasCampana[(int)$r['id_cadena']]['respuestas'] = (int)$r['respuestas'];
+        }
+    }
+    $stmtResp->close();
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -1784,26 +1973,120 @@ $sets = getQuestionSets();
              role="tabpanel"
              aria-labelledby="import-set-tab">
             <h3 class="mt-4">Añadir Set de Preguntas</h3>
-            <form action="editar_formulario.php?id=<?php echo $formulario_id; ?>" method="post">
-                <input type="hidden" name="action" value="import_set">
-                <input type="hidden" name="active_tab" value="import-set">
-                <div class="form-group">
-                    <label for="selected_set_id">Seleccionar Set de Preguntas:</label>
-                    <select id="selected_set_id" name="selected_set_id" class="form-control" required>
-                        <option value="">-- Seleccionar --</option>
-                        <?php
-                        if (!empty($sets)) {
-                            foreach ($sets as $s) {
-                                echo '<option value="' . htmlspecialchars($s['id'], ENT_QUOTES, 'UTF-8') . '">'
-                                     . htmlspecialchars($s['nombre_set'], ENT_QUOTES, 'UTF-8')
-                                     . '</option>';
-                            }
-                        }
-                        ?>
-                    </select>
+
+            <!-- Set GENERAL (todas las cadenas) -->
+            <div class="card mt-3">
+                <div class="card-header"><strong>Set general — todas las cadenas</strong></div>
+                <div class="card-body">
+                    <?php if ($setGeneralInfo['num_preguntas'] > 0): ?>
+                        <p class="text-muted mb-2">
+                            Set actual: <strong><?php echo h($setGeneralInfo['set_nombre'] !== null ? $setGeneralInfo['set_nombre'] : 'preguntas manuales / sin set'); ?></strong>
+                            · <?php echo (int)$setGeneralInfo['num_preguntas']; ?> pregunta(s)
+                            <?php if ($setGeneralInfo['num_sets'] > 1): ?>
+                                · <span class="text-warning">mezcla de varios sets</span>
+                            <?php endif; ?>
+                        </p>
+                    <?php else: ?>
+                        <p class="text-muted mb-2">La campaña no tiene set general cargado.</p>
+                    <?php endif; ?>
+                    <form action="editar_formulario.php?id=<?php echo $formulario_id; ?>" method="post" class="form-inline">
+                        <input type="hidden" name="action" value="import_set">
+                        <input type="hidden" name="active_tab" value="import-set">
+                        <input type="hidden" name="id_cadena" value="0">
+                        <label class="mr-2" for="selected_set_id">Set:</label>
+                        <select id="selected_set_id" name="selected_set_id" class="form-control mr-2" required>
+                            <?php echo $setsOptionsHtml; ?>
+                        </select>
+                        <button type="submit" class="btn btn-success">Importar / Re-sincronizar</button>
+                    </form>
                 </div>
-                <button type="submit" class="btn btn-success">Añadir Set al Formulario</button>
-            </form>
+            </div>
+
+            <!-- Sets POR CADENA -->
+            <?php if ($fqTieneCadena && $esCampanaConLocales): ?>
+            <div class="card mt-4 mb-4">
+                <div class="card-header"><strong>Sets por cadena</strong></div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        Asigna un set distinto a los locales de una cadena.
+                        Regla: si la cadena tiene set propio, sus locales ven <b>solo</b> ese set;
+                        si no tiene, ven el <b>set general</b>.
+                    </p>
+                    <?php if (empty($cadenasCampana)): ?>
+                        <div class="alert alert-info mb-0">La campaña aún no tiene locales cargados (no hay cadenas que mostrar). Agrega entradas primero.</div>
+                    <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Cuenta</th>
+                                    <th>Cadena</th>
+                                    <th>Locales</th>
+                                    <th>Set asignado</th>
+                                    <th style="min-width:320px">Asignar / cambiar set</th>
+                                    <th>Quitar</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            <?php foreach ($cadenasCampana as $cad): ?>
+                                <tr>
+                                    <td><?php echo h($cad['cuenta'] !== '' ? $cad['cuenta'] : '—'); ?></td>
+                                    <td><strong><?php echo h($cad['cadena']); ?></strong></td>
+                                    <td>
+                                        <?php echo (int)$cad['locales']; ?>
+                                        <?php if ((int)$cad['locales'] === 0): ?>
+                                            <br><small class="text-warning">sin locales en la campaña</small>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if ($cad['num_preguntas'] > 0): ?>
+                                            <strong><?php echo h($cad['set_nombre'] !== null ? $cad['set_nombre'] : 'preguntas sin set'); ?></strong>
+                                            <?php if ((int)$cad['num_sets'] > 1): ?>
+                                                <span class="text-warning">(mezcla)</span>
+                                            <?php endif; ?>
+                                            <br><small class="text-muted"><?php echo (int)$cad['num_preguntas']; ?> pregunta(s) · <?php echo (int)$cad['respuestas']; ?> respuesta(s)</small>
+                                        <?php else: ?>
+                                            <span class="text-muted">— usa el set general</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <form action="editar_formulario.php?id=<?php echo $formulario_id; ?>" method="post" class="form-inline"
+                                              <?php if ($cad['num_preguntas'] > 0): ?>onsubmit="return confirm('La cadena <?php echo h($cad['cadena']); ?> ya tiene <?php echo (int)$cad['num_preguntas']; ?> pregunta(s) cargada(s)<?php echo (int)$cad['respuestas'] > 0 ? ' y ' . (int)$cad['respuestas'] . ' respuesta(s) registrada(s)' : ''; ?>. Al sincronizar, las preguntas que no estén en el set seleccionado se ELIMINARÁN. ¿Continuar?');"<?php endif; ?>>
+                                            <input type="hidden" name="action" value="import_set">
+                                            <input type="hidden" name="active_tab" value="import-set">
+                                            <input type="hidden" name="id_cadena" value="<?php echo (int)$cad['id']; ?>">
+                                            <select name="selected_set_id" class="form-control form-control-sm mr-2" required>
+                                                <?php echo $setsOptionsHtml; ?>
+                                            </select>
+                                            <button type="submit" class="btn btn-sm btn-success">
+                                                <?php echo $cad['num_preguntas'] > 0 ? 'Re-sincronizar' : 'Importar'; ?>
+                                            </button>
+                                        </form>
+                                    </td>
+                                    <td>
+                                        <?php if ($cad['num_preguntas'] > 0): ?>
+                                        <form action="editar_formulario.php?id=<?php echo $formulario_id; ?>" method="post"
+                                              onsubmit="return confirm('Se eliminarán las <?php echo (int)$cad['num_preguntas']; ?> pregunta(s) de la cadena <?php echo h($cad['cadena']); ?><?php echo (int)$cad['respuestas'] > 0 ? ' (tiene ' . (int)$cad['respuestas'] . ' respuesta(s) registrada(s))' : ''; ?>. Sus locales volverán a ver el set general. ¿Continuar?');">
+                                            <input type="hidden" name="action" value="remove_set_cadena">
+                                            <input type="hidden" name="active_tab" value="import-set">
+                                            <input type="hidden" name="id_cadena" value="<?php echo (int)$cad['id']; ?>">
+                                            <button type="submit" class="btn btn-sm btn-danger">Quitar</button>
+                                        </form>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php elseif (!$fqTieneCadena): ?>
+                <div class="alert alert-warning mt-4">
+                    Para asignar sets por cadena falta ejecutar <code>scripts/17_form_questions_cadena.sql</code>.
+                </div>
+            <?php endif; ?>
         </div>
     </div>
     

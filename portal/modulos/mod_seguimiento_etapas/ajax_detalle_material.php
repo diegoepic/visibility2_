@@ -77,8 +77,12 @@ if (!$fq) {
 
 // --- Fotos por etapa ---
 $fotosPorEtapa = ['armado' => [], 'entregado' => [], 'implementado' => [], 'retirado' => []];
+// dup_flag puede no existir aún (BBDD sin la migración 12_fotos_duplicadas.sql) → seleccionar 0.
+$fvHasDup = false;
+try { $cdup = $conn->query("SHOW COLUMNS FROM fotoVisita LIKE 'dup_flag'"); $fvHasDup = ($cdup && $cdup->num_rows > 0); if ($cdup) { $cdup->close(); } } catch (Throwable $e) { $fvHasDup = false; }
+$dupCol = $fvHasDup ? 'dup_flag' : '0 AS dup_flag';
 $stmtFoto = $conn->prepare("
-    SELECT id, url, kind, fotoLat, fotoLng, exif_lat, exif_lng, exif_datetime
+    SELECT id, url, kind, fotoLat, fotoLng, exif_lat, exif_lng, exif_datetime, $dupCol
     FROM fotoVisita
     WHERE id_formularioQuestion = ?
       AND kind IN ('armado','entregado','implementado','retirado')
@@ -106,6 +110,7 @@ while ($f = $resFoto->fetch_assoc()) {
         'fecha' => $f['exif_datetime'],
         'dist_m' => $dist !== null ? (int)round($dist) : null,
         'fuera_rango' => ($dist !== null && $dist > $RADIO_OK_METROS),
+        'dup_flag' => (int)($f['dup_flag'] ?? 0),
     ];
 }
 $stmtFoto->close();

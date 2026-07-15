@@ -15,6 +15,7 @@ $subcanal_id = isset($_GET['subcanal_id']) && is_numeric($_GET['subcanal_id']) ?
 $division_id = isset($_GET['division_id']) && is_numeric($_GET['division_id']) ? intval($_GET['division_id']) : null;
 $codigo     = isset($_GET['codigo']) ? trim($_GET['codigo']) : '';
 $id_local     = isset($_GET['id_local']) ? trim($_GET['id_local']) : '';
+$busqueda   = isset($_GET['busqueda']) ? trim($_GET['busqueda']) : '';
 $filtros = [];
 if ($empresa_id) {
     $filtros['empresa_id'] = $empresa_id;
@@ -42,6 +43,9 @@ if (!empty($codigo)) {
 }
 if (!empty($id_local)) {
     $filtros['id_local'] = $id_local;  // <--- NUEVO
+}
+if ($busqueda !== '') {
+    $filtros['busqueda'] = $busqueda;  // búsqueda rápida combinada (código/nombre/dirección)
 }
 
 // Leer parámetros de paginación (offset y limit)
@@ -119,6 +123,11 @@ function obtenerTotalLocalesFiltrados($filtros = []) {
         $sql .= " AND l.nombre LIKE ?";
         $params[] = '%' . $filtros['nombre'] . '%';
         $tipos   .= 's';
+    }
+
+    // Búsqueda rápida combinada (código / nombre / dirección) — mismo helper que el listado
+    if (!empty($filtros['busqueda'])) {
+        aplicarBusquedaLocal($sql, $params, $tipos, $filtros['busqueda']);
     }
 
     if ($stmt = $conn->prepare($sql)) {

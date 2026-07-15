@@ -404,6 +404,46 @@ date_default_timezone_set('America/Santiago');
                                     </div>
                                 </div>
 
+                                <div class="card mb-4">
+                                    <div class="card-header bg-info text-white">
+                                        <i class="fa-solid fa-wand-magic-sparkles"></i> Planificador optimizado
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label for="optMetaDiaria" class="form-label fw-semibold">Carga por dia</label>
+                                            <input type="number" min="2" max="30" class="form-control" id="optMetaDiaria" value="19">
+                                            <div class="mini-note mt-1">Hasta 30 locales por dia. Sobre 23 se optimiza por subtramos.</div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="optFechaInicio" class="form-label fw-semibold">Fecha inicio</label>
+                                            <input type="date" class="form-control" id="optFechaInicio">
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="optPrefijoGrupo" class="form-label fw-semibold">Prefijo ruta</label>
+                                            <input type="text" class="form-control" id="optPrefijoGrupo" value="RUTA OPT">
+                                        </div>
+
+                                        <div class="form-check mb-3">
+                                            <input class="form-check-input" type="checkbox" id="optSoloSeleccionados" checked>
+                                            <label class="form-check-label" for="optSoloSeleccionados">
+                                                Usar seleccionados si existen
+                                            </label>
+                                        </div>
+
+                                        <div class="d-grid gap-2">
+                                            <button class="btn btn-info text-white" id="btnOptimizarRutas" type="button">
+                                                <i class="fa-solid fa-route"></i> Generar rutas optimizadas
+                                            </button>
+                                        </div>
+
+                                        <div class="mini-note mt-3" id="optimizadorEstado">
+                                            Toma los locales visibles o seleccionados, arma bloques por dia y reordena cada bloque con Google.
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div class="card">
                                     <div class="card-header bg-dark text-white">
                                         <i class="fa-solid fa-list"></i> Resumen por grupo
@@ -493,7 +533,7 @@ date_default_timezone_set('America/Santiago');
 </div>
 
 <div class="modal fade" id="modalEditarRuta" tabindex="-1" aria-labelledby="modalEditarRutaLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="modalEditarRutaLabel">
@@ -524,6 +564,27 @@ date_default_timezone_set('America/Santiago');
                 </div>
 
                 <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label fw-semibold mb-0">Orden de visita</label>
+                        <span class="mini-note">Usa las flechas para reorganizar las paradas seleccionadas.</span>
+                    </div>
+                    <div class="table-responsive" style="max-height:280px;">
+                        <table class="table table-sm table-hover align-middle mb-0" id="tablaOrdenEdicion">
+                            <thead>
+                                <tr>
+                                    <th style="width:80px;">Orden</th>
+                                    <th style="width:120px;">Codigo</th>
+                                    <th>Local</th>
+                                    <th>Comuna</th>
+                                    <th style="width:110px;">Mover</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="mb-3">
                     <label for="editUsuarioNombre" class="form-label fw-semibold">Usuario</label>
                     <input type="text" class="form-control" id="editUsuarioNombre" placeholder="Nombre del usuario">
                 </div>
@@ -547,11 +608,11 @@ date_default_timezone_set('America/Santiago');
 
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw&callback=initMapRutas"></script>
 
 <script>
 let mapaRutas;
 let infoWindowRutas;
+let directionsServiceRutas;
 let markersRutas = [];
 let polylinesRutas = [];
 
@@ -560,10 +621,12 @@ let planGroups = [];
 let planSummary = {};
 let planFilters = { usuarios: [], fechas: [], grupos: [] };
 let selectedRowIds = new Set();
+let editOrderRows = [];
 let modalEditarRuta;
 let mapSelectionMode = false;
 let mapProjectionOverlay;
 let selectionDragStart = null;
+let optimizationWarnings = [];
 
 const routePalette = [
     '#d32f2f', '#1976d2', '#388e3c', '#f57c00', '#7b1fa2',
@@ -580,6 +643,7 @@ function initMapRutas() {
     });
 
     infoWindowRutas = new google.maps.InfoWindow();
+    directionsServiceRutas = new google.maps.DirectionsService();
 
     mapProjectionOverlay = new google.maps.OverlayView();
     mapProjectionOverlay.onAdd = function() {};
@@ -1053,13 +1117,18 @@ function createMarker(row, color) {
 }
 
 function renderMap(ajustarVista = true) {
+    if (!mapaRutas || !window.google || !google.maps) {
+        setTimeout(() => renderMap(ajustarVista), 250);
+        return;
+    }
+
     const currentCenter = mapaRutas ? mapaRutas.getCenter() : null;
     const currentZoom = mapaRutas ? mapaRutas.getZoom() : null;
 
     clearMapRutas();
 
     const rows = getFilteredRows()
-        .filter(row => !isNaN(Number(row.lat)) && !isNaN(Number(row.lng)));
+        .filter(row => Number.isFinite(Number(row.lat)) && Number.isFinite(Number(row.lng)));
 
     if (!rows.length) {
         $('#badgeRutaActiva').text('Sin datos para el filtro actual');
@@ -1191,10 +1260,64 @@ function dateMetadata(dateSql) {
     };
 }
 
+function getSelectedRowsSortedForEdit() {
+    return planRows
+        .filter(row => selectedRowIds.has(row.row_id))
+        .sort((a, b) => {
+            const cmpFecha = String(a.fecha_ruta_sql || '').localeCompare(String(b.fecha_ruta_sql || ''));
+            if (cmpFecha !== 0) return cmpFecha;
+
+            const cmpGrupo = String(a.grupo_ruta || '').localeCompare(String(b.grupo_ruta || ''));
+            if (cmpGrupo !== 0) return cmpGrupo;
+
+            const cmpOrden = Number(a.orden_visita || 0) - Number(b.orden_visita || 0);
+            if (cmpOrden !== 0) return cmpOrden;
+
+            return String(a.codigo_local || '').localeCompare(String(b.codigo_local || ''));
+        });
+}
+
+function renderEditOrderTable() {
+    const tbody = $('#tablaOrdenEdicion tbody').empty();
+
+    editOrderRows.forEach((row, index) => {
+        tbody.append(`
+            <tr>
+                <td class="fw-semibold">${index + 1}</td>
+                <td>${escapeHtml(row.codigo_local || '')}</td>
+                <td>${escapeHtml(row.nombre || '')}</td>
+                <td>${escapeHtml(row.comuna || '')}</td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-outline-secondary btnMoverOrden"
+                            data-index="${index}" data-direction="-1" ${index === 0 ? 'disabled' : ''}>
+                            <i class="fa-solid fa-arrow-up"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btnMoverOrden"
+                            data-index="${index}" data-direction="1" ${index === editOrderRows.length - 1 ? 'disabled' : ''}>
+                            <i class="fa-solid fa-arrow-down"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `);
+    });
+}
+
+function moveEditOrderRow(index, direction) {
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= editOrderRows.length) return;
+
+    const moved = editOrderRows.splice(index, 1)[0];
+    editOrderRows.splice(newIndex, 0, moved);
+    renderEditOrderTable();
+}
+
 function openEditModal() {
     if (!selectedRowIds.size) return;
 
-    const selectedRows = planRows.filter(row => selectedRowIds.has(row.row_id));
+    const selectedRows = getSelectedRowsSortedForEdit();
+    editOrderRows = selectedRows.slice();
     $('#modalCantidadSeleccionados').text(selectedRows.length);
     $('#editFechaRuta, #editGrupoRuta, #editOrdenVisita, #editUsuarioNombre').val('');
     if (selectedRows.length === 1 && selectedRows[0].grupo_ruta_sugerido) {
@@ -1204,6 +1327,7 @@ function openEditModal() {
 
     const groups = [...new Set(planRows.map(row => row.grupo_ruta).filter(Boolean))].sort();
     $('#listaGruposRuta').html(groups.map(group => `<option value="${escapeHtml(group)}"></option>`).join(''));
+    renderEditOrderTable();
 
     modalEditarRuta.show();
 }
@@ -1215,51 +1339,283 @@ function applyRouteEdits() {
     const usuarioNombre = $('#editUsuarioNombre').val().trim();
     const quitarRuta = $('#editQuitarRuta').is(':checked');
     const metadata = dateMetadata(fecha);
-    let orderOffset = 0;
+    const orderedRows = editOrderRows.length ? editOrderRows : getSelectedRowsSortedForEdit();
+    if (ordenRaw !== '' && (!Number.isFinite(Number(ordenRaw)) || Number(ordenRaw) < 1)) {
+        alert('El orden inicial debe ser un numero mayor o igual a 1.');
+        return;
+    }
+    const existingOrders = orderedRows
+        .map(row => Number(row.orden_visita || 0))
+        .filter(order => Number.isFinite(order) && order > 0);
+    const startOrder = ordenRaw !== ''
+        ? Number(ordenRaw)
+        : (existingOrders.length ? Math.min(...existingOrders) : 1);
 
-    planRows.forEach(row => {
-        if (!selectedRowIds.has(row.row_id)) return;
+    orderedRows.forEach((row, orderOffset) => {
+        const planRow = planRows.find(item => item.row_id === row.row_id);
+        if (!planRow) return;
 
         if (quitarRuta) {
-            row.grupo_ruta = '';
-            row.fecha_ruta = '';
-            row.fecha_ruta_sql = '';
-            row.orden_visita = 0;
-            row.dia_plan = '';
-            row.dia_semana = '';
-            row.dia_semana_num = '';
-            row.semana_plan = '';
-            row.sin_ruta = true;
+            planRow.grupo_ruta = '';
+            planRow.fecha_ruta = '';
+            planRow.fecha_ruta_sql = '';
+            planRow.orden_visita = 0;
+            planRow.dia_plan = '';
+            planRow.dia_semana = '';
+            planRow.dia_semana_num = '';
+            planRow.semana_plan = '';
+            planRow.sin_ruta = true;
             return;
         }
 
         if (fecha) {
-            row.fecha_ruta_sql = fecha;
-            row.fecha_ruta = metadata.display;
-            row.dia_semana = metadata.dayName;
-            row.dia_semana_num = metadata.dayNumber;
-            row.semana_plan = metadata.week;
+            planRow.fecha_ruta_sql = fecha;
+            planRow.fecha_ruta = metadata.display;
+            planRow.dia_semana = metadata.dayName;
+            planRow.dia_semana_num = metadata.dayNumber;
+            planRow.semana_plan = metadata.week;
         }
         if (grupo) {
-            row.grupo_ruta = grupo;
+            planRow.grupo_ruta = grupo;
         }
-        if (ordenRaw !== '') {
-            row.orden_visita = Number(ordenRaw) + orderOffset;
-            orderOffset++;
-        }
+        planRow.orden_visita = startOrder + orderOffset;
         if (usuarioNombre) {
-            row.usuario_nombre = usuarioNombre;
+            planRow.usuario_nombre = usuarioNombre;
         }
 
-        row.sin_ruta = !row.grupo_ruta || !row.fecha_ruta_sql;
+        planRow.sin_ruta = !planRow.grupo_ruta || !planRow.fecha_ruta_sql;
     });
 
     selectedRowIds.clear();
+    editOrderRows = [];
     rebuildFiltersFromRows();
     renderUsuarioSelect();
     renderFechaSelect();
     refreshAllViews(true);
     modalEditarRuta.hide();
+}
+
+function distanceBetweenRows(a, b) {
+    const latA = Number(a.lat);
+    const lngA = Number(a.lng);
+    const latB = Number(b.lat);
+    const lngB = Number(b.lng);
+    if (![latA, lngA, latB, lngB].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
+
+    const dLat = latA - latB;
+    const dLng = lngA - lngB;
+    return Math.sqrt((dLat * dLat) + (dLng * dLng));
+}
+
+function sortRowsByNearestNeighbor(rows) {
+    const pending = rows.slice();
+    if (pending.length <= 2) return pending;
+
+    let currentIndex = 0;
+    pending.forEach((row, index) => {
+        const current = pending[currentIndex];
+        const isMoreNorthWest = Number(row.lat) > Number(current.lat)
+            || (Number(row.lat) === Number(current.lat) && Number(row.lng) < Number(current.lng));
+        if (isMoreNorthWest) {
+            currentIndex = index;
+        }
+    });
+
+    const ordered = [pending.splice(currentIndex, 1)[0]];
+    while (pending.length) {
+        const current = ordered[ordered.length - 1];
+        let nearestIndex = 0;
+        let nearestDistance = distanceBetweenRows(current, pending[0]);
+        for (let i = 1; i < pending.length; i++) {
+            const distance = distanceBetweenRows(current, pending[i]);
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearestIndex = i;
+            }
+        }
+        ordered.push(pending.splice(nearestIndex, 1)[0]);
+    }
+
+    return ordered;
+}
+
+function addDaysSql(dateSql, daysToAdd) {
+    const date = new Date(`${dateSql}T12:00:00`);
+    date.setDate(date.getDate() + daysToAdd);
+    return date.toISOString().slice(0, 10);
+}
+
+function todaySqlLocal() {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function chunkRows(rows, size) {
+    const chunks = [];
+    for (let i = 0; i < rows.length; i += size) {
+        chunks.push(rows.slice(i, i + size));
+    }
+    return chunks;
+}
+
+function dailyChunksWithSmallTailAbsorption(rows, targetSize, maxSize = 30) {
+    const chunks = chunkRows(rows, targetSize);
+    if (chunks.length <= 1) return chunks;
+
+    const lastChunk = chunks[chunks.length - 1];
+    const previousChunk = chunks[chunks.length - 2];
+    const canAbsorbTail = lastChunk.length <= (maxSize - targetSize)
+        && previousChunk.length + lastChunk.length <= maxSize;
+
+    if (canAbsorbTail) {
+        previousChunk.push(...lastChunk);
+        chunks.pop();
+    }
+
+    return chunks;
+}
+
+function optimizeChunkWithGoogle(rows) {
+    return new Promise(resolve => {
+        if (!directionsServiceRutas || rows.length <= 2) {
+            resolve(rows);
+            return;
+        }
+
+        const origin = rows[0];
+        const destination = rows[rows.length - 1];
+        const intermediateRows = rows.slice(1, -1);
+
+        directionsServiceRutas.route({
+            origin: { lat: Number(origin.lat), lng: Number(origin.lng) },
+            destination: { lat: Number(destination.lat), lng: Number(destination.lng) },
+            waypoints: intermediateRows.map(row => ({
+                location: { lat: Number(row.lat), lng: Number(row.lng) },
+                stopover: true
+            })),
+            optimizeWaypoints: true,
+            travelMode: google.maps.TravelMode.DRIVING
+        }, (result, status) => {
+            if (status !== 'OK' || !result || !result.routes || !result.routes[0]) {
+                optimizationWarnings.push(status || 'ERROR');
+                resolve(rows);
+                return;
+            }
+
+            const order = result.routes[0].waypoint_order || [];
+            const optimized = [
+                origin,
+                ...order.map(index => intermediateRows[index]).filter(Boolean),
+                destination
+            ];
+            resolve(optimized);
+        });
+    });
+}
+
+async function optimizeDailyRowsWithGoogle(rows) {
+    const maxRowsPerDirectionsRequest = 23;
+    if (rows.length <= maxRowsPerDirectionsRequest) {
+        return await optimizeChunkWithGoogle(rows);
+    }
+
+    const optimized = [];
+    const segments = chunkRows(rows, maxRowsPerDirectionsRequest);
+    for (const segment of segments) {
+        const optimizedSegment = await optimizeChunkWithGoogle(segment);
+        optimized.push(...optimizedSegment);
+    }
+
+    return optimized;
+}
+
+function getOptimizationRows() {
+    const useSelected = $('#optSoloSeleccionados').is(':checked') && selectedRowIds.size > 0;
+    const sourceRows = useSelected
+        ? planRows.filter(row => selectedRowIds.has(row.row_id))
+        : getFilteredRows();
+
+    return sourceRows.filter(row => {
+        const lat = Number(row.lat);
+        const lng = Number(row.lng);
+        return Number.isFinite(lat) && Number.isFinite(lng);
+    });
+}
+
+async function optimizeVisibleRoutes() {
+    if (!planRows.length) {
+        alert('Primero debes cargar un archivo.');
+        return;
+    }
+
+    const dailyLoad = Number($('#optMetaDiaria').val() || 0);
+    if (!Number.isInteger(dailyLoad) || dailyLoad < 2 || dailyLoad > 30) {
+        alert('La carga por dia debe estar entre 2 y 30 locales para este optimizador.');
+        return;
+    }
+
+    const startDate = $('#optFechaInicio').val();
+    if (!startDate) {
+        alert('Debes indicar una fecha de inicio.');
+        return;
+    }
+
+    const candidates = getOptimizationRows();
+    if (!candidates.length) {
+        alert('No hay locales visibles o seleccionados con coordenadas validas.');
+        return;
+    }
+
+    const button = $('#btnOptimizarRutas');
+    const originalHtml = button.html();
+    const prefix = ($('#optPrefijoGrupo').val().trim() || 'RUTA OPT').toUpperCase();
+    optimizationWarnings = [];
+    button.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> Optimizando...');
+    $('#optimizadorEstado').text(`Preparando ${candidates.length} local(es) en bloques de ${dailyLoad}, absorbiendo solo restos pequenos...`);
+
+    try {
+        const spatialOrder = sortRowsByNearestNeighbor(candidates);
+        const chunks = dailyChunksWithSmallTailAbsorption(spatialOrder, dailyLoad, 30);
+
+        for (let dayIndex = 0; dayIndex < chunks.length; dayIndex++) {
+            $('#optimizadorEstado').text(`Optimizando ruta ${dayIndex + 1} de ${chunks.length}...`);
+            const optimizedRows = await optimizeDailyRowsWithGoogle(chunks[dayIndex]);
+            const dateSql = addDaysSql(startDate, dayIndex);
+            const metadata = dateMetadata(dateSql);
+            const groupName = `${prefix} ${String(dayIndex + 1).padStart(2, '0')}`;
+
+            optimizedRows.forEach((row, orderIndex) => {
+                row.fecha_ruta_sql = dateSql;
+                row.fecha_ruta = metadata.display;
+                row.dia_semana = metadata.dayName;
+                row.dia_semana_num = metadata.dayNumber;
+                row.semana_plan = metadata.week;
+                row.dia_plan = dayIndex + 1;
+                row.grupo_ruta = groupName;
+                row.ruta_global = groupName;
+                row.orden_visita = orderIndex + 1;
+                row.sin_ruta = false;
+            });
+        }
+
+        selectedRowIds.clear();
+        rebuildFiltersFromRows();
+        renderUsuarioSelect();
+        renderFechaSelect();
+        refreshAllViews(true);
+        if (optimizationWarnings.length) {
+            const uniqueWarnings = [...new Set(optimizationWarnings)].join(', ');
+            $('#optimizadorEstado').text(`Listo con respaldo geografico: ${candidates.length} local(es) en ${chunks.length} ruta(s). Google devolvio: ${uniqueWarnings}. Revisa si Directions API esta activa para la key.`);
+        } else {
+            $('#optimizadorEstado').text(`Listo: ${candidates.length} local(es) distribuidos en ${chunks.length} ruta(s).`);
+        }
+    } catch (error) {
+        console.error(error);
+        alert(error.message || 'No se pudo optimizar la ruta.');
+        $('#optimizadorEstado').text('No se pudo completar la optimizacion.');
+    } finally {
+        button.prop('disabled', false).html(originalHtml);
+    }
 }
 
 async function downloadEditedRoutes() {
@@ -1420,6 +1776,13 @@ $('#btnLimpiarSeleccion').on('click', function() {
 $('#btnEditarSeleccionados').on('click', openEditModal);
 $('#btnAplicarEdicion').on('click', applyRouteEdits);
 $('#btnDescargarEditado').on('click', downloadEditedRoutes);
+$('#btnOptimizarRutas').on('click', optimizeVisibleRoutes);
+
+$(document).on('click', '.btnMoverOrden', function() {
+    moveEditOrderRow(Number($(this).data('index')), Number($(this).data('direction')));
+});
+
+$('#optFechaInicio').val(todaySqlLocal());
 
 $('#checkSeleccionarVisibles').on('change', function() {
     const checked = $(this).is(':checked');
@@ -1468,7 +1831,11 @@ $(document).on('click', '#tablaDetalleRuta tbody tr', function() {
 document.addEventListener('DOMContentLoaded', function() {
     modalEditarRuta = new bootstrap.Modal(document.getElementById('modalEditarRuta'));
 });
+
+window.initMapRutas = initMapRutas;
 </script>
+
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw&callback=initMapRutas&loading=async"></script>
 
 </body>
 </html>

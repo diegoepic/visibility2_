@@ -880,6 +880,11 @@
       // 409 = Conflict - puede ser duplicado exitoso o request en progreso
       if (status === 409) {
         const errorCode = parsed?.json?.error_code;
+        // DUPLICATE_PHOTO = rechazo de negocio (misma foto en otra sala). Terminal: NO reintentar
+        // y NO tratar como éxito (la foto NO se aceptó).
+        if (errorCode === 'DUPLICATE_PHOTO') {
+          return { code: 'DUPLICATE_PHOTO', retryable: false };
+        }
         // REQUEST_IN_PROGRESS significa que otro request está procesando, reintentar
         if (errorCode === 'REQUEST_IN_PROGRESS') {
           const retryAfter = parsed?.json?.retry_after || 5;

@@ -421,10 +421,21 @@ try {
     // -------- 8) Preguntas + opciones por formulario
     $questionsByForm = [];
     if (!empty($routeFormIds)) {
+        // Sets por cadena (scripts/17): incluir id_cadena en cada pregunta para que
+        // el cliente pueda filtrar por la cadena del local (viene en las filas de ruta).
+        // Guard de columna para no romper el bundle si falta la migración.
+        $fqTieneCadena = false;
+        $resColCad = @$conn->query("SHOW COLUMNS FROM form_questions LIKE 'id_cadena'");
+        if ($resColCad) {
+            $fqTieneCadena = ($resColCad->num_rows > 0);
+            $resColCad->close();
+        }
+        $colCadena = $fqTieneCadena ? ', id_cadena' : '';
+
         $inForms = $inClause($routeFormIds);
         if ($inForms['placeholders'] !== 'NULL') {
             $sqlQ = "
-                SELECT id, id_formulario, question_text, id_question_type, is_required, is_valued, sort_order
+                SELECT id, id_formulario, question_text, id_question_type, is_required, is_valued, sort_order{$colCadena}
                   FROM form_questions
                  WHERE deleted_at IS NULL
                    AND id_formulario IN ({$inForms['placeholders']})
@@ -483,6 +494,8 @@ try {
                     'id_question_type' => (int)($q['id_question_type'] ?? 0),
                     'is_required'      => (int)($q['is_required'] ?? 0),
                     'is_valued'        => (int)($q['is_valued'] ?? 0),
+                    // NULL = pregunta general; <id> = solo locales de esa cadena
+                    'id_cadena'        => (isset($q['id_cadena']) && $q['id_cadena'] !== null) ? (int)$q['id_cadena'] : null,
                     'options'          => $optionsByQ[$qid] ?? [],
                 ];
             }

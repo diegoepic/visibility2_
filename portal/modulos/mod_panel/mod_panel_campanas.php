@@ -12,12 +12,32 @@ $apellido    = $_SESSION['usuario_apellido'];
 $id_division = intval($_SESSION['division_id']);
 $id_empresa  = intval($_SESSION['empresa_id']);
 
-$division_filtro = isset($_GET['division']) 
-    ? intval($_GET['division']) 
+$division_nombre_sesion = '';
+if ($id_division > 0) {
+    $stmtSesionDiv = $conn->prepare("SELECT nombre FROM division_empresa WHERE id = ? LIMIT 1");
+    $stmtSesionDiv->bind_param("i", $id_division);
+    $stmtSesionDiv->execute();
+    $stmtSesionDiv->bind_result($division_nombre_sesion);
+    $stmtSesionDiv->fetch();
+    $stmtSesionDiv->close();
+}
+
+$esUsuarioMC = strtoupper(trim($division_nombre_sesion)) === 'MC';
+
+$division_filtro = $esUsuarioMC && isset($_GET['division'])
+    ? intval($_GET['division'])
     : $id_division;
 
 $subdivision_filtro = isset($_GET['subdivision']) 
     ? intval($_GET['subdivision']) 
+    : 0;
+
+$trade_filtro = isset($_GET['trade'])
+    ? intval($_GET['trade'])
+    : 0;
+
+$categoria_filtro = isset($_GET['categoria'])
+    ? intval($_GET['categoria'])
     : 0;
 
 
@@ -45,6 +65,87 @@ while ($row = $resDiv->fetch_assoc()) {
     $divisiones[] = $row;
 }
 $stmtDiv->close();
+
+if (!$esUsuarioMC) {
+    $divisiones = array_values(array_filter(
+        $divisiones,
+        static fn(array $division): bool => (int)$division['id'] === $division_filtro
+    ));
+}
+
+/* ======================================================
+   CARGAR TRADES Y CATEGORIAS PARA FILTROS
+====================================================== */
+
+$sqlTrades = "
+    SELECT DISTINCT
+        f.id_trade,
+        COALESCE(NULLIF(TRIM(t.nombre), ''), CONCAT('TRADE ', f.id_trade)) AS nombre_trade
+    FROM formulario f
+    LEFT JOIN trade t ON t.id = f.id_trade
+    INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
+    WHERE f.estado = 1
+      AND f.id_empresa = ?
+      AND f.id_division = ?
+      AND f.id_trade IS NOT NULL
+      AND f.id_trade > 0
+";
+$typesTrades = "ii";
+$paramsTrades = [$id_empresa, $division_filtro];
+
+if ($subdivision_filtro > 0) {
+    $sqlTrades .= " AND f.id_subdivision = ? ";
+    $typesTrades .= "i";
+    $paramsTrades[] = $subdivision_filtro;
+}
+
+$sqlTrades .= " ORDER BY nombre_trade ASC ";
+
+$stmtTrades = $conn->prepare($sqlTrades);
+$stmtTrades->bind_param($typesTrades, ...$paramsTrades);
+$stmtTrades->execute();
+$resTrades = $stmtTrades->get_result();
+
+$trades = [];
+while ($row = $resTrades->fetch_assoc()) {
+    $trades[] = $row;
+}
+$stmtTrades->close();
+
+$sqlCategorias = "
+    SELECT DISTINCT
+        f.id_categoria_formulario,
+        COALESCE(NULLIF(TRIM(cf.nombre), ''), CONCAT('CATEGORIA ', f.id_categoria_formulario)) AS nombre_categoria
+    FROM formulario f
+    LEFT JOIN categoria_formulario cf ON cf.id = f.id_categoria_formulario
+    INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
+    WHERE f.estado = 1
+      AND f.id_empresa = ?
+      AND f.id_division = ?
+      AND f.id_categoria_formulario IS NOT NULL
+      AND f.id_categoria_formulario > 0
+";
+$typesCategorias = "ii";
+$paramsCategorias = [$id_empresa, $division_filtro];
+
+if ($subdivision_filtro > 0) {
+    $sqlCategorias .= " AND f.id_subdivision = ? ";
+    $typesCategorias .= "i";
+    $paramsCategorias[] = $subdivision_filtro;
+}
+
+$sqlCategorias .= " ORDER BY nombre_categoria ASC ";
+
+$stmtCategorias = $conn->prepare($sqlCategorias);
+$stmtCategorias->bind_param($typesCategorias, ...$paramsCategorias);
+$stmtCategorias->execute();
+$resCategorias = $stmtCategorias->get_result();
+
+$categorias = [];
+while ($row = $resCategorias->fetch_assoc()) {
+    $categorias[] = $row;
+}
+$stmtCategorias->close();
 
 
 /* ======================================================
@@ -88,6 +189,22 @@ if ($subdivision_filtro > 0) {
     $paramsC[] = $subdivision_filtro;
 }
 
+if ($trade_filtro > 0) {
+    $sqlCampanas .= " AND f.id_trade = ? ";
+    $typesC .= "i";
+    $paramsC[] = $trade_filtro;
+} elseif ($trade_filtro === -1) {
+    $sqlCampanas .= " AND (f.id_trade IS NULL OR f.id_trade <= 0) ";
+}
+
+if ($categoria_filtro > 0) {
+    $sqlCampanas .= " AND f.id_categoria_formulario = ? ";
+    $typesC .= "i";
+    $paramsC[] = $categoria_filtro;
+} elseif ($categoria_filtro === -1) {
+    $sqlCampanas .= " AND (f.id_categoria_formulario IS NULL OR f.id_categoria_formulario <= 0) ";
+}
+
 $sqlCampanas .= "
     GROUP BY f.id
     ORDER BY f.fechaInicio DESC
@@ -109,6 +226,8 @@ $urlDescargaMasivaActivas = '/visibility2/portal/informes/descarga_excel_masivo_
     . '&id_empresa=' . urlencode((string)$id_empresa)
     . '&id_division=' . urlencode((string)$division_filtro)
     . '&id_subdivision=' . urlencode((string)$subdivision_filtro)
+    . '&id_trade=' . urlencode((string)$trade_filtro)
+    . '&id_categoria_formulario=' . urlencode((string)$categoria_filtro)
     . '&fotos=0&fotos_encuesta=0';
 
 
@@ -2116,9 +2235,12 @@ $conn->close();
       </div>
 
       <form method="GET" class="row align-items-end">
-        <div class="col-md-4 mb-3">
+        <div class="col-lg-2 col-md-4 mb-3">
           <label class="modern-label"><strong>División</strong></label>
-          <select name="division" class="form-control modern-control">
+          <?php if (!$esUsuarioMC): ?>
+            <input type="hidden" name="division" value="<?= (int)$division_filtro ?>">
+          <?php endif; ?>
+          <select name="<?= $esUsuarioMC ? 'division' : 'division_locked' ?>" class="form-control modern-control" <?= $esUsuarioMC ? '' : 'disabled' ?>>
             <?php foreach ($divisiones as $d): ?>
               <option value="<?= $d['id'] ?>" <?= ($d['id'] == $division_filtro ? 'selected' : '') ?>>
                 <?= htmlspecialchars($d['nombre']) ?>
@@ -2127,20 +2249,46 @@ $conn->close();
           </select>
         </div>
 
-        <div class="col-md-4 mb-3">
+        <div class="col-lg-2 col-md-4 mb-3">
           <label class="modern-label"><strong>Subdivisión</strong></label>
           <select name="subdivision" id="subdivision" class="form-control modern-control">
             <option value="0">Todas</option>
           </select>
         </div>
 
-        <div class="col-md-2 mb-3">
+        <div class="col-lg-2 col-md-4 mb-3">
+          <label class="modern-label"><strong>Trade</strong></label>
+          <select name="trade" id="trade" class="form-control modern-control">
+            <option value="0">Todos</option>
+            <option value="-1" <?= ($trade_filtro === -1 ? 'selected' : '') ?>>SIN TRADE</option>
+            <?php foreach ($trades as $trade): ?>
+              <option value="<?= (int)$trade['id_trade'] ?>" <?= ((int)$trade['id_trade'] === $trade_filtro ? 'selected' : '') ?>>
+                <?= htmlspecialchars($trade['nombre_trade'], ENT_QUOTES, 'UTF-8') ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+
+        <div class="col-lg-2 col-md-4 mb-3">
+          <label class="modern-label"><strong>Categoria</strong></label>
+          <select name="categoria" id="categoria" class="form-control modern-control">
+            <option value="0">Todas</option>
+            <option value="-1" <?= ($categoria_filtro === -1 ? 'selected' : '') ?>>SIN CATEGORIA</option>
+            <?php foreach ($categorias as $categoria): ?>
+              <option value="<?= (int)$categoria['id_categoria_formulario'] ?>" <?= ((int)$categoria['id_categoria_formulario'] === $categoria_filtro ? 'selected' : '') ?>>
+                <?= htmlspecialchars($categoria['nombre_categoria'], ENT_QUOTES, 'UTF-8') ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+
+        <div class="col-lg-2 col-md-4 mb-3">
           <button type="submit" class="btn modern-btn modern-btn-primary w-100">
             <i class="fas fa-filter mr-2"></i> Filtrar
           </button>
         </div>
 
-        <div class="col-md-2 mb-3">
+        <div class="col-lg-2 col-md-4 mb-3">
           <a
             href="<?= htmlspecialchars($urlDescargaMasivaActivas, ENT_QUOTES, 'UTF-8') ?>"
             class="btn modern-btn modern-btn-success w-100 <?= empty($idsCampanasActivas) ? 'disabled' : '' ?>"
@@ -3225,6 +3373,11 @@ $(document).on('click', '.btn-campaign-detail', function() {
     $('[name="division"]').on('change', function() {
         const divisionId = $(this).val();
         cargarSubdivisiones(divisionId, 0);
+        $('#trade, #categoria').val('0');
+    });
+
+    $('#subdivision').on('change', function() {
+        $('#trade, #categoria').val('0');
     });
 
     const divisionInicial = $('[name="division"]').val();

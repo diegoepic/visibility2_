@@ -1063,6 +1063,14 @@ $(function () {
             rows.push(`<div class="meta-row"><span class="meta-icon"><i class="fa ${icon}"></i></span><div><span class="meta-label">${label}</span><span class="meta-val">${val}</span></div></div>`);
         }
 
+        // Aviso de posible duplicada (foto casi idéntica cargada en otra sala de la campaña).
+        if (Number(m.dup_flag) === 1) {
+            rows.push(`<div class="meta-row" style="background:#3f1d1d;border-radius:6px;padding:6px 8px;">
+                <span class="meta-icon" style="color:#f87171;"><i class="fa fa-clone"></i></span>
+                <div><span class="meta-label" style="color:#f8b4b4;">Alerta</span>
+                <span class="meta-val" style="color:#fca5a5;font-weight:600;">⚠ Posible foto duplicada de otra sala</span></div></div>`);
+        }
+
         const sourceMap = { camera: 'Cámara', gallery: 'Galería', unknown: 'Desconocido' };
         row('fa-camera', 'Origen', sourceMap[m.capture_source] || m.capture_source);
 

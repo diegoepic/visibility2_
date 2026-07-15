@@ -8,6 +8,7 @@
 // - Fallback por client_guid para resolver/crear visita si no llega visita_id
 // - Inserción en FQR con columnas dinámicas (created_at/valor/foto_visita_id si existen)
 
+
 declare(strict_types=1);
 
 // CRÍTICO: Para endpoints JSON, NUNCA mostrar errores en output
@@ -98,6 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 // CRÍTICO: NO llamar idempo_claim_or_fail() aquí porque si la visita no existe,
 // retornamos 503 VISITA_PENDING y el reintento fallaría con 409 REQUEST_IN_PROGRESS
 require_once __DIR__ . '/lib/idempotency.php';
+require_once __DIR__ . '/lib/foto_hash.php'; // detección de fotos duplicadas (sha256 + dHash perceptual)
 sanitize_idempotency_key();
 // idempo_claim_or_fail() se llama MÁS ABAJO, después de resolver la visita
 
@@ -338,6 +340,35 @@ if (!convertToWebP($tmp, $destAbs, 1280, 80)) {
 }
 @chmod($destAbs, 0644);
 
+/* ===== Detección de duplicados (sha256 exacto + dHash perceptual) sobre el WebP almacenado ===== */
+$contentSha = v2_sha256_file($destAbs);          // '' si no se pudo leer
+$phashHex   = v2_dhash($destAbs);                // null si no se pudo decodificar
+$shaParam   = $contentSha !== '' ? $contentSha : null;
+
+// BLOQUEO de duplicado EXACTO: misma foto (mismos bytes) ya usada en OTRA sala de la campaña.
+// (Aún no se insertó nada en BD; solo hay que borrar el archivo convertido.)
+if ($shaParam !== null) {
+  $dupExacto = v2_encuesta_buscar_dup_exacto($conn, $shaParam, (int)$id_formulario, $id_local);
+  if ($dupExacto) {
+    if (is_file($destAbs))         @unlink($destAbs);
+    if (is_file($destAbs.'.json')) @unlink($destAbs.'.json');
+    $dupLocal = trim(((string)($dupExacto['local_codigo'] ?? '')) . ' ' . ((string)($dupExacto['local_nombre'] ?? '')));
+    $msgDup   = 'Foto duplicada: esta misma imagen ya fue cargada'
+              . ($dupLocal !== '' ? ' en el local ' . $dupLocal : ' en otra sala')
+              . '. Debes tomar una foto real de este local.';
+    v2_log_intento_duplicado($conn, (int)$id_formulario, $id_local, $usuario_id, 'encuesta', $shaParam, $phashHex, (int)$dupExacto['id'], (int)($dupExacto['id_local'] ?? 0), $id_form_question, null);
+    // Cierra la reclamación de idempotencia de forma idempotente (retry con misma key → mismo 409).
+    idempo_store_and_reply($conn, 'pregunta_foto', 409, [
+      'status'     => 'error',
+      'message'    => $msgDup,
+      'error_code' => 'DUPLICATE_PHOTO',
+      'retryable'  => false,
+      'dup_of'     => (int)$dupExacto['id'],
+      'dup_local'  => $dupLocal,
+    ]);
+  }
+}
+
 /* URL relativa (igual que otros endpoints: empieza por "uploads/") */
 $relUrl   = 'uploads/'.$hoy.'/pregunta_'.$id_form_question.'/'.$filename;
 $absolute = '/visibility2/app/'.$relUrl;
@@ -418,23 +449,39 @@ try {
        exif_datetime, exif_lat, exif_lng, exif_altitude, exif_img_direction,
        exif_make, exif_model, exif_software, exif_lens_model,
        exif_fnumber, exif_exposure_time, exif_iso, exif_focal_length, exif_orientation,
-       capture_source, meta_json, created_at)
+       capture_source, meta_json, created_at,
+       id_formulario, content_sha256, phash)
       VALUES (?,?,?,?,?,
               ?,?,?,?,?,
               ?,?,?,?,
               ?,?,?,?,?,
+              ?,?,?,
               ?,?,?)
     ");
     if ($stmtM) {
+      $idFormMeta = (int)$id_formulario;
       $stmtM->bind_param(
-        "iiiissddddssssdsidisss",
+        "iiiissddddssssdsidisssiss",
         $resp_id, $visita_id, $id_local, $usuario_id, $relUrl,
         $exif_datetime, $exif_lat, $exif_lng, $exif_altitude, $exif_img_direction,
         $exif_make, $exif_model, $exif_software, $exif_lens_model,
         $exif_fnumber, $exif_exposure_time, $exif_iso, $exif_focal_length, $exif_orientation,
-        $capture_source, $meta_json, $now
+        $capture_source, $meta_json, $now,
+        $idFormMeta, $shaParam, $phashHex
       );
-      if (!$stmtM->execute()) { error_log('form_question_photo_meta insert: '.$stmtM->error); }
+      if (!$stmtM->execute()) {
+        error_log('form_question_photo_meta insert: '.$stmtM->error);
+      } else {
+        $metaId = (int)$stmtM->insert_id;
+        // MARCA (no bloquea): foto casi idéntica ya cargada en OTRA sala de la campaña → revisión en portal.
+        if ($metaId > 0 && $phashHex !== null) {
+          $parecida = v2_encuesta_buscar_parecida($conn, $phashHex, (int)$id_formulario, $id_local, 8);
+          if ($parecida) {
+            $um = $conn->prepare("UPDATE form_question_photo_meta SET dup_flag = 1, dup_ref_id = ? WHERE id = ?");
+            if ($um) { $refId = (int)$parecida['id']; $um->bind_param('ii', $refId, $metaId); @$um->execute(); $um->close(); }
+          }
+        }
+      }
       $stmtM->close();
     }
   } else {

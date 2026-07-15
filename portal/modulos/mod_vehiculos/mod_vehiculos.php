@@ -115,6 +115,66 @@ date_default_timezone_set('America/Santiago');
             border-radius: 12px;
         }
 
+        .download-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, .68);
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 22px;
+        }
+
+        .download-overlay.show {
+            display: flex;
+        }
+
+        .download-card {
+            width: min(420px, 94vw);
+            background: #ffffff;
+            border-radius: 22px;
+            padding: 26px;
+            box-shadow: 0 28px 70px rgba(0, 0, 0, .28);
+            text-align: center;
+        }
+
+        .download-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 18px;
+            background: #dcfce7;
+            color: #15803d;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 14px;
+        }
+
+        .download-progress {
+            height: 10px;
+            background: #e5e7eb;
+            border-radius: 999px;
+            overflow: hidden;
+            margin-top: 18px;
+        }
+
+        .download-progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #16a34a, #22c55e);
+            border-radius: 999px;
+            transition: width .35s ease;
+        }
+
+        .download-progress-text {
+            margin-top: 10px;
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
         .history-item {
             border-left: 4px solid #111827;
             background: #f9fafb;
@@ -1693,6 +1753,11 @@ body.fleet-photo-open {
                             <i class="fa-solid fa-rotate me-1"></i> Actualizar
                         </button>
                     </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-success w-100 btn-main" onclick="abrirModalDescargaReporteVehiculos()">
+                            <i class="fa-solid fa-file-excel me-1"></i> Descargar
+                        </button>
+                    </div>
                 </div>
 
                 <div class="alert alert-info">
@@ -1724,6 +1789,74 @@ body.fleet-photo-open {
             </div>
 
         </div>
+    </div>
+</div>
+
+<!-- MODAL DESCARGA REPORTE VEHICULOS -->
+<div class="modal fade" id="modalDescargaReporteVehiculos" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:460px">
+        <div class="modal-content">
+
+            <form
+                id="formDescargaReporteVehiculos"
+                method="get"
+                action="/visibility2/portal/modulos/mod_vehiculos/exportar_vehiculos_reporte.php"
+                target="iframeDescargaReporteVehiculos"
+            >
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fa-solid fa-calendar-days me-2"></i> Descargar reporte
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Fecha desde</label>
+                        <input type="date" name="fecha_desde" id="reporteFechaDesde" class="form-control" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Fecha hasta</label>
+                        <input type="date" name="fecha_hasta" id="reporteFechaHasta" class="form-control" required>
+                    </div>
+
+                    <div class="alert alert-info mb-0">
+                        <i class="fa-solid fa-circle-info me-1"></i>
+                        El Excel incluirá solo las subidas registradas dentro del rango seleccionado.
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-main" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success btn-main">
+                        <i class="fa-solid fa-file-excel me-1"></i> Descargar
+                    </button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+<iframe
+    id="iframeDescargaReporteVehiculos"
+    name="iframeDescargaReporteVehiculos"
+    style="display:none;width:0;height:0;border:0;"
+    title="Descarga reporte vehiculos"
+></iframe>
+
+<div id="overlayDescargaReporte" class="download-overlay" aria-hidden="true">
+    <div class="download-card">
+        <div class="download-icon">
+            <i class="fa-solid fa-file-excel"></i>
+        </div>
+        <h5 class="mb-1">Preparando descarga</h5>
+        <p class="text-muted mb-0">Generando el reporte con el rango seleccionado.</p>
+        <div class="download-progress">
+            <div class="download-progress-bar" id="barraDescargaReporte"></div>
+        </div>
+        <div class="download-progress-text" id="textoDescargaReporte">Iniciando...</div>
     </div>
 </div>
 
@@ -2015,6 +2148,7 @@ let modalVehiculo = null;
 let modalHistorial = null;
 let modalReporte = null;
 let modalDescargaExcel = null;
+let modalDescargaReporteVehiculos = null;
 let modalDocumentos = null;
 let modalMantenciones = null;
 
@@ -2025,11 +2159,15 @@ let mantVehiculoActual = { id: null, patente: '' };
 
 let reporteVehiculos = [];
 let reportePreguntas = [];
+let descargaReporteTimer = null;
+let descargaReporteTimeout = null;
+let descargaReporteActiva = false;
 
 $(document).ready(function () {
     modalVehiculo     = new bootstrap.Modal(document.getElementById('modalVehiculo'));
     modalHistorial    = new bootstrap.Modal(document.getElementById('modalHistorial'));
     modalDescargaExcel = new bootstrap.Modal(document.getElementById('modalDescargaExcel'));
+    modalDescargaReporteVehiculos = new bootstrap.Modal(document.getElementById('modalDescargaReporteVehiculos'));
     modalDocumentos   = new bootstrap.Modal(document.getElementById('modalDocumentos'));
     modalMantenciones = new bootstrap.Modal(document.getElementById('modalMantenciones'));
     const modalReporteEl = document.getElementById('modalReporte');
@@ -2037,6 +2175,19 @@ $(document).ready(function () {
     if (modalReporteEl) {
         modalReporte = new bootstrap.Modal(modalReporteEl);
     }
+
+    $('#formDescargaReporteVehiculos').on('submit', function () {
+        mostrarOverlayDescargaReporte();
+        if (modalDescargaReporteVehiculos) {
+            modalDescargaReporteVehiculos.hide();
+        }
+    });
+
+    $('#iframeDescargaReporteVehiculos').on('load', function () {
+        if (descargaReporteActiva) {
+            completarOverlayDescargaReporte();
+        }
+    });
 
     cargarCatalogos();
     cargarVehiculos();
@@ -2638,6 +2789,111 @@ function abrirModalReporte() {
 
     modalReporte.show();
     cargarReporteVehiculos();
+}
+
+function abrirModalDescargaReporteVehiculos() {
+    if (!modalDescargaReporteVehiculos) {
+        alert('No se encontró el modal de descarga del reporte.');
+        return;
+    }
+
+    const hoy = new Date();
+    const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    const formatoFecha = fecha => {
+        const year = fecha.getFullYear();
+        const month = String(fecha.getMonth() + 1).padStart(2, '0');
+        const day = String(fecha.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    $('#reporteFechaDesde').val(formatoFecha(primerDia));
+    $('#reporteFechaHasta').val(formatoFecha(hoy));
+    modalDescargaReporteVehiculos.show();
+}
+
+function mostrarOverlayDescargaReporte() {
+    const overlay = document.getElementById('overlayDescargaReporte');
+    const barra = document.getElementById('barraDescargaReporte');
+    const texto = document.getElementById('textoDescargaReporte');
+
+    if (!overlay || !barra || !texto) {
+        return;
+    }
+
+    if (descargaReporteTimer) {
+        clearInterval(descargaReporteTimer);
+    }
+    if (descargaReporteTimeout) {
+        clearTimeout(descargaReporteTimeout);
+    }
+
+    descargaReporteActiva = true;
+    let progreso = 12;
+    barra.style.width = progreso + '%';
+    texto.textContent = 'Preparando consulta...';
+    overlay.classList.add('show');
+    overlay.setAttribute('aria-hidden', 'false');
+
+    descargaReporteTimer = setInterval(function () {
+        progreso = Math.min(progreso + 14, 92);
+        barra.style.width = progreso + '%';
+
+        if (progreso >= 70) {
+            texto.textContent = 'Armando archivo Excel...';
+        } else if (progreso >= 35) {
+            texto.textContent = 'Procesando registros...';
+        }
+    }, 420);
+
+    descargaReporteTimeout = setTimeout(function () {
+        completarOverlayDescargaReporte();
+    }, 9000);
+}
+
+function completarOverlayDescargaReporte() {
+    const barra = document.getElementById('barraDescargaReporte');
+    const texto = document.getElementById('textoDescargaReporte');
+
+    if (!descargaReporteActiva || !barra || !texto) {
+        return;
+    }
+
+    descargaReporteActiva = false;
+    barra.style.width = '100%';
+    texto.textContent = 'Descarga iniciada.';
+
+    setTimeout(cerrarOverlayDescargaReporte, 900);
+}
+
+function cerrarOverlayDescargaReporte() {
+    const overlay = document.getElementById('overlayDescargaReporte');
+    const barra = document.getElementById('barraDescargaReporte');
+    const texto = document.getElementById('textoDescargaReporte');
+
+    if (descargaReporteTimer) {
+        clearInterval(descargaReporteTimer);
+        descargaReporteTimer = null;
+    }
+
+    if (descargaReporteTimeout) {
+        clearTimeout(descargaReporteTimeout);
+        descargaReporteTimeout = null;
+    }
+
+    descargaReporteActiva = false;
+
+    if (overlay) {
+        overlay.classList.remove('show');
+        overlay.setAttribute('aria-hidden', 'true');
+    }
+
+    if (barra) {
+        barra.style.width = '0%';
+    }
+
+    if (texto) {
+        texto.textContent = 'Iniciando...';
+    }
 }
 
 function cargarReporteVehiculos() {

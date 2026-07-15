@@ -51,29 +51,6 @@ if (!function_exists('e')) {
     }
 }
 
-function firstExistingColumn(mysqli $conn, string $table, array $candidates): string
-{
-    static $cache = [];
-
-    if (!isset($cache[$table])) {
-        $cache[$table] = [];
-        $res = $conn->query("SHOW COLUMNS FROM {$table}");
-        while ($row = $res->fetch_assoc()) {
-            $cache[$table][strtolower((string)$row['Field'])] = (string)$row['Field'];
-        }
-        $res->free();
-    }
-
-    foreach ($candidates as $candidate) {
-        $key = strtolower($candidate);
-        if (isset($cache[$table][$key])) {
-            return $cache[$table][$key];
-        }
-    }
-
-    return '';
-}
-
 // -----------------------------------------------------------------------------
 // Validación de parámetros
 // -----------------------------------------------------------------------------
@@ -89,6 +66,8 @@ if (isset($_GET['activas']) && (string)$_GET['activas'] === '1') {
     $idEmpresaActiva = isset($_GET['id_empresa']) ? (int)$_GET['id_empresa'] : 0;
     $idDivisionActiva = isset($_GET['id_division']) ? (int)$_GET['id_division'] : 0;
     $idSubdivisionActiva = isset($_GET['id_subdivision']) ? (int)$_GET['id_subdivision'] : 0;
+    $idTradeActiva = isset($_GET['id_trade']) ? (int)$_GET['id_trade'] : 0;
+    $idCategoriaFormularioActiva = isset($_GET['id_categoria_formulario']) ? (int)$_GET['id_categoria_formulario'] : 0;
 
     if ($idEmpresaActiva <= 0 || $idDivisionActiva <= 0) {
         die('Para descargar campaÃ±as activas debes enviar id_empresa e id_division.');
@@ -109,6 +88,22 @@ if (isset($_GET['activas']) && (string)$_GET['activas'] === '1') {
         $sqlIdsActivas .= " AND f.id_subdivision = ? ";
         $typesIdsActivas .= 'i';
         $paramsIdsActivas[] = $idSubdivisionActiva;
+    }
+
+    if ($idTradeActiva > 0) {
+        $sqlIdsActivas .= " AND f.id_trade = ? ";
+        $typesIdsActivas .= 'i';
+        $paramsIdsActivas[] = $idTradeActiva;
+    } elseif ($idTradeActiva === -1) {
+        $sqlIdsActivas .= " AND (f.id_trade IS NULL OR f.id_trade <= 0) ";
+    }
+
+    if ($idCategoriaFormularioActiva > 0) {
+        $sqlIdsActivas .= " AND f.id_categoria_formulario = ? ";
+        $typesIdsActivas .= 'i';
+        $paramsIdsActivas[] = $idCategoriaFormularioActiva;
+    } elseif ($idCategoriaFormularioActiva === -1) {
+        $sqlIdsActivas .= " AND (f.id_categoria_formulario IS NULL OR f.id_categoria_formulario <= 0) ";
     }
 
     $sqlIdsActivas .= "
@@ -325,11 +320,6 @@ function getCampaignData(int $idForm): array {
 function getLocalesDetails(int $idForm): array {
     global $conn;
 
-    $prioridadColumn = firstExistingColumn($conn, 'formulario', ['prioridad', 'priority']);
-    $prioridadSelect = $prioridadColumn !== ''
-        ? "UPPER(COALESCE(f.`{$prioridadColumn}`, '')) AS prioridad,"
-        : "'' AS prioridad,";
-
     $sql = "
         SELECT
             l.id AS idLocal,
@@ -341,7 +331,15 @@ function getLocalesDetails(int $idForm): array {
               ELSE CAST(l.codigo AS UNSIGNED)
             END AS numero_local,
             f.modalidad AS modalidad,
+            UPPER(COALESCE(NULLIF(TRIM(t.nombre), ''), 'SIN TRADE')) AS trade,
             UPPER(f.nombre) AS nombreCampana,
+            CASE UPPER(COALESCE(NULLIF(TRIM(f.prioridad_cliente), ''), 'MEDIO'))
+                WHEN 'ALTO' THEN 'ALTA'
+                WHEN 'ALTA' THEN 'ALTA'
+                WHEN 'BAJO' THEN 'BAJA'
+                WHEN 'BAJA' THEN 'BAJA'
+                ELSE 'MEDIA'
+            END AS prioridad,
 
             CASE
                 WHEN f.fechaInicio IS NULL
@@ -356,8 +354,6 @@ function getLocalesDetails(int $idForm): array {
                 THEN NULL
                 ELSE DATE(f.fechaTermino)
             END AS fechaTermino,
-
-            {$prioridadSelect}
 
             CASE
                 WHEN fq.fechaVisita IS NULL
@@ -454,6 +450,7 @@ function getLocalesDetails(int $idForm): array {
             UPPER(u.usuario) AS gestionado_por
         FROM formularioQuestion fq
         INNER JOIN formulario   f  ON f.id  = fq.id_formulario
+        LEFT  JOIN trade        t  ON t.id  = f.id_trade
         INNER JOIN local        l  ON l.id  = fq.id_local
         LEFT  JOIN jefe_venta   jv ON jv.id = l.id_jefe_venta
         INNER JOIN usuario      u  ON u.id  = fq.id_usuario
@@ -998,6 +995,36 @@ function diferenciaDias($desde, $hasta): string {
     }
 }
 
+function diferenciaDiasHabiles($desde, $hasta): string {
+    if (!fechaValida($desde) || !fechaValida($hasta)) {
+        return '';
+    }
+
+    try {
+        $inicio = new DateTime((string)$desde);
+        $fin = new DateTime((string)$hasta);
+        if ($fin < $inicio) {
+            return '';
+        }
+
+        $diasHabiles = 0;
+        $cursor = clone $inicio;
+        $cursor->modify('+1 day');
+
+        while ($cursor <= $fin) {
+            $diaSemana = (int)$cursor->format('N');
+            if ($diaSemana <= 5) {
+                $diasHabiles++;
+            }
+            $cursor->modify('+1 day');
+        }
+
+        return (string)$diasHabiles;
+    } catch (Throwable $e) {
+        return '';
+    }
+}
+
 function promedioFechas(array $fechas): string {
     $timestamps = [];
     foreach ($fechas as $fecha) {
@@ -1017,22 +1044,6 @@ function promedioFechas(array $fechas): string {
     return date('Y-m-d', (int)round(array_sum($timestamps) / count($timestamps)));
 }
 
-function primeraFechaValida(array $fechas): string {
-    $validas = [];
-    foreach ($fechas as $fecha) {
-        if (fechaValida($fecha)) {
-            $validas[] = (string)$fecha;
-        }
-    }
-
-    if (empty($validas)) {
-        return '';
-    }
-
-    sort($validas);
-    return $validas[0];
-}
-
 function construirMetricaGantt(array $filas, string $region = ''): array {
     $localesProgramados = [];
     $localesVisitados = [];
@@ -1042,9 +1053,14 @@ function construirMetricaGantt(array $filas, string $region = ''): array {
     $fechaTermino = '';
     $ultimaFechaVisita = '';
     $nombreCampana = '';
+    $prioridad = 'MEDIA';
 
     foreach ($filas as $fila) {
         $nombreCampana = $nombreCampana ?: (string)($fila['nombreCampana'] ?? '');
+        $prioridadFila = trim((string)($fila['prioridad'] ?? ''));
+        if ($prioridadFila !== '') {
+            $prioridad = $prioridadFila;
+        }
 
         if (!$fechaInicio && fechaValida($fila['fechaInicio'] ?? null)) {
             $fechaInicio = (string)$fila['fechaInicio'];
@@ -1082,6 +1098,7 @@ function construirMetricaGantt(array $filas, string $region = ''): array {
 
     return [
         'campana' => $nombreCampana,
+        'prioridad' => $prioridad ?: 'MEDIA',
         'region' => $region,
         'fecha_inicio' => $fechaInicio,
         'fecha_termino' => $fechaTermino,
@@ -1319,29 +1336,28 @@ $crearMetricas = function (array $filas, bool $porRegion = false): array {
 
     foreach ($filas as $fila) {
         $campana = trim((string)($fila['nombreCampana'] ?? 'SIN CAMPAÑA'));
+        $trade = trim((string)($fila['trade'] ?? 'SIN TRADE'));
         $region = trim((string)($fila['region'] ?? 'SIN REGION'));
-        $key = $porRegion ? $campana . '||' . $region : $campana;
+        $key = $porRegion ? $trade . '||' . $campana . '||' . $region : $trade . '||' . $campana;
 
         if (!isset($grupos[$key])) {
             $grupos[$key] = [
+                'trade' => $trade,
                 'campana' => $campana,
+                'prioridad' => trim((string)($fila['prioridad'] ?? 'MEDIA')) ?: 'MEDIA',
                 'region' => $porRegion ? $region : '',
                 'fecha_inicio' => fechaValida($fila['fechaInicio'] ?? null) ? (string)$fila['fechaInicio'] : '',
                 'fecha_termino' => fechaValida($fila['fechaTermino'] ?? null) ? (string)$fila['fechaTermino'] : '',
-                'prioridad' => trim((string)($fila['prioridad'] ?? '')),
                 'programados' => [],
                 'visitados' => [],
                 'recepciones' => [],
                 'visitas' => [],
+                'primera_visita' => '',
                 'ultima_visita' => '',
             ];
         }
 
         $localId = (string)($fila['idLocal'] ?? $fila['codigo_local'] ?? '');
-        if ($grupos[$key]['prioridad'] === '' && trim((string)($fila['prioridad'] ?? '')) !== '') {
-            $grupos[$key]['prioridad'] = trim((string)$fila['prioridad']);
-        }
-
         if ($localId !== '') {
             $grupos[$key]['programados'][$localId] = true;
         }
@@ -1366,6 +1382,9 @@ $crearMetricas = function (array $filas, bool $porRegion = false): array {
             if ($grupos[$key]['ultima_visita'] === '' || $fechaVisita > $grupos[$key]['ultima_visita']) {
                 $grupos[$key]['ultima_visita'] = $fechaVisita;
             }
+            if ($grupos[$key]['primera_visita'] === '' || $fechaVisita < $grupos[$key]['primera_visita']) {
+                $grupos[$key]['primera_visita'] = $fechaVisita;
+            }
         }
     }
 
@@ -1376,17 +1395,20 @@ $crearMetricas = function (array $filas, bool $porRegion = false): array {
             $visitas[$fecha] = count($localesFecha);
         }
         ksort($visitas);
+        $fechaRecepcion = promedioFechas(array_values($grupo['recepciones']));
 
         $metricas[] = [
+            'trade' => $grupo['trade'],
             'campana' => $grupo['campana'],
+            'prioridad' => $grupo['prioridad'],
             'region' => $grupo['region'],
             'fecha_inicio' => $grupo['fecha_inicio'],
             'fecha_termino' => $grupo['fecha_termino'],
-            'fecha_recepcion' => $porRegion
-                ? primeraFechaValida(array_values($grupo['recepciones']))
-                : promedioFechas(array_values($grupo['recepciones'])),
+            'fecha_recepcion' => $fechaRecepcion,
+            'primera_visita' => $grupo['primera_visita'],
             'ultima_visita' => $grupo['ultima_visita'],
-            'prioridad' => $grupo['prioridad'],
+            'dias_habiles_inicio_recepcion' => diferenciaDiasHabiles($grupo['fecha_inicio'], $fechaRecepcion),
+            'dias_habiles_recepcion_primera_visita' => diferenciaDiasHabiles($fechaRecepcion, $grupo['primera_visita']),
             'programados' => count($grupo['programados']),
             'visitados' => count($grupo['visitados']),
             'visitas' => $visitas,
@@ -1394,6 +1416,10 @@ $crearMetricas = function (array $filas, bool $porRegion = false): array {
     }
 
     usort($metricas, function (array $a, array $b) use ($porRegion): int {
+        $result = strcmp($a['trade'], $b['trade']);
+        if ($result !== 0) {
+            return $result;
+        }
         $result = strcmp($a['campana'], $b['campana']);
         return ($result !== 0 || !$porRegion) ? $result : strcmp($a['region'], $b['region']);
     });
@@ -1463,6 +1489,7 @@ $finalizarHoja = function (
     int $ultimaColumna
 ): void {
     $ultimaLetra = Coordinate::stringFromColumnIndex($ultimaColumna);
+    $sheet->unfreezePane();
     $sheet->setAutoFilter("A{$filaEncabezado}:{$ultimaLetra}{$ultimaFila}");
     $sheet->getStyle("A" . ($filaEncabezado + 1) . ":{$ultimaLetra}{$ultimaFila}")->applyFromArray([
         'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
@@ -1493,11 +1520,12 @@ $headersResumen = [
     'DIAS RECEPCION A ULTIMA VISITA', 'LOCALES PROGRAMADOS',
     'LOCALES VISITADOS', 'AVANCE VISITA', 'AVANCES POR VISITA',
 ];
-$headersResumen = [
-    'CAMPANA', 'FECHA INICIO', 'FECHA TERMINO', 'FECHA RECEPCION',
-    'FECHA ULTIMA VISITA', 'PRIORIDAD', 'CANTIDAD DE LOCALES',
-    'CANTIDAD DE LOCALES VISITADOS', 'RATIO DE AVANCE', 'AVANCES POR FECHA',
-];
+array_splice($headersResumen, 1, 0, ['PRIORIDAD']);
+array_unshift($headersResumen, 'TRADE');
+array_splice($headersResumen, 9, 0, [
+    'DIAS HABILES INICIO A RECEPCION',
+    'DIAS HABILES RECEPCION A PRIMERA VISITA',
+]);
 $estiloTitulo(
     $resumen,
     'Resumen Ejecutivo de Campañas Activas',
@@ -1511,28 +1539,33 @@ $estiloEncabezado($resumen, 4, count($headersResumen));
 
 $fila = 5;
 foreach ($datosCampana['metricas'] as $metrica) {
-    $resumen->setCellValueExplicit("A{$fila}", $metrica['campana'], DataType::TYPE_STRING);
-    $escribirFecha($resumen, "B{$fila}", $metrica['fecha_inicio']);
-    $escribirFecha($resumen, "C{$fila}", $metrica['fecha_termino']);
-    $escribirFecha($resumen, "D{$fila}", $metrica['fecha_recepcion']);
-    $escribirFecha($resumen, "E{$fila}", $metrica['ultima_visita']);
-    $resumen->setCellValueExplicit("F{$fila}", $metrica['prioridad'], DataType::TYPE_STRING);
-    $resumen->setCellValue("G{$fila}", $metrica['programados']);
-    $resumen->setCellValue("H{$fila}", $metrica['visitados']);
-    $resumen->setCellValue("I{$fila}", "=IF(G{$fila}=0,0,H{$fila}/G{$fila})");
+    $resumen->setCellValueExplicit("A{$fila}", $metrica['trade'] ?? 'SIN TRADE', DataType::TYPE_STRING);
+    $resumen->setCellValueExplicit("B{$fila}", $metrica['campana'], DataType::TYPE_STRING);
+    $resumen->setCellValueExplicit("C{$fila}", $metrica['prioridad'] ?? 'MEDIA', DataType::TYPE_STRING);
+    $escribirFecha($resumen, "D{$fila}", $metrica['fecha_inicio']);
+    $escribirFecha($resumen, "E{$fila}", $metrica['fecha_termino']);
+    $escribirFecha($resumen, "F{$fila}", $metrica['fecha_recepcion']);
+    $escribirFecha($resumen, "G{$fila}", $metrica['ultima_visita']);
+    $resumen->setCellValue("H{$fila}", "=IF(OR(D{$fila}=\"\",G{$fila}=\"\"),\"\",G{$fila}-D{$fila})");
+    $resumen->setCellValue("I{$fila}", "=IF(OR(F{$fila}=\"\",G{$fila}=\"\"),\"\",G{$fila}-F{$fila})");
+    $resumen->setCellValue("J{$fila}", $metrica['dias_habiles_inicio_recepcion']);
+    $resumen->setCellValue("K{$fila}", $metrica['dias_habiles_recepcion_primera_visita']);
+    $resumen->setCellValue("L{$fila}", $metrica['programados']);
+    $resumen->setCellValue("M{$fila}", $metrica['visitados']);
+    $resumen->setCellValue("N{$fila}", "=IF(L{$fila}=0,0,M{$fila}/L{$fila})");
     $avances = [];
     foreach ($metrica['visitas'] as $fecha => $cantidad) {
         $avances[] = $fecha . ': ' . $cantidad . ' local(es)';
     }
-    $resumen->setCellValueExplicit("J{$fila}", implode(' | ', $avances), DataType::TYPE_STRING);
+    $resumen->setCellValueExplicit("O{$fila}", implode(' | ', $avances), DataType::TYPE_STRING);
     $fila++;
 }
 $ultimaFilaResumen = max(5, $fila - 1);
 $finalizarHoja($resumen, 4, $ultimaFilaResumen, count($headersResumen));
-$resumen->getStyle("I5:I{$ultimaFilaResumen}")->getNumberFormat()->setFormatCode('0.0%');
-$resumen->getStyle("G5:H{$ultimaFilaResumen}")->getNumberFormat()->setFormatCode('#,##0');
-$resumen->getStyle("J5:J{$ultimaFilaResumen}")->getAlignment()->setWrapText(true);
-$anchosResumen = [38, 14, 14, 18, 18, 16, 20, 28, 16, 58];
+$resumen->getStyle("N5:N{$ultimaFilaResumen}")->getNumberFormat()->setFormatCode('0.0%');
+$resumen->getStyle("H5:M{$ultimaFilaResumen}")->getNumberFormat()->setFormatCode('#,##0');
+$resumen->getStyle("O5:O{$ultimaFilaResumen}")->getAlignment()->setWrapText(true);
+$anchosResumen = [24, 38, 14, 14, 14, 22, 18, 22, 24, 24, 28, 18, 17, 14, 58];
 foreach ($anchosResumen as $index => $ancho) {
     $resumen->getColumnDimension(Coordinate::stringFromColumnIndex($index + 1))->setWidth($ancho);
 }
@@ -1558,24 +1591,21 @@ $crearHojaGantt = function (
     if ($incluyeRegion) {
         $headers[] = 'REGION';
     }
+    array_splice($headers, 1, 0, ['PRIORIDAD']);
+    array_unshift($headers, 'TRADE');
     $headers = array_merge($headers, [
         'FECHA INICIO', 'FECHA TERMINO', 'FECHA RECEPCION PROMEDIO',
         'ULTIMA FECHA VISITA', 'DIAS INICIO A ULTIMA VISITA',
         'DIAS RECEPCION A ULTIMA VISITA', 'LOCALES PROGRAMADOS',
         'LOCALES VISITADOS', 'AVANCE VISITA',
     ]);
-
-    $headers = $incluyeRegion
-        ? [
-            'CAMPANA', 'REGION', 'FECHA INICIO', 'FECHA TERMINO',
-            'FECHA RECEPCION', 'FECHA ULTIMA VISITA', 'PRIORIDAD',
-            'CANTIDAD DE LOCALES', 'CANTIDAD DE LOCALES VISITADOS', 'RATIO DE AVANCE',
-        ]
-        : [
-            'CAMPANA', 'FECHA INICIO', 'FECHA TERMINO',
-            'FECHA RECEPCION', 'FECHA ULTIMA VISITA', 'PRIORIDAD',
-            'CANTIDAD DE LOCALES', 'CANTIDAD DE LOCALES VISITADOS', 'RATIO DE AVANCE',
-        ];
+    $posLocalesProgramados = array_search('LOCALES PROGRAMADOS', $headers, true);
+    if ($posLocalesProgramados !== false) {
+        array_splice($headers, $posLocalesProgramados, 0, [
+            'DIAS HABILES INICIO A RECEPCION',
+            'DIAS HABILES RECEPCION A PRIMERA VISITA',
+        ]);
+    }
 
     $inicioGantt = count($headers) + 1;
     $ultimaColumna = count($headers) + count($fechasGantt);
@@ -1605,7 +1635,17 @@ $crearHojaGantt = function (
         $columna = 1;
         $sheet->setCellValueExplicit(
             Coordinate::stringFromColumnIndex($columna++) . $fila,
+            $metrica['trade'] ?? 'SIN TRADE',
+            DataType::TYPE_STRING
+        );
+        $sheet->setCellValueExplicit(
+            Coordinate::stringFromColumnIndex($columna++) . $fila,
             $metrica['campana'],
+            DataType::TYPE_STRING
+        );
+        $sheet->setCellValueExplicit(
+            Coordinate::stringFromColumnIndex($columna++) . $fila,
+            $metrica['prioridad'] ?? 'MEDIA',
             DataType::TYPE_STRING
         );
         if ($incluyeRegion) {
@@ -1620,11 +1660,20 @@ $crearHojaGantt = function (
         $escribirFecha($sheet, Coordinate::stringFromColumnIndex($columna++) . $fila, $metrica['fecha_termino']);
         $escribirFecha($sheet, Coordinate::stringFromColumnIndex($columna++) . $fila, $metrica['fecha_recepcion']);
         $escribirFecha($sheet, Coordinate::stringFromColumnIndex($columna++) . $fila, $metrica['ultima_visita']);
-        $sheet->setCellValueExplicit(
+
+        $colFechaInicio = Coordinate::stringFromColumnIndex($incluyeRegion ? 5 : 4);
+        $colRecepcion = Coordinate::stringFromColumnIndex($incluyeRegion ? 7 : 6);
+        $colUltimaVisita = Coordinate::stringFromColumnIndex($incluyeRegion ? 8 : 7);
+        $sheet->setCellValue(
             Coordinate::stringFromColumnIndex($columna++) . $fila,
-            $metrica['prioridad'],
-            DataType::TYPE_STRING
+            "=IF(OR({$colFechaInicio}{$fila}=\"\",{$colUltimaVisita}{$fila}=\"\"),\"\",{$colUltimaVisita}{$fila}-{$colFechaInicio}{$fila})"
         );
+        $sheet->setCellValue(
+            Coordinate::stringFromColumnIndex($columna++) . $fila,
+            "=IF(OR({$colRecepcion}{$fila}=\"\",{$colUltimaVisita}{$fila}=\"\"),\"\",{$colUltimaVisita}{$fila}-{$colRecepcion}{$fila})"
+        );
+        $sheet->setCellValue(Coordinate::stringFromColumnIndex($columna++) . $fila, $metrica['dias_habiles_inicio_recepcion']);
+        $sheet->setCellValue(Coordinate::stringFromColumnIndex($columna++) . $fila, $metrica['dias_habiles_recepcion_primera_visita']);
         $colProgramados = Coordinate::stringFromColumnIndex($columna);
         $sheet->setCellValue(Coordinate::stringFromColumnIndex($columna++) . $fila, $metrica['programados']);
         $colVisitados = Coordinate::stringFromColumnIndex($columna);
@@ -1656,15 +1705,17 @@ $crearHojaGantt = function (
     $finalizarHoja($sheet, 4, $ultimaFila, max(1, $ultimaColumna));
     $colAvance = Coordinate::stringFromColumnIndex($inicioGantt - 1);
     $sheet->getStyle("{$colAvance}5:{$colAvance}{$ultimaFila}")->getNumberFormat()->setFormatCode('0.0%');
-    $primeraMetrica = Coordinate::stringFromColumnIndex($incluyeRegion ? 8 : 7);
+    $primeraMetrica = Coordinate::stringFromColumnIndex($incluyeRegion ? 9 : 8);
     $ultimaMetrica = Coordinate::stringFromColumnIndex($inicioGantt - 2);
     $sheet->getStyle("{$primeraMetrica}5:{$ultimaMetrica}{$ultimaFila}")
         ->getNumberFormat()->setFormatCode('#,##0');
-    $sheet->getColumnDimension('A')->setWidth(38);
+    $sheet->getColumnDimension('A')->setWidth(24);
+    $sheet->getColumnDimension('B')->setWidth(38);
+    $sheet->getColumnDimension('C')->setWidth(14);
     if ($incluyeRegion) {
-        $sheet->getColumnDimension('B')->setWidth(24);
+        $sheet->getColumnDimension('D')->setWidth(24);
     }
-    for ($col = $incluyeRegion ? 3 : 2; $col < $inicioGantt; $col++) {
+    for ($col = $incluyeRegion ? 5 : 4; $col < $inicioGantt; $col++) {
         $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($col))->setWidth(18);
     }
     foreach ($fechasGantt as $index => $_fecha) {
@@ -1674,6 +1725,9 @@ $crearHojaGantt = function (
 
 $crearHojaGantt('Carta Gantt', 'Carta Gantt por Campaña', $datosCampana['metricas'], false);
 $crearHojaGantt('Gantt Detallada', 'Carta Gantt Detallada por Campaña y Región', $datosRegion['metricas'], true);
+foreach ($spreadsheet->getAllSheets() as $sheet) {
+    $sheet->unfreezePane();
+}
 $spreadsheet->setActiveSheetIndex(0);
 
 $downloadToken = $_GET['download_token'] ?? '';

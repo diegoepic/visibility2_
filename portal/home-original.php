@@ -930,7 +930,60 @@ body.layout-fixed {
   </div>
 </div>
 
-  
+<!-- Modal para Descargar Data Adicionales -->
+<div class="modal fade" id="modalDataAdicionales" tabindex="-1" role="dialog" aria-labelledby="modalDataAdicionalesLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalDataAdicionalesLabel">Descargar Data Adicionales</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="formFiltrosAdicionales">
+          <?php if (strtoupper(trim($division_nombre)) == 'MC'): ?>
+          <div class="form-group">
+            <label for="division_adicionales">Seleccionar Divisi&oacute;n:</label>
+            <select class="form-control" id="division_adicionales" name="id_division" required>
+              <option value="">Seleccione una Divisi&oacute;n</option>
+              <?php
+              $queryDivAdicionales = "SELECT id, nombre FROM division_empresa WHERE estado = 1 ORDER BY nombre ASC";
+              $resultDivAdicionales = $conn->query($queryDivAdicionales);
+              while ($rowDivAdicionales = $resultDivAdicionales->fetch_assoc()) {
+                $idDivAdicionales = (int)$rowDivAdicionales['id'];
+                $isSelectedAdicionales = ($idDivAdicionales === (int)$division) ? ' selected' : '';
+                echo '<option value="' . $idDivAdicionales . '"' . $isSelectedAdicionales . '>'
+                  . htmlspecialchars($rowDivAdicionales['nombre'], ENT_QUOTES, 'UTF-8')
+                  . '</option>';
+              }
+              ?>
+            </select>
+          </div>
+          <?php else: ?>
+            <input type="hidden" id="division_adicionales" name="id_division" value="<?php echo htmlspecialchars($division_id, ENT_QUOTES, 'UTF-8'); ?>">
+          <?php endif; ?>
+
+          <div class="form-group">
+            <label for="fecha_inicio_adicionales">Fecha Inicio:</label>
+            <input type="date" class="form-control" id="fecha_inicio_adicionales" name="fecha_inicio" required>
+          </div>
+          <div class="form-group">
+            <label for="fecha_fin_adicionales">Fecha Fin:</label>
+            <input type="date" class="form-control" id="fecha_fin_adicionales" name="fecha_fin" required>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+        <button type="button" class="btn btn-primary" onclick="descargarReporteAdicionales('excel')">
+          <i class="fa fa-download"></i> Descargar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Modal para Descargar Data IPT -->
 <div class="modal fade" id="modalDataIPT" tabindex="-1" role="dialog" aria-labelledby="modalDataIPTLabel" aria-hidden="true">
   <div class="modal-dialog" role="document" aria-modal="true">
@@ -1221,6 +1274,12 @@ body.layout-fixed {
                 </a>
               </li>
               <li class="nav-item">
+                <a href="#" class="nav-link" data-toggle="modal" data-target="#modalDataAdicionales">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Adicionales</p>
+                </a>
+              </li>
+              <li class="nav-item">
                   <a href="#" class="nav-link" data-toggle="modal" data-target="#modalDataIPT">
                       <i class="far fa-circle nav-icon"></i>
                       <p>Ruta Planificada</p>
@@ -1304,12 +1363,18 @@ body.layout-fixed {
                   <p>Crear/Editar Formulario</p>
                 </a>
               </li>
-                        <li class="nav-item">
+          <li class="nav-item">
             <a href="modulos/mod_seguimiento_etapas.php" class="nav-link">
               <i class="nav-icon fas fa-layer-group"></i>
               <p>Seguimiento por Etapas</p>
             </a>
           </li>
+              <li class="nav-item">
+                <a href="mod_planificador_fecha_propuesta.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Generador de rutas campañas</p>
+                </a>
+              </li>          
             </ul>
           </li>
           <li class="nav-item">
@@ -1333,6 +1398,12 @@ body.layout-fixed {
                   <p>Campaña/Actividades</p>
                 </a>
               </li>
+              <li class="nav-item">
+                <a href="mod_formularios_prioridad_cliente.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Modulo Trademarketing</p>
+                </a>
+              </li>              
               <li class="nav-item">
                 <a href="modulos/mod_recepcion_materiales.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
@@ -2137,6 +2208,32 @@ function descargarDataAdicionales(formato) {
    window.location.href = url;
 } 
     
+function descargarReporteAdicionales(formato) {
+    var division = document.getElementById('division_adicionales').value;
+    var fecha_inicio = document.getElementById('fecha_inicio_adicionales').value;
+    var fecha_fin = document.getElementById('fecha_fin_adicionales').value;
+
+    if (!division) {
+        alert('Debe seleccionar una división.');
+        return;
+    }
+    if (!fecha_inicio || !fecha_fin) {
+        alert('Debe seleccionar fecha inicio y fecha fin.');
+        return;
+    }
+    if (fecha_fin < fecha_inicio) {
+        alert('La fecha fin no puede ser menor que la fecha inicio.');
+        return;
+    }
+
+    var url = 'modulos/descargar_data_programada_adicionales.php?formato=' + encodeURIComponent(formato)
+        + '&id_division=' + encodeURIComponent(division)
+        + '&fecha_inicio=' + encodeURIComponent(fecha_inicio)
+        + '&fecha_fin=' + encodeURIComponent(fecha_fin);
+
+    window.location.href = url;
+}
+
 function descargarEncuestaPivot(formato) {
         var canal     = document.getElementById('canal_programados').value;
         var distrito  = document.getElementById('distrito_programados').value;

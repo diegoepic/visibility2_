@@ -300,6 +300,12 @@ try {
 $sha1 = @sha1_file($savedPath) ?: '';
 $size = @filesize($savedPath) ?: 0;
 
+// Hashes de dedup (best-effort). Estas fotos son de estado (pendiente/cancelado): se POBLAN para
+// trazabilidad/auditoría, sin aplicar bloqueo (no son evidencia de implementación de campaña).
+require_once __DIR__ . '/lib/foto_hash.php';
+$contentSha = v2_sha256_file($savedPath); $contentSha = $contentSha !== '' ? $contentSha : null;
+$phashHex   = v2_dhash($savedPath);
+
 /* ---------------- Persistencia ---------------- */
 $conn->begin_transaction();
 try {
@@ -325,6 +331,8 @@ try {
   if ($FV_HAS_KIND) { $cols[] = 'kind'; $ph[] = '?'; $types .= 's'; $args[] = $kind; }
   if ($FV_HAS_SHA1) { $cols[] = 'sha1'; $ph[] = '?'; $types .= 's'; $args[] = $sha1; }
   if ($FV_HAS_SIZE) { $cols[] = 'size'; $ph[] = '?'; $types .= 'i'; $args[] = (int)$size; }
+  if (table_has_col($conn, 'fotoVisita', 'content_sha256')) { $cols[] = 'content_sha256'; $ph[] = '?'; $types .= 's'; $args[] = $contentSha; }
+  if (table_has_col($conn, 'fotoVisita', 'phash'))          { $cols[] = 'phash';          $ph[] = '?'; $types .= 's'; $args[] = $phashHex; }
 
   $sql = "INSERT INTO fotoVisita (".implode(',', $cols).") VALUES (".implode(',', $ph).")";
   $stmt = $conn->prepare($sql);

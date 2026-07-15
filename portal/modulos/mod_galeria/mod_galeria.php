@@ -140,6 +140,8 @@ $end_date     = $_GET['end_date'] ?? '';
 $user_id      = intval($_GET['user_id'] ?? 0);
 $material_id  = intval($_GET['material_id'] ?? 0);
 $local_code   = trim($_GET['local_code'] ?? '');
+$region_id    = intval($_GET['region'] ?? 0);
+$comuna_id    = intval($_GET['comuna'] ?? 0);
 $id_question  = $_GET['id_question'] ?? '';
 $limit        = max(1, intval($_GET['limit'] ?? 25));
 $page         = max(1, intval($_GET['page'] ?? 1));
@@ -149,6 +151,9 @@ $view         = $_GET['view'] ?? 'implementacion';
 if ($tipoForm == 2) {
     $view = 'encuesta';
 }
+
+// Vista especial de revisión: fotos duplicadas / sospechosas (campañas tipo 1 y 3, que tienen tabs).
+$isDupView = ($view === 'duplicados' && ((int)$tipoForm === 1 || (int)$tipoForm === 3));
 
 $base_url = "https://visibility.cl/visibility2/app/";
 
@@ -435,6 +440,24 @@ while ($r = $rsP->fetch_assoc()) {
 }
 $stmtP->close();
 
+// Regiones / comunas para filtros (solo campañas con locales)
+$regiones = [];
+$comunas  = [];
+if ($tipoForm == 1 || $tipoForm == 3) {
+    if ($rsR = $conn->query("SELECT id, region FROM region ORDER BY id")) {
+        while ($r = $rsR->fetch_assoc()) { $regiones[] = $r; }
+        $rsR->close();
+    }
+    if ($region_id > 0) {
+        $stmtC = $conn->prepare("SELECT id, comuna FROM comuna WHERE id_region = ? ORDER BY comuna");
+        $stmtC->bind_param("i", $region_id);
+        $stmtC->execute();
+        $rsC = $stmtC->get_result();
+        while ($r = $rsC->fetch_assoc()) { $comunas[] = $r; }
+        $stmtC->close();
+    }
+}
+
 // -------------------------------------------------------------
 // 5) Consulta principal
 // -------------------------------------------------------------
@@ -498,6 +521,16 @@ if (($tipoForm == 1 || $tipoForm == 3) && $view === 'implementacion') {
         $sqlGV .= " AND l.codigo = ?";
         $typesGV .= "s";
         $paramsGV[] = $local_code;
+    }
+    if ($region_id > 0) {
+        $sqlGV .= " AND l.id_comuna IN (SELECT id FROM comuna WHERE id_region = ?)";
+        $typesGV .= "i";
+        $paramsGV[] = $region_id;
+    }
+    if ($comuna_id > 0) {
+        $sqlGV .= " AND l.id_comuna = ?";
+        $typesGV .= "i";
+        $paramsGV[] = $comuna_id;
     }
     if ($material_id > 0) {
         $sqlGV .= " AND COALESCE(fv.id_material, gv.id_material) = ?";
@@ -567,6 +600,16 @@ if (($tipoForm == 1 || $tipoForm == 3) && $view === 'implementacion') {
         $sqlLegacy .= " AND l.codigo = ?";
         $typesLg .= "s";
         $paramsLg[] = $local_code;
+    }
+    if ($region_id > 0) {
+        $sqlLegacy .= " AND l.id_comuna IN (SELECT id FROM comuna WHERE id_region = ?)";
+        $typesLg .= "i";
+        $paramsLg[] = $region_id;
+    }
+    if ($comuna_id > 0) {
+        $sqlLegacy .= " AND l.id_comuna = ?";
+        $typesLg .= "i";
+        $paramsLg[] = $comuna_id;
     }
     if ($material_id > 0) {
         $sqlLegacy .= " AND COALESCE(fv.id_material, 0) = ?";
@@ -649,6 +692,16 @@ if (($tipoForm == 1 || $tipoForm == 3) && $view === 'implementacion') {
         $types .= "s";
         $params[] = $local_code;
     }
+    if ($region_id > 0) {
+        $sql .= " AND l.id_comuna IN (SELECT id FROM comuna WHERE id_region = ?)";
+        $types .= "i";
+        $params[] = $region_id;
+    }
+    if ($comuna_id > 0) {
+        $sql .= " AND l.id_comuna = ?";
+        $types .= "i";
+        $params[] = $comuna_id;
+    }
     if ($user_id > 0) {
         $sql .= " AND fqr.id_usuario = ?";
         $types .= "i";
@@ -723,6 +776,16 @@ if (($tipoForm == 1 || $tipoForm == 3) && $view === 'implementacion') {
         $typesGV .= "s";
         $paramsGV[] = $local_code;
     }
+    if ($region_id > 0) {
+        $sqlGV .= " AND l.id_comuna IN (SELECT id FROM comuna WHERE id_region = ?)";
+        $typesGV .= "i";
+        $paramsGV[] = $region_id;
+    }
+    if ($comuna_id > 0) {
+        $sqlGV .= " AND l.id_comuna = ?";
+        $typesGV .= "i";
+        $paramsGV[] = $comuna_id;
+    }
 
     $sqlGV .= " GROUP BY DATE(gv.fecha_visita), u.id, l.id ";
 
@@ -786,6 +849,16 @@ if (($tipoForm == 1 || $tipoForm == 3) && $view === 'implementacion') {
         $typesFQ .= "s";
         $paramsFQ[] = $local_code;
     }
+    if ($region_id > 0) {
+        $sqlFQ .= " AND l.id_comuna IN (SELECT id FROM comuna WHERE id_region = ?)";
+        $typesFQ .= "i";
+        $paramsFQ[] = $region_id;
+    }
+    if ($comuna_id > 0) {
+        $sqlFQ .= " AND l.id_comuna = ?";
+        $typesFQ .= "i";
+        $paramsFQ[] = $comuna_id;
+    }
 
     $sqlFQ .= " GROUP BY DATE(fq.fechaVisita), u.id, l.id ";
 
@@ -824,6 +897,8 @@ if (($tipoForm == 1 || $tipoForm == 3) && $view === 'implementacion') {
     $params = [$formulario_id, $limit, $offset];
 }
 
+$data = [];
+if (!$isDupView) {
 $stmtMain = $conn->prepare($sql);
 if (!$stmtMain) {
     die("<div class='alert alert-danger'>Error preparación: " . htmlspecialchars($conn->error) . "</div>");
@@ -931,10 +1006,14 @@ while ($row = $result->fetch_assoc()) {
 }
 
 $stmtMain->close();
+} // fin if (!$isDupView) — consulta principal
 
 // -------------------------------------------------------------
 // 7) Conteo para paginación
 // -------------------------------------------------------------
+$totalRows  = 0;
+$totalPages = 1;
+if (!$isDupView) {
 $countSql    = "";
 $countTypes  = "";
 $countParams = [];
@@ -981,6 +1060,16 @@ if (($tipoForm == 1 || $tipoForm == 3) && $view === 'implementacion') {
         $cntGV .= " AND l.codigo = ?";
         $typesGVc .= "s";
         $paramsGVc[] = $local_code;
+    }
+    if ($region_id > 0) {
+        $cntGV .= " AND l.id_comuna IN (SELECT id FROM comuna WHERE id_region = ?)";
+        $typesGVc .= "i";
+        $paramsGVc[] = $region_id;
+    }
+    if ($comuna_id > 0) {
+        $cntGV .= " AND l.id_comuna = ?";
+        $typesGVc .= "i";
+        $paramsGVc[] = $comuna_id;
     }
     if ($material_id > 0) {
         $cntGV .= " AND COALESCE(fv.id_material, gv.id_material) = ?";
@@ -1037,6 +1126,16 @@ if (($tipoForm == 1 || $tipoForm == 3) && $view === 'implementacion') {
         $cntLG .= " AND l.codigo = ?";
         $typesLGc .= "s";
         $paramsLGc[] = $local_code;
+    }
+    if ($region_id > 0) {
+        $cntLG .= " AND l.id_comuna IN (SELECT id FROM comuna WHERE id_region = ?)";
+        $typesLGc .= "i";
+        $paramsLGc[] = $region_id;
+    }
+    if ($comuna_id > 0) {
+        $cntLG .= " AND l.id_comuna = ?";
+        $typesLGc .= "i";
+        $paramsLGc[] = $comuna_id;
     }
     if ($material_id > 0) {
         $cntLG .= " AND COALESCE(fv.id_material, 0) = ?";
@@ -1096,6 +1195,16 @@ if (($tipoForm == 1 || $tipoForm == 3) && $view === 'implementacion') {
         $countSql .= " AND l.codigo = ?";
         $countTypes .= "s";
         $countParams[] = $local_code;
+    }
+    if ($region_id > 0) {
+        $countSql .= " AND l.id_comuna IN (SELECT id FROM comuna WHERE id_region = ?)";
+        $countTypes .= "i";
+        $countParams[] = $region_id;
+    }
+    if ($comuna_id > 0) {
+        $countSql .= " AND l.id_comuna = ?";
+        $countTypes .= "i";
+        $countParams[] = $comuna_id;
     }
     if ($user_id > 0) {
         $countSql .= " AND fqr.id_usuario = ?";
@@ -1157,6 +1266,16 @@ if (($tipoForm == 1 || $tipoForm == 3) && $view === 'implementacion') {
         $typesGVc .= "s";
         $paramsGVc[] = $local_code;
     }
+    if ($region_id > 0) {
+        $cntGV .= " AND l.id_comuna IN (SELECT id FROM comuna WHERE id_region = ?)";
+        $typesGVc .= "i";
+        $paramsGVc[] = $region_id;
+    }
+    if ($comuna_id > 0) {
+        $cntGV .= " AND l.id_comuna = ?";
+        $typesGVc .= "i";
+        $paramsGVc[] = $comuna_id;
+    }
 
     $cntGV .= " GROUP BY d, uid, lid ";
 
@@ -1209,6 +1328,16 @@ if (($tipoForm == 1 || $tipoForm == 3) && $view === 'implementacion') {
         $cntFQ .= " AND l.codigo = ?";
         $typesLGc .= "s";
         $paramsLGc[] = $local_code;
+    }
+    if ($region_id > 0) {
+        $cntFQ .= " AND l.id_comuna IN (SELECT id FROM comuna WHERE id_region = ?)";
+        $typesLGc .= "i";
+        $paramsLGc[] = $region_id;
+    }
+    if ($comuna_id > 0) {
+        $cntFQ .= " AND l.id_comuna = ?";
+        $typesLGc .= "i";
+        $paramsLGc[] = $comuna_id;
     }
 
     $cntFQ .= " GROUP BY d, uid, lid ";
@@ -1266,6 +1395,152 @@ $stmtCount->close();
 
 $totalRows  = $totalRows ?? 0;
 $totalPages = (int)ceil($totalRows / max(1, $limit));
+} // fin if (!$isDupView) — conteo
+
+// -------------------------------------------------------------
+// 7b) Datos para la vista "Fotos duplicadas / sospechosas" (revisión)
+//     - Intentos bloqueados (foto_duplicada_log): se muestra la foto ORIGINAL como referencia.
+//     - Sospechosas (dup_flag=1) de material (fotoVisita) + encuesta (form_question_photo_meta).
+//     Guards de existencia para no fatalar si faltan migraciones 12/13/14.
+// -------------------------------------------------------------
+$dupIntentos    = [];
+$dupSospechosas = [];
+if (!function_exists('v2_gal_dist_m')) {
+    function v2_gal_dist_m($lat1, $lng1, $lat2, $lng2): ?float {
+        if ($lat1 === null || $lng1 === null || $lat2 === null || $lng2 === null) return null;
+        $lat1 = (float)$lat1; $lng1 = (float)$lng1;
+        $lat2 = (float)$lat2; $lng2 = (float)$lng2;
+        if (($lat1 == 0.0 && $lng1 == 0.0) || ($lat2 == 0.0 && $lng2 == 0.0)) return null;
+        $R = 6371000.0;
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+        $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+        return 2 * $R * atan2(sqrt($a), sqrt(1 - $a));
+    }
+    // Mismo radio que Seguimiento por Etapas (RADIO_OK_METROS)
+    function v2_gal_geo_badge($fotoLat, $fotoLng, $localLat, $localLng, int $radioOk = 200): string {
+        $d = v2_gal_dist_m($fotoLat, $fotoLng, $localLat, $localLng);
+        if ($d === null) {
+            return '<span class="badge badge-secondary">Sin datos GPS</span>';
+        }
+        $txt = $d >= 1000 ? number_format($d / 1000, 1, ',', '.') . ' km' : round($d) . ' m';
+        if ($d > $radioOk) {
+            return '<span class="badge badge-danger">&#9888; Fuera de rango (' . $txt . ')</span>';
+        }
+        return '<span class="badge badge-success">En rango (' . $txt . ')</span>';
+    }
+}
+if ($isDupView) {
+    $colExists = function(string $tabla, string $col) use ($conn): bool {
+        try { $r = $conn->query("SHOW COLUMNS FROM `$tabla` LIKE '" . $conn->real_escape_string($col) . "'");
+              $ok = ($r && $r->num_rows > 0); if ($r) $r->close(); return $ok; } catch (Throwable $e) { return false; }
+    };
+    $tblExists = function(string $tabla) use ($conn): bool {
+        try { $r = $conn->query("SHOW TABLES LIKE '" . $conn->real_escape_string($tabla) . "'");
+              $ok = ($r && $r->num_rows > 0); if ($r) $r->close(); return $ok; } catch (Throwable $e) { return false; }
+    };
+
+    // A) Intentos bloqueados
+    if ($tblExists('foto_duplicada_log')) {
+        // Contexto EXACTO del intento (migración 15). Guardado por si aún no se aplicó.
+        $hasLogCtx   = $colExists('foto_duplicada_log', 'id_form_question');
+        $selIntento  = $hasLogCtx ? "COALESCE(dl.material, fqAtt.question_text)" : "NULL";
+        $joinIntento = $hasLogCtx ? "LEFT JOIN form_questions fqAtt ON fqAtt.id = dl.id_form_question" : "";
+        $sqlLog = "
+          SELECT dl.created_at, dl.tipo, u.usuario,
+                 loc.codigo AS local_codigo, loc.nombre AS local_nombre,
+                 {$selIntento} AS intento_contexto,
+                 COALESCE(fv.url, fqpm.foto_url)  AS orig_url,
+                 COALESCE(ol1.codigo, ol2.codigo) AS orig_codigo,
+                 COALESCE(ol1.nombre, ol2.nombre) AS orig_nombre,
+                 COALESCE(fqm.material, fqq.question_text) AS orig_contexto
+          FROM foto_duplicada_log dl
+          JOIN usuario u ON u.id = dl.id_usuario
+          LEFT JOIN local loc  ON loc.id = dl.id_local
+          {$joinIntento}
+          LEFT JOIN fotoVisita fv ON dl.tipo='material' AND fv.id = dl.dup_ref_id
+          LEFT JOIN local ol1 ON ol1.id = fv.id_local
+          LEFT JOIN formularioQuestion fqm ON fqm.id = fv.id_formularioQuestion
+          LEFT JOIN form_question_photo_meta fqpm ON dl.tipo='encuesta' AND fqpm.id = dl.dup_ref_id
+          LEFT JOIN local ol2 ON ol2.id = fqpm.id_local
+          LEFT JOIN form_question_responses fqr ON fqr.id = fqpm.resp_id
+          LEFT JOIN form_questions fqq ON fqq.id = fqr.id_form_question
+          WHERE dl.id_formulario = ?
+          ORDER BY dl.created_at DESC
+          LIMIT 1000
+        ";
+        if ($st = $conn->prepare($sqlLog)) {
+            $st->bind_param('i', $formulario_id);
+            $st->execute();
+            $rs = $st->get_result();
+            while ($r = $rs->fetch_assoc()) { $dupIntentos[] = $r; }
+            $st->close();
+        }
+    }
+
+    // B) Sospechosas de MATERIAL (fotoVisita.dup_flag=1)
+    if ($colExists('fotoVisita', 'dup_flag')) {
+        $sqlS1 = "
+          SELECT 'material' AS tipo, fv.url, u.usuario,
+                 loc.codigo AS local_codigo, loc.nombre AS local_nombre,
+                 fq.material AS contexto,
+                 fq.fechaVisita AS fecha,
+                 COALESCE(fv.fotoLat, fv.exif_lat) AS foto_lat,
+                 COALESCE(fv.fotoLng, fv.exif_lng) AS foto_lng,
+                 loc.lat AS local_lat, loc.lng AS local_lng,
+                 fvr.url AS ref_url,
+                 lr.codigo AS ref_codigo, lr.nombre AS ref_nombre
+          FROM fotoVisita fv
+          JOIN formularioQuestion fq ON fq.id = fv.id_formularioQuestion
+          JOIN usuario u ON u.id = fv.id_usuario
+          LEFT JOIN local loc ON loc.id = fv.id_local
+          LEFT JOIN fotoVisita fvr ON fvr.id = fv.dup_ref_id
+          LEFT JOIN local lr ON lr.id = fvr.id_local
+          WHERE fv.id_formulario = ? AND fv.dup_flag = 1
+          ORDER BY fv.id DESC
+          LIMIT 1000
+        ";
+        if ($st = $conn->prepare($sqlS1)) {
+            $st->bind_param('i', $formulario_id);
+            $st->execute();
+            $rs = $st->get_result();
+            while ($r = $rs->fetch_assoc()) { $dupSospechosas[] = $r; }
+            $st->close();
+        }
+    }
+
+    // C) Sospechosas de ENCUESTA (form_question_photo_meta.dup_flag=1)
+    if ($colExists('form_question_photo_meta', 'dup_flag') && $colExists('form_question_photo_meta', 'id_formulario')) {
+        $sqlS2 = "
+          SELECT 'encuesta' AS tipo, m.foto_url AS url, u.usuario,
+                 loc.codigo AS local_codigo, loc.nombre AS local_nombre,
+                 fqq.question_text AS contexto,
+                 m.created_at AS fecha,
+                 m.exif_lat AS foto_lat,
+                 m.exif_lng AS foto_lng,
+                 loc.lat AS local_lat, loc.lng AS local_lng,
+                 mr.foto_url AS ref_url,
+                 lr.codigo AS ref_codigo, lr.nombre AS ref_nombre
+          FROM form_question_photo_meta m
+          JOIN usuario u ON u.id = m.id_usuario
+          LEFT JOIN local loc ON loc.id = m.id_local
+          LEFT JOIN form_question_responses fqr ON fqr.id = m.resp_id
+          LEFT JOIN form_questions fqq ON fqq.id = fqr.id_form_question
+          LEFT JOIN form_question_photo_meta mr ON mr.id = m.dup_ref_id
+          LEFT JOIN local lr ON lr.id = mr.id_local
+          WHERE m.id_formulario = ? AND m.dup_flag = 1
+          ORDER BY m.id DESC
+          LIMIT 1000
+        ";
+        if ($st = $conn->prepare($sqlS2)) {
+            $st->bind_param('i', $formulario_id);
+            $st->execute();
+            $rs = $st->get_result();
+            while ($r = $rs->fetch_assoc()) { $dupSospechosas[] = $r; }
+            $st->close();
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -1783,7 +2058,7 @@ body.gallery-modern-body {
             <?php
               echo $view === 'implementacion'
                 ? 'Implementación'
-                : ($view === 'encuesta' ? 'Encuesta' : 'No gestionados');
+                : ($view === 'encuesta' ? 'Encuesta' : ($isDupView ? 'Duplicadas / Sospechosas' : 'No gestionados'));
             ?>
           </strong>
         </div>
@@ -1819,9 +2094,112 @@ body.gallery-modern-body {
                     Locales No Gestionados
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link <?= $isDupView ? 'active' : '' ?>"
+                   href="?<?= http_build_query(array_merge($_GET, ['view' => 'duplicados', 'page' => 1])) ?>"
+                   style="<?= $isDupView ? '' : 'color:#c0392b;' ?>">
+                    <i class="fas fa-clone"></i>
+                    Duplicadas / Sospechosas
+                </a>
+            </li>
         </ul>
     <?php endif; ?>
   </div>
+
+<?php if ($isDupView): ?>
+
+  <p class="modern-gallery-subtitle" style="margin:2px 0 16px;">
+    Intentos de subir fotos duplicadas (bloqueados) y fotos marcadas como sospechosas para revisión. Clic en una miniatura para ampliar.
+  </p>
+
+  <h5 style="font-weight:900;color:#15315d;margin-bottom:10px;">
+    <i class="fas fa-ban text-danger mr-1"></i> Intentos bloqueados (duplicado exacto) — <?= count($dupIntentos) ?>
+  </h5>
+  <div class="modern-gallery-table-shell" style="margin-bottom:22px;">
+    <table class="table modern-gallery-table">
+      <thead class="thead-light">
+        <tr><th>#</th><th>Fecha intento</th><th>Usuario</th><th>Local intentado</th><th>Pregunta / Material (intento)</th><th>Tipo</th><th>Foto original</th><th>Local original</th><th>Pregunta / Material (original)</th></tr>
+      </thead>
+      <tbody>
+        <?php if (empty($dupIntentos)): ?>
+          <tr><td colspan="9"><div class="modern-gallery-empty">No hay intentos bloqueados registrados para esta campaña.</div></td></tr>
+        <?php else: $i = 1; foreach ($dupIntentos as $r):
+            $origUrl    = fixUrl($r['orig_url'] ?? '', $base_url);
+            $localInt   = trim(($r['local_codigo'] ?? '') . ' ' . ($r['local_nombre'] ?? ''));
+            $localOrig  = trim(($r['orig_codigo'] ?? '') . ' ' . ($r['orig_nombre'] ?? ''));
+            $ctxIntento = trim((string)($r['intento_contexto'] ?? ''));
+            $ctxOrig    = trim((string)($r['orig_contexto'] ?? ''));
+        ?>
+          <tr>
+            <td><?= $i ?></td>
+            <td><?= formatearFecha($r['created_at'] ?? null) ?></td>
+            <td><?= htmlspecialchars($r['usuario'], ENT_QUOTES) ?></td>
+            <td><?= htmlspecialchars($localInt !== '' ? $localInt : '—', ENT_QUOTES) ?></td>
+            <td><?= htmlspecialchars($ctxIntento !== '' ? $ctxIntento : '—', ENT_QUOTES) ?></td>
+            <td><?= htmlspecialchars($r['tipo'], ENT_QUOTES) ?></td>
+            <td class="custom-img-cell">
+              <?php if ($origUrl !== ''): ?>
+                <img src="<?= htmlspecialchars($origUrl, ENT_QUOTES) ?>" class="thumbnail img-click" loading="lazy" decoding="async" data-urls="<?= htmlspecialchars($origUrl, ENT_QUOTES) ?>">
+              <?php else: ?>—<?php endif; ?>
+            </td>
+            <td><?= htmlspecialchars($localOrig !== '' ? $localOrig : '—', ENT_QUOTES) ?></td>
+            <td><?= htmlspecialchars($ctxOrig !== '' ? $ctxOrig : '—', ENT_QUOTES) ?></td>
+          </tr>
+        <?php $i++; endforeach; endif; ?>
+      </tbody>
+    </table>
+  </div>
+
+  <h5 style="font-weight:900;color:#15315d;margin-bottom:10px;">
+    <i class="fas fa-clone text-warning mr-1"></i> Fotos sospechosas (posible duplicada) para revisión — <?= count($dupSospechosas) ?>
+  </h5>
+  <p class="modern-gallery-subtitle" style="margin:2px 0 10px;font-size:.85rem;">
+    Cada fila muestra la foto marcada y la <b>foto similar</b> ya existente en otro local de la misma campaña
+    con la que coincidió. Clic en cualquiera de las dos miniaturas para compararlas. La columna <b>Geo</b>
+    cruza las coordenadas de la foto con la ubicación del local (radio 200 m).
+  </p>
+  <div class="modern-gallery-table-shell">
+    <table class="table modern-gallery-table">
+      <thead class="thead-light">
+        <tr><th>#</th><th>Foto</th><th>Foto similar</th><th>Tipo</th><th>Pregunta / Material</th><th>Usuario</th><th>Local</th><th>Local foto similar</th><th>Geo</th><th>Fecha</th></tr>
+      </thead>
+      <tbody>
+        <?php if (empty($dupSospechosas)): ?>
+          <tr><td colspan="10"><div class="modern-gallery-empty">No hay fotos marcadas como sospechosas para esta campaña.</div></td></tr>
+        <?php else: $i = 1; foreach ($dupSospechosas as $r):
+            $u      = fixUrl($r['url'] ?? '', $base_url);
+            $refUrl = fixUrl($r['ref_url'] ?? '', $base_url);
+            $localS = trim(($r['local_codigo'] ?? '') . ' ' . ($r['local_nombre'] ?? ''));
+            $localR = trim(($r['ref_codigo'] ?? '') . ' ' . ($r['ref_nombre'] ?? ''));
+            $ctxS   = trim((string)($r['contexto'] ?? ''));
+            $par    = implode('||', array_filter([$u, $refUrl]));
+        ?>
+          <tr>
+            <td><?= $i ?></td>
+            <td class="custom-img-cell">
+              <?php if ($u !== ''): ?>
+                <img src="<?= htmlspecialchars($u, ENT_QUOTES) ?>" class="thumbnail img-click" loading="lazy" decoding="async" title="Clic para comparar con la foto similar" data-urls="<?= htmlspecialchars($par, ENT_QUOTES) ?>">
+              <?php else: ?>—<?php endif; ?>
+            </td>
+            <td class="custom-img-cell">
+              <?php if ($refUrl !== ''): ?>
+                <img src="<?= htmlspecialchars($refUrl, ENT_QUOTES) ?>" class="thumbnail img-click" loading="lazy" decoding="async" title="Foto ya existente con la que coincidió — clic para comparar" data-urls="<?= htmlspecialchars(implode('||', array_filter([$refUrl, $u])), ENT_QUOTES) ?>">
+              <?php else: ?>—<?php endif; ?>
+            </td>
+            <td><?= htmlspecialchars($r['tipo'], ENT_QUOTES) ?></td>
+            <td><?= htmlspecialchars($ctxS !== '' ? $ctxS : '—', ENT_QUOTES) ?></td>
+            <td><?= htmlspecialchars($r['usuario'], ENT_QUOTES) ?></td>
+            <td><?= htmlspecialchars($localS !== '' ? $localS : '—', ENT_QUOTES) ?></td>
+            <td><?= htmlspecialchars($localR !== '' ? $localR : '—', ENT_QUOTES) ?></td>
+            <td><?= v2_gal_geo_badge($r['foto_lat'] ?? null, $r['foto_lng'] ?? null, $r['local_lat'] ?? null, $r['local_lng'] ?? null) ?></td>
+            <td><?= formatearFecha($r['fecha'] ?? null) ?></td>
+          </tr>
+        <?php $i++; endforeach; endif; ?>
+      </tbody>
+    </table>
+  </div>
+
+<?php else: ?>
 
 <form id="filterForm" method="GET" class="modern-gallery-filter-card">
   <input type="hidden" name="id" value="<?= $formulario_id ?>">
@@ -1880,6 +2258,30 @@ body.gallery-modern-body {
     <?php endif; ?>
 
     <?php if ($tipoForm == 1 || $tipoForm == 3): ?>
+      <div class="modern-gallery-field">
+        <label>Región</label>
+        <select name="region">
+          <option value="0">Todas</option>
+          <?php foreach ($regiones as $rg): ?>
+            <option value="<?= $rg['id'] ?>" <?= $rg['id'] == $region_id ? 'selected' : '' ?>>
+              <?= htmlspecialchars($rg['region']) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+
+      <div class="modern-gallery-field">
+        <label>Comuna</label>
+        <select name="comuna" <?= $region_id > 0 ? '' : 'disabled title="Selecciona primero una región"' ?>>
+          <option value="0">Todas</option>
+          <?php foreach ($comunas as $cm): ?>
+            <option value="<?= $cm['id'] ?>" <?= $cm['id'] == $comuna_id ? 'selected' : '' ?>>
+              <?= htmlspecialchars($cm['comuna']) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+
       <div class="modern-gallery-field">
         <label>Cód. Local</label>
         <input type="text" name="local_code" value="<?= htmlspecialchars($local_code) ?>">
@@ -2126,6 +2528,8 @@ body.gallery-modern-body {
             </ul>
         </nav>
     <?php endif; ?>
+
+<?php endif; // fin else de $isDupView ?>
 </div>
 
 <div class="modal fade modern-photo-modal" id="fullSizeModal" tabindex="-1">
@@ -2261,6 +2665,11 @@ $(function () {
 });
 
 $(function () {
+    // Al cambiar la región se resetea la comuna ANTES del autosubmit;
+    // la página recarga y el server repuebla las comunas de la región elegida.
+    $('#filterForm').on('change', 'select[name="region"]', function () {
+        $('#filterForm select[name="comuna"]').val('0');
+    });
     $('#filterForm').on('change', 'input, select', function () {
         $('#filterForm').submit();
     });

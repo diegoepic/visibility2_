@@ -108,6 +108,7 @@ $sql_validar = "
         l.direccion AS direccionLocal,
         l.lat AS lat,
         l.lng AS lng,
+        l.id_cadena AS idCadenaLocal,
         IFNULL(v.nombre_vendedor, '') AS vendedor
     FROM formularioQuestion fq
     INNER JOIN formulario AS f ON f.id = fq.id_formulario
@@ -143,6 +144,7 @@ $direccionLocal= htmlspecialchars($row['direccionLocal'], ENT_QUOTES, 'UTF-8');
 $nombreVendedor = htmlspecialchars($row['vendedor'] ?? '', ENT_QUOTES, 'UTF-8');
 $latitud       = floatval($row['lat']);
 $longitud      = floatval($row['lng']);
+$idCadenaLocal = intval($row['idCadenaLocal'] ?? 0);
 $codigoLocalDisplay = $codigoLocal !== '' ? $codigoLocal : 'No aplica';
 $nombreVendedorDisplay = $nombreVendedor !== '' ? $nombreVendedor : 'No aplica';
 
@@ -173,8 +175,45 @@ $encuestaPendiente = true;
    ========================= */
 $preguntas = [];
 if ($encuestaPendiente) {
+    /* Sets por cadena (scripts/17_form_questions_cadena.sql):
+       si la cadena del local tiene preguntas propias en la campaña, el local ve
+       SOLO esas; si no, ve las generales (id_cadena IS NULL = comportamiento
+       histórico). Guard de columna para no romper si falta la migración. */
+    $fqTieneCadena = false;
+    try {
+        $resColCad = $conn->query("SHOW COLUMNS FROM form_questions LIKE 'id_cadena'");
+        $fqTieneCadena = ($resColCad && $resColCad->num_rows > 0);
+        if ($resColCad) { $resColCad->close(); }
+    } catch (Throwable $e) {
+        $fqTieneCadena = false;
+    }
+
+    $condCadena  = '';
+    $tiposPreg   = "i";
+    $paramsPreg  = [$idCampana];
+
+    if ($fqTieneCadena) {
+        $nEspecificas = 0;
+        if ($idCadenaLocal > 0) {
+            $nEspecificas = (int) dbFetchValue(
+                $conn,
+                "SELECT COUNT(*) AS cnt FROM form_questions WHERE id_formulario = ? AND id_cadena = ?",
+                "ii",
+                [$idCampana, $idCadenaLocal],
+                'cnt'
+            );
+        }
+        if ($nEspecificas > 0) {
+            $condCadena = " AND id_cadena = ?";
+            $tiposPreg  = "ii";
+            $paramsPreg = [$idCampana, $idCadenaLocal];
+        } else {
+            $condCadena = " AND id_cadena IS NULL";
+        }
+    }
+
     $sql_encuesta = "
-      SELECT 
+      SELECT
         id AS id_form_question,
         question_text,
         id_question_type,
@@ -182,15 +221,15 @@ if ($encuestaPendiente) {
         is_valued,
         is_required
       FROM form_questions
-      WHERE id_formulario = ?
+      WHERE id_formulario = ?{$condCadena}
       ORDER BY sort_order ASC
     ";
 
     $preguntas = dbFetchAllAssoc(
         $conn,
         $sql_encuesta,
-        "i",
-        [$idCampana]
+        $tiposPreg,
+        $paramsPreg
     );
 }
 
@@ -1922,6 +1961,19 @@ async function subirFotoPregunta(id_form_question, id_local) {
         return;
       }
 
+      // Foto duplicada exacta (409): rechazo terminal → NO encolar. Se descarta la miniatura y se
+      // avisa al ejecutor con el local donde ya existe.
+      if (xhr.status === 409 && data && data.error_code === 'DUPLICATE_PHOTO') {
+        uploadInstance.remove();
+        const msgDup = data.message || 'Foto duplicada: esta imagen ya fue cargada en otra sala.';
+        if (typeof mcToast === 'function') mcToast('danger', 'Foto duplicada', msgDup);
+        else alert(msgDup);
+        resetFileInput(inputFile);
+        const flag = document.getElementById('flagFoto_' + id_form_question);
+        if (flag) flag.value = '';
+        return;
+      }
+
       if (xhr.status >= 200 && xhr.status < 300 && data.status === 'success') {
         // Pintar miniatura con URL definitiva y botón de borrar
         renderThumb({ url: normalizeAppUrl(data.fotoUrl), queuedId: null });
@@ -2233,8 +2285,21 @@ async function uploadFile(file, url, idFQ, onProgress, meta = {}, extra = {}) {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', url);
       xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round(e.loaded / e.total * 100)); };
-      xhr.onload  = () => xhr.status < 300 ? res(JSON.parse(xhr.response)) : rej(xhr.responseText);
-      xhr.onerror = () => rej(xhr.statusText);
+      xhr.onload  = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try { res(JSON.parse(xhr.response)); } catch { res({}); }
+          return;
+        }
+        // Error HTTP: rechazar con objeto estructurado (status + cuerpo parseado) para que el
+        // llamador distinga un rechazo terminal (p. ej. foto duplicada 409) de un error transitorio.
+        let body = null; try { body = JSON.parse(xhr.response); } catch (_) {}
+        const e = new Error((body && body.message) || xhr.responseText || ('HTTP ' + xhr.status));
+        e.status = xhr.status;
+        e.body = body;
+        e.duplicate = (xhr.status === 409 && !!body && body.error_code === 'DUPLICATE_PHOTO');
+        rej(e);
+      };
+      xhr.onerror = () => { const e = new Error(xhr.statusText || 'network'); e.status = 0; rej(e); };
       try { xhr.setRequestHeader('X-CSRF-Token', window.CSRF_TOKEN || ''); } catch(_) {}
         const _idem = (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random()));
         try { xhr.setRequestHeader('X-Idempotency-Key', _idem); } catch(_) {}
@@ -2620,9 +2685,21 @@ function setupFileInput(inputElem) {
           wrapper.appendChild(okMsg);
           setTimeout(() => { $(okMsg).fadeOut(300, () => okMsg.remove()); }, 2000);
         } catch (err) {
-          console.warn('[material_foto] upload online falló, encolando:', err);
-          await enqueueMaterialFoto({ idFQ, compressed, meta, coords, captureSource,
-            wrapper, imgContainer, bar, blobUrl, hiddenContainer, inputElem });
+          // Foto duplicada exacta (409): rechazo terminal → NO encolar (nunca se aceptaría).
+          // Se descarta la miniatura y se avisa al ejecutor con el local donde ya existe.
+          if (err && err.duplicate) {
+            try { bar.remove(); } catch (_) {}
+            try { URL.revokeObjectURL(blobUrl); } catch (_) {}
+            $(wrapper).fadeOut(150, () => wrapper.remove());
+            const msgDup = (err.body && err.body.message) || 'Foto duplicada: esta imagen ya fue cargada en otra sala.';
+            if (typeof mcToast === 'function') mcToast('danger', 'Foto duplicada', msgDup);
+            else if (typeof mcAlert === 'function') await mcAlert('Foto duplicada', msgDup);
+            else alert(msgDup);
+          } else {
+            console.warn('[material_foto] upload online falló, encolando:', err);
+            await enqueueMaterialFoto({ idFQ, compressed, meta, coords, captureSource,
+              wrapper, imgContainer, bar, blobUrl, hiddenContainer, inputElem });
+          }
         }
       } else {
         // ── Offline: encolar foto individualmente (se sube al recuperar red)

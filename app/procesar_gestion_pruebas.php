@@ -80,6 +80,7 @@ if (!isset($conn) || !($conn instanceof mysqli)) { respond_err('No hay conexión
 /* ---------------- API Helpers + Idempotencia ---------------- */
 require_once __DIR__ . '/lib/api_helpers.php';
 require_once __DIR__ . '/lib/idempotency.php';
+require_once __DIR__ . '/lib/foto_hash.php'; // detección de fotos duplicadas (sha256 + dHash perceptual)
 if (function_exists('idempo_claim_or_fail')) { idempo_claim_or_fail($conn, 'procesar_gestion'); }
 
 /* ---------------- Utilidades columnas opcionales ---------------- */
@@ -758,15 +759,45 @@ try {
   }
 
   if (isset($_POST['respuesta']) && is_array($_POST['respuesta'])) {
+    /* Sets por cadena (scripts/17_form_questions_cadena.sql): una respuesta solo es
+       válida si la pregunta pertenece a esta campaña y es general (id_cadena NULL)
+       o de la cadena del local. Las que no cumplen se SALTAN sin abortar la gestión
+       (mismo criterio que la variante IW). */
+    $fqTieneCadena = false;
+    $resColCad = @$conn->query("SHOW COLUMNS FROM form_questions LIKE 'id_cadena'");
+    if ($resColCad) { $fqTieneCadena = ($resColCad->num_rows > 0); $resColCad->close(); }
+
+    $idCadenaLocalEnc = 0;
+    if ($fqTieneCadena) {
+      $stmtCadL = $conn->prepare("SELECT id_cadena FROM local WHERE id=? LIMIT 1");
+      if ($stmtCadL) {
+        $stmtCadL->bind_param("i",$idLocal);
+        $stmtCadL->execute(); $stmtCadL->bind_result($cadLocTmp);
+        if ($stmtCadL->fetch()) { $idCadenaLocalEnc = (int)$cadLocTmp; }
+        $stmtCadL->close();
+      }
+    }
+
+    $sqlTipoPreg = $fqTieneCadena
+      ? "SELECT id_question_type, id_formulario, id_cadena FROM form_questions WHERE id=? LIMIT 1"
+      : "SELECT id_question_type, id_formulario, NULL AS id_cadena FROM form_questions WHERE id=? LIMIT 1";
+
     foreach ($_POST['respuesta'] as $id_form_question => $respValue) {
       $id_form_question = (int)$id_form_question;
 
-      $stmtT = $conn->prepare("SELECT id_question_type FROM form_questions WHERE id=? LIMIT 1");
+      $stmtT = $conn->prepare($sqlTipoPreg);
       if (!$stmtT) throw new Exception("Error tipoPregunta: ".$conn->error);
       $stmtT->bind_param("i",$id_form_question);
-      $stmtT->execute(); $stmtT->bind_result($tipoPregunta);
-      if (!$stmtT->fetch()) { $stmtT->close(); throw new Exception("Pregunta no existe (ID=$id_form_question)."); }
+      $stmtT->execute();
+      $rowQ = $stmtT->get_result()->fetch_assoc();
       $stmtT->close();
+      if (!$rowQ) { throw new Exception("Pregunta no existe (ID=$id_form_question)."); }
+      $tipoPregunta = (int)$rowQ['id_question_type'];
+
+      // Pertenencia a la campaña (antes no se validaba)
+      if ((int)$rowQ['id_formulario'] !== $idCampana) { continue; }
+      // Scoping por cadena: NULL = general (siempre válida); de otra cadena = se salta
+      if ($rowQ['id_cadena'] !== null && (int)$rowQ['id_cadena'] !== $idCadenaLocalEnc) { continue; }
 
       if ($tipoPregunta == 1 || $tipoPregunta == 2) {
         $id_option = intval($respValue); if ($id_option === 0) continue;
@@ -833,7 +864,7 @@ try {
 
   /* ----- Foto material (archivos convertidos en este request) → fotoVisita ----- */
   if (!empty($imagenes)) {
-    $stmtFV = $conn->prepare("INSERT INTO fotoVisita (visita_id,url,id_usuario,id_formulario,id_local,id_material,id_formularioQuestion,fotoLat,fotoLng,kind) VALUES (?,?,?,?,?,?,?,?,?,?)");
+    $stmtFV = $conn->prepare("INSERT INTO fotoVisita (visita_id,url,id_usuario,id_formulario,id_local,id_material,id_formularioQuestion,fotoLat,fotoLng,kind,content_sha256,phash) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
     if (!$stmtFV) throw new Exception("Error insert fotoVisita: ".$conn->error);
     foreach ($imagenes as $img) {
       $rawUrl = (string)$img['url']; // normalmente 'uploads/...'
@@ -854,16 +885,23 @@ try {
         $latFoto=(float)$_POST['coordsFoto'][$idFQ][$idx]['lat']; $lngFoto=(float)$_POST['coordsFoto'][$idFQ][$idx]['lng'];
       }
       $kindFoto = $etapaMaterial[$idFQ] ?? null;
-      $stmtFV->bind_param("isiiiiidds",$visita_id,$urlFoto,$usuario_id,$idCampana,$idLocal,$idMat,$idFQ,$latFoto,$lngFoto,$kindFoto);
+      // Hashes de dedup sobre el archivo ya guardado (best-effort; null si no se puede leer).
+      $absFoto = __DIR__ . '/' . $urlFoto;
+      $shaFoto = v2_sha256_file($absFoto); $shaFoto = $shaFoto !== '' ? $shaFoto : null;
+      $phFoto  = v2_dhash($absFoto);
+      $stmtFV->bind_param("isiiiiiddsss",$visita_id,$urlFoto,$usuario_id,$idCampana,$idLocal,$idMat,$idFQ,$latFoto,$lngFoto,$kindFoto,$shaFoto,$phFoto);
       if (!$stmtFV->execute()) throw new Exception("Error insert fotoVisita => ".$stmtFV->error);
+      $newFvId = (int)$stmtFV->insert_id;
       $metrics['inserts_fv']++;
+      // Marca (no bloquea) si la foto se repite en otra sala de la campaña.
+      v2_marcar_dup_si_aplica($conn, $newFvId, $shaFoto, $phFoto, $idCampana, $idLocal);
     }
     $stmtFV->close();
   }
 
   /* ----- Foto material (URLs ya subidas por el front) → fotoVisita (DEDUPED) ----- */
   if (isset($_POST['fotos']) && is_array($_POST['fotos'])) {
-    $stmtFV2 = $conn->prepare("INSERT INTO fotoVisita (visita_id,url,id_usuario,id_formulario,id_local,id_material,id_formularioQuestion,fotoLat,fotoLng,kind) VALUES (?,?,?,?,?,?,?,?,?,?)");
+    $stmtFV2 = $conn->prepare("INSERT INTO fotoVisita (visita_id,url,id_usuario,id_formulario,id_local,id_material,id_formularioQuestion,fotoLat,fotoLng,kind,content_sha256,phash) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
     if (!$stmtFV2) throw new Exception("Error prepare fotoVisita (urls): ".$conn->error);
 
     foreach ($_POST['fotos'] as $idFQ => $urls) {
@@ -890,9 +928,16 @@ try {
         $latFoto = isset($_POST['coordsFoto'][$idFQ][$idx]['lat']) ? (float)$_POST['coordsFoto'][$idFQ][$idx]['lat'] : 0.0;
         $lngFoto = isset($_POST['coordsFoto'][$idFQ][$idx]['lng']) ? (float)$_POST['coordsFoto'][$idFQ][$idx]['lng'] : 0.0;
 
-        $stmtFV2->bind_param("isiiiiidds",$visita_id,$urlFoto,$usuario_id,$idCampana,$idLocal,$idMaterial,$idFQ,$latFoto,$lngFoto,$kindFoto);
+        // Hashes de dedup sobre el archivo ya guardado (best-effort; null si no se puede leer).
+        $absFoto = __DIR__ . '/' . $urlFoto;
+        $shaFoto = v2_sha256_file($absFoto); $shaFoto = $shaFoto !== '' ? $shaFoto : null;
+        $phFoto  = v2_dhash($absFoto);
+        $stmtFV2->bind_param("isiiiiiddsss",$visita_id,$urlFoto,$usuario_id,$idCampana,$idLocal,$idMaterial,$idFQ,$latFoto,$lngFoto,$kindFoto,$shaFoto,$phFoto);
         if (!$stmtFV2->execute()) { throw new Exception("Error insert fotoVisita (url): ".$stmtFV2->error); }
+        $newFvId = (int)$stmtFV2->insert_id;
         $metrics['inserts_fv']++;
+        // Marca (no bloquea) si la foto se repite en otra sala de la campaña.
+        v2_marcar_dup_si_aplica($conn, $newFvId, $shaFoto, $phFoto, $idCampana, $idLocal);
       }
     }
     $stmtFV2->close();
