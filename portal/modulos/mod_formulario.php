@@ -2024,6 +2024,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const subdivisionFilter = document.getElementById('subdivision_filter');
     const estadoFilter = document.getElementById('estado_filter');
     const tipoFilter = document.getElementById('tipo_filter');
+    const categoriaFilter = document.getElementById('categoria_formulario_filter');
+    const tradeFilter = document.getElementById('trade_filter');
 
     cargarTablaFormularios(false);
 
@@ -2071,6 +2073,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (tipoFilter) {
         tipoFilter.addEventListener('change', function() {
+            cargarTablaFormularios(true);
+        });
+    }
+
+    if (categoriaFilter) {
+        categoriaFilter.addEventListener('change', function() {
+            cargarTablaFormularios(true);
+        });
+    }
+
+    if (tradeFilter) {
+        tradeFilter.addEventListener('change', function() {
             cargarTablaFormularios(true);
         });
     }

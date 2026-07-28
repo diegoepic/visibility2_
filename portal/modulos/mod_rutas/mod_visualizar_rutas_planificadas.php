@@ -1,6 +1,52 @@
 <?php
 session_start();
 date_default_timezone_set('America/Santiago');
+
+if (empty($_SESSION['route_optimizer_csrf'])) {
+    $_SESSION['route_optimizer_csrf'] = bin2hex(random_bytes(32));
+}
+
+include $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
+header('Content-Type: text/html; charset=UTF-8');
+
+$db = isset($conn) && $conn instanceof mysqli ? $conn : null;
+$divisionSesionId = (int)($_SESSION['division_id'] ?? 0);
+$divisionSesionNombre = '';
+$divisionesDisponibles = [];
+
+if ($db) {
+    mysqli_set_charset($db, 'utf8mb4');
+    if ($divisionSesionId > 0) {
+        $stmtDivisionSesion = $db->prepare('SELECT nombre FROM division_empresa WHERE id=? LIMIT 1');
+        if ($stmtDivisionSesion) {
+            $stmtDivisionSesion->bind_param('i', $divisionSesionId);
+            $stmtDivisionSesion->execute();
+            $stmtDivisionSesion->bind_result($divisionSesionNombre);
+            $stmtDivisionSesion->fetch();
+            $stmtDivisionSesion->close();
+        }
+    }
+
+    $esMc = strtoupper(trim($divisionSesionNombre)) === 'MC';
+    if ($esMc) {
+        $resultDivisiones = $db->query('SELECT id,nombre FROM division_empresa WHERE estado=1 ORDER BY nombre');
+        if ($resultDivisiones) {
+            while ($division = $resultDivisiones->fetch_assoc()) {
+                $divisionesDisponibles[] = $division;
+            }
+        }
+    } elseif ($divisionSesionId > 0) {
+        $divisionesDisponibles[] = ['id' => $divisionSesionId, 'nombre' => $divisionSesionNombre];
+    }
+} else {
+    $esMc = false;
+}
+
+$mapsConfigPath = rtrim($_SERVER['DOCUMENT_ROOT'], '/\\') . '/visibility2/portal/config/maps_config.php';
+$mapsConfig = is_file($mapsConfigPath) ? include $mapsConfigPath : [];
+$googleMapsBrowserKey = is_array($mapsConfig)
+    ? trim((string)($mapsConfig['google_maps_browser_api_key'] ?? $mapsConfig['google_maps_api_key'] ?? ''))
+    : '';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -221,7 +267,7 @@ date_default_timezone_set('America/Santiago');
             <i class="fa-solid fa-route"></i> Visualizador de Rutas Planificadas
         </h2>
         <p class="text-muted mb-0">
-            Sube el archivo Excel generado por la planificación y revisa rutas por usuario, fecha y grupo directamente en el mapa.
+            Sube un CSV con código de local y usuario. Las coordenadas se obtienen desde SQL y, si faltan, se intenta validarlas con Google.
         </p>
     </div>
 
@@ -246,29 +292,54 @@ date_default_timezone_set('America/Santiago');
                         <div class="col-lg-7">
                             <div class="card">
                                 <div class="card-header bg-primary text-white">
-                                    <i class="fa-solid fa-file-excel"></i> Subir archivo de planificación
+                                    <i class="fa-solid fa-file-csv"></i> Cargar locales y usuarios
                                 </div>
                                 <div class="card-body">
                                     <form id="formUploadPlanificacion" enctype="multipart/form-data">
+                                        <input type="hidden" id="routeOptimizerCsrf" value="<?php echo htmlspecialchars($_SESSION['route_optimizer_csrf'], ENT_QUOTES, 'UTF-8'); ?>">
                                         <div class="mb-3">
-                                            <label for="archivoPlanificacion" class="form-label fw-semibold">Archivo Excel</label>
+                                            <label for="idDivisionPlanificacion" class="form-label fw-semibold">División</label>
+                                            <?php if ($esMc): ?>
+                                                <select class="form-select" id="idDivisionPlanificacion" name="id_division" required>
+                                                    <option value="">Selecciona una división</option>
+                                                    <?php foreach ($divisionesDisponibles as $division): ?>
+                                                        <option value="<?php echo (int)$division['id']; ?>"><?php echo htmlspecialchars($division['nombre'], ENT_QUOTES, 'UTF-8'); ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            <?php else: ?>
+                                                <input type="hidden" id="idDivisionPlanificacion" name="id_division" value="<?php echo $divisionSesionId; ?>">
+                                                <input type="text" class="form-control" value="<?php echo htmlspecialchars($divisionSesionNombre, ENT_QUOTES, 'UTF-8'); ?>" readonly>
+                                            <?php endif; ?>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="archivoPlanificacion" class="form-label fw-semibold">Archivo CSV</label>
                                             <input
                                                 type="file"
                                                 class="form-control"
                                                 id="archivoPlanificacion"
-                                                name="archivoPlanificacion"
-                                                accept=".xlsx,.xls"
+                                                name="csvFile"
+                                                accept=".csv"
                                                 required
                                             >
                                         </div>
 
-                                        <div class="mb-3 mini-note">
+                                        <div class="mb-3 mini-note" style="display:none;">
                                             El sistema leerá la hoja <strong>Planificacion</strong> del archivo exportado.
                                         </div>
 
-                                        <button type="submit" class="btn btn-success" id="btnCargarPlanificacion">
-                                            <i class="fa-solid fa-cloud-arrow-up"></i> Procesar archivo
-                                        </button>
+                                        <div class="mb-3 mini-note">
+                                            El archivo debe contener las columnas <strong>codigo</strong> y <strong>usuario</strong>.
+                                            Dirección, comuna, latitud y longitud se consultan automáticamente desde SQL.
+                                        </div>
+
+                                        <div class="d-flex flex-wrap gap-2">
+                                            <button type="submit" class="btn btn-success" id="btnCargarPlanificacion">
+                                                <i class="fa-solid fa-cloud-arrow-up"></i> Procesar archivo
+                                            </button>
+                                            <button type="button" class="btn btn-outline-primary" id="btnDescargarTemplateRutas">
+                                                <i class="fa-solid fa-file-arrow-down"></i> Descargar template
+                                            </button>
+                                        </div>
                                     </form>
                                 </div>
                             </div>
@@ -281,17 +352,14 @@ date_default_timezone_set('America/Santiago');
                                 </div>
                                 <div class="card-body">
                                     <div class="mini-note">
-                                        Esta pantalla toma el Excel generado por tu módulo de propuesta de ruta y utiliza la hoja <strong>Planificacion</strong>.
+                                        El archivo sólo asigna cada local a un usuario. El mapa y el optimizador usan la dirección y las coordenadas guardadas en la tabla <strong>local</strong>.
+                                        Address Validation se consulta únicamente cuando esas coordenadas faltan y el resultado queda guardado para próximas cargas.
                                     </div>
                                     <hr>
                                     <div class="mb-2"><strong>Campos esperados:</strong></div>
-                                    <div class="summary-pill">Usuario Nombre</div>
-                                    <div class="summary-pill">Grupo Ruta Usuario</div>
-                                    <div class="summary-pill">Fecha Ruta</div>
-                                    <div class="summary-pill">Código Local</div>
-                                    <div class="summary-pill">Lat</div>
-                                    <div class="summary-pill">Lng</div>
-                                    <div class="summary-pill">Orden Visita</div>
+                                    <div class="summary-pill">codigo</div>
+                                    <div class="summary-pill">usuario</div>
+                                    <div class="mt-3 small text-muted">Admite coma, punto y coma o tabulación como delimitador.</div>
                                 </div>
                             </div>
                         </div>
@@ -410,9 +478,18 @@ date_default_timezone_set('America/Santiago');
                                     </div>
                                     <div class="card-body">
                                         <div class="mb-3">
-                                            <label for="optMetaDiaria" class="form-label fw-semibold">Carga por dia</label>
+                                            <label for="optMetaDiaria" class="form-label fw-semibold">Carga objetivo por día</label>
                                             <input type="number" min="2" max="30" class="form-control" id="optMetaDiaria" value="19">
-                                            <div class="mini-note mt-1">Hasta 30 locales por dia. Sobre 23 se optimiza por subtramos.</div>
+                                            <div class="mini-note mt-1">Es una meta flexible: prioriza cercanía geográfica, admite grupos mayores y procura que ninguno quede bajo el 80% de la meta.</div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="optAislamientoKm" class="form-label fw-semibold">Separación para considerar aislado</label>
+                                            <div class="input-group">
+                                                <input type="number" min="2" max="150" step="1" class="form-control" id="optAislamientoKm" value="25">
+                                                <span class="input-group-text">km</span>
+                                            </div>
+                                            <div class="mini-note mt-1">Los grupos pequeños desconectados por más de esta distancia quedan sin ruta.</div>
                                         </div>
 
                                         <div class="mb-3">
@@ -439,7 +516,7 @@ date_default_timezone_set('America/Santiago');
                                         </div>
 
                                         <div class="mini-note mt-3" id="optimizadorEstado">
-                                            Toma los locales visibles o seleccionados, arma bloques por dia y reordena cada bloque con Google.
+                                            Detecta clústeres geográficos por usuario y después ordena cada ruta con Google.
                                         </div>
                                     </div>
                                 </div>
@@ -643,7 +720,6 @@ function initMapRutas() {
     });
 
     infoWindowRutas = new google.maps.InfoWindow();
-    directionsServiceRutas = new google.maps.DirectionsService();
 
     mapProjectionOverlay = new google.maps.OverlayView();
     mapProjectionOverlay.onAdd = function() {};
@@ -713,6 +789,15 @@ function getFilteredRows() {
     });
 }
 
+function hasUsableCoordinates(row) {
+    if (row.lat === null || row.lat === '' || row.lng === null || row.lng === '') return false;
+    const lat = Number(row.lat);
+    const lng = Number(row.lng);
+    return Number.isFinite(lat) && Number.isFinite(lng)
+        && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+        && (Math.abs(lat) > 0.0001 || Math.abs(lng) > 0.0001);
+}
+
 function getFilteredGroups() {
     const rows = getFilteredRows();
     const groupMap = {};
@@ -749,11 +834,12 @@ function getFilteredGroups() {
 
 function renderSummary() {
     const rows = getFilteredRows();
+    const geoRows = rows.filter(hasUsableCoordinates);
     const groups = getFilteredGroups();
     const totalKm = groups.reduce((acc, g) => acc + Number(g.distancia_total_ruta_km || 0), 0);
 
     $('#statTotalGrupos').text(groups.length);
-    $('#statTotalPuntos').text(rows.length);
+    $('#statTotalPuntos').text(geoRows.length);
     $('#statTotalKm').text(totalKm.toFixed(2));
     $('#statFilasIgnoradas').text(planSummary.sin_ruta || 0);
 
@@ -929,9 +1015,9 @@ function selectRowsInsideBounds(bounds) {
     let added = 0;
 
     getFilteredRows().forEach(row => {
+        if (!hasUsableCoordinates(row)) return;
         const lat = Number(row.lat);
         const lng = Number(row.lng);
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
         const position = new google.maps.LatLng(lat, lng);
         if (bounds.contains(position) && !selectedRowIds.has(row.row_id)) {
@@ -1100,7 +1186,9 @@ function createMarker(row, color) {
                 <div><strong>Código:</strong> ${escapeHtml(row.codigo_local)}</div>
                 <div><strong>Nombre:</strong> ${escapeHtml(row.nombre || '')}</div>
                 <div><strong>Dirección:</strong> ${escapeHtml(row.direccion || '')}</div>
+                ${row.direccion_original && row.direccion_original !== row.direccion ? `<div><strong>Dirección original:</strong> ${escapeHtml(row.direccion_original)}</div>` : ''}
                 <div><strong>Comuna:</strong> ${escapeHtml(row.comuna || '')}</div>
+                <div><strong>Origen coordenadas:</strong> ${escapeHtml(row.coordenadas_origen || 'SQL')}</div>
                 <div><strong>Día:</strong> ${escapeHtml(row.dia_semana || '')}</div>
                 <div><strong>Semana:</strong> ${escapeHtml(row.semana_plan || '')}</div>
                 <button type="button" class="btn btn-sm btn-primary mt-2"
@@ -1116,6 +1204,37 @@ function createMarker(row, color) {
     return marker;
 }
 
+function decodeGooglePolyline(encoded) {
+    if (!encoded) return [];
+    const path = [];
+    let index = 0;
+    let lat = 0;
+    let lng = 0;
+
+    while (index < encoded.length) {
+        let shift = 0;
+        let result = 0;
+        let byte;
+        do {
+            byte = encoded.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20 && index <= encoded.length);
+        lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+
+        shift = 0;
+        result = 0;
+        do {
+            byte = encoded.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20 && index <= encoded.length);
+        lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+        path.push({ lat: lat / 1e5, lng: lng / 1e5 });
+    }
+    return path;
+}
+
 function renderMap(ajustarVista = true) {
     if (!mapaRutas || !window.google || !google.maps) {
         setTimeout(() => renderMap(ajustarVista), 250);
@@ -1128,7 +1247,7 @@ function renderMap(ajustarVista = true) {
     clearMapRutas();
 
     const rows = getFilteredRows()
-        .filter(row => Number.isFinite(Number(row.lat)) && Number.isFinite(Number(row.lng)));
+        .filter(hasUsableCoordinates);
 
     if (!rows.length) {
         $('#badgeRutaActiva').text('Sin datos para el filtro actual');
@@ -1152,19 +1271,23 @@ function renderMap(ajustarVista = true) {
         const groupRows = groupMap[groupName].sort((a, b) => Number(a.orden_visita || 0) - Number(b.orden_visita || 0));
         const isUnplannedGroup = groupName === '__UNPLANNED__';
         const color = isUnplannedGroup ? '#dc2626' : getRouteColor(groupName);
-        const path = [];
+        const markerPath = [];
 
         groupRows.forEach(row => {
             const position = { lat: Number(row.lat), lng: Number(row.lng) };
-            path.push(position);
+            markerPath.push(position);
             allBounds.extend(position);
             createMarker(row, color);
         });
 
+        const encodedPolyline = groupRows.find(row => row.route_polyline)?.route_polyline || '';
+        const roadPath = decodeGooglePolyline(encodedPolyline);
+        const path = roadPath.length > 1 ? roadPath : markerPath;
+
         if (!isUnplannedGroup && path.length > 1) {
             const polyline = new google.maps.Polyline({
                 path,
-                geodesic: true,
+                geodesic: roadPath.length <= 1,
                 strokeColor: color,
                 strokeOpacity: 0.85,
                 strokeWeight: 4,
@@ -1260,6 +1383,13 @@ function dateMetadata(dateSql) {
     };
 }
 
+function isWeekendSql(dateSql) {
+    if (!dateSql) return false;
+    const date = new Date(`${dateSql}T12:00:00`);
+    if (Number.isNaN(date.getTime())) return false;
+    return date.getDay() === 0 || date.getDay() === 6;
+}
+
 function getSelectedRowsSortedForEdit() {
     return planRows
         .filter(row => selectedRowIds.has(row.row_id))
@@ -1340,6 +1470,10 @@ function applyRouteEdits() {
     const quitarRuta = $('#editQuitarRuta').is(':checked');
     const metadata = dateMetadata(fecha);
     const orderedRows = editOrderRows.length ? editOrderRows : getSelectedRowsSortedForEdit();
+    if (fecha && isWeekendSql(fecha)) {
+        alert('La fecha de ruta debe ser de lunes a viernes.');
+        return;
+    }
     if (ordenRaw !== '' && (!Number.isFinite(Number(ordenRaw)) || Number(ordenRaw) < 1)) {
         alert('El orden inicial debe ser un numero mayor o igual a 1.');
         return;
@@ -1402,9 +1536,12 @@ function distanceBetweenRows(a, b) {
     const lngB = Number(b.lng);
     if (![latA, lngA, latB, lngB].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
 
-    const dLat = latA - latB;
-    const dLng = lngA - lngB;
-    return Math.sqrt((dLat * dLat) + (dLng * dLng));
+    const toRadians = degrees => degrees * Math.PI / 180;
+    const dLat = toRadians(latB - latA);
+    const dLng = toRadians(lngB - lngA);
+    const value = Math.sin(dLat / 2) ** 2
+        + Math.cos(toRadians(latA)) * Math.cos(toRadians(latB)) * Math.sin(dLng / 2) ** 2;
+    return 6371 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
 }
 
 function sortRowsByNearestNeighbor(rows) {
@@ -1439,10 +1576,24 @@ function sortRowsByNearestNeighbor(rows) {
     return ordered;
 }
 
-function addDaysSql(dateSql, daysToAdd) {
+function addBusinessDaysSql(dateSql, businessDaysToAdd) {
     const date = new Date(`${dateSql}T12:00:00`);
-    date.setDate(date.getDate() + daysToAdd);
-    return date.toISOString().slice(0, 10);
+    if (Number.isNaN(date.getTime())) return dateSql;
+
+    // Si la fecha inicial cae en fin de semana, comienza el lunes siguiente.
+    while (date.getDay() === 0 || date.getDay() === 6) {
+        date.setDate(date.getDate() + 1);
+    }
+
+    let remaining = Math.max(0, Math.trunc(Number(businessDaysToAdd) || 0));
+    while (remaining > 0) {
+        date.setDate(date.getDate() + 1);
+        if (date.getDay() !== 0 && date.getDay() !== 6) {
+            remaining--;
+        }
+    }
+
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 function todaySqlLocal() {
@@ -1458,21 +1609,136 @@ function chunkRows(rows, size) {
     return chunks;
 }
 
-function dailyChunksWithSmallTailAbsorption(rows, targetSize, maxSize = 30) {
-    const chunks = chunkRows(rows, targetSize);
-    if (chunks.length <= 1) return chunks;
+function clusterCentroid(rows, fallback = null) {
+    if (!rows.length) return fallback;
+    return {
+        lat: rows.reduce((sum, row) => sum + Number(row.lat), 0) / rows.length,
+        lng: rows.reduce((sum, row) => sum + Number(row.lng), 0) / rows.length
+    };
+}
 
-    const lastChunk = chunks[chunks.length - 1];
-    const previousChunk = chunks[chunks.length - 2];
-    const canAbsorbTail = lastChunk.length <= (maxSize - targetSize)
-        && previousChunk.length + lastChunk.length <= maxSize;
-
-    if (canAbsorbTail) {
-        previousChunk.push(...lastChunk);
-        chunks.pop();
+function chooseGeographicSeeds(rows, count) {
+    if (count <= 1) {
+        return [rows.reduce((best, row) => Number(row.lat) > Number(best.lat) ? row : best, rows[0])];
     }
 
-    return chunks;
+    const seeds = [rows.reduce((best, row) => {
+        const rowScore = Number(row.lat) - Number(row.lng) * 0.01;
+        const bestScore = Number(best.lat) - Number(best.lng) * 0.01;
+        return rowScore > bestScore ? row : best;
+    }, rows[0])];
+
+    while (seeds.length < count) {
+        let bestCandidate = null;
+        let bestDistance = -1;
+        rows.forEach(row => {
+            if (seeds.includes(row)) return;
+            const nearestSeed = Math.min(...seeds.map(seed => distanceBetweenRows(row, seed)));
+            if (nearestSeed > bestDistance) {
+                bestDistance = nearestSeed;
+                bestCandidate = row;
+            }
+        });
+        if (!bestCandidate) break;
+        seeds.push(bestCandidate);
+    }
+    return seeds;
+}
+
+function assignRowsToGeographicClusters(rows, centroids, maxSize) {
+    const clusters = centroids.map(() => []);
+    const rankedRows = rows.map(row => {
+        const distances = centroids
+            .map((centroid, index) => ({ index, distance: distanceBetweenRows(row, centroid) }))
+            .sort((a, b) => a.distance - b.distance);
+        return {
+            row,
+            distances,
+            confidence: distances.length > 1 ? distances[1].distance - distances[0].distance : Number.POSITIVE_INFINITY
+        };
+    }).sort((a, b) => b.confidence - a.confidence);
+
+    rankedRows.forEach(item => {
+        const destination = item.distances.find(candidate => clusters[candidate.index].length < maxSize)
+            || item.distances[0];
+        clusters[destination.index].push(item.row);
+    });
+    return clusters;
+}
+
+function rebalanceSmallGeographicClusters(clusters, centroids, minSize) {
+    const updatedCentroids = () => clusters.map((cluster, index) => clusterCentroid(cluster, centroids[index]));
+    let guard = 0;
+
+    while (guard++ < 1000) {
+        const smallIndex = clusters.findIndex(cluster => cluster.length > 0 && cluster.length < minSize);
+        if (smallIndex < 0) break;
+
+        const currentCentroids = updatedCentroids();
+        let bestMove = null;
+        clusters.forEach((donor, donorIndex) => {
+            if (donorIndex === smallIndex || donor.length <= minSize) return;
+            donor.forEach((row, rowIndex) => {
+                const cost = distanceBetweenRows(row, currentCentroids[smallIndex])
+                    - distanceBetweenRows(row, currentCentroids[donorIndex]);
+                if (!bestMove || cost < bestMove.cost) {
+                    bestMove = { donorIndex, rowIndex, cost };
+                }
+            });
+        });
+
+        if (!bestMove) break;
+        clusters[smallIndex].push(clusters[bestMove.donorIndex].splice(bestMove.rowIndex, 1)[0]);
+    }
+
+    return clusters.filter(cluster => cluster.length > 0);
+}
+
+function smartGeographicClusters(rows, targetSize, absoluteMaxSize = 30) {
+    if (!rows.length) return [];
+
+    const minSize = Math.max(1, Math.ceil(targetSize * 0.8));
+    const maxSize = Math.min(absoluteMaxSize, Math.max(targetSize, Math.ceil(targetSize * 1.5)));
+    if (rows.length <= maxSize) return [sortRowsByNearestNeighbor(rows)];
+
+    const minimumGroups = Math.max(1, Math.ceil(rows.length / maxSize));
+    const maximumGroups = Math.max(1, Math.floor(rows.length / minSize));
+    const idealGroups = Math.max(1, Math.round(rows.length / targetSize));
+    const groupCount = Math.max(minimumGroups, Math.min(idealGroups, maximumGroups));
+    const seeds = chooseGeographicSeeds(rows, groupCount);
+    let centroids = seeds.map(seed => ({ lat: Number(seed.lat), lng: Number(seed.lng) }));
+    let clusters = [];
+
+    for (let iteration = 0; iteration < 8; iteration++) {
+        clusters = assignRowsToGeographicClusters(rows, centroids, maxSize);
+        const nextCentroids = clusters.map((cluster, index) => clusterCentroid(cluster, centroids[index]));
+        const movement = nextCentroids.reduce((sum, centroid, index) =>
+            sum + distanceBetweenRows(centroid, centroids[index]), 0);
+        centroids = nextCentroids;
+        if (movement < 0.01) break;
+    }
+
+    clusters = rebalanceSmallGeographicClusters(clusters, centroids, minSize);
+    return clusters
+        .map(cluster => sortRowsByNearestNeighbor(cluster))
+        .sort((a, b) => Number(b[0]?.lat || 0) - Number(a[0]?.lat || 0));
+}
+
+function buildSmartRoutesByUser(rows, targetSize) {
+    const byUser = new Map();
+    rows.forEach(row => {
+        const key = String(row.usuario_id || row.usuario_login || row.usuario_nombre || 'SIN_USUARIO');
+        if (!byUser.has(key)) byUser.set(key, []);
+        byUser.get(key).push(row);
+    });
+
+    const routes = [];
+    [...byUser.entries()].forEach(([userKey, userRows]) => {
+        smartGeographicClusters(userRows, targetSize, 30).forEach((routeRows, userDayIndex) => {
+            routes.push({ userKey, userDayIndex, rows: routeRows });
+        });
+    });
+    return routes;
 }
 
 function optimizeChunkWithGoogle(rows) {
@@ -1535,11 +1801,73 @@ function getOptimizationRows() {
         ? planRows.filter(row => selectedRowIds.has(row.row_id))
         : getFilteredRows();
 
-    return sourceRows.filter(row => {
-        const lat = Number(row.lat);
-        const lng = Number(row.lng);
-        return Number.isFinite(lat) && Number.isFinite(lng);
+    return sourceRows.filter(hasUsableCoordinates);
+}
+
+async function requestGoogleRouteOptimization(rows, targetSize, isolationKm) {
+    const payloadRows = rows.map(row => ({
+        row_id: row.row_id,
+        codigo_local: row.codigo_local,
+        usuario_id: row.usuario_id,
+        usuario_login: row.usuario_login,
+        usuario_nombre: row.usuario_nombre,
+        lat: Number(row.lat),
+        lng: Number(row.lng)
+    }));
+    const body = new URLSearchParams();
+    body.set('rows', JSON.stringify(payloadRows));
+    body.set('target_size', String(targetSize));
+    body.set('isolation_km', String(isolationKm));
+    body.set('csrf_token', String($('#routeOptimizerCsrf').val() || ''));
+
+    const response = await fetch('mod_optimizar_rutas_google.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: body.toString()
     });
+    const raw = await response.text();
+    let result;
+    try {
+        result = JSON.parse(raw);
+    } catch (error) {
+        throw new Error(raw || 'Route Optimization API devolvió una respuesta inválida.');
+    }
+    if (!response.ok || result.success !== true) {
+        throw new Error(result.message || 'No se pudo optimizar con Route Optimization API.');
+    }
+
+    const rowsById = new Map(rows.map(row => [String(row.row_id), row]));
+    const routes = (result.routes || []).map(route => ({
+        userKey: route.user_key || '',
+        userDayIndex: Number(route.user_day_index || 0),
+        encodedPolyline: route.encoded_polyline || '',
+        distanceMeters: Number(route.distance_meters || 0),
+        totalDuration: route.total_duration || '',
+        rows: (route.row_ids || []).map(rowId => rowsById.get(String(rowId))).filter(Boolean)
+    })).filter(route => route.rows.length > 0);
+
+    return {
+        routes,
+        skipped: Array.isArray(result.skipped) ? result.skipped : [],
+        summary: result.summary || {}
+    };
+}
+
+function leaveRowWithoutRoute(row, reason) {
+    row.fecha_ruta_sql = '';
+    row.fecha_ruta = '';
+    row.dia_semana = '';
+    row.dia_semana_num = '';
+    row.semana_plan = '';
+    row.dia_plan = '';
+    row.grupo_ruta = '';
+    row.ruta_global = '';
+    row.orden_visita = 0;
+    row.tamano_ruta = 0;
+    row.distancia_total_ruta_km = 0;
+    row.route_polyline = '';
+    row.observacion = reason || 'Local dejado sin ruta por Route Optimization API.';
+    row.sin_ruta = true;
 }
 
 async function optimizeVisibleRoutes() {
@@ -1554,10 +1882,20 @@ async function optimizeVisibleRoutes() {
         return;
     }
 
-    const startDate = $('#optFechaInicio').val();
-    if (!startDate) {
+    const isolationKm = Number($('#optAislamientoKm').val() || 25);
+    if (!Number.isFinite(isolationKm) || isolationKm < 2 || isolationKm > 150) {
+        alert('La separación para considerar un local aislado debe estar entre 2 y 150 km.');
+        return;
+    }
+
+    const selectedStartDate = $('#optFechaInicio').val();
+    if (!selectedStartDate) {
         alert('Debes indicar una fecha de inicio.');
         return;
+    }
+    const startDate = addBusinessDaysSql(selectedStartDate, 0);
+    if (startDate !== selectedStartDate) {
+        $('#optFechaInicio').val(startDate);
     }
 
     const candidates = getOptimizationRows();
@@ -1571,18 +1909,30 @@ async function optimizeVisibleRoutes() {
     const prefix = ($('#optPrefijoGrupo').val().trim() || 'RUTA OPT').toUpperCase();
     optimizationWarnings = [];
     button.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> Optimizando...');
-    $('#optimizadorEstado').text(`Preparando ${candidates.length} local(es) en bloques de ${dailyLoad}, absorbiendo solo restos pequenos...`);
+    $('#optimizadorEstado').text(`Enviando ${candidates.length} local(es) a Google Route Optimization API...`);
 
     try {
-        const spatialOrder = sortRowsByNearestNeighbor(candidates);
-        const chunks = dailyChunksWithSmallTailAbsorption(spatialOrder, dailyLoad, 30);
+        const googleResult = await requestGoogleRouteOptimization(candidates, dailyLoad, isolationKm);
+        const routePlans = googleResult.routes;
+        const skippedById = new Map(googleResult.skipped.map(item => [String(item.row_id), item]));
+        const assignedIds = new Set(routePlans.flatMap(route => route.rows.map(row => String(row.row_id))));
 
-        for (let dayIndex = 0; dayIndex < chunks.length; dayIndex++) {
-            $('#optimizadorEstado').text(`Optimizando ruta ${dayIndex + 1} de ${chunks.length}...`);
-            const optimizedRows = await optimizeDailyRowsWithGoogle(chunks[dayIndex]);
-            const dateSql = addDaysSql(startDate, dayIndex);
+        candidates.forEach(row => {
+            const skipped = skippedById.get(String(row.row_id));
+            if (skipped) {
+                leaveRowWithoutRoute(row, skipped.reason);
+            } else if (!assignedIds.has(String(row.row_id))) {
+                leaveRowWithoutRoute(row, 'Google no encontró una ruta conveniente para este local.');
+            }
+        });
+
+        for (let routeIndex = 0; routeIndex < routePlans.length; routeIndex++) {
+            const routePlan = routePlans[routeIndex];
+            $('#optimizadorEstado').text(`Aplicando ruta vial ${routeIndex + 1} de ${routePlans.length} (${routePlan.rows.length} locales)...`);
+            const optimizedRows = routePlan.rows;
+            const dateSql = addBusinessDaysSql(startDate, routePlan.userDayIndex);
             const metadata = dateMetadata(dateSql);
-            const groupName = `${prefix} ${String(dayIndex + 1).padStart(2, '0')}`;
+            const groupName = `${prefix} ${String(routeIndex + 1).padStart(2, '0')}`;
 
             optimizedRows.forEach((row, orderIndex) => {
                 row.fecha_ruta_sql = dateSql;
@@ -1590,10 +1940,14 @@ async function optimizeVisibleRoutes() {
                 row.dia_semana = metadata.dayName;
                 row.dia_semana_num = metadata.dayNumber;
                 row.semana_plan = metadata.week;
-                row.dia_plan = dayIndex + 1;
+                row.dia_plan = routePlan.userDayIndex + 1;
                 row.grupo_ruta = groupName;
                 row.ruta_global = groupName;
                 row.orden_visita = orderIndex + 1;
+                row.tamano_ruta = optimizedRows.length;
+                row.distancia_total_ruta_km = routePlan.distanceMeters / 1000;
+                row.route_polyline = routePlan.encodedPolyline;
+                row.observacion = 'Optimizado por Google Route Optimization API.';
                 row.sin_ruta = false;
             });
         }
@@ -1603,12 +1957,13 @@ async function optimizeVisibleRoutes() {
         renderUsuarioSelect();
         renderFechaSelect();
         refreshAllViews(true);
-        if (optimizationWarnings.length) {
-            const uniqueWarnings = [...new Set(optimizationWarnings)].join(', ');
-            $('#optimizadorEstado').text(`Listo con respaldo geografico: ${candidates.length} local(es) en ${chunks.length} ruta(s). Google devolvio: ${uniqueWarnings}. Revisa si Directions API esta activa para la key.`);
-        } else {
-            $('#optimizadorEstado').text(`Listo: ${candidates.length} local(es) distribuidos en ${chunks.length} ruta(s).`);
-        }
+        const routeSizes = routePlans.map(route => route.rows.length);
+        const sizeRange = routeSizes.length ? `${Math.min(...routeSizes)}–${Math.max(...routeSizes)}` : '0';
+        const skippedCount = googleResult.skipped.length;
+        $('#optimizadorEstado').text(
+            `Listo con Google Route Optimization: ${routePlans.length} ruta(s) de ${sizeRange} locales. `
+            + `${skippedCount} local(es) aislado(s) quedaron SIN RUTA.`
+        );
     } catch (error) {
         console.error(error);
         alert(error.message || 'No se pudo optimizar la ruta.');
@@ -1621,6 +1976,12 @@ async function optimizeVisibleRoutes() {
 async function downloadEditedRoutes() {
     if (!planRows.length) {
         alert('Primero debes cargar un archivo.');
+        return;
+    }
+
+    const weekendRows = planRows.filter(row => row.fecha_ruta_sql && isWeekendSql(row.fecha_ruta_sql));
+    if (weekendRows.length) {
+        alert(`Hay ${weekendRows.length} local(es) asignados a sabado o domingo. Vuelve a ejecutar el optimizador o corrige sus fechas antes de descargar.`);
         return;
     }
 
@@ -1673,6 +2034,55 @@ function activateMapView() {
     }, 250);
 }
 
+function rowsFromLocalUpload(resp) {
+    return (Array.isArray(resp.encontrados) ? resp.encontrados : []).map((local, index) => ({
+        row_id: `csv_${local.fila_csv || index + 2}_${local.id_local || local.codigo || index}`,
+        codigo_local: String(local.codigo || ''),
+        nombre: local.nombre || '',
+        direccion: local.direccion_google || local.direccion || '',
+        direccion_original: local.direccion || '',
+        comuna: local.comuna || '',
+        lat: local.tiene_coords ? Number(local.lat) : null,
+        lng: local.tiene_coords ? Number(local.lng) : null,
+        cantidad_objetivo_dia: 0,
+        dias_planificados: 0,
+        grupo_ruta: '',
+        ruta_global: '',
+        fecha_ruta: '',
+        fecha_ruta_sql: '',
+        usuario_id: local.usuario_id || '',
+        usuario_login: local.usuario_login || '',
+        usuario_nombre: local.usuario_nombre || local.usuario_login || '',
+        dia_plan: '',
+        semana_plan: '',
+        dia_semana_num: '',
+        dia_semana: '',
+        orden_visita: 0,
+        tamano_ruta: 0,
+        distancia_desde_anterior_km: 0,
+        distancia_total_ruta_km: 0,
+        observacion: local.motivo_validacion || '',
+        estado_address_validation: local.estado_address_validation || '',
+        coordenadas_origen: local.coordenadas_origen || '',
+        sin_ruta: true
+    }));
+}
+
+$('#btnDescargarTemplateRutas').on('click', function() {
+    // BOM UTF-8 + punto y coma permiten abrir el archivo directamente en Excel
+    // manteniendo los encabezados que reconoce mod_cargar_locales.php.
+    const csv = '\uFEFFcodigo;usuario\r\n500038;MCARVAJAL\r\n';
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'template_visualizador_rutas.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+});
+
 $('#formUploadPlanificacion').on('submit', function(e) {
     e.preventDefault();
 
@@ -1683,7 +2093,7 @@ $('#formUploadPlanificacion').on('submit', function(e) {
     btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> Procesando...');
 
     $.ajax({
-        url: 'mod_cargar_rutas_excel.php',
+        url: 'mod_cargar_locales.php',
         method: 'POST',
         data: formData,
         processData: false,
@@ -1699,26 +2109,44 @@ $('#formUploadPlanificacion').on('submit', function(e) {
                 return;
             }
 
-            planRows = Array.isArray(resp.rows) ? resp.rows : [];
-            planGroups = Array.isArray(resp.groups) ? resp.groups : [];
-            planSummary = resp.summary || {};
-            planFilters = resp.filters || { usuarios: [], fechas: [], grupos: [] };
+            planRows = rowsFromLocalUpload(resp);
+            planGroups = [];
+            planSummary = Object.assign({}, resp.resumen || {});
+            planFilters = { usuarios: [], fechas: [], grupos: [] };
             selectedRowIds.clear();
 
+            rebuildFiltersFromRows();
             renderUsuarioSelect();
             renderFechaSelect();
             $('#filtroGrupoRuta').html('<option value="__ALL__">Todas las rutas</option>');
 
             refreshAllViews(true);
 
+            const resumen = resp.resumen || {};
+            const invalidas = Number(resumen.filas_invalidas || 0);
+            const detalleInvalidas = invalidas > 0
+                ? `<br><span class="text-danger">${invalidas} fila(s) no se cargaron por código o usuario inválido.</span>`
+                : '';
+            const problemas = [
+                ...(Array.isArray(resp.filas_invalidas) ? resp.filas_invalidas.map(item =>
+                    `Fila ${item.fila_csv}: ${item.codigo || '(sin código)'} — ${item.motivo || 'Fila inválida'}`) : []),
+                ...(Array.isArray(resp.encontrados) ? resp.encontrados
+                    .filter(item => !item.tiene_coords)
+                    .map(item => `Fila ${item.fila_csv}: ${item.codigo} — ${item.motivo_validacion || 'Sin coordenadas'}`) : [])
+            ];
+            const detalleProblemas = problemas.length
+                ? `<details class="mt-2"><summary>Ver observaciones</summary><ul class="mb-0 mt-2">${problemas.slice(0, 50).map(text => `<li>${escapeHtml(text)}</li>`).join('')}</ul>${problemas.length > 50 ? '<small>Se muestran las primeras 50 observaciones.</small>' : ''}</details>`
+                : '';
+
             $('#uploadResultBox')
                 .show()
                 .html(`
                     <div class="alert alert-success mb-0">
                         <strong>Archivo procesado correctamente.</strong><br>
-                        Se cargaron ${planRows.length} puntos, ${planGroups.length} grupo(s),
-                        ${planSummary.total_usuarios || 0} usuario(s), ${planSummary.total_fechas || 0} fecha(s)
-                        y ${planSummary.sin_ruta || 0} local(es) sin ruta.
+                        Se cargaron ${planRows.length} local(es): ${resumen.coordenadas_sql || 0} con coordenadas SQL,
+                        ${resumen.validados_google || 0} recuperado(s) mediante Address Validation y
+                        ${resumen.sin_coordenadas || 0} sin coordenadas utilizables.${detalleInvalidas}
+                        ${detalleProblemas}
                     </div>
                 `);
 
@@ -1835,7 +2263,11 @@ document.addEventListener('DOMContentLoaded', function() {
 window.initMapRutas = initMapRutas;
 </script>
 
-<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw&callback=initMapRutas&loading=async"></script>
+<?php if ($googleMapsBrowserKey !== ''): ?>
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=<?php echo rawurlencode($googleMapsBrowserKey); ?>&callback=initMapRutas&loading=async"></script>
+<?php else: ?>
+<script>console.error('Falta google_maps_browser_api_key en config/maps_config.php');</script>
+<?php endif; ?>
 
 </body>
 </html>

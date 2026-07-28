@@ -291,7 +291,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             $setOptionIds[]  = $original_opt_id;
                             $option_text     = $opt['option_text'];
                             $sort_order      = (int)$opt['sort_order'];
-                            $reference_image = $opt['reference_image'];
+                            // question_set_options.reference_image es NULL-able, pero
+                            // form_question_options.reference_image es NOT NULL sin default.
+                            $reference_image = $opt['reference_image'] ?? '';
 
                             if (isset($existingOpts[$original_opt_id])) {
                                 $form_opt_id = $existingOpts[$original_opt_id];
@@ -513,6 +515,8 @@ $stmt = $conn->prepare("
         modalidad,
         id_division,
         id_subdivision,
+        id_categoria_formulario,
+        id_trade,
         id_empresa,
         url_bi,
         reference_image
@@ -582,6 +586,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $id_subdivision = (int)($_POST['id_subdivision'] ?? 0);
     $modalidad      = trim($_POST['modalidad'] ?? '');
     $url_bi       = trim($_POST['url_bi'] ?? '');
+    $id_categoria_form = (int)($_POST['id_categoria_formulario'] ?? 0);
+    $id_categoria_form = $id_categoria_form > 0 ? $id_categoria_form : null; // 0 = sin categoría → NULL
+    $id_trade_form     = (int)($_POST['id_trade'] ?? 0);
+    $id_trade_form     = $id_trade_form > 0 ? $id_trade_form : null;         // 0 = sin trade → NULL
 
     // Tipo 2 (Actividad IW / complementaria): modalidad siempre = 'complementaria',
     // fechas opcionales.
@@ -645,6 +653,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 modalidad = ?,
                 id_division = ?,
                 id_subdivision = ?,
+                id_categoria_formulario = ?,
+                id_trade = ?,
                 url_bi = ?,
                 reference_image = ?
             WHERE id = ?
@@ -654,7 +664,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
 
         $stmt_update->bind_param(
-            "sssiisiissi",
+            "sssiisiiiissi",
             $nombre,
             $fechaInicio,
             $fechaTermino,
@@ -663,6 +673,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $modalidad,
             $id_division,
             $id_subdivision,
+            $id_categoria_form,
+            $id_trade_form,
             $url_bi,
             $reference_image,
             $formulario_id
@@ -678,6 +690,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $formulario['modalidad'] = $modalidad;
             $formulario['id_division'] = $id_division;
             $formulario['id_subdivision'] = $id_subdivision;
+            $formulario['id_categoria_formulario'] = $id_categoria_form;
+            $formulario['id_trade'] = $id_trade_form;
             $subdivisiones_actuales = obtenerSubdivisionesPorDivision($id_division);
             $formulario['url_bi'] = $url_bi;
             $formulario['reference_image'] = $reference_image;
@@ -687,6 +701,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $stmt_update->close();
     }
 }
+
+// -----------------------------------------------------------------------------
+// Catálogos Categoría / Trade (activos; si el formulario tiene asignado uno
+// oculto, se agrega igual a la lista para no perderlo al guardar)
+// -----------------------------------------------------------------------------
+function catalogoFormularioParaSelect(mysqli $conn, string $tabla, $idActual): array {
+    if (!in_array($tabla, ['categoria_formulario', 'trade'], true)) {
+        return [];
+    }
+
+    $lista = [];
+    $res = $conn->query("SELECT id, nombre FROM {$tabla} WHERE estado = 1 AND deleted_at IS NULL ORDER BY nombre ASC");
+    if ($res) {
+        $lista = $res->fetch_all(MYSQLI_ASSOC);
+    }
+
+    $idActual = (int)$idActual;
+    if ($idActual > 0 && !in_array($idActual, array_map('intval', array_column($lista, 'id')), true)) {
+        $stmt = $conn->prepare("SELECT id, nombre FROM {$tabla} WHERE id = ? LIMIT 1");
+        $stmt->bind_param('i', $idActual);
+        $stmt->execute();
+        if ($row = $stmt->get_result()->fetch_assoc()) {
+            $row['nombre'] .= ' (OCULTO EN CATALOGO)';
+            $lista[] = $row;
+        }
+        $stmt->close();
+    }
+
+    return $lista;
+}
+
+$categorias_formulario = catalogoFormularioParaSelect($conn, 'categoria_formulario', $formulario['id_categoria_formulario'] ?? 0);
+$trades_formulario     = catalogoFormularioParaSelect($conn, 'trade', $formulario['id_trade'] ?? 0);
 
 // -----------------------------------------------------------------------------
 // CARGA MASIVA CSV A formularioQuestion
@@ -1663,6 +1710,32 @@ if ($fqTieneCadena && $esCampanaConLocales) {
                             </option>
                         <?php endforeach; ?>
                     </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label for="id_categoria_formulario">Categoría:</label>
+                        <select id="id_categoria_formulario" name="id_categoria_formulario" class="form-control">
+                            <option value="0">-- Sin categoría --</option>
+                            <?php foreach ($categorias_formulario as $cat): ?>
+                                <option value="<?php echo (int)$cat['id']; ?>"
+                                    <?php if ((int)($formulario['id_categoria_formulario'] ?? 0) === (int)$cat['id']) echo 'selected'; ?>>
+                                    <?php echo h($cat['nombre']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group col-md-6">
+                        <label for="id_trade">Trade:</label>
+                        <select id="id_trade" name="id_trade" class="form-control">
+                            <option value="0">-- Sin trade --</option>
+                            <?php foreach ($trades_formulario as $tr): ?>
+                                <option value="<?php echo (int)$tr['id']; ?>"
+                                    <?php if ((int)($formulario['id_trade'] ?? 0) === (int)$tr['id']) echo 'selected'; ?>>
+                                    <?php echo h($tr['nombre']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
                 </div>
                 <div class="form-group" id="modalidadContainer">
                   <label for="modalidad">Modalidad de la encuesta:</label>

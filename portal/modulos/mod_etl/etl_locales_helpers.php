@@ -16,6 +16,34 @@ function removeBOM(string $str): string
     return $str;
 }
 
+function normalizeCsvText($value): string
+{
+    $value = removeBOM((string)$value);
+
+    if (preg_match('//u', $value) !== 1) {
+        if (function_exists('mb_convert_encoding')) {
+            $value = mb_convert_encoding($value, 'UTF-8', 'Windows-1252');
+        } elseif (function_exists('iconv')) {
+            $converted = @iconv('Windows-1252', 'UTF-8//IGNORE', $value);
+            if ($converted !== false) {
+                $value = $converted;
+            }
+        }
+    }
+
+    if (class_exists('Normalizer')) {
+        $normalized = Normalizer::normalize($value, Normalizer::FORM_C);
+        if ($normalized !== false) {
+            $value = $normalized;
+        }
+    }
+
+    $value = preg_replace('/[\p{Z}\s]+/u', ' ', $value);
+    return trim((string)$value);
+}
+
+require_once __DIR__ . '/../mod_local/etl_address_validation.php';
+
 function normalizeHeader(string $header): string
 {
     $header = removeBOM($header);
@@ -64,14 +92,11 @@ function resolveColumnIndexes(array $headers): array|false
         'nombre_local' => ['nombre local', 'nombre', 'nombre_local', 'local'],
         'direccion'    => ['direccion', 'dirección'],
         'comuna'       => ['comuna'],
-        'region'       => ['region', 'región'],
     ];
 
     $optionalAliases = [
         'cuenta'   => ['cuenta'],
-        'cadena'   => ['cadena'],
-        'zona'     => ['zona'],
-        'distrito' => ['distrito']
+        'cadena'   => ['cadena']
     ];
 
     $normalizedHeaders = array_map('normalizeHeader', $headers);
@@ -137,10 +162,66 @@ function appendFailureToReport(string $reportPath, array $failure): void
         $failure['line'] ?? '',
         $failure['codigo'] ?? '',
         $failure['nombre'] ?? '',
-        $failure['reason'] ?? ''
+        $failure['division_id'] ?? '',
+        $failure['estado_validacion'] ?? 'ERROR_IMPORTACION',
+        $failure['direccion_original'] ?? '',
+        $failure['direccion_limpia'] ?? '',
+        $failure['direccion_google'] ?? '',
+        $failure['comuna'] ?? '',
+        $failure['distrito'] ?? '',
+        $failure['zona'] ?? '',
+        $failure['region'] ?? '',
+        $failure['reason'] ?? '',
+        $failure['response_id'] ?? ''
     ], ';');
 
     fclose($fp);
+}
+
+function appendValidationRecord(string $validationPath, array $record): bool
+{
+    $fp = fopen($validationPath, 'a');
+    if (!$fp) {
+        return false;
+    }
+
+    $written = fwrite($fp, json_encode($record, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL);
+    fclose($fp);
+    return $written !== false;
+}
+
+function appendPreviewRecord(string $previewPath, array $record): bool
+{
+    $fp = fopen($previewPath, 'a');
+    if (!$fp) {
+        return false;
+    }
+
+    $written = fputcsv($fp, [
+        $record['line'] ?? '',
+        $record['codigo'] ?? '',
+        $record['division_id'] ?? '',
+        $record['nombre'] ?? '',
+        $record['direccion_actual'] ?? '',
+        $record['direccion_original'] ?? '',
+        $record['direccion_limpia'] ?? '',
+        $record['direccion_nueva'] ?? '',
+        $record['direccion_google'] ?? '',
+        $record['comuna'] ?? '',
+        $record['distrito'] ?? '',
+        $record['zona'] ?? '',
+        $record['region'] ?? '',
+        $record['cuenta'] ?? '',
+        $record['cadena'] ?? '',
+        $record['estado_validacion'] ?? '',
+        $record['reason'] ?? '',
+        $record['lat'] ?? '',
+        $record['lng'] ?? '',
+        $record['response_id'] ?? ''
+    ], ';');
+
+    fclose($fp);
+    return $written !== false;
 }
 
 function getRegionId(mysqli $conn, string $regionName, array &$errors, int $lineNumber): int|false
@@ -431,12 +512,13 @@ function getDistritoData(mysqli $conn, string $distritoName, ?int $zonaId, array
     ];
 }
 
-function getExistingLocalByCode(mysqli $conn, string $codigo, array &$errors, int $lineNumber): array|false
+function getExistingLocalByCode(mysqli $conn, string $codigo, int $divisionId, array &$errors, int $lineNumber): array|false
 {
     $sql = "
         SELECT
             l.id,
             l.codigo,
+            l.id_division,
             l.nombre,
             l.direccion,
             l.lat,
@@ -462,6 +544,7 @@ function getExistingLocalByCode(mysqli $conn, string $codigo, array &$errors, in
         LEFT JOIN zona z     ON z.id = l.id_zona
         LEFT JOIN distrito d ON d.id = l.id_distrito
         WHERE l.codigo = ?
+          AND l.id_division = ?
           AND l.deleted_at IS NULL
         LIMIT 1
     ";
@@ -472,14 +555,14 @@ function getExistingLocalByCode(mysqli $conn, string $codigo, array &$errors, in
         return false;
     }
 
-    $stmt->bind_param('s', $codigo);
+    $stmt->bind_param('si', $codigo, $divisionId);
     $stmt->execute();
     $result = $stmt->get_result();
     $row = $result ? $result->fetch_assoc() : null;
     $stmt->close();
 
     if (!$row) {
-        $errors[] = "El código '$codigo' no existe en la tabla local.";
+        $errors[] = "El código '$codigo' no existe en la división seleccionada (ID $divisionId).";
         return false;
     }
 
@@ -546,8 +629,13 @@ function geocodeAddress(string $direccion, string $comuna, string $region, strin
 function updateLocalByCodigo(
     mysqli $conn,
     string $codigo,
+    int $divisionId,
     string $nombre,
+    string $direccionOriginal,
     string $direccion,
+    string $direccionGoogle,
+    string $validationStatus,
+    string $googleResponseId,
     int $comunaId,
     float $lat,
     float $lng,
@@ -562,7 +650,12 @@ function updateLocalByCodigo(
         UPDATE local
         SET
             nombre = ?,
+            direccion_original = ?,
             direccion = ?,
+            direccion_google = ?,
+            estado_address_validation = ?,
+            google_response_id = ?,
+            direccion_validada_at = NOW(),
             id_comuna = ?,
             lat = ?,
             lng = ?,
@@ -572,6 +665,7 @@ function updateLocalByCodigo(
             id_distrito = ?,
             updated_at = NOW()
         WHERE codigo = ?
+          AND id_division = ?
           AND deleted_at IS NULL
     ";
 
@@ -582,9 +676,13 @@ function updateLocalByCodigo(
     }
 
     $stmt->bind_param(
-        'ssiddiiiis',
+        'ssssssiddiiiisi',
         $nombre,
+        $direccionOriginal,
         $direccion,
+        $direccionGoogle,
+        $validationStatus,
+        $googleResponseId,
         $comunaId,
         $lat,
         $lng,
@@ -592,15 +690,23 @@ function updateLocalByCodigo(
         $cadenaId,
         $zonaId,
         $distritoId,
-        $codigo
+        $codigo,
+        $divisionId
     );
 
     if (!$stmt->execute()) {
-        $errors[] = "Error actualizando local '$codigo' en línea $lineNumber: " . $stmt->error;
+        $errors[] = "Error actualizando local '$codigo' de la división $divisionId en línea $lineNumber: " . $stmt->error;
         $stmt->close();
         return false;
     }
 
+    $affectedRows = $stmt->affected_rows;
     $stmt->close();
+
+    if ($affectedRows < 1) {
+        $errors[] = "El local '$codigo' de la división $divisionId no fue modificado en la línea $lineNumber.";
+        return false;
+    }
+
     return true;
 }

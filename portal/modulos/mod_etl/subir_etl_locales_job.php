@@ -24,6 +24,30 @@ if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $po
     jsonResponse(['success' => false, 'message' => 'Token CSRF inválido.'], 400);
 }
 
+$divisionId = (int)($_POST['division_id'] ?? 0);
+$createScope = strtolower(trim((string)($_POST['create_scope'] ?? 'accepted_only')));
+$sessionEmpresaId = (int)($empresa_id ?? ($_SESSION['empresa_id'] ?? 0));
+
+if ($divisionId <= 0) {
+    jsonResponse(['success' => false, 'message' => 'Debes seleccionar una división.'], 400);
+}
+if (!in_array($createScope, ['accepted_only', 'accepted_review'], true)) {
+    jsonResponse(['success' => false, 'message' => 'La selección de estados para actualizar no es válida.'], 400);
+}
+
+$stmtDivision = $conn->prepare("SELECT 1 FROM division_empresa WHERE id = ? AND id_empresa = ? AND estado = 1 LIMIT 1");
+if (!$stmtDivision) {
+    jsonResponse(['success' => false, 'message' => 'No se pudo validar la división seleccionada.'], 500);
+}
+$stmtDivision->bind_param('ii', $divisionId, $sessionEmpresaId);
+$stmtDivision->execute();
+$stmtDivision->store_result();
+$validDivision = $stmtDivision->num_rows === 1;
+$stmtDivision->close();
+if (!$validDivision) {
+    jsonResponse(['success' => false, 'message' => 'La división seleccionada no pertenece a la empresa activa.'], 400);
+}
+
 if (!isset($_FILES['csvFile']) || $_FILES['csvFile']['error'] !== UPLOAD_ERR_OK) {
     jsonResponse(['success' => false, 'message' => 'No se subió correctamente el archivo CSV.'], 400);
 }
@@ -77,7 +101,7 @@ if ($indexes === false) {
     @unlink($filePath);
     jsonResponse([
         'success' => false,
-        'message' => 'Los encabezados no son válidos. Deben incluir al menos: codigo, nombre local, direccion, comuna, region. Opcionales: cuenta, cadena, zona, distrito.'
+        'message' => 'Los encabezados no son válidos. Deben incluir: Código Local, Nombre, Dirección y Comuna. Cuenta y Cadena son opcionales.'
     ], 400);
 }
 
@@ -114,14 +138,46 @@ if (!empty($duplicateCodes)) {
 
 $reportName = 'etl_locales_fallidos_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.csv';
 $reportPath = $reportDir . $reportName;
+$previewName = 'etl_locales_revision_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.csv';
+$previewPath = $reportDir . $previewName;
+$validationName = 'etl_locales_validation_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.jsonl';
+$validationPath = $uploadDir . $validationName;
 
 $fp = fopen($reportPath, 'w');
 if (!$fp) {
     @unlink($filePath);
     jsonResponse(['success' => false, 'message' => 'No se pudo crear el reporte de errores.'], 500);
 }
-fputcsv($fp, ['linea', 'codigo', 'nombre local', 'motivo de fallo'], ';');
+fputcsv($fp, [
+    'linea','codigo','nombre local','division id','estado address validation',
+    'direccion original','direccion limpia','direccion google','comuna','distrito',
+    'zona','region','motivo de fallo','response id'
+], ';');
 fclose($fp);
+
+$previewFp = fopen($previewPath, 'w');
+if (!$previewFp) {
+    @unlink($filePath);
+    @unlink($reportPath);
+    jsonResponse(['success' => false, 'message' => 'No se pudo crear el archivo de revisión.'], 500);
+}
+fwrite($previewFp, "\xEF\xBB\xBF");
+fputcsv($previewFp, [
+    'linea','codigo','division id','nombre local','direccion actual en base',
+    'direccion original archivo','direccion limpia','direccion propuesta','direccion completa google',
+    'comuna','distrito','zona','region','cuenta','cadena','estado address validation',
+    'motivo','lat','lng','response id'
+], ';');
+fclose($previewFp);
+
+$validationFp = fopen($validationPath, 'w');
+if (!$validationFp) {
+    @unlink($filePath);
+    @unlink($reportPath);
+    @unlink($previewPath);
+    jsonResponse(['success' => false, 'message' => 'No se pudo crear la caché de validación.'], 500);
+}
+fclose($validationFp);
 
 $conn->set_charset('utf8mb4');
 
@@ -129,6 +185,8 @@ $stmt = $conn->prepare("
     INSERT INTO etl_locales_jobs
     (
         user_id,
+        id_division,
+        create_scope,
         original_name,
         file_path,
         delimiter,
@@ -138,33 +196,43 @@ $stmt = $conn->prepare("
         failed_rows,
         status,
         report_path,
+        preview_path,
+        validation_path,
         last_error,
         created_at,
         updated_at
     )
-    VALUES (?, ?, ?, ?, ?, 0, 0, 0, 'pending', ?, NULL, NOW(), NOW())
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 'pending_preview', ?, ?, ?, NULL, NOW(), NOW())
 ");
 
 if (!$stmt) {
     @unlink($filePath);
     @unlink($reportPath);
+    @unlink($previewPath);
+    @unlink($validationPath);
     jsonResponse(['success' => false, 'message' => 'No se pudo crear el job: ' . $conn->error], 500);
 }
 
 $stmt->bind_param(
-    'isssis',
+    'iissssisss',
     $usuario_id,
+    $divisionId,
+    $createScope,
     $originalName,
     $filePath,
     $delimiter,
     $totalRows,
-    $reportPath
+    $reportPath,
+    $previewPath,
+    $validationPath
 );
 
 if (!$stmt->execute()) {
     $stmt->close();
     @unlink($filePath);
     @unlink($reportPath);
+    @unlink($previewPath);
+    @unlink($validationPath);
     jsonResponse(['success' => false, 'message' => 'No se pudo guardar el job: ' . $conn->error], 500);
 }
 

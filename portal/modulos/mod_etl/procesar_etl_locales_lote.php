@@ -13,39 +13,28 @@ require __DIR__ . '/etl_locales_helpers.php';
 if (!isset($usuario_id)) {
     jsonResponse(['success' => false, 'message' => 'Usuario no autenticado.'], 401);
 }
-
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jsonResponse(['success' => false, 'message' => 'Método no permitido.'], 405);
 }
 
 $sessionToken = trim($_SESSION['csrf_token'] ?? '');
-$postToken    = trim($_POST['csrf_token'] ?? '');
-
+$postToken = trim($_POST['csrf_token'] ?? '');
 if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $postToken)) {
     jsonResponse(['success' => false, 'message' => 'Token CSRF inválido.'], 400);
 }
 
 $jobId = (int)($_POST['job_id'] ?? 0);
-$limit = (int)($_POST['limit'] ?? 1000);
-$limit = ($limit > 0 && $limit <= 1000) ? $limit : 1000;
-
+$limit = (int)($_POST['limit'] ?? 100);
+$limit = ($limit > 0 && $limit <= 250) ? $limit : 100;
 if ($jobId <= 0) {
     jsonResponse(['success' => false, 'message' => 'Job inválido.'], 400);
 }
 
 $conn->set_charset('utf8mb4');
-
-$stmt = $conn->prepare("
-    SELECT *
-    FROM etl_locales_jobs
-    WHERE id = ?
-      AND user_id = ?
-    LIMIT 1
-");
+$stmt = $conn->prepare('SELECT * FROM etl_locales_jobs WHERE id = ? AND user_id = ? LIMIT 1');
 if (!$stmt) {
     jsonResponse(['success' => false, 'message' => 'Error preparando consulta job: ' . $conn->error], 500);
 }
-
 $stmt->bind_param('ii', $jobId, $usuario_id);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -56,52 +45,60 @@ if (!$job) {
     jsonResponse(['success' => false, 'message' => 'Job no encontrado.'], 404);
 }
 
-if (!file_exists($job['file_path'])) {
-    $stmtErr = $conn->prepare("UPDATE etl_locales_jobs SET status='failed', last_error='Archivo CSV no encontrado', updated_at=NOW() WHERE id=? LIMIT 1");
-    if ($stmtErr) {
-        $stmtErr->bind_param('i', $jobId);
-        $stmtErr->execute();
-        $stmtErr->close();
-    }
-    jsonResponse(['success' => false, 'message' => 'El archivo del job no existe.'], 500);
-}
+$previewUrl = !empty($job['preview_path'])
+    ? publicUrlFromPath($job['preview_path'], $_SERVER['DOCUMENT_ROOT'])
+    : '';
+$reportUrl = !empty($job['report_path'])
+    ? publicUrlFromPath($job['report_path'], $_SERVER['DOCUMENT_ROOT'])
+    : '';
 
-if ($job['status'] === 'completed') {
-    $reportUrl = $job['report_path'] ? publicUrlFromPath($job['report_path'], $_SERVER['DOCUMENT_ROOT']) : '';
-    $progress  = ((int)$job['total_rows'] > 0)
-        ? round((((int)$job['processed_rows']) / ((int)$job['total_rows'])) * 100, 2)
-        : 100;
-
+if (in_array($job['status'], ['preview_completed', 'applying', 'completed'], true)) {
     jsonResponse([
-        'success'        => true,
-        'done'           => true,
-        'job_id'         => (int)$job['id'],
-        'total_rows'     => (int)$job['total_rows'],
+        'success' => true,
+        'done' => true,
+        'phase' => 'preview',
+        'job_id' => (int)$job['id'],
+        'total_rows' => (int)$job['total_rows'],
         'processed_rows' => (int)$job['processed_rows'],
-        'updated_rows'   => (int)$job['updated_rows'],
-        'failed_rows'    => (int)$job['failed_rows'],
-        'batch_updated'  => 0,
-        'batch_failed'   => 0,
-        'progress'       => $progress,
-        'reportUrl'      => $reportUrl
+        'accepted_rows' => (int)$job['accepted_rows'],
+        'review_rows' => (int)$job['review_rows'],
+        'rejected_rows' => (int)$job['rejected_rows'],
+        'progress' => 100,
+        'previewReportUrl' => $previewUrl,
+        'reportUrl' => (int)$job['rejected_rows'] > 0 ? $reportUrl : ''
     ]);
 }
 
-$stmt = $conn->prepare("UPDATE etl_locales_jobs SET status='processing', updated_at=NOW() WHERE id=? LIMIT 1");
+if (!in_array($job['status'], ['pending_preview', 'processing_preview'], true)) {
+    jsonResponse(['success' => false, 'message' => 'El job no está disponible para validación.'], 409);
+}
+
+$divisionId = (int)($job['id_division'] ?? 0);
+if ($divisionId <= 0) {
+    jsonResponse(['success' => false, 'message' => 'El job no tiene una división válida.'], 409);
+}
+
+$filePath = (string)$job['file_path'];
+$previewPath = (string)($job['preview_path'] ?? '');
+$validationPath = (string)($job['validation_path'] ?? '');
+$reportPath = (string)($job['report_path'] ?? '');
+if (!is_file($filePath) || $previewPath === '' || $validationPath === '') {
+    jsonResponse(['success' => false, 'message' => 'Faltan archivos requeridos para validar el job.'], 500);
+}
+
+$apiKey = etlLoadGoogleMapsApiKey();
+if ($apiKey === '') {
+    jsonResponse(['success' => false, 'message' => 'Falta configurar GOOGLE_MAPS_API_KEY para Address Validation API.'], 500);
+}
+
+$stmt = $conn->prepare("UPDATE etl_locales_jobs SET status='processing_preview', updated_at=NOW() WHERE id=? LIMIT 1");
 if ($stmt) {
     $stmt->bind_param('i', $jobId);
     $stmt->execute();
     $stmt->close();
 }
 
-$google_maps_api_key = 'AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw';
-
-$delimiter   = $job['delimiter'] ?: ';';
-$filePath    = $job['file_path'];
-$reportPath  = $job['report_path'];
-$totalRows   = (int)$job['total_rows'];
-$startOffset = (int)$job['processed_rows'];
-
+$delimiter = $job['delimiter'] ?: ';';
 $handle = fopen($filePath, 'r');
 if (!$handle) {
     jsonResponse(['success' => false, 'message' => 'No se pudo abrir el archivo del job.'], 500);
@@ -112,317 +109,148 @@ if ($headers === false) {
     fclose($handle);
     jsonResponse(['success' => false, 'message' => 'El CSV del job está vacío.'], 400);
 }
-
-if (count($headers) > 0) {
-    $headers[0] = removeBOM($headers[0]);
-}
-
+$headers[0] = removeBOM($headers[0] ?? '');
 $indexes = resolveColumnIndexes($headers);
 if ($indexes === false) {
     fclose($handle);
-    jsonResponse([
-        'success' => false,
-        'message' => 'Los encabezados del archivo no son válidos.'
-    ], 400);
+    jsonResponse(['success' => false, 'message' => 'Los encabezados del archivo no son válidos.'], 400);
 }
 
+$startOffset = (int)$job['processed_rows'];
 $physicalLineNumber = 1;
-$skippedDataRows = 0;
-
-while ($skippedDataRows < $startOffset && ($row = fgetcsv($handle, 200000, $delimiter)) !== false) {
+$skippedRows = 0;
+while ($skippedRows < $startOffset && ($row = fgetcsv($handle, 200000, $delimiter)) !== false) {
     $physicalLineNumber++;
-    if (!isNonEmptyCsvRow($row)) {
-        continue;
+    if (isNonEmptyCsvRow($row)) {
+        $skippedRows++;
     }
-    $skippedDataRows++;
 }
 
 $batchProcessed = 0;
-$batchUpdated   = 0;
-$batchFailed    = 0;
-$errors         = [];
-$seenCodesBatch = [];
+$batchAccepted = 0;
+$batchReview = 0;
+$batchRejected = 0;
+$errors = [];
 
 while ($batchProcessed < $limit && ($dataLine = fgetcsv($handle, 200000, $delimiter)) !== false) {
     $physicalLineNumber++;
-
     if (!isNonEmptyCsvRow($dataLine)) {
         continue;
     }
-
     $batchProcessed++;
 
-    $codigo      = trim((string)($dataLine[$indexes['codigo']] ?? ''));
-    $nombreLocal = trim((string)($dataLine[$indexes['nombre_local']] ?? ''));
-    $direccion   = trim((string)($dataLine[$indexes['direccion']] ?? ''));
-    $comunaName  = trim((string)($dataLine[$indexes['comuna']] ?? ''));
-    $regionName  = trim((string)($dataLine[$indexes['region']] ?? ''));
+    $codigo = etlUpper($dataLine[$indexes['codigo']] ?? '');
+    $nombreOriginal = normalizeCsvText($dataLine[$indexes['nombre_local']] ?? '');
+    $direccionOriginal = normalizeCsvText($dataLine[$indexes['direccion']] ?? '');
+    $comunaOriginal = normalizeCsvText($dataLine[$indexes['comuna']] ?? '');
+    $cuentaName = ($indexes['cuenta'] !== null) ? etlUpper($dataLine[$indexes['cuenta']] ?? '') : '';
+    $cadenaName = ($indexes['cadena'] !== null) ? etlUpper($dataLine[$indexes['cadena']] ?? '') : '';
 
-    $cuentaName   = ($indexes['cuenta']   !== null) ? trim((string)($dataLine[$indexes['cuenta']]   ?? '')) : '';
-    $cadenaName   = ($indexes['cadena']   !== null) ? trim((string)($dataLine[$indexes['cadena']]   ?? '')) : '';
-    $zonaName     = ($indexes['zona']     !== null) ? trim((string)($dataLine[$indexes['zona']]     ?? '')) : '';
-    $distritoName = ($indexes['distrito'] !== null) ? trim((string)($dataLine[$indexes['distrito']] ?? '')) : '';
-
-    if ($codigo === '' || $nombreLocal === '' || $direccion === '' || $comunaName === '' || $regionName === '') {
-        $failure = [
-            'line'   => $physicalLineNumber,
-            'codigo' => $codigo,
-            'nombre' => $nombreLocal,
-            'reason' => 'Faltan campos requeridos.'
-        ];
-        $batchFailed++;
-        appendFailureToReport($reportPath, $failure);
-        continue;
-    }
-
-    if (isset($seenCodesBatch[$codigo])) {
-        $failure = [
-            'line'   => $physicalLineNumber,
-            'codigo' => $codigo,
-            'nombre' => $nombreLocal,
-            'reason' => 'Código repetido dentro del mismo lote.'
-        ];
-        $batchFailed++;
-        appendFailureToReport($reportPath, $failure);
-        continue;
-    }
-    $seenCodesBatch[$codigo] = true;
-
-    $localActual = getExistingLocalByCode($conn, $codigo, $errors, $physicalLineNumber);
-    if ($localActual === false) {
-        $failure = [
-            'line'   => $physicalLineNumber,
-            'codigo' => $codigo,
-            'nombre' => $nombreLocal,
-            'reason' => array_pop($errors) ?: 'No se encontró el local.'
-        ];
-        $batchFailed++;
-        appendFailureToReport($reportPath, $failure);
-        continue;
-    }
-
-    $regionId = getRegionId($conn, $regionName, $errors, $physicalLineNumber);
-    if ($regionId === false) {
-        $failure = [
-            'line'   => $physicalLineNumber,
-            'codigo' => $codigo,
-            'nombre' => $nombreLocal,
-            'reason' => array_pop($errors) ?: 'No se pudo resolver la región.'
-        ];
-        $batchFailed++;
-        appendFailureToReport($reportPath, $failure);
-        continue;
-    }
-
-    $comunaId = getComunaId($conn, $comunaName, $regionId, $errors, $physicalLineNumber);
-    if ($comunaId === false) {
-        $failure = [
-            'line'   => $physicalLineNumber,
-            'codigo' => $codigo,
-            'nombre' => $nombreLocal,
-            'reason' => array_pop($errors) ?: 'No se pudo resolver la comuna.'
-        ];
-        $batchFailed++;
-        appendFailureToReport($reportPath, $failure);
-        continue;
-    }
-
-    $cuentaId   = !empty($localActual['id_cuenta'])   ? (int)$localActual['id_cuenta']   : null;
-    $cadenaId   = !empty($localActual['id_cadena'])   ? (int)$localActual['id_cadena']   : null;
-    $zonaId     = !empty($localActual['id_zona'])     ? (int)$localActual['id_zona']     : null;
-    $distritoId = !empty($localActual['id_distrito']) ? (int)$localActual['id_distrito'] : null;
-
-    if ($cuentaName !== '') {
-        $tmpCuentaId = getCuentaId($conn, $cuentaName, $errors, $physicalLineNumber);
-        if ($tmpCuentaId === false) {
-            $failure = [
-                'line'   => $physicalLineNumber,
-                'codigo' => $codigo,
-                'nombre' => $nombreLocal,
-                'reason' => array_pop($errors) ?: 'No se pudo resolver la cuenta.'
-            ];
-            $batchFailed++;
-            appendFailureToReport($reportPath, $failure);
-            continue;
-        }
-        $cuentaId = $tmpCuentaId;
-    }
-
-    if ($cadenaName !== '') {
-        $cadenaData = getCadenaData($conn, $cadenaName, $cuentaId, $errors, $physicalLineNumber);
-        if ($cadenaData === false) {
-            $failure = [
-                'line'   => $physicalLineNumber,
-                'codigo' => $codigo,
-                'nombre' => $nombreLocal,
-                'reason' => array_pop($errors) ?: 'No se pudo resolver la cadena.'
-            ];
-            $batchFailed++;
-            appendFailureToReport($reportPath, $failure);
-            continue;
-        }
-        $cadenaId = (int)$cadenaData['id'];
-        if ($cuentaId === null && isset($cadenaData['id_cuenta'])) {
-            $cuentaId = (int)$cadenaData['id_cuenta'];
-        }
-    }
-
-    if ($zonaName !== '') {
-        $tmpZonaId = getZonaId($conn, $zonaName, $errors, $physicalLineNumber);
-        if ($tmpZonaId === false) {
-            $failure = [
-                'line'   => $physicalLineNumber,
-                'codigo' => $codigo,
-                'nombre' => $nombreLocal,
-                'reason' => array_pop($errors) ?: 'No se pudo resolver la zona.'
-            ];
-            $batchFailed++;
-            appendFailureToReport($reportPath, $failure);
-            continue;
-        }
-        $zonaId = $tmpZonaId;
-    }
-
-    if ($distritoName !== '') {
-        $distritoData = getDistritoData($conn, $distritoName, $zonaId, $errors, $physicalLineNumber);
-        if ($distritoData === false) {
-            $failure = [
-                'line'   => $physicalLineNumber,
-                'codigo' => $codigo,
-                'nombre' => $nombreLocal,
-                'reason' => array_pop($errors) ?: 'No se pudo resolver el distrito.'
-            ];
-            $batchFailed++;
-            appendFailureToReport($reportPath, $failure);
-            continue;
-        }
-        $distritoId = (int)$distritoData['id'];
-        if ($zonaId === null && isset($distritoData['id_zona'])) {
-            $zonaId = (int)$distritoData['id_zona'];
-        }
-    }
-
-    $direccionActual = trim((string)($localActual['direccion'] ?? ''));
-    $comunaActual    = trim((string)($localActual['comuna'] ?? ''));
-    $regionActual    = trim((string)($localActual['region'] ?? ''));
-    $latActual       = $localActual['lat'] !== null ? (float)$localActual['lat'] : null;
-    $lngActual       = $localActual['lng'] !== null ? (float)$localActual['lng'] : null;
-
-    $needGeocode = false;
-
-    if ($latActual === null || $lngActual === null || $latActual == 0.0 || $lngActual == 0.0) {
-        $needGeocode = true;
-    }
-
-    if (strcasecmp($direccionActual, $direccion) !== 0 ||
-        strcasecmp($comunaActual, $comunaName) !== 0 ||
-        strcasecmp($regionActual, $regionName) !== 0) {
-        $needGeocode = true;
-    }
-
-    $coords = [
-        'lat' => $latActual ?? 0,
-        'lng' => $lngActual ?? 0
+    $record = [
+        'line' => $physicalLineNumber,
+        'codigo' => $codigo,
+        'division_id' => $divisionId,
+        'nombre' => $nombreOriginal,
+        'direccion_actual' => '',
+        'direccion_original' => $direccionOriginal,
+        'direccion_limpia' => '',
+        'direccion_nueva' => '',
+        'direccion_google' => '',
+        'comuna' => $comunaOriginal,
+        'distrito' => '',
+        'zona' => '',
+        'region' => '',
+        'cuenta' => $cuentaName,
+        'cadena' => $cadenaName,
+        'estado_validacion' => 'ERROR_ENTRADA',
+        'reason' => '',
+        'lat' => null,
+        'lng' => null,
+        'response_id' => ''
     ];
 
-    if ($needGeocode) {
-        $coords = geocodeAddress($direccion, $comunaName, $regionName, $google_maps_api_key, $errors, $physicalLineNumber);
-        if ($coords === false) {
-            $failure = [
-                'line'   => $physicalLineNumber,
-                'codigo' => $codigo,
-                'nombre' => $nombreLocal,
-                'reason' => array_pop($errors) ?: 'No se pudo geolocalizar la dirección.'
-            ];
-            $batchFailed++;
-            appendFailureToReport($reportPath, $failure);
-            continue;
+    if ($codigo === '' || $nombreOriginal === '' || $direccionOriginal === '' || $comunaOriginal === '') {
+        $record['reason'] = 'Faltan campos requeridos.';
+    } else {
+        $territory = etlLookupTerritoryByComuna($comunaOriginal);
+        if ($territory === null) {
+            $record['estado_validacion'] = 'COMUNA_SIN_MAPEO';
+            $record['reason'] = "La comuna '$comunaOriginal' no existe en el catálogo territorial.";
+        } else {
+            $record['comuna'] = $territory['comuna'];
+            $record['distrito'] = $territory['distrito'];
+            $record['zona'] = $territory['zona'];
+            $record['region'] = $territory['region'];
+            $record['nombre'] = etlBuildLocalName($codigo, $nombreOriginal, $record['comuna']);
+            $record['direccion_limpia'] = etlCleanAddress($direccionOriginal, $record['comuna']);
+
+            $localActual = getExistingLocalByCode($conn, $codigo, $divisionId, $errors, $physicalLineNumber);
+            if ($localActual === false) {
+                $record['estado_validacion'] = 'LOCAL_NO_ENCONTRADO';
+                $record['reason'] = array_pop($errors) ?: 'No se encontró el local.';
+            } else {
+                $record['direccion_actual'] = normalizeCsvText($localActual['direccion'] ?? '');
+                $validation = etlValidateAddress(
+                    $record['direccion_limpia'],
+                    $record['comuna'],
+                    $apiKey,
+                    $physicalLineNumber
+                );
+                $record['estado_validacion'] = $validation['status'];
+                $record['reason'] = $validation['reason'];
+                $record['direccion_nueva'] = etlPreferredAddress($validation, $record['direccion_limpia']);
+                $record['direccion_google'] = $validation['formatted_address'];
+                $record['lat'] = $validation['lat'];
+                $record['lng'] = $validation['lng'];
+                $record['response_id'] = $validation['response_id'];
+            }
         }
     }
 
-    $ok = updateLocalByCodigo(
-        $conn,
-        $codigo,
-        $nombreLocal,
-        $direccion,
-        $comunaId,
-        (float)$coords['lat'],
-        (float)$coords['lng'],
-        $cuentaId,
-        $cadenaId,
-        $zonaId,
-        $distritoId,
-        $errors,
-        $physicalLineNumber
-    );
-
-    if (!$ok) {
-        $failure = [
-            'line'   => $physicalLineNumber,
-            'codigo' => $codigo,
-            'nombre' => $nombreLocal,
-            'reason' => array_pop($errors) ?: 'No se pudo actualizar el local.'
-        ];
-        $batchFailed++;
-        appendFailureToReport($reportPath, $failure);
-        continue;
+    if ($record['estado_validacion'] === 'ACEPTADA') {
+        $batchAccepted++;
+    } elseif ($record['estado_validacion'] === 'REVISION') {
+        $batchReview++;
+    } else {
+        $batchRejected++;
+        appendFailureToReport($reportPath, $record);
     }
 
-    $batchUpdated++;
+    if (!appendPreviewRecord($previewPath, $record) || !appendValidationRecord($validationPath, $record)) {
+        fclose($handle);
+        jsonResponse(['success' => false, 'message' => 'No se pudo guardar el resultado de la validación.'], 500);
+    }
 }
-
 fclose($handle);
 
 $newProcessed = $startOffset + $batchProcessed;
-$newUpdated   = ((int)$job['updated_rows']) + $batchUpdated;
-$newFailed    = ((int)$job['failed_rows']) + $batchFailed;
-$done         = ($newProcessed >= $totalRows);
-$newStatus    = $done ? 'completed' : 'processing';
+$newAccepted = (int)$job['accepted_rows'] + $batchAccepted;
+$newReview = (int)$job['review_rows'] + $batchReview;
+$newRejected = (int)$job['rejected_rows'] + $batchRejected;
+$totalRows = (int)$job['total_rows'];
+$done = $newProcessed >= $totalRows;
+$newStatus = $done ? 'preview_completed' : 'processing_preview';
+$progress = $totalRows > 0 ? round(($newProcessed / $totalRows) * 100, 2) : 100;
 
-$reportUrl = $reportPath ? publicUrlFromPath($reportPath, $_SERVER['DOCUMENT_ROOT']) : '';
-$progress  = ($totalRows > 0) ? round(($newProcessed / $totalRows) * 100, 2) : 100;
-
-$stmt = $conn->prepare("
-    UPDATE etl_locales_jobs
-    SET
-        processed_rows = ?,
-        updated_rows   = ?,
-        failed_rows    = ?,
-        status         = ?,
-        updated_at     = NOW()
-    WHERE id = ?
-    LIMIT 1
-");
-
+$stmt = $conn->prepare("UPDATE etl_locales_jobs SET processed_rows=?, accepted_rows=?, review_rows=?, rejected_rows=?, failed_rows=?, status=?, updated_at=NOW() WHERE id=? LIMIT 1");
 if (!$stmt) {
-    jsonResponse(['success' => false, 'message' => 'No se pudo actualizar el job: ' . $conn->error], 500);
+    jsonResponse(['success' => false, 'message' => 'No se pudo actualizar el avance del job: ' . $conn->error], 500);
 }
-
-$stmt->bind_param(
-    'iiisi',
-    $newProcessed,
-    $newUpdated,
-    $newFailed,
-    $newStatus,
-    $jobId
-);
-
-if (!$stmt->execute()) {
-    $stmt->close();
-    jsonResponse(['success' => false, 'message' => 'No se pudo guardar avance del job.'], 500);
-}
+$stmt->bind_param('iiiiisi', $newProcessed, $newAccepted, $newReview, $newRejected, $newRejected, $newStatus, $jobId);
+$stmt->execute();
 $stmt->close();
 
 jsonResponse([
-    'success'        => true,
-    'done'           => $done,
-    'job_id'         => $jobId,
-    'total_rows'     => $totalRows,
+    'success' => true,
+    'done' => $done,
+    'phase' => 'preview',
+    'job_id' => $jobId,
+    'total_rows' => $totalRows,
     'processed_rows' => $newProcessed,
-    'updated_rows'   => $newUpdated,
-    'failed_rows'    => $newFailed,
-    'batch_updated'  => $batchUpdated,
-    'batch_failed'   => $batchFailed,
-    'progress'       => $progress,
-    'reportUrl'      => $reportUrl
+    'accepted_rows' => $newAccepted,
+    'review_rows' => $newReview,
+    'rejected_rows' => $newRejected,
+    'progress' => $progress,
+    'previewReportUrl' => $done ? publicUrlFromPath($previewPath, $_SERVER['DOCUMENT_ROOT']) : '',
+    'reportUrl' => $done && $newRejected > 0 ? publicUrlFromPath($reportPath, $_SERVER['DOCUMENT_ROOT']) : ''
 ]);

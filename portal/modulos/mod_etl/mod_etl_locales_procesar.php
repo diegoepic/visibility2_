@@ -26,7 +26,25 @@ if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $po
     exit();
 }
 
-$google_maps_api_key = 'AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw';
+// Endpoint legado: no conoce la división y podría actualizar otro local con el mismo código.
+// El flujo vigente y seguro es subir_etl_locales_job.php + procesar_etl_locales_lote.php.
+http_response_code(410);
+echo json_encode([
+    'success' => false,
+    'message' => 'Este procesador fue reemplazado. Use el flujo ETL por lotes seleccionando una división.'
+], JSON_UNESCAPED_UNICODE);
+exit();
+
+$google_maps_api_key = trim((string)getenv('GOOGLE_MAPS_API_KEY'));
+if ($google_maps_api_key === '') {
+    $mapsConfigPath = rtrim($_SERVER['DOCUMENT_ROOT'], '/\\') . '/visibility2/portal/config/maps_config.php';
+    if (is_file($mapsConfigPath)) {
+        $mapsConfig = include $mapsConfigPath;
+        if (is_array($mapsConfig)) {
+            $google_maps_api_key = trim((string)($mapsConfig['google_maps_api_key'] ?? ''));
+        }
+    }
+}
 
 function jsonResponse(array $data, int $status = 200): void {
     http_response_code($status);

@@ -271,6 +271,14 @@ try {
     }
 
     // =========================
+    // Categoría / Trade (0 = sin asignar → NULL)
+    // =========================
+    $id_categoria_form = isset($_POST['id_categoria_formulario']) ? intval($_POST['id_categoria_formulario']) : 0;
+    $id_categoria_form = $id_categoria_form > 0 ? $id_categoria_form : null;
+    $id_trade_form     = isset($_POST['id_trade']) ? intval($_POST['id_trade']) : 0;
+    $id_trade_form     = $id_trade_form > 0 ? $id_trade_form : null;
+
+    // =========================
     // CSV requerido
     // =========================
     $requiereCsv = ($tipo === 1 || $tipo === 3);
@@ -290,13 +298,13 @@ try {
 
     $sql_insert_formulario = "
         INSERT INTO formulario
-        (nombre, fechaInicio, fechaTermino, estado, tipo, iw_requiere_local, id_empresa, id_division, id_subdivision, url_bi, modalidad)
-        VALUES (?, NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?)
+        (nombre, fechaInicio, fechaTermino, estado, tipo, iw_requiere_local, id_empresa, id_division, id_subdivision, id_categoria_formulario, id_trade, url_bi, modalidad)
+        VALUES (?, NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ";
 
     $stmt_insert_formulario = $conn->prepare($sql_insert_formulario);
     $stmt_insert_formulario->bind_param(
-        'ssssiiiiiss',
+        'ssssiiiiiiiss',
         $nombre,
         $fechaInicio,
         $fechaTermino,
@@ -306,6 +314,8 @@ try {
         $empresa_form,
         $id_division,
         $id_subdivision,
+        $id_categoria_form,
+        $id_trade_form,
         $url_bi,
         $modalidad
     );

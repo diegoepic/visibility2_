@@ -86,6 +86,8 @@ $division_seleccionada    = isset($_GET['division']) ? intval($_GET['division'])
 $estado_campana           = isset($_GET['estado_campana']) ? trim($_GET['estado_campana']) : '1';
 $tipo_campana             = isset($_GET['tipo_campana']) ? intval($_GET['tipo_campana']) : 0;
 $subdivision_seleccionada = isset($_GET['subdivision']) ? intval($_GET['subdivision']) : 0;
+$categoria_seleccionada   = isset($_GET['categoria_formulario']) ? intval($_GET['categoria_formulario']) : 0;
+$trade_seleccionado       = isset($_GET['trade']) ? intval($_GET['trade']) : 0;
 $buscar                   = isset($_GET['buscar']) ? trim($_GET['buscar']) : '0';
 
 $empresa_id = intval($_SESSION['empresa_id'] ?? 0);
@@ -108,11 +110,17 @@ if ($buscar === '1') {
             f.estado,
             f.tipo,
             f.id_division,
+            f.id_categoria_formulario,
+            f.id_trade,
             d.nombre  AS division_nombre,
-            sd.nombre AS subdivision_nombre
+            sd.nombre AS subdivision_nombre,
+            cf.nombre AS categoria_nombre,
+            tr.nombre AS trade_nombre
         FROM formulario AS f
         LEFT JOIN division_empresa AS d ON d.id = f.id_division
         LEFT JOIN subdivision AS sd ON sd.id = f.id_subdivision
+        LEFT JOIN categoria_formulario AS cf ON cf.id = f.id_categoria_formulario
+        LEFT JOIN trade AS tr ON tr.id = f.id_trade
     ";
 
     $conditions = [];
@@ -155,6 +163,18 @@ if ($buscar === '1') {
         $param_types .= "i";
     }
 
+    if ($categoria_seleccionada > 0) {
+        $conditions[] = "f.id_categoria_formulario = ?";
+        $params[] = $categoria_seleccionada;
+        $param_types .= "i";
+    }
+
+    if ($trade_seleccionado > 0) {
+        $conditions[] = "f.id_trade = ?";
+        $params[] = $trade_seleccionado;
+        $param_types .= "i";
+    }
+
     if (!empty($conditions)) {
         $query .= " WHERE " . implode(" AND ", $conditions);
     }
@@ -194,6 +214,8 @@ if ($buscar === '1') {
                 <th>Tipo</th>
                 <th>División</th>
                 <th>Subdivisión</th>
+                <th>Categoría</th>
+                <th>Trade</th>
                 <th>Acciones</th>
             </tr>
         </thead>
@@ -207,6 +229,8 @@ if ($buscar === '1') {
                         $tipo_clase         = obtenerClaseTipo($row['tipo']);
                         $division_nombre    = !empty($row['division_nombre']) ? e($row['division_nombre']) : '<span class="table-muted">Sin División</span>';
                         $subdivision_nombre = !empty($row['subdivision_nombre']) ? e($row['subdivision_nombre']) : '<span class="table-muted">Sin Subdivisión</span>';
+                        $categoria_nombre   = !empty($row['categoria_nombre']) ? e($row['categoria_nombre']) : '<span class="table-muted">Sin Categoría</span>';
+                        $trade_nombre       = !empty($row['trade_nombre']) ? e($row['trade_nombre']) : '<span class="table-muted">Sin Trade</span>';
                         $editar_url         = "mod_formulario/editar_formulario.php?id=" . urlencode($row['id']);
                     ?>
                     <tr>
@@ -218,6 +242,8 @@ if ($buscar === '1') {
                         <td><span class="<?php echo e($tipo_clase); ?>"><?php echo e($tipo_texto); ?></span></td>
                         <td><?php echo $division_nombre; ?></td>
                         <td><?php echo $subdivision_nombre; ?></td>
+                        <td><?php echo $categoria_nombre; ?></td>
+                        <td><?php echo $trade_nombre; ?></td>
                         <td>
                             <div class="action-group">
                             <button
@@ -243,7 +269,7 @@ if ($buscar === '1') {
                 <?php endforeach; ?>
             <?php else: ?>
                 <tr>
-                    <td colspan="9" class="text-center text-muted py-4">No se encontraron formularios.</td>
+                    <td colspan="11" class="text-center text-muted py-4">No se encontraron formularios.</td>
                 </tr>
             <?php endif; ?>
         </tbody>

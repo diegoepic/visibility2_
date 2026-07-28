@@ -3,8 +3,8 @@ declare(strict_types=1);
 
 session_start();
 
-ini_set('display_errors', '1');
-ini_set('display_startup_errors', '1');
+ini_set('display_errors', '0');
+ini_set('display_startup_errors', '0');
 error_reporting(E_ALL);
 ini_set('log_errors', '1');
 ini_set('memory_limit', '512M');
@@ -16,6 +16,24 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
 
 mysqli_set_charset($conn, 'utf8mb4');
 date_default_timezone_set('America/Santiago');
+
+if (!function_exists('normalizeCsvText')) {
+    function normalizeCsvText($value): string
+    {
+        $value = (string)$value;
+        if (!mb_check_encoding($value, 'UTF-8')) {
+            $converted = @mb_convert_encoding($value, 'UTF-8', 'Windows-1252, ISO-8859-1');
+            if ($converted !== false) {
+                $value = $converted;
+            }
+        }
+        $value = preg_replace('/^\xEF\xBB\xBF/', '', $value);
+        $value = preg_replace('/\s+/u', ' ', $value);
+        return trim((string)$value);
+    }
+}
+
+require_once __DIR__ . '/../mod_local/etl_address_validation.php';
 
 function json_fail(string $message, int $code = 400, array $extra = []): void
 {
@@ -70,13 +88,20 @@ function find_header_index(array $headers, array $aliases): int
 
 function has_valid_coords(array $local): bool
 {
-    return isset($local['lat'], $local['lng'])
+    if (!(isset($local['lat'], $local['lng'])
         && $local['lat'] !== null
         && $local['lng'] !== null
         && $local['lat'] !== ''
         && $local['lng'] !== ''
         && is_numeric((string)$local['lat'])
-        && is_numeric((string)$local['lng']);
+        && is_numeric((string)$local['lng']))) {
+        return false;
+    }
+
+    $lat = (float)$local['lat'];
+    $lng = (float)$local['lng'];
+    return $lat >= -90 && $lat <= 90 && $lng >= -180 && $lng <= 180
+        && (abs($lat) > 0.0001 || abs($lng) > 0.0001);
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -113,6 +138,25 @@ if (!$divisionData) {
 }
 
 $divisionNombreRuta = (string)($divisionData['nombre'] ?? '');
+
+// Un usuario normal sólo puede consultar locales de su división. MC conserva
+// la selección global que ya ofrece la interfaz.
+$divisionSesionId = (int)($_SESSION['division_id'] ?? 0);
+$divisionSesionNombre = '';
+if ($divisionSesionId > 0) {
+    $stmtSesion = $conn->prepare('SELECT nombre FROM division_empresa WHERE id=? LIMIT 1');
+    if ($stmtSesion) {
+        $stmtSesion->bind_param('i', $divisionSesionId);
+        $stmtSesion->execute();
+        $stmtSesion->bind_result($divisionSesionNombre);
+        $stmtSesion->fetch();
+        $stmtSesion->close();
+    }
+}
+$esMc = strtoupper(trim($divisionSesionNombre)) === 'MC';
+if (!$esMc && $divisionSesionId > 0 && $idDivisionRuta !== $divisionSesionId) {
+    json_fail('No tienes permiso para cargar locales de otra división.', 403);
+}
 
 if (!isset($_FILES['csvFile']) || !is_array($_FILES['csvFile'])) {
     json_fail('No se recibió el archivo CSV.');
@@ -237,10 +281,11 @@ $usuariosInput = array_keys($usuariosInput);
 $localesMap = [];
 
 if (!empty($codigos)) {
-    $placeholders = implode(',', array_fill(0, count($codigos), '?'));
+    foreach (array_chunk($codigos, 1000) as $codigoChunk) {
+    $placeholders = implode(',', array_fill(0, count($codigoChunk), '?'));
 
-    $types = str_repeat('s', count($codigos)) . 'i';
-    $params = $codigos;
+    $types = str_repeat('s', count($codigoChunk)) . 'i';
+    $params = $codigoChunk;
     $params[] = $idDivisionRuta;
 
     $sqlLocales = "
@@ -249,6 +294,10 @@ if (!empty($codigos)) {
             l.codigo,
             l.nombre,
             l.direccion,
+            l.direccion_original,
+            l.direccion_google,
+            l.google_response_id,
+            l.direccion_validada_at,
             c.comuna,
             l.lat,
             l.lng,
@@ -283,11 +332,16 @@ if (!empty($codigos)) {
     while ($row = $resLocales->fetch_assoc()) {
         $codigo = trim((string)$row['codigo']);
 
-        $localesMap[$codigo] = [
+        $localesMap[normalize_text($codigo)] = [
             'id_local'        => (int)$row['id_local'],
             'codigo'          => $codigo,
             'nombre'          => $row['nombre'] ?? '',
             'direccion'       => $row['direccion'] ?? '',
+            'direccion_original' => $row['direccion_original'] ?? '',
+            'direccion_google' => $row['direccion_google'] ?? '',
+            'estado_address_validation' => '',
+            'google_response_id' => $row['google_response_id'] ?? '',
+            'direccion_validada_at' => $row['direccion_validada_at'] ?? null,
             'comuna'          => $row['comuna'] ?? '',
             'lat'             => $row['lat'],
             'lng'             => $row['lng'],
@@ -297,7 +351,120 @@ if (!empty($codigos)) {
     }
 
     $stmtLocales->close();
+    }
 }
+
+// Las coordenadas existentes siempre tienen prioridad. Address Validation sólo
+// se usa como respaldo para locales sin un punto geográfico utilizable.
+$apiKey = etlLoadGoogleMapsApiKey();
+$validationDeadline = microtime(true) + 130;
+$maxGoogleValidations = 40;
+$googleAttempts = 0;
+
+foreach ($localesMap as &$local) {
+    $local['coordenadas_origen'] = has_valid_coords($local) ? 'SQL' : 'SIN_COORDENADAS';
+    $local['motivo_validacion'] = has_valid_coords($local)
+        ? 'Se utilizaron las coordenadas guardadas en SQL.'
+        : '';
+
+    if (has_valid_coords($local)) {
+        continue;
+    }
+
+    if ($apiKey === '') {
+        $local['motivo_validacion'] = 'No hay una API key configurada para Address Validation.';
+        continue;
+    }
+
+    $lastValidation = trim((string)($local['direccion_validada_at'] ?? ''));
+    if ($lastValidation !== '' && strtotime($lastValidation) >= strtotime('-30 days')) {
+        $local['motivo_validacion'] = 'La dirección ya fue revisada recientemente y Google no entregó coordenadas utilizables.';
+        continue;
+    }
+
+    if ($googleAttempts >= $maxGoogleValidations || microtime(true) >= $validationDeadline) {
+        $local['motivo_validacion'] = 'Validación pendiente por límite de proceso; vuelve a cargar el archivo para continuar.';
+        continue;
+    }
+
+    $cleanAddress = etlCleanAddress($local['direccion'], $local['comuna']);
+    if ($cleanAddress === '') {
+        $local['motivo_validacion'] = 'El local no tiene una dirección que se pueda validar.';
+        continue;
+    }
+
+    $googleAttempts++;
+    $validation = etlValidateAddress(
+        $cleanAddress,
+        (string)$local['comuna'],
+        $apiKey,
+        (int)$local['id_local']
+    );
+
+    $local['estado_address_validation'] = (string)($validation['status'] ?? 'RECHAZADA');
+    $local['motivo_validacion'] = (string)($validation['reason'] ?? 'Sin detalle de validación.');
+    $formattedAddress = etlUpper($validation['formatted_address'] ?? '');
+    $responseId = trim((string)($validation['response_id'] ?? ''));
+    $latGoogle = $validation['lat'] ?? null;
+    $lngGoogle = $validation['lng'] ?? null;
+    $googleHasCoords = is_numeric($latGoogle) && is_numeric($lngGoogle)
+        && has_valid_coords(['lat' => $latGoogle, 'lng' => $lngGoogle]);
+
+    if ($googleHasCoords && in_array($local['estado_address_validation'], ['ACEPTADA', 'REVISION'], true)) {
+        $latGoogle = (float)$latGoogle;
+        $lngGoogle = (float)$lngGoogle;
+        $stmtUpdate = $conn->prepare("
+            UPDATE local
+            SET direccion_original = CASE
+                    WHEN direccion_original IS NULL OR direccion_original = '' THEN direccion
+                    ELSE direccion_original
+                END,
+                direccion_google = ?,
+                google_response_id = ?,
+                direccion_validada_at = NOW(),
+                lat = ?,
+                lng = ?,
+                updated_at = NOW()
+            WHERE id = ? AND id_division = ?
+            LIMIT 1
+        ");
+        if ($stmtUpdate) {
+            $idLocalUpdate = (int)$local['id_local'];
+            $stmtUpdate->bind_param('ssddii', $formattedAddress, $responseId, $latGoogle, $lngGoogle, $idLocalUpdate, $idDivisionRuta);
+            $stmtUpdate->execute();
+            $stmtUpdate->close();
+        }
+
+        $local['direccion_google'] = $formattedAddress;
+        $local['google_response_id'] = $responseId;
+        $local['lat'] = $latGoogle;
+        $local['lng'] = $lngGoogle;
+        $local['coordenadas_origen'] = 'ADDRESS_VALIDATION';
+    } elseif ($responseId !== '') {
+        // Registrar la revisión evita cobrar repetidamente por la misma dirección rechazada.
+        $stmtRejected = $conn->prepare("
+            UPDATE local
+            SET direccion_original = CASE
+                    WHEN direccion_original IS NULL OR direccion_original = '' THEN direccion
+                    ELSE direccion_original
+                END,
+                direccion_google = ?,
+                google_response_id = ?,
+                direccion_validada_at = NOW(),
+                updated_at = NOW()
+            WHERE id = ? AND id_division = ?
+            LIMIT 1
+        ");
+        if ($stmtRejected) {
+            $idLocalRejected = (int)$local['id_local'];
+            $stmtRejected->bind_param('ssii', $formattedAddress, $responseId, $idLocalRejected, $idDivisionRuta);
+            $stmtRejected->execute();
+            $stmtRejected->close();
+        }
+        $local['direccion_google'] = $formattedAddress;
+    }
+}
+unset($local);
 
 // Buscar usuarios activos
 $usuariosMap = [];
@@ -351,6 +518,9 @@ $encontradosValidos = [];
 $localesNoEncontrados = [];
 $usuariosNoValidos = [];
 $filasInvalidas = [];
+$coordenadasSql = 0;
+$validadosGoogle = 0;
+$sinCoordenadas = 0;
 
 foreach ($rows as $row) {
     $codigo = $row['codigo'];
@@ -367,7 +537,7 @@ foreach ($rows as $row) {
         $errores[] = 'Usuario vacío';
     }
 
-    $local = $localesMap[$codigo] ?? null;
+    $local = $localesMap[normalize_text($codigo)] ?? null;
 
     if ($codigo !== '' && !$local) {
         $errores[] = 'Código de local no existe para la división seleccionada';
@@ -424,18 +594,32 @@ foreach ($rows as $row) {
         continue;
     }
 
+    $tieneCoords = has_valid_coords($local);
+    if (($local['coordenadas_origen'] ?? '') === 'ADDRESS_VALIDATION' && $tieneCoords) {
+        $validadosGoogle++;
+    } elseif ($tieneCoords) {
+        $coordenadasSql++;
+    } else {
+        $sinCoordenadas++;
+    }
+
     $encontradosValidos[] = [
         'fila_csv'        => $filaCsv,
         'id_local'        => $local['id_local'],
         'codigo'          => $local['codigo'],
         'nombre'          => $local['nombre'],
         'direccion'       => $local['direccion'],
+        'direccion_original' => $local['direccion_original'] ?: $local['direccion'],
+        'direccion_google' => $local['direccion_google'],
         'comuna'          => $local['comuna'],
         'lat'             => $local['lat'],
         'lng'             => $local['lng'],
         'id_division'     => $local['id_division'],
         'division_nombre' => $local['division_nombre'],
-        'tiene_coords'    => has_valid_coords($local),
+        'tiene_coords'    => $tieneCoords,
+        'coordenadas_origen' => $local['coordenadas_origen'],
+        'estado_address_validation' => $local['estado_address_validation'],
+        'motivo_validacion' => $local['motivo_validacion'],
         'usuario_input'   => $usuarioInput,
         'usuario_id'      => $usuarioMatch['usuario_id'],
         'usuario_login'   => $usuarioMatch['usuario_login'],
@@ -458,6 +642,10 @@ echo json_encode([
         'locales_no_encontrados' => count($localesNoEncontrados),
         'usuarios_no_validos' => count($usuariosNoValidos),
         'filas_invalidas' => count($filasInvalidas),
+        'coordenadas_sql' => $coordenadasSql,
+        'validados_google' => $validadosGoogle,
+        'sin_coordenadas' => $sinCoordenadas,
+        'intentos_address_validation' => $googleAttempts,
     ],
 ], JSON_UNESCAPED_UNICODE);
 exit;

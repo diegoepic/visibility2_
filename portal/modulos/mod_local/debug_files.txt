@@ -2,19 +2,21 @@ Array
 (
     [csvFile] => Array
         (
-            [name] => formato_creacion_locales1.csv
-            [full_path] => formato_creacion_locales1.csv
+            [name] => plantilla_carga_masiva_locales (2).csv
+            [full_path] => plantilla_carga_masiva_locales (2).csv
             [type] => text/csv
-            [tmp_name] => /tmp/phpazBMCR
+            [tmp_name] => /tmp/phpxIs4eF
             [error] => 0
-            [size] => 20758
+            [size] => 127360
         )
 
 )
 
 Array
 (
-    [csrf_token] => a1f48fbbd773a0fc7e243a819f88f6c535c91b3ee008ad3742226e14d6aa77be
+    [csrf_token] => 2b3e70be3322b54e8de554a8a54d4c571c041eae33f85f56938ce8b232d6ff4a
+    [import_mode] => create
+    [create_scope] => accepted_review
     [empresa_id] => 103
-    [division_id] => 14
+    [division_id] => 20
 )

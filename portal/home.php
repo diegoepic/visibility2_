@@ -1383,7 +1383,7 @@ body.layout-fixed {
               <?php endif; ?>
               <?php if (puedeVerModulo($conn, 'mapa.visor_rutas')): ?>
               <li class="nav-item">
-                 <a href="modulos/mod_panel/mod_visualizar_ruta_excel.php" class="nav-link">
+                 <a href="modulos/mod_panel/mod_visualizar_rutas_cliente.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Visor de rutas</p>
                 </a>
@@ -1446,6 +1446,12 @@ body.layout-fixed {
                   <p>Merchan</p>
                 </a>
               </li>
+              <li class="nav-item">
+                <a href="modulos/mod_panel/mod_panel_visitas_locales.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Visita locales</p>
+                </a>
+              </li>              
               <?php endif; ?>
               <?php if (puedeVerModulo($conn, 'panel_control.campanas')): ?>
               <li class="nav-item">
@@ -1483,7 +1489,7 @@ body.layout-fixed {
             <a href="#" class="nav-link">
               <i class="nav-icon fas fa-chart-line"></i>
               <p>
-                Administrador
+                Administrador de rutas
                 <i class="fas fa-angle-left right"></i>
               </p>
             </a>
@@ -1494,6 +1500,24 @@ body.layout-fixed {
                   <p>Editor de rutas</p>
                 </a>
               </li>
+              <li class="nav-item">
+                <a href="modulos/mod_rutas/mod_visualizar_rutas_planificadas.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Planificador de rutas</p>
+                </a>
+              </li> 
+              <li class="nav-item">              
+                <a href="modulos/mod_panel/mod_control_carga.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Control de ruta</p>
+                </a> 
+              </li>
+              <li class="nav-item">              
+                <a href="modulos/mod_panel/mod_administrar_rutas_excel.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Cargar set de rutas</p>
+                </a> 
+              </li>              
             </ul>
           </li>          
           <?php endif; ?>
@@ -1570,20 +1594,10 @@ body.layout-fixed {
             </a>
             <ul class="nav nav-treeview">
               <li class="nav-item">
-                <a href="modulos/mod_panel/mod_control_carga.php" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Control de ruta</p>
-                </a>                
               <li class="nav-item">
                 <a href="modulos/mod_rutas/mapa_rutas.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Planificador de rutas</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="modulos/mod_rutas/mod_visualizar_rutas_planificadas.php" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Visor de rutas planificadas</p>
                 </a>
               </li>
               <li class="nav-item">
@@ -1614,9 +1628,9 @@ body.layout-fixed {
             </a>
             <ul class="nav nav-treeview">
               <li class="nav-item">
-                <a href="modulos/mod_elementos.php" class="nav-link">
+                <a href="modulos/mod_cadena.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
-                  <p>Crear empresa</p>
+                  <p>Adminsitrar cadenas</p>
                 </a>
               </li>
               <li class="nav-item">

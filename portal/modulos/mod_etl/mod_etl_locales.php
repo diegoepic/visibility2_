@@ -6,7 +6,20 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 $csrfToken = $_SESSION['csrf_token'];
-$templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/template_etl.csv';
+$templateUrl = '/visibility2/portal/modulos/mod_etl/descargar_plantilla_etl_locales.php';
+
+include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
+$sessionEmpresaId = (int)($_SESSION['empresa_id'] ?? 0);
+$divisionesEtl = [];
+if ($sessionEmpresaId > 0) {
+    $stmtDivisiones = $conn->prepare("SELECT id, nombre FROM division_empresa WHERE id_empresa = ? AND estado = 1 ORDER BY nombre ASC");
+    if ($stmtDivisiones) {
+        $stmtDivisiones->bind_param('i', $sessionEmpresaId);
+        $stmtDivisiones->execute();
+        $divisionesEtl = $stmtDivisiones->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmtDivisiones->close();
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -619,7 +632,7 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
             <img src="/visibility2/portal/images/logo/etl_head.webp" alt="ETL Locales">
         </h2>
         <p>
-            Actualiza nombre, dirección, comuna, distrito, zona, región, cadena y cuenta, recalculando latitud y longitud.
+            Valida direcciones antiguas con Google, actualiza su propuesta y coordenadas dentro de la división seleccionada.
         </p>
     </div>
 
@@ -636,6 +649,24 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
             <div class="etl-card-body">
                 <form id="formEtlLocales" enctype="multipart/form-data">
                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
+
+                    <div class="etl-section">
+                        <div class="etl-section-title">
+                            <span class="icon"><i class="fa-solid fa-code-branch"></i></span>
+                            <span>División y criterio de actualización</span>
+                        </div>
+
+                        <label for="divisionId" class="form-label fw-semibold">División</label>
+                        <select id="divisionId" name="division_id" class="form-select mb-3" required>
+                            <option value="">Selecciona una división</option>
+                            <?php foreach ($divisionesEtl as $divisionEtl): ?>
+                                <option value="<?= (int)$divisionEtl['id']; ?>">
+                                    <?= htmlspecialchars($divisionEtl['nombre'], ENT_QUOTES, 'UTF-8'); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+
+                    </div>
 
                     <div class="etl-section">
                         <div class="etl-section-title">
@@ -676,12 +707,12 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
 
                         <div class="etl-chip-box">
                             <span class="etl-chip">
-                                codigo;nombre local;direccion;comuna;distrito;zona;region;cadena;cuenta
+                                Código Local;Nombre;Dirección;Comuna;Cadena;Cuenta
                             </span>
                         </div>
 
                         <div class="etl-help">
-                            El archivo debe contener exactamente estos encabezados y en este orden.
+                            Distrito, zona y región se obtienen automáticamente desde la comuna.
                         </div>
                     </div>
 
@@ -710,7 +741,7 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
 
                     <div class="etl-submit">
                         <button type="submit" class="btn btn-success" id="btnProcesar">
-                            <i class="fa-solid fa-gears me-2"></i> Procesar ETL
+                            <i class="fa-solid fa-magnifying-glass-location me-2"></i> Validar y descargar revisión
                         </button>
                     </div>
 
@@ -735,7 +766,7 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
                 <ul class="etl-info-list">
                     <li>
                         <span class="bullet"><i class="fa-solid fa-magnifying-glass"></i></span>
-                        <span>Busca el local por <strong>código</strong>.</span>
+                        <span>Busca el local por <strong>código y división</strong>.</span>
                     </li>
                     <li>
                         <span class="bullet"><i class="fa-solid fa-pen"></i></span>
@@ -743,11 +774,11 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
                     </li>
                     <li>
                         <span class="bullet"><i class="fa-solid fa-sliders"></i></span>
-                        <span>Actualiza opcionalmente <strong>distrito, zona, región, cadena y cuenta</strong>.</span>
+                        <span>Obtiene automáticamente <strong>distrito, zona y región</strong> desde la comuna.</span>
                     </li>
                     <li>
                         <span class="bullet"><i class="fa-solid fa-crosshairs"></i></span>
-                        <span>Recalcula <strong>latitud y longitud</strong> solo cuando corresponde.</span>
+                        <span>Guarda la dirección propuesta por Google y sus nuevas <strong>latitud y longitud</strong>.</span>
                     </li>
                     <li>
                         <span class="bullet"><i class="fa-regular fa-circle-xmark"></i></span>
@@ -755,7 +786,7 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
                     </li>
                     <li>
                         <span class="bullet"><i class="fa-solid fa-layer-group"></i></span>
-                        <span>Procesa el archivo en <strong>lotes de 1.000</strong>.</span>
+                        <span>Primero genera una <strong>revisión descargable sin modificar la base</strong>.</span>
                     </li>
                     <li>
                         <span class="bullet"><i class="fa-regular fa-file-lines"></i></span>
@@ -800,21 +831,22 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
         <div class="etl-stats">
             <div class="etl-stat">
                 <div class="etl-stat-number etl-stat-updated" id="statUpdated">0</div>
-                <div class="etl-stat-label">Locales actualizados</div>
+                <div class="etl-stat-label" id="statUpdatedLabel">Aprobadas</div>
             </div>
 
             <div class="etl-stat">
                 <div class="etl-stat-number etl-stat-failed" id="statFailed">0</div>
-                <div class="etl-stat-label">Fallidos</div>
+                <div class="etl-stat-label" id="statFailedLabel">En revisión</div>
             </div>
 
             <div class="etl-stat">
                 <div class="etl-stat-number etl-stat-total" id="statTotal">0</div>
-                <div class="etl-stat-label">Total procesados</div>
+                <div class="etl-stat-label" id="statTotalLabel">Rechazadas</div>
             </div>
         </div>
 
         <div id="reportLinkBox" class="etl-report-box mb-3" style="display:none;"></div>
+        <div id="previewActionsBox" class="etl-report-box mb-3" style="display:none;"></div>
 
         <div class="alert alert-light etl-alert" id="etlResumenBox">
             El detalle masivo ya no se carga en pantalla. Los fallidos se descargan desde el reporte CSV.
@@ -822,7 +854,30 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
     </div>
 </div>
 
+<div class="modal fade" id="modalAplicarEtl" tabindex="-1" aria-labelledby="modalAplicarEtlLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalAplicarEtlLabel">Aplicar cambios revisados</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p>Selecciona qué direcciones deseas actualizar:</p>
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-success" id="btnAplicarAprobadas">Aplicar solo aprobadas</button>
+                    <button type="button" class="btn btn-warning" id="btnAplicarRevision">Aplicar aprobadas y en revisión</button>
+                </div>
+                <p class="small text-muted mt-3 mb-0">Las rechazadas nunca se actualizarán y conservarán su motivo en el reporte.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 (function () {
     const $form = $('#formEtlLocales');
@@ -833,8 +888,10 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
 
     let currentJobId = null;
     let isRunning = false;
+    let previewAccepted = 0;
+    let previewReview = 0;
     const MAX_RETRIES = 3;
-    const LOTE_SIZE = 1000;
+    const LOTE_SIZE = 100;
 
     function escapeHtml(text) {
         return String(text ?? '')
@@ -857,6 +914,8 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
     function setLoading(running) {
         isRunning = running;
         $btn.prop('disabled', running);
+        $fileInput.prop('disabled', running);
+        $('#divisionId').prop('disabled', running);
 
         if (running) {
             $btn.html('<i class="fa-solid fa-spinner fa-spin me-2"></i> Procesando...');
@@ -876,13 +935,22 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
         $('#etlProgressText').html(text || '');
     }
 
-    function updateStats(updated, failed) {
-        updated = Number(updated || 0);
-        failed = Number(failed || 0);
+    function updatePreviewStats(accepted, review, rejected) {
+        $('#statUpdatedLabel').text('Aprobadas');
+        $('#statFailedLabel').text('En revisión');
+        $('#statTotalLabel').text('Rechazadas');
+        $('#statUpdated').text(Number(accepted || 0));
+        $('#statFailed').text(Number(review || 0));
+        $('#statTotal').text(Number(rejected || 0));
+    }
 
-        $('#statUpdated').text(updated);
-        $('#statFailed').text(failed);
-        $('#statTotal').text(updated + failed);
+    function updateApplyStats(applied, failed, processed) {
+        $('#statUpdatedLabel').text('Actualizadas');
+        $('#statFailedLabel').text('No actualizadas');
+        $('#statTotalLabel').text('Procesadas');
+        $('#statUpdated').text(Number(applied || 0));
+        $('#statFailed').text(Number(failed || 0));
+        $('#statTotal').text(Number(processed || 0));
     }
 
     function showResultBox() {
@@ -896,7 +964,7 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
                 .html(`
                     <div class="alert alert-warning etl-alert mb-0">
                         <i class="fa-solid fa-file-circle-exclamation me-2"></i>
-                        Se generó un reporte de fallidos:
+                        Se generó un reporte de direcciones no actualizadas con sus motivos:
                         <a href="${escapeHtml(url)}" target="_blank" class="fw-bold ms-1">
                             Descargar reporte CSV
                         </a>
@@ -905,6 +973,25 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
         } else {
             $('#reportLinkBox').hide().empty();
         }
+    }
+
+    function showPreviewActions(previewUrl) {
+        if (!previewUrl) {
+            $('#previewActionsBox').hide().empty();
+            return;
+        }
+
+        const applyDisabled = (previewAccepted + previewReview) <= 0 ? ' disabled' : '';
+        $('#previewActionsBox').show().html(`
+            <div class="d-flex flex-wrap gap-2">
+                <a href="${escapeHtml(previewUrl)}" target="_blank" class="btn btn-primary">
+                    <i class="fa-solid fa-file-arrow-down me-2"></i>Descargar revisión
+                </a>
+                <button type="button" id="btnAplicarCambios" class="btn btn-success"${applyDisabled}>
+                    <i class="fa-solid fa-database me-2"></i>Aplicar cambios
+                </button>
+            </div>
+        `);
     }
 
     function showError(message) {
@@ -935,7 +1022,7 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
         });
     }
 
-    function processBatch(jobId, retryCount) {
+    function processPreviewBatch(jobId, retryCount) {
         retryCount = retryCount || 0;
 
         const fd = new FormData();
@@ -954,7 +1041,7 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
             timeout: 0,
             success: function (resp) {
                 if (!resp || resp.success !== true) {
-                    showError(resp && resp.message ? resp.message : 'No fue posible procesar el lote.');
+                    showError(resp && resp.message ? resp.message : 'No fue posible validar el lote.');
                     setLoading(false);
                     return;
                 }
@@ -967,12 +1054,15 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
 
                 setProgress(
                     resp.progress || 0,
-                    `Procesados <strong>${resp.processed_rows || 0}</strong> de <strong>${resp.total_rows || 0}</strong>
-                    | Actualizados: <strong>${resp.updated_rows || 0}</strong>
-                    | Fallidos: <strong>${resp.failed_rows || 0}</strong>`
+                    `Validadas <strong>${resp.processed_rows || 0}</strong> de <strong>${resp.total_rows || 0}</strong>
+                    | Aprobadas: <strong>${resp.accepted_rows || 0}</strong>
+                    | Revisión: <strong>${resp.review_rows || 0}</strong>
+                    | Rechazadas: <strong>${resp.rejected_rows || 0}</strong>`
                 );
 
-                updateStats(resp.updated_rows || 0, resp.failed_rows || 0);
+                previewAccepted = Number(resp.accepted_rows || 0);
+                previewReview = Number(resp.review_rows || 0);
+                updatePreviewStats(previewAccepted, previewReview, resp.rejected_rows || 0);
 
                 if (resp.reportUrl) {
                     showReport(resp.reportUrl);
@@ -980,19 +1070,17 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
 
                 if (resp.done) {
                     setLoading(false);
+                    showPreviewActions(resp.previewReportUrl);
                     showInfo(
-                        `<strong>Proceso finalizado correctamente.</strong><br>
-                        Total filas: ${escapeHtml(resp.total_rows)}<br>
-                        Procesadas: ${escapeHtml(resp.processed_rows)}<br>
-                        Actualizadas: ${escapeHtml(resp.updated_rows)}<br>
-                        Fallidas: ${escapeHtml(resp.failed_rows)}`,
-                        (Number(resp.failed_rows || 0) > 0 ? 'warning' : 'success')
+                        `<strong>Revisión terminada. La base de datos todavía no fue modificada.</strong><br>
+                        Descarga el resultado y, cuando estés conforme, utiliza <strong>Aplicar cambios</strong>.`,
+                        'info'
                     );
                     return;
                 }
 
                 setTimeout(function () {
-                    processBatch(jobId, 0);
+                    processPreviewBatch(jobId, 0);
                 }, 250);
             },
             error: function (xhr) {
@@ -1001,11 +1089,11 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
 
                     setProgress(
                         currentProgress,
-                        `Se detectó un corte en el lote. Reintentando ${retryCount + 1} de ${MAX_RETRIES}...`
+                        `Se detectó un corte durante la validación. Reintentando ${retryCount + 1} de ${MAX_RETRIES}...`
                     );
 
                     setTimeout(function () {
-                        processBatch(jobId, retryCount + 1);
+                        processPreviewBatch(jobId, retryCount + 1);
                     }, 1200 * (retryCount + 1));
 
                     return;
@@ -1024,7 +1112,124 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
         });
     }
 
-    $fileInput.on('change', updateFileName);
+    function processApplyBatch(jobId, retryCount) {
+        retryCount = retryCount || 0;
+        const fd = new FormData();
+        fd.append('csrf_token', $('input[name="csrf_token"]').val());
+        fd.append('job_id', jobId);
+        fd.append('limit', LOTE_SIZE);
+
+        $.ajax({
+            url: '/visibility2/portal/modulos/mod_etl/aplicar_etl_locales_lote.php',
+            type: 'POST',
+            data: fd,
+            processData: false,
+            contentType: false,
+            dataType: 'json',
+            cache: false,
+            timeout: 0,
+            success: function (resp) {
+                if (!resp || resp.success !== true) {
+                    showError(resp && resp.message ? resp.message : 'No fue posible aplicar el lote.');
+                    setLoading(false);
+                    return;
+                }
+
+                setProgress(
+                    resp.progress || 0,
+                    `Aplicadas <strong>${resp.applied_rows || 0}</strong> |
+                    No actualizadas: <strong>${resp.failed_rows || 0}</strong> |
+                    Procesadas: <strong>${resp.processed_rows || 0}</strong> de <strong>${resp.total_rows || 0}</strong>`
+                );
+                updateApplyStats(resp.applied_rows || 0, resp.failed_rows || 0, resp.processed_rows || 0);
+
+                if (resp.reportUrl) {
+                    showReport(resp.reportUrl);
+                }
+                if (resp.done) {
+                    setLoading(false);
+                    $('#btnAplicarCambios').prop('disabled', true).text('Cambios aplicados');
+                    showInfo(
+                        `<strong>Aplicación finalizada.</strong><br>
+                        Locales actualizados: ${escapeHtml(resp.applied_rows || 0)}<br>
+                        No actualizados: ${escapeHtml(resp.failed_rows || 0)}`,
+                        Number(resp.failed_rows || 0) > 0 ? 'warning' : 'success'
+                    );
+                    return;
+                }
+
+                setTimeout(function () {
+                    processApplyBatch(jobId, 0);
+                }, 250);
+            },
+            error: function (xhr) {
+                if (retryCount < MAX_RETRIES) {
+                    setTimeout(function () {
+                        processApplyBatch(jobId, retryCount + 1);
+                    }, 1200 * (retryCount + 1));
+                    return;
+                }
+                const message = xhr.responseJSON && xhr.responseJSON.message
+                    ? xhr.responseJSON.message
+                    : 'Ocurrió un error al aplicar los cambios.';
+                showError(message);
+                setLoading(false);
+            }
+        });
+    }
+
+    function startApply(scope) {
+        const modalElement = document.getElementById('modalAplicarEtl');
+        bootstrap.Modal.getOrCreateInstance(modalElement).hide();
+        setLoading(true);
+        $('#previewActionsBox button').prop('disabled', true);
+        setProgress(0, 'Preparando la aplicación de los resultados revisados...');
+
+        $.ajax({
+            url: '/visibility2/portal/modulos/mod_etl/iniciar_aplicacion_etl_locales.php',
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                csrf_token: $('input[name="csrf_token"]').val(),
+                job_id: currentJobId,
+                apply_scope: scope
+            }
+        }).done(function (resp) {
+            if (!resp || resp.success !== true) {
+                showError(resp && resp.message ? resp.message : 'No fue posible autorizar la aplicación.');
+                setLoading(false);
+                $('#previewActionsBox button').prop('disabled', false);
+                return;
+            }
+            updateApplyStats(0, 0, 0);
+            showInfo('Aplicando exclusivamente los resultados guardados en la revisión...', 'info');
+            processApplyBatch(currentJobId, 0);
+        }).fail(function (xhr) {
+            const message = xhr.responseJSON && xhr.responseJSON.message
+                ? xhr.responseJSON.message
+                : 'No fue posible iniciar la aplicación.';
+            showError(message);
+            setLoading(false);
+            $('#previewActionsBox button').prop('disabled', false);
+        });
+    }
+
+    function clearCurrentPreview() {
+        if (isRunning) {
+            return;
+        }
+        currentJobId = null;
+        previewAccepted = 0;
+        previewReview = 0;
+        $('#previewActionsBox').hide().empty();
+        $('#reportLinkBox').hide().empty();
+    }
+
+    $fileInput.on('change', function () {
+        updateFileName();
+        clearCurrentPreview();
+    });
+    $('#divisionId').on('change', clearCurrentPreview);
 
     $form.on('submit', function (e) {
         e.preventDefault();
@@ -1039,15 +1244,21 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
             return;
         }
 
+        if (!$('#divisionId').val()) {
+            alert('Debes seleccionar una división.');
+            return;
+        }
+
         const formData = new FormData(this);
 
         setLoading(true);
         showResultBox();
-        updateStats(0, 0);
-        setProgress(0, 'Subiendo archivo y creando job...');
+        updatePreviewStats(0, 0, 0);
+        setProgress(0, 'Subiendo archivo y preparando la revisión...');
         $('#etlJobText').empty();
         $('#reportLinkBox').hide().empty();
-        showInfo('Preparando archivo para procesamiento por lotes...', 'info');
+        $('#previewActionsBox').hide().empty();
+        showInfo('Preparando archivo para validación. En esta etapa no se modificará la base.', 'info');
 
         createJob(formData)
             .done(function (resp) {
@@ -1069,11 +1280,11 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
                 );
 
                 showInfo(
-                    `Job creado correctamente. Se iniciará el procesamiento en lotes de <strong>${LOTE_SIZE}</strong> registros.`,
+                    `Job creado correctamente. Se iniciará la validación en lotes de <strong>${LOTE_SIZE}</strong> registros.`,
                     'info'
                 );
 
-                processBatch(currentJobId, 0);
+                processPreviewBatch(currentJobId, 0);
             })
             .fail(function (xhr) {
                 let msg = 'No fue posible crear el job.';
@@ -1086,6 +1297,20 @@ $templateUrl = 'https://visibility.cl/visibility2/portal/repositorio/ETL/templat
                 showError(msg);
                 setLoading(false);
             });
+    });
+
+    $(document).on('click', '#btnAplicarCambios', function () {
+        $('#btnAplicarAprobadas').prop('disabled', previewAccepted <= 0);
+        $('#btnAplicarRevision').prop('disabled', (previewAccepted + previewReview) <= 0);
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAplicarEtl')).show();
+    });
+
+    $('#btnAplicarAprobadas').on('click', function () {
+        startApply('accepted_only');
+    });
+
+    $('#btnAplicarRevision').on('click', function () {
+        startApply('accepted_review');
     });
 
     updateFileName();

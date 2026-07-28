@@ -1,13 +1,20 @@
 <?php
 
-
 return [
 
     'google_maps_api_key' => 'AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw',
+
+    'google_cloud_project_id' => 'poised-bot-441812-q7',
+    
+    'google_cloud_project_number' => '30401489341',
+    
+    'route_optimization_service_account_file'
+        => '/home/visibility/secure/route-optimizer.json',
+
     'map_defaults' => [
         'center' => [
             'lat' => -33.45,
-            'lng' => -70.66
+            'lng' => -70.66,
         ],
         'zoom' => 5,
         'max_zoom' => 18,
@@ -17,17 +24,19 @@ return [
     'chile_bounds' => [
         'southwest' => [
             'lat' => -56.0,
-            'lng' => -76.0
+            'lng' => -76.0,
         ],
         'northeast' => [
             'lat' => -17.5,
-            'lng' => -66.0
-        ]
+            'lng' => -66.0,
+        ],
     ],
 
     'marker_base_url' => '/visibility2/portal/assets/images/',
+
     'marker_icons' => [
         'priority' => 'marker_blue1.png',
         'normal' => 'marker_red1.png',
     ],
+
 ];

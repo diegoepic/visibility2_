@@ -503,6 +503,8 @@ $stmt_div->close();
             <div class="card-body">
                 <form id="formCargaMasiva" method="POST" enctype="multipart/form-data">
                     <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                    <input type="hidden" name="import_mode" id="importMode" value="preview">
+                    <input type="hidden" name="create_scope" id="createScope" value="accepted_only">
 
                     <div class="row g-3">
                         <div class="col-md-6">
@@ -525,7 +527,7 @@ $stmt_div->close();
                         </div>
 
                         <div class="col-md-12">
-                            <label for="csvFile" class="form-label">Archivo CSV</label>
+                            <label for="csvFile" class="form-label">Archivo CSV para limpiar y validar</label>
                             <div class="input-group">
                                 <div class="custom-file">
                                     <input type="file" class="custom-file-input" id="csvFile" name="csvFile" accept=".csv" disabled required>
@@ -533,9 +535,14 @@ $stmt_div->close();
                                 </div>
                             </div>
                             <small class="form-text text-muted">
-                                El archivo CSV debe contener los siguientes encabezados: 
-                                <strong>codigo, nombre local, cadena, cuenta, comuna, region, direccion</strong>.  
-                                Usa <strong>;</strong> como delimitador.
+                                Primero usa <strong>Validar y descargar prueba</strong>. Este paso no crea locales y entrega
+                                un CSV con la direcciÃ³n original, la direcciÃ³n limpia y la propuesta por
+                                <strong>Google Address Validation API</strong>. La creaciÃ³n se habilita despuÃ©s de la prueba.
+                                Distrito, zona y regiÃ³n se completan automÃ¡ticamente desde la comuna usando el catÃ¡logo
+                                de la hoja <strong>datos</strong>; los valores recibidos en esas tres columnas se reemplazan.
+                                Relevancia se asigna como <strong>0</strong>. Nombre vendedor y jefe de venta pueden quedar
+                                vacÃ­os, llevar un guion o decir "no aplica"; en esos casos se normalizan como
+                                <strong>NO APLICA</strong>. Usa <strong>;</strong> como delimitador y los 10 encabezados de la plantilla.
                             </small>
                             <small class="form-text text-muted">
                                                         <strong>
@@ -580,16 +587,62 @@ $stmt_div->close();
                     </div>
 
                     <div class="mt-4">
-                        <button type="submit" class="btn btn-success">
-                            <i class="fas fa-upload"></i> Subir y Procesar
+                        <button type="button" id="btnProbarDirecciones" class="btn btn-primary">
+                            <i class="fas fa-search-location"></i> Validar y descargar prueba
+                        </button>
+                        <button type="button" id="btnCargaMasiva" class="btn btn-success ml-2" disabled>
+                            <i class="fas fa-upload"></i> Crear locales validados
                         </button>
                         <div id="spinnerCargaMasiva" class="spinner-border text-primary ms-3" role="status" style="display: none;">
                             <span class="sr-only">Procesando...</span>
                         </div>
                     </div>
+                    <div id="progresoCargaMasiva" class="mt-3" style="display:none;">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span id="textoProgresoCarga">Preparando archivo...</span>
+                            <strong id="porcentajeProgresoCarga">0%</strong>
+                        </div>
+                        <div class="progress" style="height:24px;">
+                            <div id="barraProgresoCarga" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%" aria-valuemin="0" aria-valuemax="100">0 / 0</div>
+                        </div>
+                        <small id="detalleProgresoCarga" class="form-text text-muted"></small>
+                    </div>
                 </form>
 
                 <div id="resultado" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para elegir qué estados se crearán después de la validación -->
+<div class="modal fade" id="modalSeleccionCreacionEtl" tabindex="-1" role="dialog" aria-labelledby="modalSeleccionCreacionEtlLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="modalSeleccionCreacionEtlLabel">Crear locales validados</h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">Selecciona qué resultados deseas crear:</p>
+                <div class="alert alert-light border py-2 mb-2">
+                    Aprobados: <strong id="cantidadEtlAprobados">0</strong> &nbsp;|&nbsp;
+                    En revisión: <strong id="cantidadEtlRevision">0</strong>
+                </div>
+                <p class="small text-muted mb-0">
+                    Las direcciones rechazadas nunca se crearán y se entregarán en un CSV con sus motivos.
+                </p>
+            </div>
+            <div class="modal-footer flex-column align-items-stretch">
+                <button type="button" id="btnCrearSoloAprobados" class="btn btn-success mb-2">
+                    Crear solo locales aprobados
+                </button>
+                <button type="button" id="btnCrearAprobadosRevision" class="btn btn-warning mb-2">
+                    Crear locales aprobados y en revisión
+                </button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
             </div>
         </div>
     </div>
@@ -1832,9 +1885,26 @@ $(function () {
     /* =========================================================
        FORM CARGA MASIVA
     ========================================================= */
+    // Flujo anterior conservado temporalmente como referencia. El flujo activo por lotes esta debajo.
+    if (false) {
+    let etlPreviewOk = false;
+    let etlPreviewAccepted = 0;
+    let etlPreviewReview = 0;
+
+    function resetEtlPreview() {
+        etlPreviewOk = false;
+        etlPreviewAccepted = 0;
+        etlPreviewReview = 0;
+        $('#importMode').val('preview');
+        $('#createScope').val('accepted_only');
+        $('#btnCargaMasiva').prop('disabled', true);
+        $('#resultado').empty();
+    }
+
     $('#csvFile').prop('disabled', true);
 
     $('#empresaCarga').on('change', function () {
+        resetEtlPreview();
         const empresaId = $(this).val();
 
         if (empresaId) {
@@ -1853,6 +1923,7 @@ $(function () {
     });
 
     $('#divisionCarga').on('change', function () {
+        resetEtlPreview();
         const tieneDivision = $(this).val() && $(this).val().trim() !== '';
         $('#csvFile').prop('disabled', !tieneDivision);
 
@@ -1863,8 +1934,42 @@ $(function () {
     });
 
     $('#csvFile').on('change', function () {
+        resetEtlPreview();
         const fileName = this.files && this.files.length ? this.files[0].name : 'Selecciona un archivo CSV';
         $(this).next('.custom-file-label').text(fileName);
+    });
+
+    $('#btnProbarDirecciones').on('click', function () {
+        etlPreviewOk = false;
+        $('#importMode').val('preview');
+        $('#formCargaMasiva').trigger('submit');
+    });
+
+    $('#btnCargaMasiva').on('click', function () {
+        if (!etlPreviewOk) {
+            mostrarAlertaPrincipal('warning', 'Primero valida el archivo y descarga la prueba.');
+            return;
+        }
+        $('#btnCrearSoloAprobados').prop('disabled', etlPreviewAccepted === 0);
+        $('#btnCrearAprobadosRevision').prop('disabled', (etlPreviewAccepted + etlPreviewReview) === 0);
+        $('#cantidadEtlAprobados').text(etlPreviewAccepted);
+        $('#cantidadEtlRevision').text(etlPreviewReview);
+        $('#modalSeleccionCreacionEtl').modal('show');
+    });
+
+    function crearLocalesValidados(scope) {
+        $('#createScope').val(scope);
+        $('#importMode').val('create');
+        $('#modalSeleccionCreacionEtl').modal('hide');
+        $('#formCargaMasiva').trigger('submit');
+    }
+
+    $('#btnCrearSoloAprobados').on('click', function () {
+        crearLocalesValidados('accepted_only');
+    });
+
+    $('#btnCrearAprobadosRevision').on('click', function () {
+        crearLocalesValidados('accepted_review');
     });
 
     $('#formCargaMasiva').on('submit', function (e) {
@@ -1886,6 +1991,8 @@ $(function () {
         }
 
         $('#spinnerCargaMasiva').show();
+        $('#btnCargaMasiva').prop('disabled', true);
+        $('#btnProbarDirecciones').prop('disabled', true);
         $('#resultado').empty();
 
         const $form = $(this);
@@ -1903,6 +2010,30 @@ $(function () {
             dataType: 'json',
             success: function (response) {
                 $('#spinnerCargaMasiva').hide();
+
+                if (response.preview) {
+                    const tested = parseInt(response.tested || 0, 10);
+                    const accepted = parseInt(response.accepted || 0, 10);
+                    const review = parseInt(response.review || 0, 10);
+                    const rejected = parseInt(response.rejected || 0, 10);
+                    etlPreviewAccepted = accepted;
+                    etlPreviewReview = review;
+                    etlPreviewOk = (accepted + review) > 0;
+                    $('#importMode').val('preview');
+                    mostrarAlertaPrincipal(
+                        etlPreviewOk ? 'info' : 'warning',
+                        'Prueba terminada: ' + tested + ' filas; ' + accepted + ' aceptadas, ' +
+                        review + ' para revisión y ' + rejected + ' rechazadas. No se creó ningún local.'
+                    );
+                    if (response.previewReportUrl) {
+                        $('#resultado').html(
+                            '<a href="' + escapeHtml(response.previewReportUrl) + '" class="btn btn-sm btn-primary" target="_blank">Descargar prueba de Address Validation</a>'
+                        );
+                    }
+                    return;
+                }
+
+                etlPreviewOk = false;
 
                 const inserted = parseInt(response.inserted || 0, 10);
                 const failed = parseInt(response.failed || 0, 10);
@@ -1922,7 +2053,7 @@ $(function () {
                         );
                     }
                 } else {
-                    mostrarAlertaPrincipal('danger', 'No se subió ningún local. Revisa el formato del CSV.');
+                    mostrarAlertaPrincipal('danger', 'No se creó ningún local. Revisa el CSV de rechazados o el formato de entrada.');
 
                     if (response.reportUrl) {
                         $('#resultado').html(
@@ -1930,12 +2061,218 @@ $(function () {
                         );
                     }
                 }
+
+                const reportLinks = [];
+                if (response.acceptedReportUrl) {
+                    reportLinks.push(
+                        '<a href="' + escapeHtml(response.acceptedReportUrl) + '" class="btn btn-sm btn-success mr-2" target="_blank">Descargar locales creados</a>'
+                    );
+                }
+                if (response.reportUrl) {
+                    reportLinks.push(
+                        '<a href="' + escapeHtml(response.reportUrl) + '" class="btn btn-sm btn-danger" target="_blank">Descargar no creados con motivos</a>'
+                    );
+                }
+                $('#resultado').html(reportLinks.join(' '));
             },
             error: function (xhr) {
-                $('#spinnerCargaMasiva').hide();
+                if ($('#importMode').val() === 'preview') {
+                    etlPreviewOk = false;
+                }
                 console.error(xhr.responseText);
-                mostrarAlertaPrincipal('danger', 'Ocurrió un error inesperado al procesar la carga masiva.');
+                const message = xhr.responseJSON && xhr.responseJSON.message
+                    ? xhr.responseJSON.message
+                    : 'Ocurrió un error inesperado al procesar la carga masiva.';
+                mostrarAlertaPrincipal('danger', message);
+            },
+            complete: function () {
+                $('#spinnerCargaMasiva').hide();
+                $('#btnProbarDirecciones').prop('disabled', false);
+                $('#btnCargaMasiva').prop('disabled', !etlPreviewOk);
             }
+        });
+    });
+
+    }
+
+    let etlPreviewOk = false;
+    let etlPreviewAccepted = 0;
+    let etlPreviewReview = 0;
+    let etlImportJobId = null;
+    let etlImportTotalRows = 0;
+    let etlBatchRunning = false;
+
+    function actualizarProgresoCarga(progress, processed, total, text, detail) {
+        const value = Math.max(0, Math.min(100, parseFloat(progress || 0)));
+        $('#progresoCargaMasiva').show();
+        $('#textoProgresoCarga').text(text || 'Procesando...');
+        $('#porcentajeProgresoCarga').text(value.toFixed(2).replace('.00', '') + '%');
+        $('#barraProgresoCarga').css('width', value + '%').text(processed + ' / ' + total);
+        $('#detalleProgresoCarga').text(detail || 'Cada solicitud procesa hasta 1.000 filas y guarda el avance.');
+    }
+
+    function bloquearCargaMasiva(blocked) {
+        etlBatchRunning = blocked;
+        $('#spinnerCargaMasiva').toggle(blocked);
+        $('#btnProbarDirecciones, #empresaCarga, #divisionCarga, #csvFile').prop('disabled', blocked);
+        if (!blocked) {
+            $('#csvFile').prop('disabled', !($('#divisionCarga').val() || '').trim());
+        }
+        $('#btnCargaMasiva').prop('disabled', blocked || !etlPreviewOk);
+    }
+
+    function mensajeAjax(xhr, fallback) {
+        return xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : fallback;
+    }
+
+    function resetEtlPreview() {
+        etlPreviewOk = false;
+        etlPreviewAccepted = 0;
+        etlPreviewReview = 0;
+        etlImportJobId = null;
+        etlImportTotalRows = 0;
+        $('#btnCargaMasiva').prop('disabled', true);
+        $('#resultado').empty();
+        $('#progresoCargaMasiva').hide();
+    }
+
+    function ejecutarPeticionLote(url, data, onSuccess, retries) {
+        $.ajax({url: url, type: 'POST', data: data, dataType: 'json'})
+            .done(onSuccess)
+            .fail(function (xhr) {
+                const attempt = retries || 0;
+                const serverMessage = mensajeAjax(xhr, '').toLowerCase();
+                const busyBatch = xhr.status === 409 && serverMessage.indexOf('ya se esta procesando') !== -1;
+                const retryableActiveBatch = (xhr.status === 0 || busyBatch) && attempt < 60;
+                const retryableServerError = xhr.status >= 500 && attempt < 2;
+                if (retryableActiveBatch || retryableServerError) {
+                    $('#detalleProgresoCarga').text('La solicitud se interrumpio; reintentando el mismo lote sin perder el avance...');
+                    setTimeout(function () { ejecutarPeticionLote(url, data, onSuccess, attempt + 1); }, 2000);
+                    return;
+                }
+                bloquearCargaMasiva(false);
+                mostrarAlertaPrincipal('danger', mensajeAjax(xhr, 'No fue posible continuar el procesamiento. El avance guardado no se pierde.'));
+            });
+    }
+
+    function validarSiguienteLote() {
+        ejecutarPeticionLote('/visibility2/portal/modulos/mod_local/validar_locales_lote.php', {
+            csrf_token: $('#formCargaMasiva input[name="csrf_token"]').val(), job_id: etlImportJobId, limit: 1000
+        }, function (response) {
+            actualizarProgresoCarga(response.progress, response.processed_rows, response.total_rows, 'Validando direcciones', 'Aprobados: ' + response.accepted_rows + ' | En revision: ' + response.review_rows + ' | Rechazados: ' + response.rejected_rows);
+            if (!response.done) {
+                setTimeout(validarSiguienteLote, 50);
+                return;
+            }
+            etlPreviewAccepted = parseInt(response.accepted_rows || 0, 10);
+            etlPreviewReview = parseInt(response.review_rows || 0, 10);
+            etlPreviewOk = (etlPreviewAccepted + etlPreviewReview) > 0;
+            bloquearCargaMasiva(false);
+            mostrarAlertaPrincipal(etlPreviewOk ? 'info' : 'warning', 'Validacion terminada: ' + response.processed_rows + ' filas; ' + etlPreviewAccepted + ' aprobadas, ' + etlPreviewReview + ' en revision y ' + response.rejected_rows + ' rechazadas. No se creo ningun local.');
+            const links = [];
+            if (response.previewReportUrl) links.push('<a href="' + escapeHtml(response.previewReportUrl) + '" class="btn btn-sm btn-primary mr-2" target="_blank">Descargar revision completa</a>');
+            if (response.reportUrl) links.push('<a href="' + escapeHtml(response.reportUrl) + '" class="btn btn-sm btn-danger" target="_blank">Descargar rechazados con motivos</a>');
+            $('#resultado').html(links.join(' '));
+        }, 0);
+    }
+
+    function crearSiguienteLote() {
+        ejecutarPeticionLote('/visibility2/portal/modulos/mod_local/crear_locales_lote.php', {
+            csrf_token: $('#formCargaMasiva input[name="csrf_token"]').val(), job_id: etlImportJobId, limit: 1000
+        }, function (response) {
+            actualizarProgresoCarga(response.progress, response.processed_rows, response.total_rows, 'Creando locales por lotes', 'Creados: ' + response.inserted_rows + ' | No creados: ' + response.failed_rows);
+            if (!response.done) {
+                setTimeout(crearSiguienteLote, 50);
+                return;
+            }
+            etlPreviewOk = false;
+            bloquearCargaMasiva(false);
+            $('#btnCargaMasiva').prop('disabled', true);
+            mostrarAlertaPrincipal(response.inserted_rows > 0 ? (response.failed_rows > 0 ? 'warning' : 'success') : 'danger', 'Proceso terminado: ' + response.inserted_rows + ' locales creados y ' + response.failed_rows + ' no creados.');
+            const links = [];
+            if (response.acceptedReportUrl) links.push('<a href="' + escapeHtml(response.acceptedReportUrl) + '" class="btn btn-sm btn-success mr-2" target="_blank">Descargar locales creados</a>');
+            if (response.reportUrl) links.push('<a href="' + escapeHtml(response.reportUrl) + '" class="btn btn-sm btn-danger" target="_blank">Descargar no creados con motivos</a>');
+            $('#resultado').html(links.join(' '));
+        }, 0);
+    }
+
+    $('#csvFile').prop('disabled', true);
+    $('#empresaCarga').on('change', function () {
+        resetEtlPreview();
+        const empresaId = $(this).val();
+        if (empresaId) {
+            cargarDivisiones(empresaId, $('#divisionCarga'), '-- Seleccione una Division --', false).done(function () {
+                $('#divisionesContainer').show();
+                $('#csvFile').prop('disabled', true).val('');
+                $('.custom-file-label').text('Selecciona un archivo CSV');
+            });
+        } else {
+            $('#divisionesContainer').hide();
+            $('#divisionCarga').html('<option value="">-- Seleccione una Division --</option>');
+            $('#csvFile').prop('disabled', true).val('');
+        }
+    });
+    $('#divisionCarga').on('change', function () {
+        resetEtlPreview();
+        const selected = !!($(this).val() || '').trim();
+        $('#csvFile').prop('disabled', !selected);
+    });
+    $('#csvFile').on('change', function () {
+        resetEtlPreview();
+        $(this).next('.custom-file-label').text(this.files && this.files.length ? this.files[0].name : 'Selecciona un archivo CSV');
+    });
+    $('#btnProbarDirecciones').on('click', function () { $('#formCargaMasiva').trigger('submit'); });
+    $('#btnCargaMasiva').on('click', function () {
+        if (!etlPreviewOk) {
+            mostrarAlertaPrincipal('warning', 'Primero valida el archivo y descarga la revision.');
+            return;
+        }
+        $('#btnCrearSoloAprobados').prop('disabled', etlPreviewAccepted === 0);
+        $('#btnCrearAprobadosRevision').prop('disabled', (etlPreviewAccepted + etlPreviewReview) === 0);
+        $('#cantidadEtlAprobados').text(etlPreviewAccepted);
+        $('#cantidadEtlRevision').text(etlPreviewReview);
+        $('#modalSeleccionCreacionEtl').modal('show');
+    });
+    function crearLocalesValidados(scope) {
+        $('#modalSeleccionCreacionEtl').modal('hide');
+        if (!etlImportJobId || etlBatchRunning) return;
+        bloquearCargaMasiva(true);
+        actualizarProgresoCarga(0, 0, etlImportTotalRows, 'Preparando creacion');
+        $.ajax({
+            url: '/visibility2/portal/modulos/mod_local/iniciar_creacion_locales_job.php', type: 'POST', dataType: 'json',
+            data: {csrf_token: $('#formCargaMasiva input[name="csrf_token"]').val(), job_id: etlImportJobId, create_scope: scope}
+        }).done(crearSiguienteLote).fail(function (xhr) {
+            bloquearCargaMasiva(false);
+            mostrarAlertaPrincipal('danger', mensajeAjax(xhr, 'No se pudo iniciar la creacion por lotes.'));
+        });
+    }
+    $('#btnCrearSoloAprobados').on('click', function () { crearLocalesValidados('accepted_only'); });
+    $('#btnCrearAprobadosRevision').on('click', function () { crearLocalesValidados('accepted_review'); });
+    $('#formCargaMasiva').on('submit', function (e) {
+        e.preventDefault();
+        if (etlBatchRunning) return;
+        if (!$('#empresaCarga').val() || !$('#divisionCarga').val() || !$('#csvFile').get(0).files.length) {
+            mostrarAlertaPrincipal('warning', 'Selecciona empresa, division y archivo CSV.');
+            return;
+        }
+        // FormData debe construirse antes de deshabilitar los controles: los campos
+        // disabled (empresa, division y archivo) no son incluidos por el navegador.
+        const formData = new FormData(this);
+        formData.set('empresa_id', $('#empresaCarga').val());
+        formData.set('division_id', $('#divisionCarga').val());
+        etlPreviewOk = false; etlImportJobId = null; bloquearCargaMasiva(true); $('#resultado').empty();
+        actualizarProgresoCarga(0, 0, 0, 'Subiendo y revisando archivo');
+        $.ajax({
+            url: '/visibility2/portal/modulos/mod_local/subir_locales_job.php', type: 'POST', data: formData,
+            contentType: false, processData: false, dataType: 'json'
+        }).done(function (response) {
+            etlImportJobId = parseInt(response.job_id, 10);
+            etlImportTotalRows = parseInt(response.total_rows || 0, 10);
+            actualizarProgresoCarga(0, 0, response.total_rows, 'Archivo recibido; iniciando validacion');
+            validarSiguienteLote();
+        }).fail(function (xhr) {
+            bloquearCargaMasiva(false);
+            mostrarAlertaPrincipal('danger', mensajeAjax(xhr, 'No se pudo preparar la carga masiva.'));
         });
     });
 
@@ -2703,7 +3040,9 @@ function actualizarBadgeSolicitudesVendedor() {
 </script>
 <?php endif; ?>
 
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw&callback=initMap" async defer></script>
+<?php if ($mapsApiKeyPortal !== ''): ?>
+<script src="https://maps.googleapis.com/maps/api/js?key=<?php echo rawurlencode($mapsApiKeyPortal); ?>&callback=initMap" async defer></script>
+<?php endif; ?>
 </body>
 </html>
 <?php

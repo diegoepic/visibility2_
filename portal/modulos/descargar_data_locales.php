@@ -8,7 +8,12 @@ ini_set('memory_limit', '512M');
 set_time_limit(0);
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
-require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/vendor/autoload.php';
+$autoloadPath = $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/vendor/autoload.php';
+if (!is_file($autoloadPath)) {
+    http_response_code(500);
+    exit('No se encontró el autoload de Composer en: ' . $autoloadPath);
+}
+require_once $autoloadPath;
 
 mysqli_set_charset($conn, 'utf8mb4');
 date_default_timezone_set('America/Santiago');
@@ -20,6 +25,11 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
+
+if (!class_exists(Spreadsheet::class)) {
+    http_response_code(500);
+    exit('Composer fue cargado, pero PhpSpreadsheet no está instalado en portal/vendor.');
+}
 
 function fail(string $message): void
 {
@@ -51,8 +61,39 @@ function limpiarNombreArchivo(string $texto): string
     return $texto !== '' ? $texto : 'locales';
 }
 
+function mayusculasSinAcentos(?string $texto): string
+{
+    $texto = trim((string)$texto);
+    if ($texto === '') {
+        return '';
+    }
+
+    if (class_exists('Normalizer')) {
+        $normalizado = Normalizer::normalize($texto, Normalizer::FORM_D);
+        if ($normalizado !== false) {
+            $texto = preg_replace('/\p{Mn}+/u', '', $normalizado);
+        }
+    }
+
+    $texto = strtr($texto, [
+        'á'=>'a','à'=>'a','â'=>'a','ä'=>'a','ã'=>'a','Á'=>'A','À'=>'A','Â'=>'A','Ä'=>'A','Ã'=>'A',
+        'é'=>'e','è'=>'e','ê'=>'e','ë'=>'e','É'=>'E','È'=>'E','Ê'=>'E','Ë'=>'E',
+        'í'=>'i','ì'=>'i','î'=>'i','ï'=>'i','Í'=>'I','Ì'=>'I','Î'=>'I','Ï'=>'I',
+        'ó'=>'o','ò'=>'o','ô'=>'o','ö'=>'o','õ'=>'o','Ó'=>'O','Ò'=>'O','Ô'=>'O','Ö'=>'O','Õ'=>'O',
+        'ú'=>'u','ù'=>'u','û'=>'u','ü'=>'u','Ú'=>'U','Ù'=>'U','Û'=>'U','Ü'=>'U',
+        'ñ'=>'n','Ñ'=>'N','ç'=>'c','Ç'=>'C'
+    ]);
+
+    $texto = function_exists('mb_strtoupper')
+        ? mb_strtoupper($texto, 'UTF-8')
+        : strtoupper($texto);
+    $texto = preg_replace('/[\p{Z}\s]+/u', ' ', $texto);
+
+    return trim((string)$texto);
+}
+
 /* =========================
-   Par�metros
+   Parámetros
    ========================= */
 
 function getIntArrayParam(string $key, ?string $fallbackKey = null): array
@@ -113,7 +154,8 @@ $canales    = getIntArrayParam('canal');
 $distritos  = getIntArrayParam('distrito');
 $divisiones = getIntArrayParam('division', 'id_division');
 
-$formato = strtolower(trim((string)($_GET['formato'] ?? 'excel'))); // excel | csv
+$formato = strtolower(trim((string)($_GET['formato'] ?? 'csv'))); // excel | csv
+$formato = in_array($formato, ['excel', 'xlsx', 'csv'], true) ? $formato : 'csv';
 $debug   = isset($_GET['debug']) && $_GET['debug'] === '1';
 
 /* =========================
@@ -148,7 +190,12 @@ SELECT
     COALESCE(ca.nombre, 'SIN CADENA') AS CADENA,
     COALESCE(cu.nombre, 'SIN CUENTA') AS CUENTA,
     l.nombre AS LOCAL,
+    l.direccion_original AS DIRECCION_ORIGINAL,
     l.direccion AS DIRECCION,
+    l.direccion_google AS DIRECCION_GOOGLE,
+    COALESCE(l.estado_address_validation, 'SIN VALIDAR') AS ESTADO_DIRECCION,
+    l.direccion_validada_at AS FECHA_VALIDACION_DIRECCION,
+    l.google_response_id AS GOOGLE_RESPONSE_ID,
     COALESCE(co.comuna, 'SIN COMUNA') AS COMUNA,
     COALESCE(re.region, 'SIN REGION') AS REGION,
     COALESCE(di.nombre_distrito, 'SIN DISTRITO') AS DISTRITO,
@@ -202,8 +249,12 @@ if ($debug) {
     $stmtDebug->execute();
     $resDebug = $stmtDebug->get_result();
     if ($resDebug) {
-        $rowsDebug = $resDebug->fetch_all(MYSQLI_ASSOC);
-        echo "\nFILAS: " . count($rowsDebug) . "\n";
+        $totalDebug = $resDebug->num_rows;
+        $rowsDebug = [];
+        while (count($rowsDebug) < 3 && ($debugRow = $resDebug->fetch_assoc())) {
+            $rowsDebug[] = $debugRow;
+        }
+        echo "\nFILAS: " . $totalDebug . "\n";
         echo "PRIMERAS 3 FILAS:\n";
         echo json_encode(array_slice($rowsDebug, 0, 3), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     } else {
@@ -236,42 +287,55 @@ if (!$res) {
     fail('Error en la consulta: ' . $conn->error);
 }
 
-$rows = $res->fetch_all(MYSQLI_ASSOC);
-$stmt->close();
-
-if (empty($rows)) {
+if ($res->num_rows < 1) {
+    $stmt->close();
     fail('No hay datos para exportar.');
 }
 
-/* =========================
-   CSV
-   ========================= */
-if ($formato === 'csv') {
-    $archivo = 'locales_' . date('Y-m-d_His') . '.csv';
+$headers = array_map(static function ($field): string {
+    return (string)$field->name;
+}, $res->fetch_fields());
 
+/* CSV masivo: salida directa, sin construir celdas PhpSpreadsheet en memoria. */
+if ($formato === 'csv') {
     if (ob_get_length()) {
         ob_end_clean();
     }
 
+    $nombreArchivo = 'locales_' . date('Y-m-d_His') . '.csv';
     header('Content-Type: text/csv; charset=UTF-8');
-    header('Content-Disposition: attachment; filename="' . $archivo . '"');
-    echo "\xEF\xBB\xBF";
+    header('Content-Disposition: attachment; filename="' . $nombreArchivo . '"');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
 
     $out = fopen('php://output', 'w');
-    $cols = array_keys($rows[0]);
+    if (!$out) {
+        $stmt->close();
+        fail('No fue posible abrir la salida CSV.');
+    }
 
-    fputcsv($out, $cols, ';');
+    fwrite($out, "\xEF\xBB\xBF");
+    fputcsv($out, $headers, ';');
 
-    foreach ($rows as $r) {
+    while ($row = $res->fetch_assoc()) {
+        $row['DIRECCION_GOOGLE'] = mayusculasSinAcentos($row['DIRECCION_GOOGLE'] ?? '');
         $line = [];
-        foreach ($cols as $c) {
-            $line[] = $r[$c];
+        foreach ($headers as $header) {
+            $line[] = $row[$header] ?? '';
         }
         fputcsv($out, $line, ';');
     }
 
     fclose($out);
+    $stmt->close();
     exit;
+}
+
+/* PhpSpreadsheet mantiene cada celda en memoria; proteger exportaciones muy grandes. */
+$maxExcelRows = 8000;
+if ($res->num_rows > $maxExcelRows) {
+    $totalRows = $res->num_rows;
+    $stmt->close();
+    fail("La exportación XLSX contiene $totalRows filas y supera el máximo seguro de $maxExcelRows. Usa formato=csv para descargar el total.");
 }
 
 /* =========================
@@ -280,8 +344,10 @@ if ($formato === 'csv') {
 $spreadsheet = new Spreadsheet();
 $sheet = $spreadsheet->getActiveSheet();
 $sheet->setTitle('Locales');
+$sheet->setShowGridlines(false);
+$sheet->freezePane('A2');
+$spreadsheet->getDefaultStyle()->getFont()->setName('Calibri')->setSize(10);
 
-$headers = array_keys($rows[0]);
 $rowNum = 1;
 $colNum = 1;
 
@@ -317,13 +383,12 @@ $sheet->getStyle($headerRange)->applyFromArray([
     ]
 ]);
 
-$sheet->getRowDimension(1)->setRowHeight(26);
-
-$sheet->getRowDimension(1)->setRowHeight(22);
+$sheet->getRowDimension(1)->setRowHeight(28);
 
 /* Datos */
 $rowNum = 2;
-foreach ($rows as $r) {
+while ($r = $res->fetch_assoc()) {
+    $r['DIRECCION_GOOGLE'] = mayusculasSinAcentos($r['DIRECCION_GOOGLE'] ?? '');
     $colNum = 1;
     foreach ($headers as $c) {
         $value = $r[$c];
@@ -338,6 +403,7 @@ foreach ($rows as $r) {
     }
     $rowNum++;
 }
+$stmt->close();
 
 if ($rowNum > 2) {
     $dataRange = "A1:{$lastCol}" . ($rowNum - 1);
@@ -358,25 +424,33 @@ if ($rowNum > 2) {
 
     $sheet->setAutoFilter($dataRange);
 
-    // Fuerza alineaci�n izquierda en todos los datos
+    // Fuerza alineación izquierda en todos los datos.
     $sheet->getStyle("A2:{$lastCol}" . ($rowNum - 1))
           ->getAlignment()
           ->setHorizontal(Alignment::HORIZONTAL_LEFT);
 }
 
-/* Auto ancho */
-$maxColIndex = Coordinate::columnIndexFromString($lastCol);
-for ($i = 1; $i <= $maxColIndex; $i++) {
-    $sheet->getColumnDimensionByColumn($i)->setAutoSize(true);
+/* Anchos legibles y acotados. */
+$columnWidths = [
+    'IDLOCAL' => 11, 'DIVISION' => 24, 'CODIGO' => 15, 'NUMERO_LOCAL' => 15,
+    'CANAL' => 18, 'SUBCANAL' => 18, 'CADENA' => 22, 'CUENTA' => 22,
+    'LOCAL' => 38, 'DIRECCION_ORIGINAL' => 42, 'DIRECCION' => 42,
+    'DIRECCION_GOOGLE' => 48, 'ESTADO_DIRECCION' => 20,
+    'FECHA_VALIDACION_DIRECCION' => 23, 'GOOGLE_RESPONSE_ID' => 32,
+    'COMUNA' => 20, 'REGION' => 30, 'DISTRITO' => 22, 'ZONA' => 20,
+    'JEFEVENTA' => 28, 'LATITUD' => 15, 'LONGITUD' => 15
+];
+foreach ($headers as $index => $header) {
+    $columnLetter = Coordinate::stringFromColumnIndex($index + 1);
+    $sheet->getColumnDimension($columnLetter)->setWidth($columnWidths[$header] ?? 18);
 }
-
-/* Nombre archivo */
-$nombreArchivo = 'locales_' . date('Y-m-d_His') . '.xlsx';
 
 /* Salida */
 if (ob_get_length()) {
     ob_end_clean();
 }
+
+$nombreArchivo = 'locales_' . date('Y-m-d_His') . '.xlsx';
 
 header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 header('Content-Disposition: attachment; filename="' . $nombreArchivo . '"');

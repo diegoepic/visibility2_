@@ -171,6 +171,7 @@ function getLocalesDetails(mysqli $conn, int $idForm): array
 {
     $sql = "
         SELECT
+            f.id AS id_campana,
             l.id AS id_local,
             fq.id AS id_formulario_question,
             l.codigo AS codigo_local,
@@ -539,34 +540,35 @@ function aplicarEstiloDatos(Worksheet $sheet, string $range): void
 function setFixedWidthsDetalleLocales(Worksheet $sheet, int $maxFotosLocales): void
 {
     $widths = [
-        1  => 12, // ID LOCAL
-        2  => 35, // CAMPAÑA
-        3  => 20, // CUENTA
-        4  => 20, // CADENA
-        5  => 14, // CODIGO
-        6  => 12, // N° LOCAL
-        7  => 30, // LOCAL
-        8  => 35, // DIRECCION
-        9  => 18, // COMUNA
-        10 => 18, // REGION
-        11 => 22, // JEFE VENTA
-        12 => 14, // FECHA INICIO
-        13 => 14, // FECHA TÉRMINO
-        14 => 16, // FECHA PLANIFICADA
-        15 => 14, // FECHA VISITA
-        16 => 12, // HORA
-        17 => 20, // USUARIO
-        18 => 16, // ESTADO VISITA
-        19 => 20, // ESTADO ACTIVIDAD
-        20 => 25, // MOTIVO
-        21 => 25, // MATERIAL
-        22 => 12, // CANTIDAD
-        23 => 18, // MATERIAL PROPUESTO
-        24 => 35, // OBSERVACION
+        1  => 12, // ID CAMPAÑA
+        2  => 12, // ID LOCAL
+        3  => 35, // CAMPAÑA
+        4  => 20, // CUENTA
+        5  => 20, // CADENA
+        6  => 14, // CODIGO
+        7  => 12, // N° LOCAL
+        8  => 30, // LOCAL
+        9  => 35, // DIRECCION
+        10 => 18, // COMUNA
+        11 => 18, // REGION
+        12 => 22, // JEFE VENTA
+        13 => 14, // FECHA INICIO
+        14 => 14, // FECHA TÉRMINO
+        15 => 16, // FECHA PLANIFICADA
+        16 => 14, // FECHA VISITA
+        17 => 12, // HORA
+        18 => 20, // USUARIO
+        19 => 16, // ESTADO VISITA
+        20 => 20, // ESTADO ACTIVIDAD
+        21 => 25, // MOTIVO
+        22 => 25, // MATERIAL
+        23 => 12, // CANTIDAD
+        24 => 18, // MATERIAL PROPUESTO
+        25 => 35, // OBSERVACION
     ];
 
     for ($i = 0; $i < $maxFotosLocales; $i++) {
-        $widths[25 + $i] = 40;
+        $widths[26 + $i] = 40;
     }
 
     foreach ($widths as $col => $width) {
@@ -648,6 +650,7 @@ function generarExcelPhpSpreadsheet(
     $row = 1;
 
     $headersLocales = [
+        'ID CAMPAÑA',
         'ID LOCAL',
         'CAMPAÑA',
         'CUENTA',
@@ -697,6 +700,7 @@ function generarExcelPhpSpreadsheet(
             $numeroLocal = preg_replace('/\D+/', '', (string)($l['codigo_local'] ?? ''));
         }
 
+        setStringByIndex($sheet1, $col++, $row, (string)($l['id_campana'] ?? ''));
         setStringByIndex($sheet1, $col++, $row, (string)($l['id_local'] ?? ''));
         setStringByIndex($sheet1, $col++, $row, (string)($l['nombre_campana'] ?? ''));
         setStringByIndex($sheet1, $col++, $row, (string)($l['cuenta'] ?? ''));
