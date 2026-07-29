@@ -37,6 +37,8 @@ $formulario_estado = $_GET['formulario_estado'] ?? 'activos';
 
 $fecha_desde = $_GET['fecha_desde'] ?? '';
 $fecha_hasta = $_GET['fecha_hasta'] ?? '';
+$usarFechaVisita = !empty($fecha_desde) || !empty($fecha_hasta);
+$fechaMedicionSql = $usarFechaVisita ? 'fq.fechaVisita' : 'fq.fechaPropuesta';
 
 /* ======================================================
    UTILIDADES
@@ -228,21 +230,21 @@ $sql = "
         COUNT(DISTINCT CASE 
             WHEN $gestionActiva
              AND f.id IS NOT NULL
-             AND DATE(fq.fechaPropuesta) < CURDATE()
+             AND DATE($fechaMedicionSql) < CURDATE()
             THEN CONCAT(fq.id_local, '-', fq.id_formulario)
         END) AS total_vencido,
         
         COUNT(DISTINCT CASE 
             WHEN $gestionActiva
              AND f.id IS NOT NULL
-             AND DATE(fq.fechaPropuesta) = CURDATE()
+             AND DATE($fechaMedicionSql) = CURDATE()
             THEN CONCAT(fq.id_local, '-', fq.id_formulario)
         END) AS total_hoy,
         
         COUNT(DISTINCT CASE 
             WHEN $gestionActiva
              AND f.id IS NOT NULL
-             AND DATE(fq.fechaPropuesta) > CURDATE()
+             AND DATE($fechaMedicionSql) > CURDATE()
             THEN CONCAT(fq.id_local, '-', fq.id_formulario)
         END) AS total_futuro,
         
@@ -255,13 +257,13 @@ $sql = "
         MAX(CASE 
             WHEN fq.id IS NOT NULL
              AND f.id IS NOT NULL
-            THEN DATE(fq.fechaPropuesta)
+            THEN DATE($fechaMedicionSql)
         END) AS ultima_fecha_propuesta,
 
         MIN(CASE 
             WHEN $gestionActiva
              AND f.id IS NOT NULL
-            THEN DATE(fq.fechaPropuesta)
+            THEN DATE($fechaMedicionSql)
         END) AS primera_fecha_pendiente,
 
         GROUP_CONCAT(
@@ -291,13 +293,13 @@ $types = "";
 $params = [];
 
 if (!empty($fecha_desde)) {
-    $sql .= " AND DATE(fq.fechaPropuesta) >= ? ";
+    $sql .= " AND DATE(fq.fechaVisita) >= ? ";
     $types .= "s";
     $params[] = $fecha_desde;
 }
 
 if (!empty($fecha_hasta)) {
-    $sql .= " AND DATE(fq.fechaPropuesta) <= ? ";
+    $sql .= " AND DATE(fq.fechaVisita) <= ? ";
     $types .= "s";
     $params[] = $fecha_hasta;
 }
@@ -415,13 +417,13 @@ $typesDept = "";
 $paramsDept = [];
 
 if (!empty($fecha_desde)) {
-    $sqlDept .= " AND DATE(fq.fechaPropuesta) >= ? ";
+    $sqlDept .= " AND DATE(fq.fechaVisita) >= ? ";
     $typesDept .= "s";
     $paramsDept[] = $fecha_desde;
 }
 
 if (!empty($fecha_hasta)) {
-    $sqlDept .= " AND DATE(fq.fechaPropuesta) <= ? ";
+    $sqlDept .= " AND DATE(fq.fechaVisita) <= ? ";
     $typesDept .= "s";
     $paramsDept[] = $fecha_hasta;
 }
@@ -636,7 +638,7 @@ $sqlEstadoVisita = "
             WHEN $gestionFinalizada THEN 'VISITADO'
             ELSE 'PENDIENTE'
         END AS estado_visita,
-        DATE(fq.fechaPropuesta) AS fecha_planificada,
+        DATE($fechaMedicionSql) AS fecha_planificada,
         CASE
             WHEN $fechaVisitaValida THEN DATE(fq.fechaVisita)
             ELSE NULL
@@ -710,13 +712,13 @@ $typesEstadoVisita = "ii";
 $paramsEstadoVisita = [$id_empresa, $division_usuario];
 
 if (!empty($fecha_desde)) {
-    $sqlEstadoVisita .= " AND DATE(fq.fechaPropuesta) >= ? ";
+    $sqlEstadoVisita .= " AND DATE(fq.fechaVisita) >= ? ";
     $typesEstadoVisita .= "s";
     $paramsEstadoVisita[] = $fecha_desde;
 }
 
 if (!empty($fecha_hasta)) {
-    $sqlEstadoVisita .= " AND DATE(fq.fechaPropuesta) <= ? ";
+    $sqlEstadoVisita .= " AND DATE(fq.fechaVisita) <= ? ";
     $typesEstadoVisita .= "s";
     $paramsEstadoVisita[] = $fecha_hasta;
 }
@@ -745,7 +747,7 @@ $sqlEstadoVisita .= "
     GROUP BY
         u.usuario,
         estado_visita,
-        DATE(fq.fechaPropuesta),
+        DATE($fechaMedicionSql),
         fecha_visita
 
     HAVING total_general > 0
@@ -2572,14 +2574,14 @@ $conn->close();
             </div>
 
             <div class="programada-field field-date">
-                <label>Inicio</label>
+                <label>Visita desde</label>
                 <input type="date" name="fecha_desde" class="form-control" value="<?= h($fecha_desde) ?>">
             </div>
 
             <div class="programada-separator">-</div>
 
             <div class="programada-field field-date">
-                <label>Fin</label>
+                <label>Visita hasta</label>
                 <input type="date" name="fecha_hasta" class="form-control" value="<?= h($fecha_hasta) ?>">
             </div>
 
@@ -2599,7 +2601,7 @@ $conn->close();
 
         <!-- KPI 1 -->
         <div class="kpi-mini-box kpi-mini-destacado">
-            <div class="kpi-mini-label">TOTAL PLANIFICADO</div>
+            <div class="kpi-mini-label"><?= $usarFechaVisita ? 'VISITAS FILTRADAS' : 'TOTAL PLANIFICADO' ?></div>
             <div class="kpi-mini-value"><?= $totalGeneralKpi ?></div>
         </div>
 
@@ -2676,7 +2678,9 @@ $conn->close();
                         Resumen por trabajador
                     </h5>
                     <div class="text-small-muted">
-                        La carga se calcula desde las planificaciones asignadas y su avance operativo.
+                        <?= $usarFechaVisita
+                            ? 'Las métricas se calculan desde las visitas realizadas en el rango seleccionado.'
+                            : 'La carga se calcula desde las planificaciones asignadas y su avance operativo.' ?>
                     </div>
                 </div>
             </div>
@@ -2688,7 +2692,7 @@ $conn->close();
                             <th>Trabajador</th>
                             <th class="text-center">Avance</th>
                             <th>Departamentos</th>
-                            <th class="text-center">Planificado</th>
+                            <th class="text-center"><?= $usarFechaVisita ? 'Visitas' : 'Planificado' ?></th>
                             <th class="text-center">Activos</th>
                             <th class="text-center">Finalizadas</th>
                             <th class="text-center">Ratio avance</th>
@@ -3005,7 +3009,7 @@ $conn->close();
                         class="btn-grid-action secondary btn-ver-planificado"
                         data-nombre="<?= h($t['nombre'] . ' ' . $t['apellido']) ?>"
                         data-usuario="<?= h($t['usuario']) ?>">
-                    Planificado
+                    <?= $usarFechaVisita ? 'Visitas' : 'Planificado' ?>
                 </button>
                  
             </div>
@@ -3047,7 +3051,9 @@ $conn->close();
 
             <div class="modal-body">
                 <div class="estado-visita-subtitle mb-3">
-                    Conteo por fecha planificada y estado detectado desde observacion.
+                    <?= $usarFechaVisita
+                        ? 'Conteo por fecha real de visita y estado detectado desde observacion.'
+                        : 'Conteo por fecha planificada y estado detectado desde observacion.' ?>
                 </div>
 
                 <?php if (empty($estadoVisitaRows)): ?>
@@ -3065,8 +3071,10 @@ $conn->close();
                                 <tr>
                                     <th>Merchan</th>
                                     <th>Estado visita</th>
-                                    <th>Fecha planificada</th>
-                                    <th>Fecha visita</th>
+                                    <th><?= $usarFechaVisita ? 'Fecha visita' : 'Fecha planificada' ?></th>
+                                    <?php if (!$usarFechaVisita): ?>
+                                        <th>Fecha visita</th>
+                                    <?php endif; ?>
                                     <th class="text-center">Pendiente</th>
                                     <th class="text-center">Gestionado</th>
                                     <th class="text-center">Local cerrado</th>
@@ -3094,7 +3102,9 @@ $conn->close();
                                         <td class="estado-visita-worker"><?= h($rowEstado['usuario']) ?></td>
                                         <td class="estado-visita-status"><?= h($rowEstado['estado_visita']) ?></td>
                                         <td><?= !empty($rowEstado['fecha_planificada']) ? date('d/m/Y', strtotime($rowEstado['fecha_planificada'])) : '-' ?></td>
-                                        <td><?= !empty($rowEstado['fecha_visita']) ? date('d/m/Y', strtotime($rowEstado['fecha_visita'])) : '-' ?></td>
+                                        <?php if (!$usarFechaVisita): ?>
+                                            <td><?= !empty($rowEstado['fecha_visita']) ? date('d/m/Y', strtotime($rowEstado['fecha_visita'])) : '-' ?></td>
+                                        <?php endif; ?>
                                         <td class="text-center"><?= (int)$rowEstado['pendiente'] ?: '' ?></td>
                                         <td class="text-center"><?= (int)$rowEstado['gestionado'] ?: '' ?></td>
                                         <td class="text-center"><?= (int)$rowEstado['local_cerrado'] ?: '' ?></td>
@@ -3108,7 +3118,7 @@ $conn->close();
                                 <?php endforeach; ?>
 
                                 <tr class="estado-visita-total-row">
-                                    <td colspan="4">Total general</td>
+                                    <td colspan="<?= $usarFechaVisita ? 3 : 4 ?>">Total general</td>
                                     <td class="text-center" id="planificadoTotalPendiente"></td>
                                     <td class="text-center" id="planificadoTotalGestionado"></td>
                                     <td class="text-center" id="planificadoTotalLocalCerrado"></td>
@@ -3173,12 +3183,12 @@ $conn->close();
                         </div>
 
                         <div class="resumen-kpi">
-                            <span>Primera pendiente</span>
+                            <span><?= $usarFechaVisita ? 'Primera visita' : 'Primera pendiente' ?></span>
                             <strong id="resumenPrimeraPendiente">-</strong>
                         </div>
 
                         <div class="resumen-kpi">
-                            <span>Ultima planificacion</span>
+                            <span><?= $usarFechaVisita ? 'Ultima visita' : 'Ultima planificacion' ?></span>
                             <strong id="resumenUltimaPlanificacion">-</strong>
                         </div>
                     </div>
@@ -3189,12 +3199,12 @@ $conn->close();
                                 <tr>
                                     <th>Formulario</th>
                                     <th>Division</th>
-                                    <th class="text-center">Pendientes</th>
-                                    <th class="text-center">Vencidas</th>
+                                    <th class="text-center"><?= $usarFechaVisita ? 'Gestiones' : 'Pendientes' ?></th>
+                                    <th class="text-center"><?= $usarFechaVisita ? 'Anteriores' : 'Vencidas' ?></th>
                                     <th class="text-center">Hoy</th>
-                                    <th class="text-center">Futuras</th>
-                                    <th>Primera pendiente</th>
-                                    <th>Ultima planificacion</th>
+                                    <th class="text-center"><?= $usarFechaVisita ? 'Posteriores' : 'Futuras' ?></th>
+                                    <th><?= $usarFechaVisita ? 'Primera visita' : 'Primera pendiente' ?></th>
+                                    <th><?= $usarFechaVisita ? 'Ultima visita' : 'Ultima planificacion' ?></th>
                                 </tr>
                             </thead>
                             <tbody id="tbodyResumenFormularios">
@@ -3218,7 +3228,7 @@ $conn->close();
                 <div>
                     <h5 class="modal-title" id="modalDetalleCargaLabel">
                         <i class="fas fa-calendar-alt mr-2"></i>
-                        Detalle de planificacion por fecha
+                        <?= $usarFechaVisita ? 'Detalle de visitas por fecha' : 'Detalle de planificacion por fecha' ?>
                     </h5>
                     <div class="modal-subtitle" id="modalDetalleTrabajador">
                         -
@@ -3250,7 +3260,7 @@ $conn->close();
                         </div>
 
                         <div class="detalle-kpi">
-                            <span>Total planificado</span>
+                            <span><?= $usarFechaVisita ? 'Total visitas' : 'Total planificado' ?></span>
                             <div class="detalle-kpi-main-with-circle">
                                 <strong id="detalleTotalPlanificado">0</strong>
                                 <span id="detallePctFinalizado" class="detalle-mini-circle">0%</span>
@@ -3763,7 +3773,7 @@ function renderDetalle(response) {
         $('#tbodyDetalleFechas').html(`
             <tr>
                 <td class="text-center text-muted py-4">
-                    No se encontraron planificaciones por fecha para este trabajador.
+                    No se encontraron <?= $usarFechaVisita ? 'visitas' : 'planificaciones' ?> por fecha para este trabajador.
                 </td>
             </tr>
         `);

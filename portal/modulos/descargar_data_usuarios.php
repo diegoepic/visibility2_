@@ -230,9 +230,9 @@ $sqlBase = "
 			ELSE ''
 		END AS ESTADO
     FROM usuario u
-    INNER JOIN division_empresa de ON de.id = u.id_division
-    INNER JOIN subdivision sd ON sd.id = u.id_subdivision
-    INNER JOIN perfil p ON p.id = u.id_perfil
+    LEFT JOIN division_empresa de ON de.id = u.id_division
+    LEFT JOIN subdivision sd ON sd.id = u.id_subdivision
+    LEFT JOIN perfil p ON p.id = u.id_perfil
     WHERE 1=1
 ";
 

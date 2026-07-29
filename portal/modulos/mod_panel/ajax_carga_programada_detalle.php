@@ -35,6 +35,8 @@ $formulario_estado = $_GET['formulario_estado'] ?? 'activos';
 
 $fecha_desde = $_GET['fecha_desde'] ?? '';
 $fecha_hasta = $_GET['fecha_hasta'] ?? '';
+$usarFechaVisita = !empty($fecha_desde) || !empty($fecha_hasta);
+$fechaMedicionSql = $usarFechaVisita ? 'fq.fechaVisita' : 'fq.fechaPropuesta';
 
 if ($id_ejecutor <= 0) {
     echo json_encode([
@@ -78,7 +80,7 @@ $sql = "
         COALESCE(f.nombre, 'SIN FORMULARIO') AS formulario,
         COALESCE(df.nombre, 'SIN DIVISION') AS division_formulario,
         COALESCE(sf.nombre, '') AS subdivision_formulario,
-        DATE(fq.fechaPropuesta) AS fecha_planificada,
+        DATE($fechaMedicionSql) AS fecha_planificada,
 
         COUNT(DISTINCT CONCAT(fq.id_local, '-', fq.id_formulario)) AS total
 
@@ -124,13 +126,13 @@ if ($clasificacion_usuario === 'interno' || $clasificacion_usuario === 'externo'
 }
 
 if (!empty($fecha_desde)) {
-    $sql .= " AND DATE(fq.fechaPropuesta) >= ? ";
+    $sql .= " AND DATE(fq.fechaVisita) >= ? ";
     $types .= "s";
     $params[] = $fecha_desde;
 }
 
 if (!empty($fecha_hasta)) {
-    $sql .= " AND DATE(fq.fechaPropuesta) <= ? ";
+    $sql .= " AND DATE(fq.fechaVisita) <= ? ";
     $types .= "s";
     $params[] = $fecha_hasta;
 }
@@ -153,7 +155,7 @@ $sql .= "
         f.nombre,
         df.nombre,
         sf.nombre,
-        DATE(fq.fechaPropuesta)
+        DATE($fechaMedicionSql)
 
     ORDER BY
         f.nombre ASC,
@@ -371,7 +373,7 @@ usort($data, function ($a, $b) {
 $sqlPct = "
     SELECT
         f.id AS id_formulario,
-        DATE(fq.fechaPropuesta) AS fecha_planificada,
+        DATE($fechaMedicionSql) AS fecha_planificada,
         COUNT(DISTINCT CONCAT(fq.id_local, '-', fq.id_formulario)) AS total_general,
         COUNT(DISTINCT CASE
             WHEN $gestionFinalizada
@@ -419,13 +421,13 @@ if ($clasificacion_usuario === 'interno' || $clasificacion_usuario === 'externo'
 }
 
 if (!empty($fecha_desde)) {
-    $sqlPct .= " AND DATE(fq.fechaPropuesta) >= ? ";
+    $sqlPct .= " AND DATE(fq.fechaVisita) >= ? ";
     $typesPct .= "s";
     $paramsPct[] = $fecha_desde;
 }
 
 if (!empty($fecha_hasta)) {
-    $sqlPct .= " AND DATE(fq.fechaPropuesta) <= ? ";
+    $sqlPct .= " AND DATE(fq.fechaVisita) <= ? ";
     $typesPct .= "s";
     $paramsPct[] = $fecha_hasta;
 }
@@ -437,7 +439,7 @@ if ($formulario_estado === 'activos') {
 }
 
 $sqlPct .= "
-    GROUP BY f.id, DATE(fq.fechaPropuesta)
+    GROUP BY f.id, DATE($fechaMedicionSql)
 ";
 
 $stmtPct = $conn->prepare($sqlPct);

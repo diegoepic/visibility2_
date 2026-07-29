@@ -25,6 +25,8 @@ $formulario_estado = $_GET['formulario_estado'] ?? 'activos';
 $estado_gestion = $_GET['estado_gestion'] ?? 'todos';
 $fecha_desde = $_GET['fecha_desde'] ?? '';
 $fecha_hasta = $_GET['fecha_hasta'] ?? '';
+$usarFechaVisita = !empty($fecha_desde) || !empty($fecha_hasta);
+$fechaMedicionSql = $usarFechaVisita ? 'fq.fechaVisita' : 'fq.fechaPropuesta';
 
 if ($id_ejecutor <= 0) {
     echo json_encode([
@@ -75,22 +77,22 @@ $sql = "
         COUNT(DISTINCT CONCAT(fq.id_local, '-', fq.id_formulario)) AS total_pendiente,
 
         COUNT(DISTINCT CASE
-            WHEN DATE(fq.fechaPropuesta) < CURDATE()
+            WHEN DATE($fechaMedicionSql) < CURDATE()
             THEN CONCAT(fq.id_local, '-', fq.id_formulario)
         END) AS total_vencido,
 
         COUNT(DISTINCT CASE
-            WHEN DATE(fq.fechaPropuesta) = CURDATE()
+            WHEN DATE($fechaMedicionSql) = CURDATE()
             THEN CONCAT(fq.id_local, '-', fq.id_formulario)
         END) AS total_hoy,
 
         COUNT(DISTINCT CASE
-            WHEN DATE(fq.fechaPropuesta) > CURDATE()
+            WHEN DATE($fechaMedicionSql) > CURDATE()
             THEN CONCAT(fq.id_local, '-', fq.id_formulario)
         END) AS total_futuro,
 
-        MIN(DATE(fq.fechaPropuesta)) AS primera_pendiente,
-        MAX(DATE(fq.fechaPropuesta)) AS ultima_planificacion
+        MIN(DATE($fechaMedicionSql)) AS primera_pendiente,
+        MAX(DATE($fechaMedicionSql)) AS ultima_planificacion
 
     FROM formularioQuestion fq
 
@@ -116,13 +118,13 @@ $types = "ii";
 $params = [$id_empresa, $id_ejecutor];
 
 if (!empty($fecha_desde)) {
-    $sql .= " AND DATE(fq.fechaPropuesta) >= ? ";
+    $sql .= " AND DATE(fq.fechaVisita) >= ? ";
     $types .= "s";
     $params[] = $fecha_desde;
 }
 
 if (!empty($fecha_hasta)) {
-    $sql .= " AND DATE(fq.fechaPropuesta) <= ? ";
+    $sql .= " AND DATE(fq.fechaVisita) <= ? ";
     $types .= "s";
     $params[] = $fecha_hasta;
 }

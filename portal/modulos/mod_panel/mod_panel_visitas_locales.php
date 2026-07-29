@@ -27,6 +27,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
                 <label><span>Subdivisión</span><select id="visdashSubdivision" disabled><option value="">Todas las subdivisiones</option></select></label>
                 <label><span>Estado campaña</span><select id="visdashCampaignStatus"><option value="1">En curso</option><option value="3">Finalizadas</option><option value="0">Ambos estados</option></select></label>
                 <button type="button" id="visdashLoad">Cargar registros</button>
+                <button type="button" id="visdashExport" class="visdash-export" disabled>Descargar Excel</button>
             </div>
             <div class="visdash-feedback" id="visdashFeedback" role="status">Selecciona una división para comenzar.</div>
             <div class="visdash-filters">
