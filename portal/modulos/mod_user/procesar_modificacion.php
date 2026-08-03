@@ -272,6 +272,17 @@ $params = [
 
 $tipos = "ssssssiiiisis";
 
+/* Permiso "adelantar ruta" (scripts/21). Solo se incluye si la columna existe,
+   porque los despliegues van desacoplados de las migraciones. Cualquier valor
+   distinto de "0" se interpreta como 1: ante la duda, no se restringe. */
+$chkCol = @mysqli_query($conn, "SHOW COLUMNS FROM usuario LIKE 'puede_adelantar_ruta'");
+if ($chkCol && mysqli_num_rows($chkCol) > 0) {
+    $puede_adelantar_ruta = (isset($_POST['puede_adelantar_ruta']) && (string)$_POST['puede_adelantar_ruta'] === '0') ? 0 : 1;
+    $campos .= ", puede_adelantar_ruta = ?";
+    $params[] = $puede_adelantar_ruta;
+    $tipos   .= "i";
+}
+
 // Contraseña
 if ($clave !== null) {
     $hash = password_hash($clave, PASSWORD_DEFAULT);

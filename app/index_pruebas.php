@@ -378,6 +378,16 @@ foreach ($stmtVendList->get_result()->fetch_all(MYSQLI_ASSOC) as $v) {
 }
 $stmtVendList->close();
 
+/* Permiso "adelantar ruta": a los ejecutores que NO lo tienen se les ocultan
+   los locales con fecha futura. Se filtra la lista base (no solo el <select>)
+   para que tabla, selector de fechas, mapa y planificador queden consistentes:
+   filtrar solo el selector dejaría las fechas futuras igual de accesibles. */
+require_once __DIR__ . '/lib/ruta_permisos.php';
+$puedeAdelantarRuta = ruta_puede_adelantar($conn, (int)$usuario_id);
+if (!$puedeAdelantarRuta) {
+    $locales = ruta_filtrar_fechas_futuras($locales);
+}
+
 $locales_por_dia = [];
 foreach ($locales as $local) {
     $fecha = $local['fechaPropuesta'];
@@ -486,6 +496,12 @@ if (!empty($vendedorOverrides)) {
         }
     }
     unset($loc);
+}
+
+// Misma regla para reagendados: un reagendado a fecha futura también sería
+// adelantar ruta, así que se filtra igual.
+if (!$puedeAdelantarRuta) {
+    $locales_reag = ruta_filtrar_fechas_futuras($locales_reag);
 }
 
 $locales_reag_por_dia = [];

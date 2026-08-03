@@ -387,9 +387,12 @@ $filterFolders = array_values($filterFolders);
               class="form-control"
               id="archivoInput"
               name="mi_archivo"
-              accept=".ppt,.pptx,.csv,.xls,.xlsx,.zip,.rar,.pdf"
+              accept=".ppt,.pptx,.csv,.xls,.xlsx,.pdf,.zip,.rar,.7z,.tar,.gz,.tgz,.bz2,.xz"
               required
             >
+            <small class="form-text text-muted">
+              Documentos y archivos comprimidos: ZIP, RAR, 7Z, TAR, GZ, TGZ, BZ2 y XZ.
+            </small>
           </div>
         </div>
 
@@ -528,6 +531,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
   fileInput.addEventListener('change', function() {
     if (!this.files.length) return;
+    const allowedExtensions = ['ppt', 'pptx', 'csv', 'xls', 'xlsx', 'pdf', 'zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz'];
+    const extension = this.files[0].name.split('.').pop().toLowerCase();
+    if (!allowedExtensions.includes(extension)) {
+      alert('Formato no permitido. Puedes subir documentos o archivos ZIP, RAR, 7Z, TAR, GZ, TGZ, BZ2 y XZ.');
+      this.value = '';
+      uploadStatus.textContent = 'Selecciona un archivo válido.';
+      return;
+    }
     uploadStatus.textContent = this.files[0].name;
   });
 

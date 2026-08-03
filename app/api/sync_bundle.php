@@ -42,6 +42,16 @@ try {
     $to = isset($_GET['to']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$_GET['to'])
         ? (string)$_GET['to'] : $from;
 
+    /* Permiso "adelantar ruta": si el ejecutor no lo tiene, el rango se recorta a
+       HOY. Sin esto el filtro de index_pruebas.php se saltaría por la caché
+       offline, que se sirve desde acá con el rango que pida el cliente. */
+    require_once dirname(__DIR__) . '/lib/ruta_permisos.php';
+    if (!ruta_puede_adelantar($conn, $usuario_id)) {
+        $hoy = $now->format('Y-m-d');
+        if ($to   > $hoy) $to   = $hoy;
+        if ($from > $hoy) $from = $hoy;
+    }
+
     $reagendadosDays = isset($_GET['reagendados_days']) && is_numeric($_GET['reagendados_days'])
         ? max(0, (int)$_GET['reagendados_days']) : 7;
 

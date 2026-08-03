@@ -5,6 +5,7 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
+
 // 1) Verificar sesión y método
 if (!isset($_SESSION['usuario_id'])) {
     header("Location: login.php");
@@ -24,6 +25,7 @@ if (
 }
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/lib/encuesta_vehiculo.php';
 
 $idCampana   = isset($_POST['idCampana']) ? intval($_POST['idCampana']) : 0;
 $id_local    = 0; // Siempre 0 para IW
@@ -82,6 +84,10 @@ function normCoord($v, $min, $max) {
 }
 $latFin = normCoord($latGestion,  -90,  90);
 $lngFin = normCoord($lngGestion, -180, 180);
+
+// Encuesta "Estatus del vehículo": se capturan al guardar para auditar la lectura de IA.
+$evPatenteGuardada = null;
+$evKmGuardado      = null;
 
 // 3) Empezar transacción
 $conn->begin_transaction();
@@ -207,6 +213,23 @@ try {
                 // Nota: para tipo 5 numérico seguimos guardando en answer_text (compatibilidad)
                 $answer_text = is_array($resp) ? implode(", ", $resp) : trim((string)$resp);
 
+                /* Encuesta "Estatus del vehículo": la patente debe existir en la tabla
+                   `vehiculo` de la empresa. El select del front ya lo limita, pero esta
+                   es la validación que de verdad impide guardar una patente inventada
+                   (o un POST manipulado). Se guarda con el formato exacto del maestro. */
+                if ($idCampana === EV_FORMULARIO_ID && $qid === EV_QID_PATENTE) {
+                    $veh = ev_buscar_vehiculo_por_patente($conn, $answer_text, $empresaId);
+                    if (!$veh) {
+                        $conn->rollback();
+                        die("La patente ingresada no existe en la flota registrada. Vuelve atrás y selecciónala de la lista.");
+                    }
+                    $answer_text = (string)$veh['patente'];
+                    $evPatenteGuardada = $answer_text;
+                }
+                if ($idCampana === EV_FORMULARIO_ID && $qid === EV_QID_KM && $answer_text !== '') {
+                    $evKmGuardado = (int)$answer_text;
+                }
+
                 $stmtI = $conn->prepare("
                     INSERT INTO form_question_responses
                       (visita_id, id_form_question, id_local, id_usuario,
@@ -224,6 +247,33 @@ try {
                 $stmtI->execute();
                 $stmtI->close();
             }
+        }
+    }
+
+    /* 4.b) Auditoría del odómetro: se marca qué kilometraje quedó guardado y si
+       coincide con lo que leyó la IA. Permite medir en producción cuántas veces
+       la lectura automática acertó y cuántas el ejecutor tuvo que corregir.
+       Nunca rompe el guardado de la encuesta. */
+    if ($idCampana === EV_FORMULARIO_ID && $evKmGuardado !== null && ev_tabla_lecturas_existe($conn)) {
+        try {
+            $stKm = $conn->prepare(
+                "UPDATE odometro_lectura
+                    SET km_final = ?,
+                        origen = CASE
+                            WHEN km_ia IS NULL      THEN 'manual'
+                            WHEN km_ia = ?          THEN 'ia'
+                            ELSE 'ia_editado' END
+                  WHERE visita_id = ?
+                  ORDER BY id DESC
+                  LIMIT 1"
+            );
+            if ($stKm) {
+                $stKm->bind_param("iii", $evKmGuardado, $evKmGuardado, $visita_id);
+                $stKm->execute();
+                $stKm->close();
+            }
+        } catch (Throwable $e) {
+            error_log('[odometro] auditoria km_final: ' . $e->getMessage());
         }
     }
 

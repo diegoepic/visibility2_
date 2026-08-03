@@ -35,15 +35,22 @@ try {
     $types  = "i";
 
     if ($id_division > 0) {
-        $sql .= " AND u.id_division = ?";
+        // Permite reasignar tanto a usuarios de la división seleccionada
+        // como a cualquier usuario de la división MC (id_division = 1).
+        $sql .= " AND (u.id_division = ? OR u.id_division = 1)";
         $params[] = $id_division;
         $types .= "i";
     }
 
     if ($id_subdivision > 0) {
-        $sql .= " AND u.id_subdivision = ?";
+        // La subdivisión aplica a la división seleccionada; MC queda disponible completo.
+        $sql .= " AND (u.id_division = 1 OR u.id_subdivision = ?)";
         $params[] = $id_subdivision;
         $types .= "i";
+    }
+
+    if ($id_subdivision === -1) {
+        $sql .= " AND (u.id_division = 1 OR u.id_subdivision IS NULL OR u.id_subdivision = 0)";
     }
 
     /*

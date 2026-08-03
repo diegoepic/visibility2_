@@ -96,6 +96,27 @@ $stmt->execute();
 $result = $stmt->get_result();
 $preguntas = $result->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
+
+/* =========================================================================
+   Encuesta "Estatus del vehículo" (formulario 138)
+   - La pregunta de patente se rinde como selector buscable contra `vehiculo`.
+   - La foto del odómetro dispara la lectura automática del kilometraje.
+   Si la campaña no es la 138, todo esto queda inactivo y el form se comporta
+   exactamente como antes.
+   ========================================================================= */
+require_once __DIR__ . '/lib/encuesta_vehiculo.php';
+
+$esEncuestaVehiculo = ((int)$campana['id'] === EV_FORMULARIO_ID);
+$vehiculosEmpresa   = [];
+$odoHabilitado      = false;
+
+if ($esEncuestaVehiculo) {
+    $empresaVeh = (int)($_SESSION['empresa_id'] ?? 0);
+    if ($empresaVeh <= 0) $empresaVeh = (int)$campana['id_empresa'];
+
+    $vehiculosEmpresa = ev_vehiculos_empresa($conn, $empresaVeh, (int)$_SESSION['usuario_id']);
+    $odoHabilitado    = ev_ia_habilitada() && ev_tabla_lecturas_existe($conn);
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -153,6 +174,55 @@ $stmt->close();
     /* Sugerencias locales */
     #sugerenciasLocales .item { cursor:pointer; }
     #sugerenciasLocales .item:hover { background: #f2f2f2; }
+
+    /* ── Selector de patente (encuesta vehículo) ── */
+    .ev-patente-lista {
+      max-height: 260px;
+      overflow-y: auto;
+      margin-top: .4rem;
+    }
+    .ev-patente-lista .ev-item { cursor: pointer; padding: .6rem .75rem; }
+    .ev-patente-lista .ev-item:hover,
+    .ev-patente-lista .ev-item.activo { background: #f2f2f2; }
+    .ev-patente-lista .ev-plate {
+      font-weight: 800;
+      letter-spacing: .6px;
+      font-variant-numeric: tabular-nums;
+    }
+    .ev-patente-lista .ev-modelo { color: #6c757d; font-size: .85rem; }
+    .ev-patente-lista .ev-mio {
+      background: #d4edda; color: #155724;
+      border-radius: 999px; padding: 1px 8px;
+      font-size: .72rem; font-weight: 700; margin-left: .4rem;
+    }
+    .ev-patente-elegida { display: flex; align-items: center; flex-wrap: wrap; }
+    .ev-patente-chip {
+      display: inline-block;
+      background: #e9f5ff; border: 1px solid #b8daff; color: #004085;
+      border-radius: 10px; padding: .45rem .85rem;
+      font-weight: 800; letter-spacing: .6px;
+    }
+
+    /* ── Lectura de odómetro con IA ── */
+    .ev-odo-estado:empty, .ev-km-estado:empty { display: none; }
+    .ev-odo-caja {
+      border-radius: 10px; padding: .6rem .75rem;
+      font-size: .88rem; display: flex; align-items: center;
+      gap: .5rem; flex-wrap: wrap;
+    }
+    .ev-odo-leyendo { background: #e9f5ff; border: 1px solid #b8daff; color: #004085; }
+    .ev-odo-ok      { background: #d4edda; border: 1px solid #b1dfbb; color: #155724; }
+    .ev-odo-aviso   { background: #fff3cd; border: 1px solid #ffeeba; color: #856404; }
+    .ev-odo-error   { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+    .ev-km-ia {
+      background: #d4edda !important;
+      border-color: #b1dfbb !important;
+    }
+    .ev-badge-ia {
+      display: inline-block; background: #155724; color: #fff;
+      border-radius: 999px; padding: 1px 9px;
+      font-size: .72rem; font-weight: 700;
+    }
   </style>
 </head>
 <body>
@@ -299,10 +369,38 @@ $stmt->close();
           endif;
 
         elseif ($type === 4):
-          echo '<input type="text" class="form-control" name="respuesta['.$qid.']">';
+          if ($esEncuestaVehiculo && $qid === EV_QID_PATENTE): ?>
+            <!-- Selector de patente: evita errores de tipeo (lista cerrada de vehículos) -->
+            <div class="ev-patente" data-qid="<?= $qid ?>">
+              <input type="hidden" name="respuesta[<?= $qid ?>]" id="evPatValor_<?= $qid ?>" value="">
+
+              <div id="evPatElegida_<?= $qid ?>" class="ev-patente-elegida d-none">
+                <span class="ev-patente-chip" id="evPatTexto_<?= $qid ?>"></span>
+                <button type="button" class="btn btn-sm btn-outline-secondary ml-2"
+                        onclick="evPatenteLimpiar(<?= $qid ?>)">Cambiar</button>
+              </div>
+
+              <div id="evPatBuscador_<?= $qid ?>">
+                <!-- data-ev-ignore: es solo la caja de búsqueda, no la respuesta -->
+                <input type="text" class="form-control" id="evPatBuscar_<?= $qid ?>"
+                       data-ev-ignore="1"
+                       placeholder="Escribe la patente para buscarla..." autocomplete="off">
+                <div id="evPatLista_<?= $qid ?>" class="list-group ev-patente-lista"></div>
+                <small class="text-muted">Selecciona tu patente de la lista.</small>
+              </div>
+            </div>
+          <?php else:
+            echo '<input type="text" class="form-control" name="respuesta['.$qid.']">';
+          endif;
 
         elseif ($type === 5):
-          echo '<input type="number" step="any" class="form-control" name="respuesta['.$qid.']">';
+          $esKm = ($esEncuestaVehiculo && $qid === EV_QID_KM);
+          echo '<input type="number" step="any" class="form-control" name="respuesta['.$qid.']"'
+             . ' id="respuesta_'.$qid.'"'
+             . ($esKm ? ' data-campo-km="1"' : '') . '>';
+          if ($esKm): ?>
+            <div id="evKmEstado" class="ev-km-estado mt-1"></div>
+          <?php endif;
 
         elseif ($type === 6):
           echo '<input type="date" class="form-control" name="respuesta['.$qid.']">';
@@ -315,6 +413,10 @@ $stmt->close();
           <input type="file"  id="fileGallery_<?= $qid ?>" accept="image/*" class="foto-iw" style="display:none;">
           <input type="file"  id="fileCamera_<?= $qid ?>"  accept="image/*" capture="environment" class="foto-iw" style="display:none;">
           <div id="previewFoto_<?= $qid ?>" class="mt-2 iw-previews d-flex flex-wrap"></div>
+          <?php if ($esEncuestaVehiculo && $qid === EV_QID_FOTO_ODO && $odoHabilitado): ?>
+            <!-- Estado de la lectura automática del odómetro -->
+            <div id="evOdoEstado" class="ev-odo-estado mt-2"></div>
+          <?php endif; ?>
         <?php endif; ?>
 
       </div>
@@ -444,6 +546,15 @@ $stmt->close();
   window.VISITA_ID  = parseInt('<?= (int)$visita_id ?>',10) || 0;
   window.IW_REQUIRE_LOCAL = <?= $requiereLocal ? 'true' : 'false' ?>;
   window.IW_ID_LOCAL = 0;
+
+  /* ── Encuesta "Estatus del vehículo" (138) ── */
+  window.EV_ACTIVA        = <?= $esEncuestaVehiculo ? 'true' : 'false' ?>;
+  window.EV_QID_PATENTE   = <?= (int)EV_QID_PATENTE ?>;
+  window.EV_QID_KM        = <?= (int)EV_QID_KM ?>;
+  window.EV_QID_FOTO_ODO  = <?= (int)EV_QID_FOTO_ODO ?>;
+  window.EV_ODO_ON        = <?= $odoHabilitado ? 'true' : 'false' ?>;
+  // ~100 patentes: se mandan inline y se filtran en el cliente (sin AJAX, sirve con red mala)
+  window.EV_VEHICULOS     = <?= json_encode($vehiculosEmpresa, JSON_UNESCAPED_UNICODE) ?: '[]' ?>;
 
   function disableSubmit(){ $('#btnFinalizarIW').prop('disabled', true); }
   function enableSubmit(){ if (uploadsInProgress <= 0 && visitReady) $('#btnFinalizarIW').prop('disabled', false); }
@@ -665,7 +776,9 @@ function verImagenGrande(url){
       });
 
       if (!answered){
-        $div.find('input:not([type=radio]):not([type=checkbox]), select, textarea').each(function(){
+        // [data-ev-ignore] excluye cajas auxiliares (ej. el buscador de patente),
+        // que no son la respuesta: si no, escribir texto ahí pasaría la validación.
+        $div.find('input:not([type=radio]):not([type=checkbox]):not([data-ev-ignore]), select, textarea').each(function(){
           if ($.trim($(this).val()) !== '') { answered = true; return false; }
         });
       }
@@ -804,6 +917,12 @@ function verImagenGrande(url){
                 if (res.status==='success'){
                   const wrap2 = document.getElementById(`previewFoto_${qid}`);
                   wrap2.appendChild(buildPreviewItem(qid, res.resp_id, res.fotoUrl));
+
+                  // Foto del odómetro: la lectura va aparte para no frenar la subida
+                  if (window.EV_ACTIVA && window.EV_ODO_ON &&
+                      Number(qid) === Number(window.EV_QID_FOTO_ODO)) {
+                    evLeerOdometro(res.resp_id, false);
+                  }
                 } else {
                   showToast(res.message || 'Error al subir la foto', 'Error');
                 }
@@ -914,6 +1033,12 @@ function deleteFotoIW(qid, respId, cardEl) {
         showToast('Foto eliminada','OK');
         const qidStr = String(qid);
         if (!hasSavedFotos(qidStr)) resetFileInputs(qidStr);
+
+        // Se borró la foto del odómetro: el estado de la lectura ya no aplica
+        if (window.EV_ACTIVA && Number(qid) === Number(window.EV_QID_FOTO_ODO)
+            && !hasSavedFotos(qidStr)) {
+          evOdoLimpiar();
+        }
       } else {
         $('#confirmDeleteModal').modal('hide');
         showToast(res.message || 'No se pudo eliminar la foto','Error');
@@ -1067,8 +1192,213 @@ $('#quitarLocal').on('click', function(){
   $('#buscarLocal').val('').focus();
 });
 
+  /* =====================================================================
+     SELECTOR DE PATENTE (encuesta vehículo)
+     Lista cerrada contra la tabla `vehiculo`: el ejecutor no puede tipear
+     una patente inexistente. El valor viaja en un hidden con el mismo
+     name="respuesta[qid]" de siempre, así el backend no cambia.
+     ===================================================================== */
+  function evNormPat(s){
+    return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
+
+  function evPatentePintar(qid, filtro){
+    const cont = document.getElementById('evPatLista_' + qid);
+    if (!cont) return;
+
+    const f = evNormPat(filtro);
+    const lista = (window.EV_VEHICULOS || []).filter(v => {
+      if (!f) return true;
+      return evNormPat(v.patente).includes(f)
+          || String(v.modelo || '').toUpperCase().includes(String(filtro).toUpperCase());
+    }).slice(0, 60);
+
+    cont.innerHTML = '';
+
+    if (!lista.length) {
+      const vacio = document.createElement('div');
+      vacio.className = 'list-group-item text-muted';
+      vacio.textContent = 'Sin coincidencias. Revisa la patente o avisa a tu supervisor.';
+      cont.appendChild(vacio);
+      return;
+    }
+
+    lista.forEach(v => {
+      const it = document.createElement('a');
+      it.className = 'list-group-item list-group-item-action ev-item';
+      it.innerHTML =
+        '<span class="ev-plate"></span>' +
+        (v.es_mio ? '<span class="ev-mio">Tu vehículo</span>' : '') +
+        (v.modelo ? '<div class="ev-modelo"></div>' : '');
+      it.querySelector('.ev-plate').textContent = v.patente;
+      if (v.modelo) it.querySelector('.ev-modelo').textContent = v.modelo;
+      it.addEventListener('click', () => evPatenteElegir(qid, v.patente));
+      cont.appendChild(it);
+    });
+  }
+
+  function evPatenteElegir(qid, patente){
+    document.getElementById('evPatValor_' + qid).value = patente;
+    document.getElementById('evPatTexto_' + qid).textContent = patente;
+    document.getElementById('evPatElegida_' + qid).classList.remove('d-none');
+    document.getElementById('evPatBuscador_' + qid).style.display = 'none';
+    document.getElementById('evPatLista_' + qid).innerHTML = '';
+  }
+
+  function evPatenteLimpiar(qid){
+    document.getElementById('evPatValor_' + qid).value = '';
+    document.getElementById('evPatElegida_' + qid).classList.add('d-none');
+    const b = document.getElementById('evPatBuscador_' + qid);
+    b.style.display = '';
+    const inp = document.getElementById('evPatBuscar_' + qid);
+    inp.value = '';
+    inp.focus();
+    evPatentePintar(qid, '');
+  }
+
+  function evPatenteInit(){
+    if (!window.EV_ACTIVA) return;
+    const qid = window.EV_QID_PATENTE;
+    const inp = document.getElementById('evPatBuscar_' + qid);
+    if (!inp) return;
+
+    inp.addEventListener('input', () => evPatentePintar(qid, inp.value));
+    inp.addEventListener('focus', () => evPatentePintar(qid, inp.value));
+
+    // Si el usuario tiene vehículo asignado, lo dejamos preseleccionado (puede cambiarlo).
+    const mio = (window.EV_VEHICULOS || []).find(v => v.es_mio === 1);
+    if (mio) evPatenteElegir(qid, mio.patente);
+    else evPatentePintar(qid, '');
+  }
+
+  /* =====================================================================
+     LECTURA DEL ODÓMETRO CON IA
+     Se dispara DESPUÉS de que la foto ya quedó guardada. Si falla, la foto
+     sigue guardada y el kilometraje se escribe a mano: nunca bloquea.
+     ===================================================================== */
+  function evOdoCaja(clase, html){
+    const box = document.getElementById('evOdoEstado');
+    if (!box) return;
+    box.innerHTML = '<div class="ev-odo-caja ' + clase + '">' + html + '</div>';
+  }
+
+  function evOdoLimpiar(){
+    const box = document.getElementById('evOdoEstado');
+    if (box) box.innerHTML = '';
+  }
+
+  function evKmInput(){
+    return document.querySelector('input[data-campo-km="1"]');
+  }
+
+  function evKmMarcarIA(km, confianza){
+    const inp = evKmInput();
+    if (!inp) return;
+    inp.value = km;
+    inp.classList.add('ev-km-ia');
+    inp.dataset.kmIa = String(km);          // para saber después si el usuario lo editó
+    const est = document.getElementById('evKmEstado');
+    if (est) {
+      est.innerHTML = '<span class="ev-badge-ia">Leído por IA</span> ' +
+        '<span class="text-muted" style="font-size:.82rem">Puedes corregirlo si no coincide.</span>';
+    }
+    // Si el ejecutor lo edita, se le quita el marcado de "IA"
+    inp.addEventListener('input', function once(){
+      inp.classList.remove('ev-km-ia');
+      const e = document.getElementById('evKmEstado');
+      if (e) e.innerHTML = '<span class="text-muted" style="font-size:.82rem">Valor corregido manualmente.</span>';
+      inp.removeEventListener('input', once);
+    });
+  }
+
+  async function evLeerOdometro(respId, reintento){
+    if (!window.EV_ACTIVA || !window.EV_ODO_ON || !respId) return;
+
+    evOdoCaja('ev-odo-leyendo',
+      '<div class="spinner-border spinner-border-sm" role="status"></div>' +
+      '<span>Leyendo el kilometraje desde la foto...</span>');
+
+    const fd = new FormData();
+    fd.append('csrf_token', window.CSRF_TOKEN);
+    fd.append('resp_id', respId);
+    fd.append('visita_id', window.VISITA_ID);
+
+    let r;
+    try {
+      const resp = await fetch('api/odometro_read.php', {
+        method: 'POST', body: fd, credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+
+      // Se lee como texto y recién después se parsea: si el servidor devolvió un
+      // error de PHP o un 404 (HTML), .json() explotaría y perderíamos la causa.
+      const txt = await resp.text();
+      try {
+        r = JSON.parse(txt);
+      } catch (parseErr) {
+        const crudo = txt.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+        evOdoCaja('ev-odo-error',
+          '<span>El servidor respondió algo inesperado (HTTP ' + resp.status + '). ' +
+          'Escribe el kilometraje manualmente.</span>' +
+          '<div class="w-100 mt-1" style="font-size:.75rem;opacity:.8">' +
+          (crudo || '(respuesta vacía)') + '</div>');
+        return;
+      }
+    } catch (e) {
+      evOdoCaja('ev-odo-aviso',
+        '<span>No hay conexión con el servidor. Escribe el kilometraje.</span>' +
+        '<div class="w-100 mt-1" style="font-size:.75rem;opacity:.8">' + String(e.message || e) + '</div>');
+      return;
+    }
+
+    const puedeReintentar = (r.intentos_restantes || 0) > 0;
+    const btnReintento = puedeReintentar
+      ? ' <button type="button" class="btn btn-sm btn-outline-secondary ml-2" ' +
+        'onclick="evLeerOdometro(' + Number(respId) + ', true)">Reintentar</button>'
+      : '';
+
+    if (r.ok && (r.status === 'leido' || r.status === 'dudosa')) {
+      evKmMarcarIA(r.km, r.confianza);
+
+      if (r.status === 'leido') {
+        let html = '<span>Kilometraje leído: <strong>' + Number(r.km).toLocaleString('es-CL') + ' km</strong>. Verifícalo.</span>';
+        evOdoCaja('ev-odo-ok', html);
+      } else {
+        evOdoCaja('ev-odo-aviso',
+          '<span>Lectura poco confiable (<strong>' + Number(r.km).toLocaleString('es-CL') +
+          ' km</strong>). Revísala y corrige si es necesario.</span>' + btnReintento);
+      }
+
+      if (r.alerta) {
+        const box = document.getElementById('evOdoEstado');
+        if (box) {
+          const extra = document.createElement('div');
+          extra.className = 'ev-odo-caja ev-odo-aviso mt-1';
+          extra.textContent = r.alerta;
+          box.appendChild(extra);
+        }
+      }
+      return;
+    }
+
+    // No se pudo leer: la ruta manual siempre queda disponible.
+    const clase = (r.status === 'error' && r.transitorio) ? 'ev-odo-aviso' : 'ev-odo-error';
+    let html = '<span>' + (r.message || 'No se pudo leer el odómetro.') + '</span>' + btnReintento;
+    // Detalle técnico (solo aparece en fallos de servicio): sirve para diagnosticar
+    // sin tener que entrar al servidor a mirar los logs.
+    if (r.detalle) {
+      html += '<div class="w-100 mt-1" style="font-size:.75rem;opacity:.75">' +
+              String(r.detalle).replace(/[<>]/g, '') + '</div>';
+    }
+    evOdoCaja(clase, html);
+
+    const inp = evKmInput();
+    if (inp) inp.focus();
+  }
+
   // ======== Init ========
   document.addEventListener('DOMContentLoaded', () => {
+    evPatenteInit();
     // Recolectar QIDs de preguntas con foto
     document.querySelectorAll('.foto-iw').forEach(input => {
       const parts = input.id.split('_');

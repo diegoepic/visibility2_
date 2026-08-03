@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Puntí Ferrer · Brindemos lo real</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ============ PANTALLA 0: ATTRACT (inicio / reposo) ============ -->
+<section class="screen active" id="s-attract">
+  <div class="attract-inner">
+    <div class="monograma" id="monograma"><span>PF</span></div>
+    <h1 class="marca">PUNTÍ FERRER</h1>
+    <div class="submarca">— FINE WINES CHILE —</div>
+    <div class="claim" id="attract-claim">Brindemos lo real</div>
+    <div class="copa-flotante" aria-hidden="true">
+      <svg viewBox="0 0 300 470" id="attract-copa"></svg>
+    </div>
+    <div class="cta-inicio" id="cta-inicio">
+      <span class="cta-anillo"></span>
+      <span class="cta-texto">Toca la pantalla<br>para comenzar</span>
+    </div>
+    <div class="attract-premio">Participa por un <b>20% OFF</b> en tienda.puntiferrer.cl</div>
+  </div>
+</section>
+
+<!-- ============ PANTALLA 1: ELIGE TU MOMENTO ============ -->
+<section class="screen" id="s-momento">
+  <header class="cabecera">
+    <div class="cabecera-pf">PF</div>
+    <div class="cabecera-linea"></div>
+  </header>
+  <h2 class="titulo-paso">Elige tu<br><em>momento ideal</em></h2>
+  <div class="grid-momentos">
+    <!-- Los cuatro iconos usan la copa como motivo común: es una marca de
+         vinos, y así las tarjetas se leen como una familia. -->
+    <button class="card-momento" data-momento="encuentro">
+      <svg viewBox="0 0 64 64" class="icono" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <g transform="rotate(12 20 45)">
+          <path d="M13 14h14c0 10-3 15-7 17-4-2-7-7-7-17z"/><path d="M20 31v14"/><path d="M14 47h12"/>
+        </g>
+        <g transform="rotate(-12 44 45)">
+          <path d="M37 14h14c0 10-3 15-7 17-4-2-7-7-7-17z"/><path d="M44 31v14"/><path d="M38 47h12"/>
+        </g>
+      </svg>
+      <span class="card-nombre">Encuentro</span>
+      <span class="card-frase">Compartir con los tuyos</span>
+    </button>
+    <button class="card-momento" data-momento="relajo">
+      <svg viewBox="0 0 64 64" class="icono" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M24 14h16c0 12-3 18-8 20-5-2-8-8-8-20z"/><path d="M32 34v12"/><path d="M25 48h14"/>
+        <path d="M10 20c3-3 6 3 9 0M45 20c3-3 6 3 9 0" opacity=".75"/>
+      </svg>
+      <span class="card-nombre">Relajo</span>
+      <span class="card-frase">Una pausa merecida</span>
+    </button>
+    <button class="card-momento" data-momento="celebracion">
+      <svg viewBox="0 0 64 64" class="icono" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M24 18h16c0 12-3 18-8 20-5-2-8-8-8-20z"/><path d="M32 38v10"/><path d="M25 50h14"/>
+        <path d="M14 12v8M10 16h8M48 8v6M45 11h6M50 28v6M47 31h6" opacity=".85"/>
+      </svg>
+      <span class="card-nombre">Celebración</span>
+      <span class="card-frase">Un logro que brilla</span>
+    </button>
+    <button class="card-momento" data-momento="desconexion">
+      <svg viewBox="0 0 64 64" class="icono" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 22h14c0 11-3 16-7 18-4-2-7-7-7-18z"/><path d="M27 40v10"/><path d="M21 52h12"/>
+        <path d="M52 14a10 10 0 1 1-9-4 8 8 0 0 0 9 4z"/>
+      </svg>
+      <span class="card-nombre">Desconexión</span>
+      <span class="card-frase">Tiempo para ti</span>
+    </button>
+  </div>
+</section>
+
+<!-- ============ PANTALLA 2: ELIGE TU VARIEDAD ============ -->
+<section class="screen" id="s-variedad">
+  <header class="cabecera">
+    <div class="cabecera-pf">PF</div>
+    <div class="cabecera-linea"></div>
+  </header>
+  <h2 class="titulo-paso">Elige tu<br><em>variedad favorita</em></h2>
+  <!-- Las copas se dibujan en SVG (game.js) y no con las fotos del cliente:
+       esas vienen con fondo blanco sólido, sin canal alfa, y sobre el negro
+       del stand se convierten en bloques que encandilan. Las fotos siguen en
+       assets/img/ para cuando lleguen las botellas reales. -->
+  <div class="grid-variedades">
+    <button class="card-variedad" data-variedad="tinto">
+      <span class="copa-var"><svg viewBox="0 0 300 470" data-copa="tinto"></svg></span>
+      <span class="card-nombre">Tinto</span>
+    </button>
+    <button class="card-variedad" data-variedad="blanco">
+      <span class="copa-var"><svg viewBox="0 0 300 470" data-copa="blanco"></svg></span>
+      <span class="card-nombre">Blanco</span>
+    </button>
+    <button class="card-variedad" data-variedad="espumante">
+      <span class="copa-var"><svg viewBox="0 0 300 470" data-copa="espumante"></svg></span>
+      <span class="card-nombre">Espumante</span>
+    </button>
+  </div>
+</section>
+
+<!-- ============ PANTALLA 2.5: TU VINO IDEAL ============ -->
+<section class="screen" id="s-vino">
+  <header class="cabecera">
+    <div class="cabecera-pf">PF</div>
+    <div class="cabecera-linea"></div>
+  </header>
+  <div class="vino-tag" id="vino-tag">TU VINO IDEAL</div>
+  <h2 class="vino-nombre" id="vino-nombre">—</h2>
+  <p class="vino-desc" id="vino-desc">—</p>
+  <div class="vino-foto"><svg viewBox="0 0 300 470" id="vino-copa"></svg></div>
+  <p class="vino-reto">Ahora demuestra que sabes brindar:<br><b>sírvelo en su medida perfecta y gana.</b></p>
+  <button class="btn-oro" id="btn-servir">Servir mi copa</button>
+</section>
+
+<!-- ============ PANTALLA 3: SIRVE LA MEDIDA PERFECTA ============ -->
+<section class="screen" id="s-servir">
+  <header class="cabecera">
+    <div class="cabecera-pf">PF</div>
+    <div class="cabecera-linea"></div>
+  </header>
+  <h2 class="titulo-paso chico">Sirve la<br><em>medida perfecta</em></h2>
+  <p class="servir-instr" id="servir-instr">Mantén presionada la copa y suelta<br>justo en la <b>línea dorada</b></p>
+  <div class="servir-stage" id="servir-stage">
+    <svg viewBox="0 0 300 470" id="copa-svg"></svg>
+  </div>
+  <div class="servir-hint" id="servir-hint">&nbsp;</div>
+</section>
+
+<!-- ============ PANTALLA 4A: ¡GANASTE! ============ -->
+<section class="screen" id="s-win">
+  <div class="resultado-inner">
+    <div class="destello" aria-hidden="true"></div>
+    <div class="resultado-tag">¡LO LOGRASTE!</div>
+    <h2 class="resultado-titulo">Brindaste<br><em>lo real</em></h2>
+    <div class="precision-caja">Precisión del brindis<br><b id="win-precision">100%</b></div>
+    <p class="resultado-bajada">Te ganaste un <b>20% OFF</b> en tu próxima compra.<br>Déjanos tus datos para entregarte tu código.</p>
+    <button class="btn-oro" id="btn-reclamar">Reclamar mi premio</button>
+  </div>
+</section>
+
+<!-- ============ PANTALLA 4B: PERDISTE ============ -->
+<section class="screen" id="s-lose">
+  <div class="resultado-inner">
+    <div class="resultado-tag opaco" id="lose-tag">¡CASI!</div>
+    <h2 class="resultado-titulo" id="lose-msg">Esta vez el brindis<br><em>no fue perfecto</em></h2>
+    <div class="precision-caja lose-caja" id="lose-detalle"></div>
+    <p class="resultado-bajada">Lo real también es intentarlo.<br>Encuentra tu vino ideal en <b>tienda.puntiferrer.cl</b></p>
+    <button class="btn-linea" id="btn-fin-lose">Finalizar</button>
+    <div class="auto-volver" id="lose-count">&nbsp;</div>
+  </div>
+</section>
+
+<!-- ============ PANTALLA 4C: DATOS DEL GANADOR ============ -->
+<section class="screen" id="s-datos">
+  <h2 class="titulo-paso chico datos-titulo">Tus datos,<br><em>tu premio</em></h2>
+  <div class="form-datos">
+    <label>Nombre
+      <input type="text" id="inp-nombre" class="osk-input" data-osk="text" maxlength="60" readonly placeholder="Toca para escribir">
+    </label>
+    <label>Email
+      <input type="text" id="inp-email" class="osk-input" data-osk="email" maxlength="80" readonly placeholder="Toca para escribir">
+    </label>
+    <label>Teléfono <span class="opcional">(opcional)</span>
+      <input type="text" id="inp-telefono" class="osk-input" data-osk="tel" maxlength="15" readonly placeholder="+56 9 ...">
+    </label>
+    <label class="consent">
+      <input type="checkbox" id="chk-consent">
+      <span id="consent-text">Acepto el uso de mis datos.</span>
+    </label>
+    <div class="form-error" id="datos-error">&nbsp;</div>
+    <button class="btn-oro" id="btn-enviar-datos">Ver mi código</button>
+  </div>
+  <div id="osk"></div>
+</section>
+
+<!-- ============ PANTALLA 5: TU PREMIO ============ -->
+<section class="screen" id="s-premio">
+  <header class="cabecera">
+    <div class="cabecera-pf">PF</div>
+    <div class="cabecera-linea"></div>
+  </header>
+  <div class="resultado-tag">TU PREMIO</div>
+  <h2 class="premio-titulo">20% OFF</h2>
+  <p class="premio-bajada" id="premio-bajada">en tu próxima compra en tienda.puntiferrer.cl</p>
+  <div class="premio-qr-marco"><div id="premio-qr"></div></div>
+  <div class="premio-codigo" id="premio-codigo">CODIGO</div>
+  <p class="premio-nota">Escanea el QR con tu teléfono o guarda una foto<br>de esta pantalla. Tu código quedó registrado a tu nombre.</p>
+  <button class="btn-linea" id="btn-fin-premio">Listo, ¡salud!</button>
+  <div class="auto-volver" id="premio-count">&nbsp;</div>
+</section>
+
+<!-- ============ Indicador de paso (1-5, como el flyer) ============ -->
+<footer id="paso-footer" class="oculto">
+  <span data-paso="1">1</span><span data-paso="2">2</span><span data-paso="3">3</span><span data-paso="4">4</span><span data-paso="5">5</span>
+</footer>
+
+<!-- ============ ADMIN (oculto: 5 toques en el monograma PF) ============ -->
+<div id="admin-overlay" class="oculto">
+  <!-- Ingreso de PIN -->
+  <div id="admin-pin">
+    <div class="admin-caja">
+      <h3>Panel del tótem</h3>
+      <div class="pin-display" id="pin-display">····</div>
+      <div class="pin-pad">
+        <button data-d="1">1</button><button data-d="2">2</button><button data-d="3">3</button>
+        <button data-d="4">4</button><button data-d="5">5</button><button data-d="6">6</button>
+        <button data-d="7">7</button><button data-d="8">8</button><button data-d="9">9</button>
+        <button data-d="C">C</button><button data-d="0">0</button><button data-d="OK">OK</button>
+      </div>
+      <button class="btn-linea chico" id="btn-pin-salir">Salir</button>
+    </div>
+  </div>
+  <!-- Panel -->
+  <div id="admin-panel" class="oculto">
+    <div class="admin-caja ancha">
+      <h3>Panel del tótem</h3>
+      <div class="admin-grid">
+        <div class="admin-bloque">
+          <h4>Hoy</h4>
+          <table class="admin-tabla" id="admin-stats-hoy"></table>
+        </div>
+        <div class="admin-bloque">
+          <h4>Total evento</h4>
+          <table class="admin-tabla" id="admin-stats-total"></table>
+        </div>
+      </div>
+      <div class="admin-bloque">
+        <h4>Sincronización</h4>
+        <div id="admin-sync" class="admin-sync-info">—</div>
+        <div class="admin-botones">
+          <button class="btn-linea chico" id="btn-sync-now">Sincronizar ahora</button>
+          <button class="btn-linea chico" id="btn-probar">Probar conexión</button>
+          <button class="btn-linea chico" id="btn-export">Exportar respaldo</button>
+        </div>
+      </div>
+      <div class="admin-bloque">
+        <h4>Funcionamiento sin red</h4>
+        <div id="admin-offline" class="admin-sync-info">—</div>
+        <div class="admin-botones">
+          <button class="btn-linea chico" id="btn-offline-check">Buscar actualización</button>
+          <button class="btn-linea chico oculto" id="btn-offline-update">Instalar y reiniciar</button>
+        </div>
+      </div>
+      <div class="admin-grid">
+        <div class="admin-bloque">
+          <h4>Juego</h4>
+          <label class="admin-campo">Dificultad
+            <select id="admin-dif">
+              <option value="facil">Fácil — gana ~78%</option>
+              <option value="normal">Normal — gana ~54%</option>
+              <option value="dificil">Difícil — gana ~38%</option>
+              <option value="experta">Experta — gana ~27%</option>
+            </select>
+          </label>
+          <div class="admin-nota">Se puede cambiar durante el evento según cómo
+            reaccione la gente. Afecta solo a las partidas siguientes.</div>
+          <label class="admin-campo fila"><input type="checkbox" id="admin-sonido"> Sonido activado</label>
+        </div>
+        <div class="admin-bloque">
+          <h4>Códigos únicos (modo pool)</h4>
+          <div id="admin-pool-info">—</div>
+          <textarea id="admin-pool-text" rows="3" placeholder="Pega códigos, uno por línea"></textarea>
+          <button class="btn-linea chico" id="btn-pool-import">Importar códigos</button>
+        </div>
+      </div>
+      <div class="admin-meta" id="admin-meta">—</div>
+      <button class="btn-oro" id="btn-admin-cerrar">Cerrar panel</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/vendor/qrcode.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/keyboard.js"></script>
+<script src="js/sync.js"></script>
+<script src="js/offline.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

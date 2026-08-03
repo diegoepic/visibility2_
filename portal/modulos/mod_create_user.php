@@ -1681,6 +1681,20 @@ td {
                     </div>
 
                     <div class="form-group row">
+                        <label for="editar_puede_adelantar_ruta" class="col-sm-2 col-form-label">Adelantar ruta:</label>
+                        <div class="col-sm-10">
+                            <select class="form-control" id="editar_puede_adelantar_ruta" name="puede_adelantar_ruta">
+                                <option value="1">Sí — puede ver fechas futuras</option>
+                                <option value="0">No — solo hoy y días anteriores</option>
+                            </select>
+                            <small class="form-text text-muted">
+                                Aplica a los ejecutores en la app: si se deja en <strong>No</strong>, el selector de
+                                fechas de locales programados y reagendados solo mostrará el día de hoy y días pasados.
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
                         <label class="col-sm-2 col-form-label">Contraseña:</label>
                         <div class="col-sm-10">
                             <button type="button" id="btnCambiarClave" class="btn btn-outline-secondary">
@@ -2025,6 +2039,11 @@ $(document).on('click', '.editar-usuario-btn', function () {
                 $('#editar_empresa').val(data.id_empresa || '');
                 $('#editar_clasificacion_usuario').val(data.clasificacion_usuario || '');
                 $('#editar_cd').val(data.centro_distribucion || '');
+                // Si el campo viene nulo/ausente se asume 1 (puede adelantar), que es
+                // el valor por defecto de la columna: no se restringe por accidente.
+                $('#editar_puede_adelantar_ruta').val(
+                    String(data.puede_adelantar_ruta === 0 || data.puede_adelantar_ruta === '0' ? 0 : 1)
+                );
                 $('#actual_fotoPerfil').attr('src', data.fotoPerfil ? data.fotoPerfil : 'ruta_por_defecto.jpg');
 
                 cargarComunas(data.id_region || '', $('#editar_comuna'), function () {

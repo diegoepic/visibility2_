@@ -15,7 +15,19 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
 
 $usuario_id = (int) $_GET['id'];
 
+/* La columna puede_adelantar_ruta la agrega scripts/21 y los despliegues van
+   desacoplados de las migraciones: si aún no existe, se omite del SELECT para
+   que el módulo no falle. */
+$colAdelantar = false;
+$chk = @mysqli_query($conn, "SHOW COLUMNS FROM usuario LIKE 'puede_adelantar_ruta'");
+if ($chk && mysqli_num_rows($chk) > 0) $colAdelantar = true;
+
+$selAdelantar = $colAdelantar
+    ? "u.puede_adelantar_ruta,"
+    : "1 AS puede_adelantar_ruta,";
+
 $sql = "SELECT
+            $selAdelantar
             u.id,
             u.rut,
             u.nombre,
@@ -70,7 +82,8 @@ if ($result->num_rows > 0) {
         'fotoPerfil'            => $usuario['fotoPerfil'],
         'id_comuna'             => $usuario['id_comuna'],
         'centro_distribucion'   => $usuario['centro_distribucion'],
-        'id_region'             => $usuario['id_region']
+        'id_region'             => $usuario['id_region'],
+        'puede_adelantar_ruta'  => (int)($usuario['puede_adelantar_ruta'] ?? 1)
     ];
 
     echo json_encode([

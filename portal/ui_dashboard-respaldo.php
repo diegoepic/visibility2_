@@ -2286,19 +2286,6 @@ body.modal-open {
       </select>
     </div>
 
-    <div class="modern-filter-field" style="justify-content:flex-end;">
-      <label>&nbsp;</label>
-      <a
-        href="descargar_excel_dashboard.php?division=<?= (int)$division_seleccionada ?>&amp;estado=<?= (int)$estado_seleccionado ?>"
-        class="modern-download-btn"
-        style="text-decoration:none; white-space:nowrap;"
-        title="Descargar Dashboard de campañas y rutas"
-      >
-        <i class="fas fa-file-excel"></i>
-        <span>Descargar Dashboard</span>
-      </a>
-    </div>
-
   </form>
 </div>
 

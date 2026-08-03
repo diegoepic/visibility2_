@@ -929,6 +929,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const region = $region?.value || 0;
     const comuna = $comuna?.value || 0;
+    const desde = document.getElementById('desde')?.value || '';
+    const hasta = document.getElementById('hasta')?.value || '';
 
     const firmaActual = [
       empresa,
@@ -939,7 +941,9 @@ document.addEventListener("DOMContentLoaded", function () {
       idCampana,
       estado,
       region,
-      comuna
+      comuna,
+      desde,
+      hasta
     ].join('|');
 
     if (!restaurar && firmaActual === firmaEjecutores) return;
@@ -962,7 +966,9 @@ document.addEventListener("DOMContentLoaded", function () {
       id_campana: idCampana,
       estado: estado,
       id_region: region,
-      id_comuna: comuna
+      id_comuna: comuna,
+      desde: desde,
+      hasta: hasta
     });
 
     xhrEjecutores = new AbortController();
@@ -1197,6 +1203,13 @@ document.addEventListener("DOMContentLoaded", function () {
       recargarEjecutoresMapa(false);
     });
   }
+
+  ['desde', 'hasta'].forEach(function (id) {
+    const input = document.getElementById(id);
+    if (input) input.addEventListener('change', function () {
+      recargarEjecutoresMapa(false);
+    });
+  });
 
   /* ============================================
      🔁 RESTAURACIÓN AUTOMÁTICA

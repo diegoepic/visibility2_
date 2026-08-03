@@ -1540,10 +1540,10 @@ body.layout-fixed {
               <li class="nav-item">
                 <a href="UI_subir_archivo.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
-                  <p>Subir archivo - deprecated</p>
+                  <p>Subir archivo</p>
                 </a>
               </li>
-              <li class="nav-item">
+              <li class="nav-item" style="display:none;">
                 <a href="UI_subir_archivo_nuevo.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Subir archivo nuevo</p>
