@@ -95,7 +95,7 @@ WITH base AS (
 
         UPPER(
             CASE
-                WHEN LOWER(TRIM(gv.estado_gestion)) IN ('cancelado', 'cancelada', 'cancelacion', 'cancelación')
+                WHEN LOWER(TRIM(gv.estado_gestion)) IN ('cancelado', 'cancelada', 'cancelacion', 'cancelación', 'pendiente')
                     AND COALESCE(NULLIF(TRIM(gv.observacion), ''), NULLIF(TRIM(fq.observacion), '')) IS NOT NULL
                     THEN TRIM(SUBSTRING_INDEX(COALESCE(NULLIF(TRIM(gv.observacion), ''), NULLIF(TRIM(fq.observacion), '')), '-', 1))
                 WHEN gv.motivo_no_implementacion IS NOT NULL AND TRIM(gv.motivo_no_implementacion) <> ''
@@ -114,7 +114,7 @@ WITH base AS (
             COALESCE(
                 NULLIF(TRIM(fq.material), ''),
                 CASE
-                    WHEN LOWER(TRIM(gv.estado_gestion)) IN ('cancelado', 'cancelada', 'cancelacion', 'cancelación')
+                    WHEN LOWER(TRIM(gv.estado_gestion)) IN ('cancelado', 'cancelada', 'cancelacion', 'cancelación', 'pendiente')
                         OR fq.etapa_material IS NULL
                         OR TRIM(fq.etapa_material) = ''
                     THEN (
@@ -136,7 +136,7 @@ WITH base AS (
             COALESCE(
                 NULLIF(TRIM(fq.categoria), ''),
                 CASE
-                    WHEN LOWER(TRIM(gv.estado_gestion)) IN ('cancelado', 'cancelada', 'cancelacion', 'cancelación')
+                    WHEN LOWER(TRIM(gv.estado_gestion)) IN ('cancelado', 'cancelada', 'cancelacion', 'cancelación', 'pendiente')
                         OR fq.etapa_material IS NULL
                         OR TRIM(fq.etapa_material) = ''
                     THEN (
@@ -158,7 +158,7 @@ WITH base AS (
             COALESCE(
                 NULLIF(TRIM(fq.marca), ''),
                 CASE
-                    WHEN LOWER(TRIM(gv.estado_gestion)) IN ('cancelado', 'cancelada', 'cancelacion', 'cancelación')
+                    WHEN LOWER(TRIM(gv.estado_gestion)) IN ('cancelado', 'cancelada', 'cancelacion', 'cancelación', 'pendiente')
                         OR fq.etapa_material IS NULL
                         OR TRIM(fq.etapa_material) = ''
                     THEN (
@@ -182,7 +182,7 @@ WITH base AS (
         COALESCE(
             NULLIF(fq.valor_propuesto, ''),
             CASE
-                WHEN LOWER(TRIM(gv.estado_gestion)) IN ('cancelado', 'cancelada', 'cancelacion', 'cancelación')
+                WHEN LOWER(TRIM(gv.estado_gestion)) IN ('cancelado', 'cancelada', 'cancelacion', 'cancelación', 'pendiente')
                     OR fq.etapa_material IS NULL
                     OR TRIM(fq.etapa_material) = ''
                 THEN (

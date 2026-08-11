@@ -48,6 +48,9 @@ const activa = (page) => page.evaluate(() => (document.querySelector('.screen.ac
   const errores = [];
   page.on('pageerror', (e) => errores.push(String(e)));
 
+  // no tocar la base de producción desde los tests
+  await page.route('**/sync.php*', (r) => r.abort());
+
   console.log('\n--- Primer arranque, con red ---');
   await page.goto(base + '/index.html');
   await page.waitForTimeout(1200);

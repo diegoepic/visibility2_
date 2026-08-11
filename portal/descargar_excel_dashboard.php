@@ -20,7 +20,9 @@ mysqli_set_charset($conn, 'utf8mb4');
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Shared\Date;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -166,13 +168,14 @@ function dashboardAplicarCabecera(Worksheet $sheet, string $range): void
 {
     $sheet->getStyle($range)->applyFromArray([
         'font' => [
+            'name' => 'Arial',
             'bold' => true,
             'color' => ['rgb' => 'FFFFFF'],
             'size' => 10,
         ],
         'fill' => [
             'fillType' => Fill::FILL_SOLID,
-            'startColor' => ['rgb' => '111827'],
+            'startColor' => ['rgb' => '4472C4'],
         ],
         'alignment' => [
             'horizontal' => Alignment::HORIZONTAL_CENTER,
@@ -181,11 +184,53 @@ function dashboardAplicarCabecera(Worksheet $sheet, string $range): void
         ],
         'borders' => [
             'bottom' => [
-                'borderStyle' => 'thin',
-                'color' => ['rgb' => '7030A0'],
+                'borderStyle' => Border::BORDER_THIN,
+                'color' => ['rgb' => 'D9E2F3'],
             ],
         ],
     ]);
+}
+
+function dashboardAplicarTituloReporte(
+    Worksheet $sheet,
+    string $lastColumn,
+    string $titulo,
+    string $subtitulo
+): void {
+    $sheet->mergeCells("A1:{$lastColumn}1");
+    $sheet->setCellValue('A1', $titulo);
+    $sheet->getStyle("A1:{$lastColumn}1")->applyFromArray([
+        'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 15, 'name' => 'Arial'],
+        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F4E78']],
+        'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT, 'vertical' => Alignment::VERTICAL_CENTER],
+    ]);
+    $sheet->getRowDimension(1)->setRowHeight(25);
+
+    $sheet->mergeCells("A2:{$lastColumn}2");
+    $sheet->setCellValue('A2', $subtitulo);
+    $sheet->getStyle("A2:{$lastColumn}2")->applyFromArray([
+        'font' => ['italic' => true, 'color' => ['rgb' => '244062'], 'size' => 10, 'name' => 'Arial'],
+        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'DDEBF7']],
+        'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT, 'vertical' => Alignment::VERTICAL_CENTER],
+    ]);
+    $sheet->getRowDimension(2)->setRowHeight(18);
+    $sheet->getRowDimension(3)->setRowHeight(12);
+}
+
+function dashboardEscribirFecha(Worksheet $sheet, string $cell, $value): void
+{
+    $fecha = dashboardFechaValida($value);
+    if ($fecha === '') {
+        $sheet->setCellValue($cell, '');
+        return;
+    }
+
+    try {
+        $sheet->setCellValue($cell, Date::PHPToExcel(new DateTimeImmutable(substr($fecha, 0, 10))));
+        $sheet->getStyle($cell)->getNumberFormat()->setFormatCode('yyyy-mm-dd');
+    } catch (Throwable $error) {
+        $sheet->setCellValueExplicit($cell, substr($fecha, 0, 10), DataType::TYPE_STRING);
+    }
 }
 
 function dashboardAplicarTarjeta(Worksheet $sheet, string $range, string $labelRange, string $valueRange, string $color): void
@@ -200,16 +245,16 @@ function dashboardAplicarTarjeta(Worksheet $sheet, string $range, string $labelR
         'borders' => [
             'outline' => [
                 'borderStyle' => 'thin',
-                'color' => ['rgb' => 'CBD5E1'],
+                'color' => ['rgb' => '0070C0'],
             ],
         ],
     ]);
     $sheet->getStyle($labelRange)->applyFromArray([
-        'font' => ['bold' => true, 'color' => ['rgb' => '64748B'], 'size' => 9],
+        'font' => ['name' => 'Arial', 'bold' => true, 'color' => ['rgb' => '0F172A'], 'size' => 9],
         'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
     ]);
     $sheet->getStyle($valueRange)->applyFromArray([
-        'font' => ['bold' => true, 'color' => ['rgb' => $color], 'size' => 18],
+        'font' => ['name' => 'Arial', 'bold' => true, 'color' => ['rgb' => $color], 'size' => 18],
         'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
     ]);
 }
@@ -247,6 +292,23 @@ if (!in_array($estadoFiltro, [1, 2, 3], true)) {
     dashboardFail('El estado debe ser 1 (en curso), 2 (en proceso) o 3 (finalizado).');
 }
 
+$idsRaw = trim((string)($_GET['ids'] ?? ''));
+$idsSeleccionados = [];
+if ($idsRaw !== '') {
+    foreach (preg_split('/\s*,\s*/', $idsRaw, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $idRaw) {
+        if (ctype_digit($idRaw) && (int)$idRaw > 0) {
+            $idsSeleccionados[(int)$idRaw] = (int)$idRaw;
+        }
+    }
+    $idsSeleccionados = array_values($idsSeleccionados);
+    if ($idsSeleccionados === []) {
+        dashboardFail('Selecciona al menos una campaña o ruta válida.');
+    }
+    if (count($idsSeleccionados) > 200) {
+        dashboardFail('La selección supera el máximo permitido de 200 campañas o rutas.');
+    }
+}
+
 $condiciones = [
     'f.tipo IN (1, 3)',
     'f.estado = ' . $estadoFiltro,
@@ -258,6 +320,10 @@ if ($divisionFiltro > 0) {
 
 if (!$esMenteCreativa) {
     $condiciones[] = 'f.id_empresa = ' . $empresaSesion;
+}
+
+if ($idsSeleccionados !== []) {
+    $condiciones[] = 'f.id IN (' . implode(',', $idsSeleccionados) . ')';
 }
 
 $whereSql = implode("\n AND ", $condiciones);
@@ -277,6 +343,31 @@ if ($divisionFiltro > 0) {
     }
 }
 
+$formulariosSeleccionados = [];
+$sqlSeleccion = "
+    SELECT f.id, f.tipo, UPPER(TRIM(f.nombre)) AS nombre
+    FROM formulario f
+    WHERE {$whereSql}
+    ORDER BY f.tipo ASC, f.nombre ASC
+";
+$resultadoSeleccion = $conn->query($sqlSeleccion);
+if (!$resultadoSeleccion) {
+    dashboardFail('Error validando las campañas y rutas seleccionadas: ' . $conn->error, 500);
+}
+while ($seleccion = $resultadoSeleccion->fetch_assoc()) {
+    $formulariosSeleccionados[] = $seleccion;
+}
+$resultadoSeleccion->free();
+
+if ($idsSeleccionados !== [] && count($formulariosSeleccionados) !== count($idsSeleccionados)) {
+    dashboardFail('Una o más campañas o rutas no pertenecen al alcance filtrado.', 403);
+}
+
+$nombresSeleccionados = array_column($formulariosSeleccionados, 'nombre');
+$seleccionResumen = count($nombresSeleccionados) === 1
+    ? (string)$nombresSeleccionados[0]
+    : count($nombresSeleccionados) . ' CAMPAÑAS / RUTAS SELECCIONADAS';
+
 $sqlResumen = "
     SELECT
         COUNT(DISTINCT CASE WHEN f.tipo = 1 THEN f.id END) AS total_campanas,
@@ -288,7 +379,8 @@ $sqlResumen = "
             THEN CONCAT(f.id, ':', fq.id_local)
         END) AS locales_visitados,
         COUNT(DISTINCT CASE
-            WHEN fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','solo_retirado')
+            WHEN COALESCE(fq.valor, 0) >= 1
+              OR fq.pregunta IN ('implementado_auditado','solo_implementado','solo_auditoria','solo_retirado')
               OR (f.modalidad = 'implementacion_por_etapas' AND fq.etapa_material IN ('implementado','retirado'))
             THEN CONCAT(f.id, ':', fq.id_local)
         END) AS locales_ejecutados
@@ -313,30 +405,134 @@ $localesVisitados = (int)($resumen['locales_visitados'] ?? 0);
 $localesEjecutados = (int)($resumen['locales_ejecutados'] ?? 0);
 $porcentajeVisita = $localesProgramados > 0 ? $localesVisitados / $localesProgramados : 0;
 $porcentajeEjecucion = $localesProgramados > 0 ? $localesEjecutados / $localesProgramados : 0;
+$porcentajeEfectividad = $localesVisitados > 0 ? $localesEjecutados / $localesVisitados : 0;
 
-$materiales = [];
-$sqlMateriales = "
-    SELECT DISTINCT UPPER(TRIM(fq.material)) AS material
+$sqlResumenEjecutivo = "
+    SELECT
+        f.id,
+        f.tipo,
+        UPPER(TRIM(f.nombre)) AS campana,
+        UPPER(COALESCE(NULLIF(TRIM(t.nombre), ''), 'SIN TRADE')) AS trade,
+        CASE
+            WHEN f.fechaInicio IS NULL OR CAST(f.fechaInicio AS CHAR(19)) = '0000-00-00 00:00:00' THEN NULL
+            ELSE DATE(f.fechaInicio)
+        END AS fecha_inicio,
+        CASE
+            WHEN f.fechaTermino IS NULL OR CAST(f.fechaTermino AS CHAR(19)) = '0000-00-00 00:00:00' THEN NULL
+            ELSE DATE(f.fechaTermino)
+        END AS fecha_termino,
+        MAX(CASE
+            WHEN fq.fechaVisita IS NULL OR CAST(fq.fechaVisita AS CHAR(19)) = '0000-00-00 00:00:00' THEN NULL
+            ELSE DATE(fq.fechaVisita)
+        END) AS ultima_fecha_visita,
+        COUNT(DISTINCT fq.id_local) AS locales_programados,
+        COUNT(DISTINCT CASE
+            WHEN fq.fechaVisita IS NOT NULL
+             AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
+            THEN fq.id_local
+        END) AS locales_visitados
     FROM formulario f
     INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
+    LEFT JOIN trade t ON t.id = f.id_trade
     WHERE {$whereSql}
       AND (f.tipo <> 3 OR fq.id_usuario <> 50)
-      AND fq.material IS NOT NULL
-      AND TRIM(fq.material) <> ''
-      AND TRIM(fq.material) <> '-'
-    ORDER BY material ASC
+    GROUP BY f.id, f.tipo, f.nombre, t.nombre, f.fechaInicio, f.fechaTermino
+    ORDER BY f.tipo ASC, f.fechaInicio DESC, f.nombre ASC
 ";
-$resultadoMateriales = $conn->query($sqlMateriales);
-if (!$resultadoMateriales) {
-    dashboardFail('Error consultando los materiales: ' . $conn->error, 500);
+$resultadoResumenEjecutivo = $conn->query($sqlResumenEjecutivo);
+if (!$resultadoResumenEjecutivo) {
+    dashboardFail('Error consultando el resumen ejecutivo: ' . $conn->error, 500);
 }
-while ($material = $resultadoMateriales->fetch_assoc()) {
-    $nombreMaterial = trim((string)($material['material'] ?? ''));
-    if ($nombreMaterial !== '') {
-        $materiales[] = $nombreMaterial;
+$filasResumenEjecutivo = [];
+while ($filaResumen = $resultadoResumenEjecutivo->fetch_assoc()) {
+    $filasResumenEjecutivo[] = $filaResumen;
+}
+$resultadoResumenEjecutivo->free();
+
+$sqlAvanceRegional = "
+    SELECT
+        f.id AS id_formulario,
+        f.tipo,
+        UPPER(TRIM(f.nombre)) AS campana,
+        UPPER(COALESCE(NULLIF(TRIM(t.nombre), ''), 'SIN TRADE')) AS trade,
+        r.id AS id_region,
+        UPPER(COALESCE(NULLIF(TRIM(r.region), ''), 'SIN REGION')) AS region,
+        CASE
+            WHEN f.fechaInicio IS NULL OR CAST(f.fechaInicio AS CHAR(19)) = '0000-00-00 00:00:00' THEN NULL
+            ELSE DATE(f.fechaInicio)
+        END AS fecha_inicio,
+        CASE
+            WHEN f.fechaTermino IS NULL OR CAST(f.fechaTermino AS CHAR(19)) = '0000-00-00 00:00:00' THEN NULL
+            ELSE DATE(f.fechaTermino)
+        END AS fecha_termino,
+        MAX(CASE
+            WHEN fq.fechaVisita IS NULL OR CAST(fq.fechaVisita AS CHAR(19)) = '0000-00-00 00:00:00' THEN NULL
+            ELSE DATE(fq.fechaVisita)
+        END) AS ultima_fecha_visita,
+        COUNT(DISTINCT fq.id_local) AS locales_programados,
+        COUNT(DISTINCT CASE
+            WHEN fq.fechaVisita IS NOT NULL
+             AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
+            THEN fq.id_local
+        END) AS locales_visitados
+    FROM formulario f
+    INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
+    INNER JOIN local l ON l.id = fq.id_local
+    LEFT JOIN comuna cm ON cm.id = l.id_comuna
+    LEFT JOIN region r ON r.id = cm.id_region
+    LEFT JOIN trade t ON t.id = f.id_trade
+    WHERE {$whereSql}
+      AND (f.tipo <> 3 OR fq.id_usuario <> 50)
+    GROUP BY f.id, f.tipo, f.nombre, t.nombre, r.id, r.region, f.fechaInicio, f.fechaTermino
+    ORDER BY f.tipo ASC, f.nombre ASC, r.region ASC
+";
+$resultadoAvanceRegional = $conn->query($sqlAvanceRegional);
+if (!$resultadoAvanceRegional) {
+    dashboardFail('Error consultando el avance detallado: ' . $conn->error, 500);
+}
+$filasAvanceRegional = [];
+while ($filaAvance = $resultadoAvanceRegional->fetch_assoc()) {
+    $filasAvanceRegional[] = $filaAvance;
+}
+$resultadoAvanceRegional->free();
+
+$sqlAvanceDiario = "
+    SELECT
+        f.id AS id_formulario,
+        COALESCE(r.id, 0) AS id_region,
+        DATE(fq.fechaVisita) AS fecha_visita,
+        COUNT(DISTINCT fq.id_local) AS locales_visitados
+    FROM formulario f
+    INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
+    INNER JOIN local l ON l.id = fq.id_local
+    LEFT JOIN comuna cm ON cm.id = l.id_comuna
+    LEFT JOIN region r ON r.id = cm.id_region
+    WHERE {$whereSql}
+      AND (f.tipo <> 3 OR fq.id_usuario <> 50)
+      AND fq.fechaVisita IS NOT NULL
+      AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
+    GROUP BY f.id, COALESCE(r.id, 0), DATE(fq.fechaVisita)
+    ORDER BY DATE(fq.fechaVisita) ASC
+";
+$resultadoAvanceDiario = $conn->query($sqlAvanceDiario);
+if (!$resultadoAvanceDiario) {
+    dashboardFail('Error consultando el avance diario: ' . $conn->error, 500);
+}
+$fechasVisita = [];
+$avanceDiario = [];
+while ($filaDiaria = $resultadoAvanceDiario->fetch_assoc()) {
+    $fechaDiaria = dashboardFechaValida($filaDiaria['fecha_visita'] ?? '');
+    if ($fechaDiaria === '') {
+        continue;
     }
+    $fechaDiaria = substr($fechaDiaria, 0, 10);
+    $claveRegional = (int)$filaDiaria['id_formulario'] . ':' . (int)$filaDiaria['id_region'];
+    $fechasVisita[$fechaDiaria] = $fechaDiaria;
+    $avanceDiario[$claveRegional][$fechaDiaria] = (int)$filaDiaria['locales_visitados'];
 }
-$resultadoMateriales->free();
+$resultadoAvanceDiario->free();
+ksort($fechasVisita);
+$fechasVisita = array_values($fechasVisita);
 
 $maxFotos = 0;
 $sqlMaxFotos = "
@@ -372,9 +568,9 @@ $sqlDetalle = "
         f.modalidad,
         l.id AS id_local,
         l.codigo AS codigo_local,
-        SUBSTRING_INDEX(TRIM(l.nombre), ' ', 1) AS numero_local,
         UPPER(l.nombre) AS nombre_local,
         UPPER(COALESCE(cu.nombre, '')) AS cuenta,
+        UPPER(COALESCE(cm.comuna, '')) AS comuna,
         CASE
             WHEN fq.fechaVisita IS NULL OR CAST(fq.fechaVisita AS CHAR(19)) = '0000-00-00 00:00:00' THEN NULL
             ELSE DATE(fq.fechaVisita)
@@ -382,8 +578,13 @@ $sqlDetalle = "
         fq.id AS id_formulario_question,
         fq.pregunta,
         fq.etapa_material,
-        UPPER(TRIM(COALESCE(fq.material, ''))) AS material,
+        UPPER(COALESCE(
+            NULLIF(TRIM(fq.material), ''),
+            NULLIF(TRIM(fq.categoria), ''),
+            'GESTIÓN'
+        )) AS material,
         COALESCE(fq.valor, 0) AS valor,
+        COALESCE(fq.valor_propuesto, 0) AS valor_propuesto,
         UPPER(COALESCE(fq.observacion, '')) AS observacion,
         fv.id AS id_foto,
         fv.url AS foto_url
@@ -391,6 +592,7 @@ $sqlDetalle = "
     INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
     INNER JOIN local l ON l.id = fq.id_local
     LEFT JOIN cuenta cu ON cu.id = l.id_cuenta
+    LEFT JOIN comuna cm ON cm.id = l.id_comuna
     LEFT JOIN fotoVisita fv
       ON fv.id_formulario = f.id
      AND fv.id_formularioQuestion = fq.id
@@ -405,6 +607,7 @@ if (!$resultadoDetalle) {
 }
 
 $spreadsheet = new Spreadsheet();
+$spreadsheet->getDefaultStyle()->getFont()->setName('Arial')->setSize(10);
 $spreadsheet->getProperties()
     ->setCreator('Visibility')
     ->setLastModifiedBy('Visibility')
@@ -412,48 +615,209 @@ $spreadsheet->getProperties()
     ->setSubject('Campanas y rutas filtradas')
     ->setDescription('Dashboard generado desde el detalle de formularioQuestion');
 
-$sheet = $spreadsheet->getActiveSheet();
-$sheet->setTitle('Dashboard');
+$sheetResumen = $spreadsheet->getActiveSheet();
+$sheetResumen->setTitle('Resumen ejecutivo');
+$sheetResumen->setShowGridlines(false);
+$sheetResumen->getSheetView()->setZoomScale(90);
+$sheetResumen->getTabColor()->setRGB('1F4E78');
+dashboardAplicarTituloReporte(
+    $sheetResumen,
+    'H',
+    'Resumen Ejecutivo de Campañas y Rutas',
+    'Consolidado de programación y visitas. Generado el ' . date('Y-m-d H:i') .
+    ' | División: ' . $divisionNombre
+);
+
+$headersResumen = [
+    'CAMPAÑA / RUTA', 'PRIORIDAD', 'FECHA INICIO', 'FECHA TERMINO',
+    'ULTIMA FECHA VISITA', 'LOCALES PROGRAMADOS', 'LOCALES VISITADOS', 'AVANCE VISITA',
+];
+$headerResumenRow = 4;
+foreach ($headersResumen as $indice => $header) {
+    dashboardTextoPlano($sheetResumen, $indice + 1, $headerResumenRow, $header);
+}
+dashboardAplicarCabecera($sheetResumen, "A{$headerResumenRow}:H{$headerResumenRow}");
+$sheetResumen->getRowDimension($headerResumenRow)->setRowHeight(42);
+
+$filaResumenExcel = $headerResumenRow + 1;
+foreach ($filasResumenEjecutivo as $filaResumen) {
+    $tipoResumen = (int)($filaResumen['tipo'] ?? 0) === 3 ? 'RUTA' : 'CAMPAÑA';
+    dashboardTextoPlano(
+        $sheetResumen,
+        1,
+        $filaResumenExcel,
+        $tipoResumen . ' · ' . (string)($filaResumen['campana'] ?? '')
+    );
+    dashboardTextoPlano($sheetResumen, 2, $filaResumenExcel, 'MEDIA');
+    dashboardEscribirFecha($sheetResumen, 'C' . $filaResumenExcel, $filaResumen['fecha_inicio'] ?? '');
+    dashboardEscribirFecha($sheetResumen, 'D' . $filaResumenExcel, $filaResumen['fecha_termino'] ?? '');
+    dashboardEscribirFecha($sheetResumen, 'E' . $filaResumenExcel, $filaResumen['ultima_fecha_visita'] ?? '');
+    $programadosResumen = (int)($filaResumen['locales_programados'] ?? 0);
+    $visitadosResumen = (int)($filaResumen['locales_visitados'] ?? 0);
+    $sheetResumen->setCellValue('F' . $filaResumenExcel, $programadosResumen);
+    $sheetResumen->setCellValue('G' . $filaResumenExcel, $visitadosResumen);
+    $sheetResumen->setCellValue(
+        'H' . $filaResumenExcel,
+        $programadosResumen > 0 ? $visitadosResumen / $programadosResumen : 0
+    );
+    $filaResumenExcel++;
+}
+$ultimaFilaResumen = max($headerResumenRow, $filaResumenExcel - 1);
+$sheetResumen->setAutoFilter("A{$headerResumenRow}:H{$ultimaFilaResumen}");
+$sheetResumen->freezePane('A' . ($headerResumenRow + 1));
+if ($ultimaFilaResumen > $headerResumenRow) {
+    $sheetResumen->getStyle('A' . ($headerResumenRow + 1) . ':H' . $ultimaFilaResumen)->applyFromArray([
+        'font' => ['name' => 'Arial', 'size' => 9],
+        'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
+        'borders' => ['bottom' => ['borderStyle' => Border::BORDER_DOTTED, 'color' => ['rgb' => 'D9D9D9']]],
+    ]);
+    $sheetResumen->getStyle('F' . ($headerResumenRow + 1) . ':G' . $ultimaFilaResumen)
+        ->getNumberFormat()->setFormatCode('#,##0');
+    $sheetResumen->getStyle('H' . ($headerResumenRow + 1) . ':H' . $ultimaFilaResumen)
+        ->getNumberFormat()->setFormatCode('0.0%');
+}
+$anchosResumen = [1 => 68, 2 => 14, 3 => 16, 4 => 16, 5 => 19, 6 => 20, 7 => 18, 8 => 16];
+foreach ($anchosResumen as $columnaResumen => $anchoResumen) {
+    $sheetResumen->getColumnDimensionByColumn($columnaResumen)->setWidth($anchoResumen);
+}
+$sheetResumen->getPageSetup()->setOrientation('landscape')->setFitToWidth(1)->setFitToHeight(0);
+$sheetResumen->getPageSetup()->setRowsToRepeatAtTopByStartAndEnd($headerResumenRow, $headerResumenRow);
+
+$sheetAvance = $spreadsheet->createSheet();
+$sheetAvance->setTitle('Avance detallado');
+$sheetAvance->setShowGridlines(false);
+$sheetAvance->getSheetView()->setZoomScale(80);
+$sheetAvance->getTabColor()->setRGB('4472C4');
+$columnasFijasAvance = 10;
+$totalColumnasAvance = $columnasFijasAvance + count($fechasVisita);
+$ultimaColumnaAvance = Coordinate::stringFromColumnIndex(max($columnasFijasAvance, $totalColumnasAvance));
+dashboardAplicarTituloReporte(
+    $sheetAvance,
+    $ultimaColumnaAvance,
+    'Avance Detallado por Campaña y Región',
+    'Cada celda verde representa locales únicos visitados en esa fecha. División: ' . $divisionNombre
+);
+
+$headersAvance = [
+    'TRADE', 'CAMPAÑA / RUTA', 'PRIORIDAD', 'REGION', 'FECHA INICIO', 'FECHA TERMINO',
+    'ULTIMA FECHA VISITA', 'LOCALES PROGRAMADOS', 'LOCALES VISITADOS', 'AVANCE VISITA',
+];
+foreach ($fechasVisita as $fechaVisitaHeader) {
+    $headersAvance[] = $fechaVisitaHeader;
+}
+$headerAvanceRow = 4;
+foreach ($headersAvance as $indice => $header) {
+    dashboardTextoPlano($sheetAvance, $indice + 1, $headerAvanceRow, $header);
+}
+dashboardAplicarCabecera(
+    $sheetAvance,
+    'A' . $headerAvanceRow . ':' . $ultimaColumnaAvance . $headerAvanceRow
+);
+$sheetAvance->getRowDimension($headerAvanceRow)->setRowHeight(78);
+if ($totalColumnasAvance > $columnasFijasAvance) {
+    $inicioFechaColumn = Coordinate::stringFromColumnIndex($columnasFijasAvance + 1);
+    $sheetAvance->getStyle(
+        $inicioFechaColumn . $headerAvanceRow . ':' . $ultimaColumnaAvance . $headerAvanceRow
+    )->getAlignment()->setTextRotation(90);
+}
+
+$filaAvanceExcel = $headerAvanceRow + 1;
+foreach ($filasAvanceRegional as $filaAvance) {
+    $idRegion = (int)($filaAvance['id_region'] ?? 0);
+    $claveRegional = (int)($filaAvance['id_formulario'] ?? 0) . ':' . $idRegion;
+    $tipoAvance = (int)($filaAvance['tipo'] ?? 0) === 3 ? 'RUTA' : 'CAMPAÑA';
+    dashboardTextoPlano($sheetAvance, 1, $filaAvanceExcel, (string)($filaAvance['trade'] ?? 'SIN TRADE'));
+    dashboardTextoPlano(
+        $sheetAvance,
+        2,
+        $filaAvanceExcel,
+        $tipoAvance . ' · ' . (string)($filaAvance['campana'] ?? '')
+    );
+    dashboardTextoPlano($sheetAvance, 3, $filaAvanceExcel, 'MEDIA');
+    $regionLabel = $idRegion > 0
+        ? str_pad((string)$idRegion, 2, '0', STR_PAD_LEFT) . ' - ' . (string)($filaAvance['region'] ?? '')
+        : (string)($filaAvance['region'] ?? 'SIN REGION');
+    dashboardTextoPlano($sheetAvance, 4, $filaAvanceExcel, $regionLabel);
+    dashboardEscribirFecha($sheetAvance, 'E' . $filaAvanceExcel, $filaAvance['fecha_inicio'] ?? '');
+    dashboardEscribirFecha($sheetAvance, 'F' . $filaAvanceExcel, $filaAvance['fecha_termino'] ?? '');
+    dashboardEscribirFecha($sheetAvance, 'G' . $filaAvanceExcel, $filaAvance['ultima_fecha_visita'] ?? '');
+    $programadosRegion = (int)($filaAvance['locales_programados'] ?? 0);
+    $visitadosRegion = (int)($filaAvance['locales_visitados'] ?? 0);
+    $sheetAvance->setCellValue('H' . $filaAvanceExcel, $programadosRegion);
+    $sheetAvance->setCellValue('I' . $filaAvanceExcel, $visitadosRegion);
+    $sheetAvance->setCellValue('J' . $filaAvanceExcel, $programadosRegion > 0 ? $visitadosRegion / $programadosRegion : 0);
+
+    foreach ($fechasVisita as $indiceFecha => $fechaVisita) {
+        $columnaFecha = Coordinate::stringFromColumnIndex($columnasFijasAvance + $indiceFecha + 1);
+        $valorDiario = (int)($avanceDiario[$claveRegional][$fechaVisita] ?? 0);
+        if ($valorDiario > 0) {
+            $sheetAvance->setCellValue($columnaFecha . $filaAvanceExcel, $valorDiario);
+            $sheetAvance->getStyle($columnaFecha . $filaAvanceExcel)->applyFromArray([
+                'font' => ['bold' => true, 'color' => ['rgb' => '000000']],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '92D050']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+            ]);
+        }
+    }
+    $filaAvanceExcel++;
+}
+$ultimaFilaAvance = max($headerAvanceRow, $filaAvanceExcel - 1);
+$sheetAvance->setAutoFilter('A' . $headerAvanceRow . ':' . $ultimaColumnaAvance . $ultimaFilaAvance);
+$sheetAvance->freezePane('E' . ($headerAvanceRow + 1));
+if ($ultimaFilaAvance > $headerAvanceRow) {
+    $sheetAvance->getStyle('A' . ($headerAvanceRow + 1) . ':' . $ultimaColumnaAvance . $ultimaFilaAvance)
+        ->getFont()->setName('Arial')->setSize(9);
+    $sheetAvance->getStyle('A' . ($headerAvanceRow + 1) . ':' . $ultimaColumnaAvance . $ultimaFilaAvance)
+        ->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+    $sheetAvance->getStyle('A' . ($headerAvanceRow + 1) . ':' . $ultimaColumnaAvance . $ultimaFilaAvance)
+        ->getBorders()->getBottom()->setBorderStyle(Border::BORDER_DOTTED)->getColor()->setRGB('D9D9D9');
+    $sheetAvance->getStyle('H' . ($headerAvanceRow + 1) . ':I' . $ultimaFilaAvance)
+        ->getNumberFormat()->setFormatCode('#,##0');
+    $sheetAvance->getStyle('J' . ($headerAvanceRow + 1) . ':J' . $ultimaFilaAvance)
+        ->getNumberFormat()->setFormatCode('0.0%');
+}
+$anchosAvance = [1 => 18, 2 => 68, 3 => 14, 4 => 30, 5 => 16, 6 => 16, 7 => 19, 8 => 19, 9 => 18, 10 => 16];
+foreach ($anchosAvance as $columnaAvance => $anchoAvance) {
+    $sheetAvance->getColumnDimensionByColumn($columnaAvance)->setWidth($anchoAvance);
+}
+for ($indiceFecha = 0; $indiceFecha < count($fechasVisita); $indiceFecha++) {
+    $sheetAvance->getColumnDimensionByColumn($columnasFijasAvance + $indiceFecha + 1)->setWidth(6);
+}
+$sheetAvance->getPageSetup()->setOrientation('landscape')->setFitToWidth(1)->setFitToHeight(0);
+$sheetAvance->getPageSetup()->setRowsToRepeatAtTopByStartAndEnd($headerAvanceRow, $headerAvanceRow);
+
+$sheet = $spreadsheet->createSheet();
+$sheet->setTitle('Resumen por local');
 $sheet->setShowGridlines(false);
 $sheet->getSheetView()->setZoomScale(85);
+$sheet->getTabColor()->setRGB('70AD47');
 
-$headers = ['CAMPAÑA', 'N LOCAL', 'SALAS', 'SUB CADENA', 'ESTADO', 'EJECUTADO', 'MOTIVO'];
-foreach ($materiales as $material) {
-    $headers[] = $material;
-}
+$headers = [
+    'TIPO', 'CAMPAÑA / RUTA', 'CÓDIGO', 'SALA', 'COMUNA', 'CUENTA',
+    'ESTADO VISITA', 'ESTADO ACTIVIDAD', 'MOTIVO', 'MATERIAL',
+    'EJECUTADO', 'PROPUESTO', 'AVANCE',
+];
 for ($numeroFoto = 1; $numeroFoto <= $maxFotos; $numeroFoto++) {
     $headers[] = 'FOTO ' . $numeroFoto;
 }
 
 $tableLastColumn = Coordinate::stringFromColumnIndex(count($headers));
-$lastColumn = Coordinate::stringFromColumnIndex(max(17, count($headers)));
-$sheet->mergeCells("A1:{$lastColumn}2");
-$sheet->setCellValue('A1', 'DASHBOARD DE CAMPAÑAS Y RUTAS');
-$sheet->getStyle("A1:{$lastColumn}2")->applyFromArray([
-    'font' => ['bold' => true, 'color' => ['rgb' => '7030A0'], 'size' => 20],
-    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-]);
-
-$sheet->mergeCells("A3:{$lastColumn}3");
-$sheet->setCellValue(
-    'A3',
-    'DIVISION: ' . $divisionNombre . '  |  ESTADO: ' . dashboardEstadoFormulario($estadoFiltro) .
-    '  |  ACTUALIZADO: ' . date('d-m-Y H:i')
+$lastColumn = Coordinate::stringFromColumnIndex(max(20, count($headers)));
+dashboardAplicarTituloReporte(
+    $sheet,
+    $lastColumn,
+    'Resumen por Local y Material',
+    'Detalle de ejecución, propuesta, avance y evidencia fotográfica. División: ' . $divisionNombre .
+    ' | ' . $seleccionResumen . ' | Estado: ' . dashboardEstadoFormulario($estadoFiltro)
 );
-$sheet->getStyle("A3:{$lastColumn}3")->applyFromArray([
-    'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 10],
-    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '7030A0']],
-    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-]);
-$sheet->getRowDimension(3)->setRowHeight(24);
 
 $tarjetas = [
-    ['A5:B7', 'A5:B5', 'A6:B7', 'CAMPAÑAS', $totalCampanas, '7030A0', '#,##0'],
-    ['D5:E7', 'D5:E5', 'D6:E7', 'RUTAS', $totalRutas, '2563EB', '#,##0'],
-    ['G5:H7', 'G5:H5', 'G6:H7', 'LOCALES PROGRAMADOS', $localesProgramados, '0F172A', '#,##0'],
-    ['J5:K7', 'J5:K5', 'J6:K7', 'LOCALES VISITADOS', $localesVisitados, '0EA5E9', '#,##0'],
-    ['M5:N7', 'M5:N5', 'M6:N7', 'LOCALES EJECUTADOS', $localesEjecutados, '16A34A', '#,##0'],
-    ['P5:Q7', 'P5:Q5', 'P6:Q7', '% EJECUCIÓN', $porcentajeEjecucion, 'DC2626', '0%'],
+    ['A6:C8', 'A6:C6', 'A7:C8', 'SALAS PROGRAMADAS', $localesProgramados, '0F172A', '#,##0'],
+    ['E6:G8', 'E6:G6', 'E7:G8', 'SALAS VISITADAS', $localesVisitados, '0F172A', '#,##0'],
+    ['I6:K8', 'I6:K6', 'I7:K8', 'SALAS EJECUTADAS', $localesEjecutados, '0F172A', '#,##0'],
+    ['M6:N8', 'M6:N6', 'M7:N8', '% RECORRIDO', $porcentajeVisita, '0F172A', '0%'],
+    ['P6:Q8', 'P6:Q6', 'P7:Q8', '% EJECUTADO', $porcentajeEjecucion, '0F172A', '0%'],
+    ['S6:T8', 'S6:T6', 'S7:T8', '% EFECTIVIDAD', $porcentajeEfectividad, '0F172A', '0%'],
 ];
 
 foreach ($tarjetas as [$range, $labelRange, $valueRange, $label, $value, $color, $format]) {
@@ -463,19 +827,26 @@ foreach ($tarjetas as [$range, $labelRange, $valueRange, $label, $value, $color,
     $sheet->getStyle($valueRange)->getNumberFormat()->setFormatCode($format);
 }
 
-$sheet->mergeCells("A9:{$lastColumn}9");
-$sheet->setCellValue(
-    'A9',
-    'VISITA: ' . number_format($porcentajeVisita * 100, 0, ',', '.') .
-    '%  |  EJECUCIÓN: ' . number_format($porcentajeEjecucion * 100, 0, ',', '.') . '%'
-);
-$sheet->getStyle("A9:{$lastColumn}9")->applyFromArray([
+$sheet->mergeCells("A10:{$lastColumn}10");
+$sheet->setCellValue('A10', 'AVANCE DE IMPLEMENTACIÓN');
+$sheet->getStyle("A10:{$lastColumn}10")->applyFromArray([
     'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '111827']],
+    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F4E78']],
     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
 ]);
+$sheet->getRowDimension(10)->setRowHeight(20);
 
-$headerRow = 11;
+$sheet->mergeCells("A11:{$lastColumn}11");
+$sheet->setCellValue(
+    'A11',
+    'Fuente: Visibility | División: ' . $divisionNombre . ' | Actualizado: ' . date('d-m-Y H:i')
+);
+$sheet->getStyle("A11:{$lastColumn}11")->applyFromArray([
+    'font' => ['italic' => true, 'color' => ['rgb' => '64748B'], 'size' => 9],
+    'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT],
+]);
+
+$headerRow = 13;
 $column = 1;
 foreach ($headers as $header) {
     dashboardTextoPlano($sheet, $column++, $headerRow, $header);
@@ -484,12 +855,10 @@ dashboardAplicarCabecera($sheet, "A{$headerRow}:{$tableLastColumn}{$headerRow}")
 $sheet->getRowDimension($headerRow)->setRowHeight(30);
 
 $rowNumber = $headerRow + 1;
-$materialIndex = array_flip($materiales);
 
 $escribirGrupo = static function (?array $grupo) use (
     $sheet,
     &$rowNumber,
-    $materiales,
     $maxFotos
 ): void {
     if ($grupo === null) {
@@ -497,13 +866,16 @@ $escribirGrupo = static function (?array $grupo) use (
     }
 
     $valoresBase = [
+        $grupo['tipo'],
         $grupo['nombre_campana'],
-        $grupo['numero_local'],
+        $grupo['codigo_local'],
         $grupo['nombre_local'],
+        $grupo['comuna'],
         $grupo['cuenta'],
         $grupo['visitado'] ? 'VISITADO' : 'NO VISITADO',
-        dashboardEjecucionPrincipal($grupo['ejecuciones']),
-        implode(' | ', array_keys($grupo['motivos'])),
+        $grupo['estado_actividad'],
+        $grupo['motivo'],
+        $grupo['material'],
     ];
 
     $columna = 1;
@@ -511,19 +883,30 @@ $escribirGrupo = static function (?array $grupo) use (
         dashboardTextoPlano($sheet, $columna++, $rowNumber, (string)$valor);
     }
 
-    foreach ($materiales as $material) {
-        $celda = Coordinate::stringFromColumnIndex($columna++) . $rowNumber;
-        $sheet->setCellValue($celda, (float)($grupo['materiales'][$material] ?? 0));
-    }
+    $sheet->setCellValue(Coordinate::stringFromColumnIndex($columna++) . $rowNumber, $grupo['ejecutado']);
+    $sheet->setCellValue(Coordinate::stringFromColumnIndex($columna++) . $rowNumber, $grupo['propuesto']);
+
+    $avance = $grupo['propuesto'] > 0 ? $grupo['ejecutado'] / $grupo['propuesto'] : 0;
+    $celdaAvance = Coordinate::stringFromColumnIndex($columna++) . $rowNumber;
+    $sheet->setCellValue($celdaAvance, $avance);
+    $sheet->getStyle($celdaAvance)->getNumberFormat()->setFormatCode('0%');
+
+    $colorAvance = $avance >= 1 ? 'C6EFCE' : ($avance > 0 ? 'FFEB9C' : 'F1F5F9');
+    $sheet->getStyle($celdaAvance)->getFill()
+        ->setFillType(Fill::FILL_SOLID)
+        ->getStartColor()->setRGB($colorAvance);
+    $sheet->getStyle($celdaAvance)->getFont()->setBold(true);
 
     for ($indiceFoto = 0; $indiceFoto < $maxFotos; $indiceFoto++) {
         $url = (string)($grupo['fotos'][$indiceFoto] ?? '');
         $celda = Coordinate::stringFromColumnIndex($columna++) . $rowNumber;
-        $sheet->setCellValueExplicit($celda, $url, DataType::TYPE_STRING);
         if ($url !== '') {
+            $sheet->setCellValueExplicit($celda, 'Foto ' . ($indiceFoto + 1), DataType::TYPE_STRING);
             $sheet->getCell($celda)->getHyperlink()->setUrl($url);
             $sheet->getStyle($celda)->getFont()->getColor()->setRGB('0563C1');
             $sheet->getStyle($celda)->getFont()->setUnderline(true);
+        } else {
+            $sheet->setCellValueExplicit($celda, '', DataType::TYPE_STRING);
         }
     }
 
@@ -533,54 +916,27 @@ $escribirGrupo = static function (?array $grupo) use (
 $grupoActual = null;
 $claveActual = '';
 while ($row = $resultadoDetalle->fetch_assoc()) {
-    $clave = (string)($row['id_campana'] ?? '') . ':' . (string)($row['id_local'] ?? '');
+    $clave = (string)($row['id_formulario_question'] ?? '');
     if ($clave !== $claveActual) {
         $escribirGrupo($grupoActual);
 
-        $numeroLocal = trim((string)($row['numero_local'] ?? ''));
-        if ($numeroLocal === '') {
-            $numeroLocal = (string)($row['codigo_local'] ?? '');
-        }
-
         $grupoActual = [
+            'tipo' => (int)($row['tipo'] ?? 0) === 3 ? 'RUTA' : 'CAMPAÑA',
             'nombre_campana' => (string)($row['nombre_campana'] ?? ''),
-            'numero_local' => $numeroLocal,
+            'codigo_local' => (string)($row['codigo_local'] ?? ''),
             'nombre_local' => (string)($row['nombre_local'] ?? ''),
+            'comuna' => (string)($row['comuna'] ?? ''),
             'cuenta' => (string)($row['cuenta'] ?? ''),
-            'visitado' => false,
-            'ejecuciones' => [],
-            'motivos' => [],
-            'materiales' => [],
+            'visitado' => dashboardFechaValida($row['fecha_visita'] ?? '') !== '',
+            'estado_actividad' => dashboardEjecucion($row),
+            'motivo' => dashboardMotivo($row),
+            'material' => trim((string)($row['material'] ?? '')),
+            'ejecutado' => (float)($row['valor'] ?? 0),
+            'propuesto' => (float)($row['valor_propuesto'] ?? 0),
             'fotos' => [],
             'fotos_vistas' => [],
-            'fq_vistos' => [],
         ];
         $claveActual = $clave;
-    }
-
-    $fechaVisita = dashboardFechaValida($row['fecha_visita'] ?? '');
-    if ($fechaVisita !== '') {
-        $grupoActual['visitado'] = true;
-    }
-
-    $ejecucion = dashboardEjecucion($row);
-    if ($ejecucion !== '') {
-        $grupoActual['ejecuciones'][$ejecucion] = true;
-    }
-
-    $motivo = dashboardMotivo($row);
-    if ($motivo !== '') {
-        $grupoActual['motivos'][$motivo] = true;
-    }
-
-    $fqId = (int)($row['id_formulario_question'] ?? 0);
-    if ($fqId > 0 && !isset($grupoActual['fq_vistos'][$fqId])) {
-        $material = trim((string)($row['material'] ?? ''));
-        if ($material !== '' && $material !== '-' && isset($materialIndex[$material])) {
-            $grupoActual['materiales'][$material] =
-                (float)($grupoActual['materiales'][$material] ?? 0) + (float)($row['valor'] ?? 0);
-        }
-        $grupoActual['fq_vistos'][$fqId] = true;
     }
 
     $foto = dashboardNormalizarFoto((string)($row['foto_url'] ?? ''));
@@ -594,12 +950,13 @@ $resultadoDetalle->free();
 
 $lastDataRow = max($headerRow, $rowNumber - 1);
 $sheet->setAutoFilter("A{$headerRow}:{$tableLastColumn}{$lastDataRow}");
-$sheet->freezePane('A12');
+$sheet->freezePane('A' . ($headerRow + 1));
 
-if ($lastDataRow >= 12) {
-    $sheet->getStyle("A12:{$tableLastColumn}{$lastDataRow}")->applyFromArray([
-        'font' => ['size' => 9, 'color' => ['rgb' => '1F2937']],
-        'alignment' => ['vertical' => Alignment::VERTICAL_TOP, 'wrapText' => false],
+if ($lastDataRow > $headerRow) {
+    $firstDataRow = $headerRow + 1;
+    $sheet->getStyle("A{$firstDataRow}:{$tableLastColumn}{$lastDataRow}")->applyFromArray([
+        'font' => ['name' => 'Arial', 'size' => 9, 'color' => ['rgb' => '1F2937']],
+        'alignment' => ['vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => false],
         'borders' => [
             'bottom' => [
                 'borderStyle' => 'hair',
@@ -608,23 +965,19 @@ if ($lastDataRow >= 12) {
         ],
     ]);
 
-    if (count($materiales) > 0) {
-        $primeraColumnaMaterial = Coordinate::stringFromColumnIndex(8);
-        $ultimaColumnaMaterial = Coordinate::stringFromColumnIndex(7 + count($materiales));
-        $sheet->getStyle("{$primeraColumnaMaterial}12:{$ultimaColumnaMaterial}{$lastDataRow}")
-            ->getNumberFormat()
-            ->setFormatCode('#,##0.##');
+    $sheet->getStyle("K{$firstDataRow}:L{$lastDataRow}")
+        ->getNumberFormat()->setFormatCode('#,##0.##');
+    for ($fila = $firstDataRow; $fila <= $lastDataRow; $fila++) {
+        $sheet->getRowDimension($fila)->setRowHeight(20);
     }
 }
 
 $widths = [
-    1 => 42, 2 => 14, 3 => 48, 4 => 20, 5 => 18, 6 => 22, 7 => 32,
+    1 => 13, 2 => 38, 3 => 14, 4 => 48, 5 => 20, 6 => 20, 7 => 18,
+    8 => 22, 9 => 30, 10 => 28, 11 => 12, 12 => 12, 13 => 12,
 ];
-for ($indiceMaterial = 0; $indiceMaterial < count($materiales); $indiceMaterial++) {
-    $widths[8 + $indiceMaterial] = 22;
-}
 for ($indiceFoto = 0; $indiceFoto < $maxFotos; $indiceFoto++) {
-    $widths[8 + count($materiales) + $indiceFoto] = 40;
+    $widths[14 + $indiceFoto] = 13;
 }
 foreach ($widths as $columnIndex => $width) {
     $sheet->getColumnDimensionByColumn($columnIndex)->setWidth($width);

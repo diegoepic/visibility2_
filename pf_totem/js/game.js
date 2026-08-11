@@ -73,10 +73,98 @@
     return Math.min(96, nivelEn(tiempoPara(lineaPartida) + (d.compensacion || 0)));
   }
 
+  /* ============================================================
+     DEMO DEL INICIO — la copa se llena y frena en la línea, en loop.
+     Enseña la mecánica a quien pasa caminando sin obligarlo a leer nada.
+     Sólo corre mientras el attract está a la vista: dejar un
+     requestAnimationFrame girando detrás de otra pantalla es gastar
+     batería y CPU del tótem por nada.
+     ============================================================ */
+  var demo = { raf: null, t0: 0, svg: null, elLiq: null, geo: null, objetivo: 62 };
+  var DEMO_CICLO = { llena: 1.9, pausa: 1.3, vacia: 0.6, espera: 0.7 };
+
+  function pintarDemo(nivel, destello, amp, t) {
+    if (!demo.elLiq) return;
+    demo.elLiq.setAttribute('d', pathLiquido(demo.geo, nivel, amp, t));
+    demo.elLiq.setAttribute('data-nivel', nivel.toFixed(2));
+    demo.svg.style.filter = destello
+      ? 'drop-shadow(0 0 16px rgba(232,207,148,.6))' : '';
+  }
+
+  function pasoDemo() {
+    if (pantalla !== 's-attract') { demo.raf = null; return; }
+    var c = DEMO_CICLO;
+    var total = c.llena + c.pausa + c.vacia + c.espera;
+    var t = (performance.now() - demo.t0) / 1000;
+    var f = t % total;
+    var nivel, destello = false, amp;
+    if (f < c.llena) {
+      // arranca rápido y frena al llegar: se siente como servir de verdad
+      var p = f / c.llena;
+      nivel = demo.objetivo * (1 - Math.pow(1 - p, 2.4));
+      amp = 2.6;
+    } else if (f < c.llena + c.pausa) {
+      nivel = demo.objetivo;
+      destello = true;
+      // recién servido: chapotea y se calma, igual que en el juego
+      amp = OLA_CFG.chapoteo * Math.exp(-OLA_CFG.decaimiento * (f - c.llena));
+    } else if (f < c.llena + c.pausa + c.vacia) {
+      var q = (f - c.llena - c.pausa) / c.vacia;
+      nivel = demo.objetivo * (1 - q);
+      amp = 2.2;
+    } else {
+      nivel = 0;
+      amp = 0;
+    }
+    pintarDemo(nivel, destello, amp, t);
+    demo.raf = requestAnimationFrame(pasoDemo);
+  }
+
+  function iniciarDemo() {
+    if (demo.raf) return;               // ya está corriendo
+    demo.svg = $('#attract-copa');
+    if (!demo.svg) return;
+    demo.elLiq = demo.svg.querySelector('.pf-liq');
+    demo.geo = GEO.copa;
+    demo.objetivo = C.lineaObjetivo;
+    demo.t0 = performance.now();
+    demo.raf = requestAnimationFrame(pasoDemo);
+  }
+
+  function detenerDemo() {
+    if (demo.raf) { cancelAnimationFrame(demo.raf); demo.raf = null; }
+    if (demo.svg) demo.svg.style.filter = '';
+  }
+
+  /* ---------- contador social ----------
+     Cuenta las partidas del día que llegaron a servir. Genera efecto arrastre
+     en el stand y es un número que el cliente puede mirar en vivo. */
+  function actualizarContadorSocial() {
+    var cfg = C.contadorSocial || {};
+    var el = $('#contador-social');
+    if (!el || !cfg.activado) return Promise.resolve(0);
+    return PFDB.getAll('sesiones').then(function (todas) {
+      var hoy = new Date().toDateString();
+      var n = todas.filter(function (s) {
+        return s.inicio && new Date(s.inicio).toDateString() === hoy
+          && s.nivel_final !== null && s.nivel_final !== undefined;
+      }).length;
+      var minimo = cfg.minimoParaMostrar || 0;
+      if (n < minimo) { el.classList.add('oculto'); return n; }
+      el.classList.remove('oculto');
+      el.innerHTML = n === 1
+        ? '<b>1</b> persona ya brindó hoy'
+        : '<b>' + n + '</b> personas ya brindaron hoy';
+      return n;
+    }).catch(function () { return 0; });
+  }
+
   // ---------- pantallas ----------
   function showScreen(id) {
     pantalla = id;
     $$('.screen').forEach(function (s) { s.classList.toggle('active', s.id === id); });
+    if (id === 's-attract') { iniciarDemo(); actualizarContadorSocial(); }
+    else detenerDemo();
     var footer = $('#paso-footer');
     var paso = PASOS[id];
     footer.classList.toggle('oculto', !paso || id === 's-datos');
@@ -204,6 +292,35 @@
     },
   };
 
+  /* ---------- superficie del líquido ----------
+     Dos senoidales de distinta frecuencia y sentido: una sola se lee como un
+     patrón que se repite, dos juntas parecen movimiento de líquido. Sale más
+     ancho que la copa a propósito; el clipPath del bowl recorta los bordes.
+
+     `amp` está en unidades del viewBox (no en % de copa) y se mantiene chica:
+     la lectura de la línea dorada es la habilidad que el juego mide, y una
+     superficie que se mueve mucho la volvería ambigua. Es una decisión de
+     jugabilidad, no de rendimiento. */
+  var OLA = { x0: 52, x1: 248, pasos: 20 };
+
+  function pathLiquido(g, nivel, amp, t) {
+    var H = g.liqBottom - g.liqTop;
+    var y = g.liqBottom - H * Math.max(0, Math.min(100, nivel)) / 100;
+    var d = 'M' + OLA.x0 + ',' + y.toFixed(2);
+    if (amp > 0.02) {
+      for (var i = 0; i <= OLA.pasos; i++) {
+        var x = OLA.x0 + (OLA.x1 - OLA.x0) * i / OLA.pasos;
+        var f = i / OLA.pasos * Math.PI * 2;
+        var oy = amp * (Math.sin(f * 1.6 + t * 3.4) * 0.6 +
+                        Math.sin(f * 2.9 - t * 2.1) * 0.4);
+        d += ' L' + x.toFixed(1) + ',' + (y + oy).toFixed(2);
+      }
+    } else {
+      d += ' L' + OLA.x1 + ',' + y.toFixed(2);   // superficie plana
+    }
+    return d + ' L' + OLA.x1 + ',' + g.liqBottom + ' L' + OLA.x0 + ',' + g.liqBottom + ' Z';
+  }
+
   /* Genera el SVG de una copa.
      opts.uid es obligatorio en la práctica: en el documento conviven la copa
      decorativa del attract y la del juego, y los ids de <defs> se resuelven a
@@ -264,12 +381,18 @@
       '  </linearGradient>' +
       '  <clipPath id="' + idClip + '"><path d="' + g.inner + '"/></clipPath>' +
       '</defs>' +
-      // banda de tolerancia (zona donde se gana), dentro de la copa
-      (opts.decorativa || dif().mostrarBanda === false ? '' :
+      /* Banda de la zona ganadora. En el resultado se muestra SIEMPRE, aunque
+         el nivel la tenga oculta durante el juego: ahí deja de ser una ayuda
+         y pasa a ser la explicación de por qué ganó o perdió. */
+      (opts.decorativa || (dif().mostrarBanda === false && !opts.resultado) ? '' :
         '<rect x="' + g.lineX1 + '" width="' + (g.lineX2 - g.lineX1) + '" y="' + yBandaTop +
         '" height="' + hBanda + '" fill="url(#' + idBanda + ')" clip-path="url(#' + idClip + ')"/>') +
-      // vino
-      '<rect class="pf-liq" x="60" width="180" y="' + (g.liqBottom - hIni) + '" height="' + hIni +
+      /* Vino: es un <path> y no un <rect> porque la superficie ondula (ver
+         pathLiquido). Ojo: el oleaje es SÓLO representación — el nivel que
+         decide ganar o perder sigue saliendo de nivelEn(), que está calibrado.
+         Mezclar las dos cosas invalidaría tests/dificultad.js. */
+      '<path class="pf-liq" data-nivel="' + nivelIni + '" d="' +
+      pathLiquido(g, nivelIni, opts.ola || 0, 0) +
       '" fill="url(#' + idGrad + ')" clip-path="url(#' + idClip + ')"/>' +
       burbujas +
       // chorro al servir
@@ -282,6 +405,17 @@
         '" stroke="#e8cf94" stroke-width="2.5" stroke-linecap="round"/>' +
         '<path d="M' + (g.lineX1 - 8) + ',' + yLinea + ' l6,-4 l0,8 Z" fill="#e8cf94"/>' +
         '<path d="M' + (g.lineX2 + 8) + ',' + yLinea + ' l-6,-4 l0,8 Z" fill="#e8cf94"/>') +
+      /* Marca de hasta dónde llegó el vino. Es lo que convierte la derrota en
+         "lo tenía casi" en vez de "no entendí qué pasó": se ve de un vistazo
+         la distancia entre donde quedó y la zona que había que alcanzar. */
+      (opts.resultado ? (function () {
+        var yNivel = g.liqBottom - H * Math.min(100, nivelIni) / 100;
+        var col = opts.gano ? '#7fae6d' : '#c96a5c';
+        return '<line x1="' + (g.lineX1 - 4) + '" x2="' + (g.lineX2 + 4) + '" y1="' + yNivel +
+          '" y2="' + yNivel + '" stroke="' + col + '" stroke-width="2.5" ' +
+          'stroke-dasharray="7 5" stroke-linecap="round"/>' +
+          '<circle cx="' + (g.lineX2 + 14) + '" cy="' + yNivel + '" r="5" fill="' + col + '"/>';
+      })() : '') +
       // cristal de la copa
       '<path d="' + g.outer + '" fill="none" stroke="#c9a45c" stroke-width="2"/>' +
       '<ellipse cx="' + g.rim.cx + '" cy="' + g.rim.cy + '" rx="' + g.rim.rx + '" ry="7" fill="none" stroke="#c9a45c" stroke-width="1.4" opacity="0.55"/>' +
@@ -293,6 +427,16 @@
   var serve = {
     estado: 'ready', nivel: 0, tServido: 0, raf: null, tPrev: 0, geo: null, varDef: null,
     elLiq: null, elChorro: null, elBubs: null,
+    // oleaje: sólo visual, no entra en el cálculo del resultado
+    amp: 0, tOla: 0, asentando: false,
+  };
+
+  var OLA_CFG = {
+    base: 1.8,        // agitación mientras cae el vino
+    porVelocidad: 0.075, // + agitación cuanto más rápido cae
+    chapoteo: 5.2,    // golpe al soltar
+    decaimiento: 3.2, // qué tan rápido se calma (1/s)
+    minVisible: 0.25, // por debajo de esto se considera quieto
   };
 
   function prepararServir() {
@@ -302,6 +446,9 @@
     serve.estado = 'ready';
     serve.nivel = 0;
     serve.tServido = 0;
+    serve.amp = 0;
+    serve.tOla = 0;
+    serve.asentando = false;
     sortearLinea();   // altura distinta en cada partida: no se puede memorizar
     var svg = $('#copa-svg');
     svg.innerHTML = buildCopaSvg(varDef, { uid: 'juego' });
@@ -321,8 +468,9 @@
     var g = serve.geo;
     var H = g.liqBottom - g.liqTop;
     var h = H * serve.nivel / 100;
-    serve.elLiq.setAttribute('y', g.liqBottom - h);
-    serve.elLiq.setAttribute('height', h);
+    serve.elLiq.setAttribute('d', pathLiquido(g, serve.nivel, serve.amp, serve.tOla));
+    // el nivel real queda legible para diagnóstico y para las pruebas
+    serve.elLiq.setAttribute('data-nivel', serve.nivel.toFixed(2));
     if (serve.elChorro) {
       var visible = serve.estado === 'pouring';
       serve.elChorro.setAttribute('height', visible ? Math.max(0, (g.liqBottom - h) - (g.rim.cy - 30)) : 0);
@@ -347,6 +495,12 @@
          asume centroEfectivo(), incluso si el tótem pierde algún frame. */
       serve.tServido += dt;
       serve.nivel = nivelEn(serve.tServido);
+      /* Oleaje: se agita más cuanto más rápido cae el vino (el vertido acelera),
+         igual que al servir de verdad. Puramente visual. */
+      serve.tOla += dt;
+      var d = dif();
+      var velActual = d.velocidad * (1 + (d.aceleracion || 0) * serve.tServido);
+      serve.amp = OLA_CFG.base + velActual * OLA_CFG.porVelocidad;
       if (serve.varDef.id === 'espumante' && Math.random() < 0.06) PFAudio.bubble();
       if (serve.nivel >= 100) {
         serve.nivel = 100;
@@ -363,9 +517,36 @@
 
   function detenerServido(silencioso) {
     if (serve.raf) { cancelAnimationFrame(serve.raf); serve.raf = null; }
-    if (serve.estado === 'pouring') serve.estado = 'stopped';
+    var estabaSirviendo = serve.estado === 'pouring';
+    if (estabaSirviendo) serve.estado = 'stopped';
     PFAudio.pourStop(silencioso);
     pintarNivel();
+    /* Al soltar, el vino chapotea y se va acomodando. El NIVEL ya quedó fijo
+       (el resultado se calcula con él); esto sólo anima la superficie. Cabe
+       justo en el segundo que evaluarServida espera antes de pasar de pantalla. */
+    if (estabaSirviendo && !silencioso) iniciarAsentamiento();
+  }
+
+  function iniciarAsentamiento() {
+    serve.amp = OLA_CFG.chapoteo;
+    serve.asentando = true;
+    var tPrev = performance.now();
+    function paso(t) {
+      if (!serve.asentando || pantalla !== 's-servir') { serve.asentando = false; return; }
+      var dt = Math.min(0.05, (t - tPrev) / 1000);
+      tPrev = t;
+      serve.tOla += dt;
+      serve.amp *= Math.exp(-OLA_CFG.decaimiento * dt);
+      pintarNivel();
+      if (serve.amp < OLA_CFG.minVisible) {
+        serve.amp = 0;
+        serve.asentando = false;
+        pintarNivel();           // deja la superficie plana y quieta
+        return;
+      }
+      requestAnimationFrame(paso);
+    }
+    requestAnimationFrame(paso);
   }
 
   function evaluarServida(derrame) {
@@ -380,6 +561,8 @@
       hint.classList.add('err');
       serve.nivel = 0;
       serve.tServido = 0;
+      serve.amp = 0;
+      serve.asentando = false;
       serve.estado = 'ready';
       pintarNivel();
       $('#servir-instr').style.opacity = '1';
@@ -422,9 +605,31 @@
       hint.classList.add('err');
     }
 
+    /* Copa congelada para las pantallas de resultado. El viewBox se recorta al
+       bowl (sin tallo ni base): a tamaño de miniatura, con la copa entera los
+       pocos milímetros que separan la marca de la zona ganadora se vuelven
+       indistinguibles, y esta pantalla existe justamente para mostrar eso. */
+    var gRes = serve.geo;
+    var vbResultado = (gRes.lineX1 - 26) + ' ' + (gRes.rim.cy - 20) + ' ' +
+      (gRes.lineX2 - gRes.lineX1 + 52) + ' ' + (gRes.liqBottom - gRes.rim.cy + 44);
+    var copaResultado = buildCopaSvg(serve.varDef, {
+      uid: 'resultado',
+      resultado: true,
+      gano: gano,
+      nivelInicial: Math.min(100, nivel),
+    });
+
+    var pintarResultado = function (sel) {
+      var svg = $(sel);
+      if (!svg) return;
+      svg.setAttribute('viewBox', vbResultado);
+      svg.innerHTML = copaResultado;
+    };
+
     setTimeout(function () {
       if (gano) {
         PFAudio.win();
+        pintarResultado('#win-copa');
         $('#win-precision').textContent = precision + '%';
         logEvent('gano');
         /* Se cierra la partida YA, sin esperar a que reclame el premio: si se
@@ -436,10 +641,11 @@
         // sin auto-volver acá: la inactividad se encarga si no reclama
       } else {
         PFAudio.lose();
+        pintarResultado('#lose-copa');
         /* Con un juego difícil el jugador TIENE que ver por cuánto falló, si
-           no se va convencido de que fue al azar. Mostrarle "te faltó 1,8%"
-           convierte la derrota en "casi lo tenía" y es lo que lo deja con
-           ganas, que es justamente lo que la marca quiere que sienta. */
+           no se va convencido de que fue al azar. La copa de arriba muestra
+           dónde quedó respecto de la zona, y el texto lo pone en números:
+           juntos convierten la derrota en "casi lo tenía". */
         // el encabezado se ajusta a lo lejos que quedó: felicitar un fallo de
         // 15% con un "¡casi!" suena a burla
         var tag = derrame ? '¡SE DERRAMÓ!'
@@ -603,6 +809,10 @@
     });
     $('#admin-dif').value = difActual;
     $('#admin-sonido').checked = PFAudio.isEnabled();
+    $('#admin-vibra').checked = PFAudio.isVibracion();
+    $('#admin-vibra').disabled = !PFAudio.vibracionSoportada();
+    $('#admin-vibra-nota').textContent = PFAudio.vibracionSoportada()
+      ? '' : 'Este equipo no soporta vibración (normal en PC y en iOS).';
     $('#admin-meta').textContent = 'Dispositivo ' + deviceId + ' · v' + C.version + ' · ' + C.evento;
   }
 
@@ -671,7 +881,7 @@
 
     // ---- attract → empezar
     $('#s-attract').addEventListener('click', function (e) {
-      if (e.target.closest('#monograma')) return; // los toques del monograma son para admin
+      if (e.target.closest('#admin-trigger')) return; // la esquina oculta es para el panel admin
       PFAudio.ensure();
       pedirWakeLock();
       if (C.pantallaCompleta && document.documentElement.requestFullscreen && !document.fullscreenElement) {
@@ -682,8 +892,8 @@
       showScreen('s-momento');
     });
 
-    // ---- monograma: 5 toques → PIN admin
-    $('#monograma').addEventListener('click', function () {
+    // ---- zona oculta en la esquina: 5 toques → PIN admin
+    $('#admin-trigger').addEventListener('click', function () {
       admin.taps++;
       clearTimeout(admin.tapTimer);
       admin.tapTimer = setTimeout(function () { admin.taps = 0; }, 4000);
@@ -717,7 +927,7 @@
         $('#vino-nombre').textContent = vino.nombre;
         $('#vino-desc').textContent = vino.desc;
         $('#vino-copa').innerHTML = buildCopaSvg(varDef,
-          { uid: 'vino', decorativa: true, sinLinea: true, nivelInicial: 58 });
+          { uid: 'vino', decorativa: true, sinLinea: true, nivelInicial: 58, ola: 1.3 });
         showScreen('s-vino');
       });
     });
@@ -811,6 +1021,11 @@
       PFDB.kvSet('dificultad', difActual);
       logEvent('admin_dificultad', { dificultad: difActual });
     });
+    $('#admin-vibra').addEventListener('change', function () {
+      PFAudio.setVibracion(this.checked);
+      PFDB.kvSet('vibracion', this.checked);
+      if (this.checked) PFAudio.vibrarWin();   // para confirmar en el equipo
+    });
     $('#admin-sonido').addEventListener('change', function () {
       PFAudio.setEnabled(this.checked);
       PFDB.kvSet('sonido', this.checked);
@@ -886,10 +1101,14 @@
         deviceId = 'PF-TOTEM-' + Math.random().toString(36).slice(2, 6).toUpperCase();
         localStorage.setItem('pf_device_id', deviceId);
       }
-      return Promise.all([PFDB.kvGet('dificultad', C.dificultad), PFDB.kvGet('sonido', C.sonido.activado)]);
+      return Promise.all([
+        PFDB.kvGet('dificultad', C.dificultad),
+        PFDB.kvGet('sonido', C.sonido.activado),
+        PFDB.kvGet('vibracion', C.vibracion),
+      ]);
     }).then(function (r) {
       difActual = r[0];
-      PFAudio.init({ activado: r[1], volumen: C.sonido.volumen });
+      PFAudio.init({ activado: r[1], volumen: C.sonido.volumen, vibracion: r[2] });
 
       $('#consent-text').textContent = C.textos.consentimiento;
       $('#attract-claim').textContent = C.textos.claim;
@@ -897,12 +1116,12 @@
 
       // copa decorativa del attract (tinto servido en la línea)
       $('#attract-copa').innerHTML = buildCopaSvg(C.variedades[0],
-        { uid: 'attract', decorativa: true, nivelInicial: C.lineaObjetivo });
+        { uid: 'attract', decorativa: true, nivelInicial: C.lineaObjetivo, ola: 1.6 });
 
       // copas de la pantalla de variedades, una por variedad y con su color
       $$('.copa-var svg').forEach(function (svg) {
         var vd = C.variedades.find(function (v) { return v.id === svg.dataset.copa; });
-        if (vd) svg.innerHTML = buildCopaSvg(vd, { uid: 'var_' + vd.id, decorativa: true, sinLinea: true, nivelInicial: 58 });
+        if (vd) svg.innerHTML = buildCopaSvg(vd, { uid: 'var_' + vd.id, decorativa: true, sinLinea: true, nivelInicial: 58, ola: 1.3 });
       });
 
       // pool de códigos desde archivo (si el navegador permite leerlo)
@@ -950,6 +1169,9 @@
     nivelEn: nivelEn,
     tiempoPara: tiempoPara,
     nivelActual: function () { return serve.nivel; },
+    refrescarContador: actualizarContadorSocial,
+    demoCorriendo: function () { return !!demo.raf; },
+    pathLiquido: pathLiquido,
   };
 
   boot();

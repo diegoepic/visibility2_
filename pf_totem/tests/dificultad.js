@@ -14,6 +14,9 @@ let fallos = 0;
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  // no tocar la base de produccion desde los tests
+  await page.route('**/sync.php*', (r) => r.abort());
+
   await page.goto(URL);
   await page.waitForTimeout(800);
 

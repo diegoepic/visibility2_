@@ -97,16 +97,40 @@ window.PFSync = (function () {
         return resp.json();
       }).then(function (json) {
         if (!json || json.ok !== true) throw new Error((json && json.error_code) || 'RESPUESTA_INVALIDA');
-        var ids = function (arr) { return arr.map(function (x) { return x.uuid; }); };
+
+        /* Sólo se marca como sincronizado lo que el servidor confirmó haber
+           guardado. Si un registro falló (columna que no existe, dato fuera
+           de rango), viene en json.fallidos y se deja pendiente para el
+           próximo intento en vez de darlo por subido y perderlo. */
+        var fall = json.fallidos || {};
+        var pendientesDe = function (grupo) {
+          var malos = Array.isArray(fall[grupo]) ? fall[grupo] : [];
+          return lote[grupo]
+            .map(function (x) { return x.uuid; })
+            .filter(function (id) { return malos.indexOf(id) === -1; });
+        };
+        var okSes = pendientesDe('sesiones');
+        var okEve = pendientesDe('eventos');
+        var okGan = pendientesDe('ganadores');
+
+        var nFall = (fall.sesiones || []).length + (fall.eventos || []).length
+          + (fall.ganadores || []).length;
+        if (nFall > 0) {
+          status.ultimoError = nFall + ' registros rechazados por la BD' +
+            (json.error_db ? ': ' + json.error_db : '');
+        }
+
         return Promise.all([
-          lote.sesiones.length ? PFDB.markSynced('sesiones', ids(lote.sesiones)) : null,
-          lote.eventos.length ? PFDB.markSynced('eventos', ids(lote.eventos)) : null,
-          lote.ganadores.length ? PFDB.markSynced('ganadores', ids(lote.ganadores)) : null,
-        ]);
-      }).then(function () {
+          okSes.length ? PFDB.markSynced('sesiones', okSes) : null,
+          okEve.length ? PFDB.markSynced('eventos', okEve) : null,
+          okGan.length ? PFDB.markSynced('ganadores', okGan) : null,
+        ]).then(function () { return nFall; });
+      }).then(function (nFall) {
         status.ultimoExito = new Date().toISOString();
-        status.ultimoError = null;
-        return cerrar(true);
+        if (!nFall) status.ultimoError = null;
+        /* Con registros rechazados no se reencola de inmediato: volverían a
+           fallar en bucle. Quedan pendientes para el siguiente intervalo. */
+        return cerrar(!nFall);
       }).catch(function (err) {
         return cerrar(false, err);
       });

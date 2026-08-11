@@ -24,7 +24,10 @@
   --dorado: #c9a45c;
   --dorado-claro: #e8cf94;
   --dorado-oscuro: #8a6d35;
-  --crema: #f2e7d3;
+  /* colores medidos sobre el logo oficial (assets/logo-pf-light.png):
+     el cobre del monograma y el crema del nombre */
+  --cobre: #b05820;
+  --crema: #e8e0d0;
   --gris: #a1957e;
   --vino: #7a2233;
   --ok: #7fae6d;
@@ -80,13 +83,19 @@ button { font-family: inherit; color: inherit; background: none; border: none; c
 
 /* ---------- Cabecera decorativa ---------- */
 .cabecera { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 3vh; }
+
+/* Recorta el monograma PF del logo oficial en vez de usar otro archivo:
+   el monograma ocupa el 37,6% superior y está centrado horizontalmente
+   (medido sobre el alfa del PNG, región 175×203 px de 1344×540).
+   background-size 768% = 1344/175, así esos 175 px llenan el ancho. */
 .cabecera-pf {
-  font-family: var(--f-display);
-  font-size: 20px;
-  letter-spacing: 2px;
-  color: var(--dorado);
-  border: 1.5px solid var(--dorado);
-  padding: 6px 10px;
+  width: clamp(40px, 6.5vw, 62px);
+  aspect-ratio: 175 / 203;
+  background: url('../assets/logo-pf-light.png') no-repeat center top;
+  background-size: 768% auto;
+  /* el cobre de marca es oscuro y a este tamaño se apaga contra el negro;
+     el halo le da presencia sin tocar el color */
+  filter: drop-shadow(0 0 10px rgba(176, 88, 32, .45));
 }
 .cabecera-linea { width: 38vw; max-width: 320px; height: 1px;
   background: linear-gradient(90deg, transparent, var(--dorado), transparent); }
@@ -111,27 +120,26 @@ button { font-family: inherit; color: inherit; background: none; border: none; c
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; flex: 1; gap: 2.2vh; text-align: center;
 }
-.monograma {
-  font-family: var(--f-display);
-  font-size: clamp(34px, 7vw, 54px);
-  color: var(--dorado);
-  border: 2px solid var(--dorado);
-  padding: 14px 20px;
-  position: relative;
+/* Logo oficial del cliente (PNG con transparencia, pensado para fondo oscuro) */
+.logo-principal {
+  width: min(76%, 600px);
+  height: auto;
+  margin-bottom: .5vh;
+  filter: drop-shadow(0 8px 34px rgba(0, 0, 0, .55));
 }
-.monograma::after {
-  content: ''; position: absolute; inset: 5px;
-  border: 1px solid rgba(201, 164, 92, .45);
+
+/* Zona oculta para abrir el panel del tótem. Va en la esquina y sin ninguna
+   marca visible: sobre el logo dejaría una zona muerta justo donde la gente
+   toca primero para empezar a jugar. */
+#admin-trigger {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100px; height: 100px;
+  background: none; border: none; padding: 0;
+  z-index: 5;
+  -webkit-tap-highlight-color: transparent;
 }
-.marca {
-  font-family: var(--f-display);
-  font-weight: 700;
-  font-size: clamp(34px, 8vw, 72px);
-  letter-spacing: .22em;
-  text-indent: .22em;
-  color: var(--crema);
-}
-.submarca { font-size: clamp(13px, 2.4vw, 20px); letter-spacing: .5em; text-indent: .5em; color: var(--dorado); }
+
 .claim {
   font-family: var(--f-display);
   font-size: clamp(20px, 4.6vw, 40px);
@@ -162,8 +170,32 @@ button { font-family: inherit; color: inherit; background: none; border: none; c
   100% { box-shadow: 0 0 0 0 rgba(201,164,92,0); }
 }
 .cta-texto { font-size: clamp(16px, 3.2vw, 26px); letter-spacing: .14em; text-transform: uppercase; color: var(--crema); }
-.attract-premio { font-size: clamp(14px, 2.6vw, 21px); color: var(--gris); letter-spacing: .05em; }
-.attract-premio b { color: var(--dorado-claro); }
+/* Gancho del premio: lo primero que tiene que leerse desde lejos */
+.premio-gancho {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 1.6vh 7vw;
+  border-top: 1px solid rgba(201, 164, 92, .3);
+  border-bottom: 1px solid rgba(201, 164, 92, .3);
+}
+.gancho-sobre {
+  font-size: clamp(12px, 2.3vw, 18px);
+  letter-spacing: .22em; text-transform: uppercase; color: var(--gris);
+}
+.gancho-cifra {
+  font-family: var(--f-display);
+  font-size: clamp(44px, 10.5vw, 96px);
+  line-height: 1.04;
+  color: var(--dorado-claro);
+  letter-spacing: .03em;
+  text-shadow: 0 0 38px rgba(232, 207, 148, .3);
+}
+.gancho-bajo { font-size: clamp(12px, 2.3vw, 18px); color: var(--gris); letter-spacing: .06em; }
+
+.contador-social {
+  font-size: clamp(13px, 2.4vw, 19px);
+  color: var(--gris); letter-spacing: .06em;
+}
+.contador-social b { color: var(--dorado-claro); font-weight: 600; }
 
 /* ============================================================
    MOMENTOS Y VARIEDADES
@@ -307,6 +339,18 @@ button { font-family: inherit; color: inherit; background: none; border: none; c
   animation: brillo 2.6s ease-in-out infinite;
   pointer-events: none;
 }
+/* copa congelada del resultado: la zona ganadora y dónde paró el vino */
+.copa-resultado { height: clamp(150px, 24vh, 290px); }
+.copa-resultado svg { height: 100%; width: auto; }
+.copa-leyenda {
+  display: flex; gap: 22px; flex-wrap: wrap; justify-content: center;
+  font-size: clamp(11px, 2vw, 15px); color: var(--gris);
+  letter-spacing: .04em; margin-top: -1vh;
+}
+.copa-leyenda span { display: flex; align-items: center; gap: 7px; }
+.copa-leyenda i { width: 20px; height: 0; display: block; }
+.ley-tuya { border-top: 2.5px dashed var(--error); }
+.ley-meta { border-top: 2.5px solid var(--dorado-claro); }
 .precision-caja {
   border: 1px solid rgba(201,164,92,.55);
   padding: 2vh 7vw;

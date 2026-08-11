@@ -21,6 +21,16 @@ window.PF_CONFIG = {
 
   sonido: { activado: true, volumen: 0.6 },
 
+  /* Vibración en los momentos clave. Sólo existe en Android; en iOS y en PC
+     navigator.vibrate no está y todo falla en silencio. */
+  vibracion: true,
+
+  /* Contador social del inicio ("127 personas ya brindaron hoy"). Cuenta las
+     partidas del día que llegaron a servir, no los toques de pantalla, para
+     que el número sea real. Se oculta hasta llegar al mínimo: arrancar el día
+     con "2 personas ya brindaron" resta en vez de sumar. */
+  contadorSocial: { activado: true, minimoParaMostrar: 5 },
+
   /* ----- Mecánica "Sirve la medida perfecta" -----
      La copa se llena mientras se mantiene presionado; hay que soltar
      sobre la línea dorada. Gana si el nivel cae dentro de la zona.
@@ -81,10 +91,16 @@ window.PF_CONFIG = {
 
   /* ----- Sincronización con el servidor visibility -----
      URL vacía = sync desactivado (el juego funciona 100% offline igual).
-     El token debe calzar con PF_TOTEM_TOKEN en el .env del servidor. */
+     El token debe calzar con PF_TOTEM_TOKEN en el .env del servidor.
+
+     ⚠ La ruta es /visibility2/pf_totem_api/sync.php — FUERA de app/.
+     No sirve ponerlo dentro de app/: app/.user.ini aplica
+     auto_prepend_file = _session_guard.php a todo lo que cuelga de ahí,
+     y ese guard exige sesión web de portal. El tótem es un kiosko
+     anónimo, así que el guard lo rechazaría antes de llegar al código. */
   sync: {
-    url: 'https://visibility.cl/visibility2/app/api/pf_totem_sync.php',            // [PLACEHOLDER] p.ej. 'https://SERVIDOR/visibility2/app/api/pf_totem_sync.php'
-    token: 'mc123',          // [PLACEHOLDER]
+    url: 'https://visibility.cl/visibility2/pf_totem_api/sync.php',
+    token: 'mc123',          // [PLACEHOLDER] debe ser igual a PF_TOTEM_TOKEN del .env
     intervaloSeg: 120,
     maxLote: 300,
   },

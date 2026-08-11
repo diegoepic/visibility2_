@@ -5,7 +5,6 @@ if (!isset($_SESSION['usuario_id'])) {
     exit();
 }
 
-
 require_once __DIR__ . '/lib/security_headers.php';
 emit_security_headers();
 
@@ -125,6 +124,8 @@ $sql_campaigns = "
         f.fechaInicio,
         f.fechaTermino,
         f.modalidad,
+        f.id_division,
+        COALESCE(de.nombre, 'Sin división') AS division_nombre,
         CASE WHEN f.tipo = 1
               AND f.modalidad IN ('implementacion_auditoria','solo_implementacion')
               AND EXISTS (
@@ -138,6 +139,7 @@ $sql_campaigns = "
         END AS tiene_recepcion_materiales
     FROM formularioQuestion fq
     INNER JOIN formulario f ON f.id = fq.id_formulario
+    LEFT JOIN division_empresa de ON de.id = f.id_division
     WHERE fq.id_usuario = ?
       AND f.id_empresa = ?
       AND fq.estado = 0
@@ -165,7 +167,30 @@ while ($row = $result_campaigns->fetch_assoc()) {
         'fechaTermino'              => $row['fechaTermino'],
         'modalidad'                 => $row['modalidad'] ?? '',
         'tiene_recepcion_materiales'=> (int)($row['tiene_recepcion_materiales'] ?? 0),
+        'id_division'               => (int)($row['id_division'] ?? 0),
+        'division_nombre'           => htmlspecialchars($row['division_nombre'] ?? 'Sin división', ENT_QUOTES, 'UTF-8'),
     ];
+}
+
+/* Divisiones presentes en las campañas del ejecutor: alimentan el filtro del
+   panel. Se arman acá (y no en JS) para no depender del texto renderizado. */
+$divisionesCampanas = [];
+foreach ($campanas as $c) {
+    $divisionesCampanas[(int)$c['id_division']] = $c['division_nombre'];
+}
+asort($divisionesCampanas, SORT_NATURAL | SORT_FLAG_CASE);
+
+/* Normaliza texto para búsqueda: minúsculas y sin tildes, para que escribir
+   "navidad" encuentre "NAVIDAD" y "promoción" encuentre "PROMOCION". */
+if (!function_exists('v2_norm_busqueda')) {
+    function v2_norm_busqueda(string $s): string {
+        $s = html_entity_decode($s, ENT_QUOTES, 'UTF-8');
+        $s = mb_strtolower(trim($s), 'UTF-8');
+        return strtr($s, [
+            'á'=>'a','é'=>'e','í'=>'i','ó'=>'o','ú'=>'u','ü'=>'u','ñ'=>'n',
+            'à'=>'a','è'=>'e','ì'=>'i','ò'=>'o','ù'=>'u',
+        ]);
+    }
 }
 
 /* Conteo de recepciones previas por campaña (para badge) */
@@ -572,6 +597,32 @@ foreach ($locales_reag as $local) {
           margin-left: 4px;
           white-space: nowrap;
       }
+
+      /* ── Filtros del panel de campañas programadas ── */
+      .camp-filtros {
+          padding: 0 0 8px;
+          margin-bottom: 6px;
+          border-bottom: 1px solid #e5e5e5;
+      }
+      .camp-filtros-row { margin-left: 0; margin-right: 0; }
+      .camp-col-izq { padding-left: 0; padding-right: 3px; }
+      .camp-col-der { padding-left: 3px; padding-right: 0; }
+      .camp-acciones {
+          margin-top: 6px;
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 6px;
+      }
+      .camp-acciones #campContador { margin-left: auto; font-size: 11px; }
+      /* Campaña oculta por el filtro del panel (distinto de "tachada") */
+      li.camp-prog.camp-filtrada { display: none !important; }
+      .camp-sin-resultados {
+          padding: 10px;
+          color: #888;
+          font-size: 13px;
+          text-align: center;
+      }
     </style>
 </head>
 <body>
@@ -656,6 +707,37 @@ if (isset($_SESSION['success'])) {
                         </div>
                     </div>
                     <div id="campanasCollapse" class="panel-body panel-scroll collapse in">
+
+                        <?php if (count($campanas) > 0): ?>
+                        <!-- Filtros del panel: son SOLO visuales (ayudan a encontrar la campaña).
+                             Lo que oculta locales de la tabla y del mapa sigue siendo el tachado. -->
+                        <div class="camp-filtros">
+                            <div class="row camp-filtros-row">
+                                <div class="col-xs-7 camp-col-izq">
+                                    <input type="text" id="filtroCampanaTexto" class="form-control input-sm"
+                                           placeholder="Buscar campaña..." autocomplete="off">
+                                </div>
+                                <div class="col-xs-5 camp-col-der">
+                                    <select id="filtroCampanaDivision" class="form-control input-sm">
+                                        <option value="">Todas las divisiones</option>
+                                        <?php foreach ($divisionesCampanas as $idDiv => $nomDiv): ?>
+                                            <option value="<?= (int)$idDiv ?>"><?= $nomDiv ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="camp-acciones">
+                                <button type="button" id="btnOcultarCamps" class="btn btn-xs btn-default">
+                                    <i class="fa fa-eye-slash"></i> <span id="txtOcultarCamps">Ocultar todas</span>
+                                </button>
+                                <button type="button" id="btnMostrarCamps" class="btn btn-xs btn-default">
+                                    <i class="fa fa-eye"></i> Mostrar todas
+                                </button>
+                                <small id="campContador" class="text-muted"></small>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+
                         <ul class="todo list-group">
                             <?php
                             if (count($campanas) > 0) {
@@ -666,7 +748,15 @@ if (isset($_SESSION['success'])) {
                                     $fechaTermino  = date('d-m-Y', strtotime($campana['fechaTermino']));
                                     $tieneRec      = (int)($campana['tiene_recepcion_materiales'] ?? 0);
                                     $nRec          = $recepcionesCount[$id_campana] ?? 0;
-                                    echo '<li class="list-group-item" data-idcampana="' . $id_campana . '">';
+                                    // data-division / data-busqueda alimentan el filtro del panel
+                                    $divCamp       = (int)($campana['id_division'] ?? 0);
+                                    $busqCamp      = htmlspecialchars(
+                                        v2_norm_busqueda($nombre_camp . ' ' . ($campana['division_nombre'] ?? '')),
+                                        ENT_QUOTES, 'UTF-8'
+                                    );
+                                    echo '<li class="list-group-item camp-prog" data-idcampana="' . $id_campana . '"'
+                                       . ' data-division="' . $divCamp . '"'
+                                       . ' data-busqueda="' . $busqCamp . '">';
                                     echo ' <a class="todo-actions" href="javascript:void(0)">';
                                     echo '   <i class="fa fa-square-o"></i> ';
                                     echo '   <span class="desc">' . $nombre_camp . ' (' . $fechaInicio . ' - ' . $fechaTermino . ')</span>';
@@ -1078,7 +1168,8 @@ if (isset($_SESSION['success'])) {
                <li><strong>Programados:</strong> es la tabla principal. Se agrupa por fecha y muestra código, cadena, comuna, dirección y opciones de ruta.</li>
                <li><strong>Reagendados:</strong> se abre con el botón <em>Ver Locales Reagendados</em>. Tiene el mismo formato, pero solo con los locales tipificados como pendiente</li>
                <li><strong>Filtro de texto:</strong> sobre cada tabla hay un cuadro para buscar por código, cadena, comuna o dirección. Escribe cualquier palabra y la tabla filtra al instante.</li>
-               <li><strong>Campañas tachadas:</strong> en el panel de campañas (izquierda) puedes tocar el nombre para tacharlo. Las campañas tachadas se ocultan de la tabla y del mapa para evitar visitas equivocadas.</li>
+               <li><strong>Campañas tachadas:</strong> en el panel de campañas (izquierda) puedes tocar el nombre para tacharlo. Las campañas tachadas se ocultan de la tabla y del mapa para evitar visitas equivocadas. Tu selección queda guardada en el dispositivo, así que se mantiene aunque actualices la página.</li>
+               <li><strong>Buscar entre muchas campañas:</strong> si tienes varias, usa el buscador y el filtro por división del panel para encontrarlas más rápido. Esos filtros solo ordenan la lista del panel: <em>no</em> ocultan locales. Para trabajar con pocas campañas, toca <strong>Ocultar todas</strong> y luego destacha solo las que quieras ver. El contador del panel te indica cuántas tienes sin mostrar.</li>
         
             </ul>
 
@@ -2505,11 +2596,125 @@ window.initMap=function(){
   handle.addEventListener('pointercancel', ()=>{ startY=null; });
 })();
 
+/* =====================================================================
+   PANEL DE CAMPAÑAS PROGRAMADAS — filtros y acciones masivas
+   Los filtros (texto / división) son SOLO visuales: ocultan <li> del panel
+   para ayudar a ENCONTRAR una campaña entre muchas. Lo que oculta locales
+   de la tabla y del mapa sigue siendo el tachado (clase .completed), que es
+   lo que lee applyFilters(). Mantener esa separación es lo que hace el
+   comportamiento predecible: un solo mecanismo decide qué se visita.
+   Solo aplica a programadas; el panel de complementarias queda igual.
+   ===================================================================== */
+const CAMPS_PREF_KEY = 'v2_camps_ocultas';
+
+function normCampTxt(s){
+  // Minusculas y sin tildes, para que "promocion" encuentre "PROMOCION".
+  // NFD separa la letra de su tilde; luego se descartan las marcas
+  // diacriticas por rango (U+0300..U+036F). Se filtra por codigo en vez de
+  // usar un regex con esos caracteres para que el archivo quede 100% ASCII
+  // y no dependa de la codificacion con que se suba por FTP.
+  return String(s || '').toLowerCase().normalize('NFD')
+    .split('')
+    .filter(function (ch) {
+      var c = ch.charCodeAt(0);
+      return c < 0x0300 || c > 0x036F;
+    })
+    .join('');
+}
+function $campsProg(){ return $('li.camp-prog'); }
+function $campsProgVisibles(){ return $('li.camp-prog:not(.camp-filtrada)'); }
+
+function guardarCampsOcultas(){
+  savePref(CAMPS_PREF_KEY,
+    $campsProg().filter('.completed').map((i, li) => String($(li).data('idcampana'))).get());
+}
+
+function restaurarCampsOcultas(){
+  const ids = loadPref(CAMPS_PREF_KEY, []);
+  if (!Array.isArray(ids) || !ids.length) return;
+
+  // Se descartan IDs de campañas que ya no están en la ruta, para que la
+  // preferencia no acumule basura de campañas terminadas.
+  const vivos   = new Set($campsProg().map((i, li) => String($(li).data('idcampana'))).get());
+  const limpios = ids.map(String).filter(id => vivos.has(id));
+
+  $campsProg().each(function(){
+    if (!limpios.includes(String($(this).data('idcampana')))) return;
+    $(this).addClass('completed')
+           .find('i').first().removeClass('fa-square-o').addClass('fa-check-square-o');
+  });
+  if (limpios.length !== ids.length) savePref(CAMPS_PREF_KEY, limpios);
+}
+
+function actualizarContadorCamps(){
+  const total    = $campsProg().length;
+  const visibles = $campsProgVisibles().length;
+  const ocultas  = $campsProg().filter('.completed').length;
+
+  $('#txtOcultarCamps').text(visibles === total ? 'Ocultar todas' : ('Ocultar ' + visibles));
+
+  let txt = (visibles === total) ? (total + ' campañas') : (visibles + ' de ' + total);
+  if (ocultas > 0) txt += ' · ' + ocultas + ' sin mostrar';
+  $('#campContador').text(txt);
+}
+
+function filtrarPanelCampanas(){
+  const q   = normCampTxt($('#filtroCampanaTexto').val()).trim();
+  const div = String($('#filtroCampanaDivision').val() || '');
+
+  $campsProg().each(function(){
+    const $li   = $(this);
+    const okTxt = !q   || normCampTxt($li.data('busqueda')).includes(q);
+    const okDiv = !div || String($li.data('division')) === div;
+    $li.toggleClass('camp-filtrada', !(okTxt && okDiv));
+  });
+
+  $('#campSinResultados').remove();
+  // Solo si hay campañas pero ninguna calza: si el ejecutor no tiene campañas,
+  // ya se muestra "No hay campañas programadas" y sobraría este mensaje.
+  if ($campsProg().length > 0 && $campsProgVisibles().length === 0) {
+    $('#campanasCollapse ul.todo').append(
+      '<li id="campSinResultados" class="camp-sin-resultados">Ninguna campaña coincide con el filtro.</li>');
+  }
+  actualizarContadorCamps();
+}
+
+/** Aplica o quita el tachado a un conjunto de campañas. */
+function setTachadoCamps($lis, tachar){
+  $lis.each(function(){
+    const $i = $(this).find('i').first();
+    $(this).toggleClass('completed', tachar);
+    if (tachar) $i.removeClass('fa-square-o').addClass('fa-check-square-o');
+    else        $i.removeClass('fa-check-square-o').addClass('fa-square-o');
+  });
+  guardarCampsOcultas();
+  actualizarContadorCamps();
+  applyFilters();   // una sola vez al final: dentro del bucle serían N pasadas
+}
+
 // ======= Wire-up básico =======
 $(document).ready(function(){
   setTimeout(()=>$('#success-alert').fadeOut('slow'),3000);
   $('#filtroFechaProg, #filtroFechaReag').off('change').on('change', function(){ applyFilters(); });
-  $(document).on('click', '.todo-actions', function(){ const $li=$(this).closest('li'), $i=$li.find('i'); $li.toggleClass('completed'); $i.toggleClass('fa-square-o fa-check-square-o'); applyFilters(); });
+  $(document).on('click', '.todo-actions', function(){
+    const $li = $(this).closest('li');
+    // .find('i').first() sobre el propio <a>: antes se tomaban TODOS los <i> del
+    // <li>, así que en campañas con "Recepción de materiales" el ícono de cubos
+    // también recibía las clases de checkbox y se veía mal.
+    const $i = $(this).find('i').first();
+    $li.toggleClass('completed');
+    $i.toggleClass('fa-square-o fa-check-square-o');
+    if ($li.hasClass('camp-prog')) { guardarCampsOcultas(); actualizarContadorCamps(); }
+    applyFilters();
+  });
+
+  // Panel de campañas programadas: restaurar preferencia + filtros + masivos
+  restaurarCampsOcultas();
+  $('#filtroCampanaTexto').on('input', debounce(filtrarPanelCampanas, 150));
+  $('#filtroCampanaDivision').on('change', filtrarPanelCampanas);
+  $('#btnOcultarCamps').on('click', function(){ setTachadoCamps($campsProgVisibles(), true); });
+  $('#btnMostrarCamps').on('click', function(){ setTachadoCamps($campsProg(), false); });
+  filtrarPanelCampanas();
   // Fix #2: listeners de modo solo aquí — eliminados los duplicados que estaban dentro de initMap()
   $('#btnVerReagendados').on('click', function(){ $('#filtroLocalesReag').val(''); setMode('reag'); });
   $('#btnVerProgramados').on('click', function(){ $('#filtroLocalesProg').val(''); setMode('prog'); });

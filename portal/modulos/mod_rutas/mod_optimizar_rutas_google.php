@@ -257,16 +257,13 @@ $eligibleGroups = [];
 $skipped = [];
 foreach ($byUser as $userKey => $userRows) {
     $components = routeConnectedComponents($userRows, $isolationKm);
-    if (count($components) <= 1) {
-        $eligibleGroups[] = ['user_key' => $userKey, 'rows' => $userRows];
-        continue;
-    }
-
     $largeComponents = array_values(array_filter(
         $components,
         static fn(array $component): bool => count($component) >= $minSize
     ));
-    $keptComponents = $largeComponents ?: [$components[0]];
+    // Route components are used to split planning only.  Do not drop a valid
+    // stop simply because it belongs to a small component.
+    $keptComponents = $components;
     $keep = [];
     foreach ($keptComponents as $component) {
         $componentRows = [];
@@ -351,7 +348,6 @@ foreach ($eligibleGroups as $eligibleGroup) {
             ],
             'allowedVehicleIndices' => $allowedVehicleIndices,
             // Si el desvío vial de un local resulta demasiado caro, Google puede omitirlo.
-            'penaltyCost' => 50,
         ];
     }
 }

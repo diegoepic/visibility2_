@@ -55,7 +55,17 @@ const dump = (page) => page.evaluate(() => new Promise((res) => {
   const page = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
   const errores = [];
   page.on('pageerror', (e) => errores.push(String(e)));
-  page.on('console', (m) => { if (m.type() === 'error') errores.push('console: ' + m.text()); });
+  page.on('console', (m) => {
+    // el sync bloqueado a propósito (ver page.route de abajo) no es un error
+    if (m.type() === 'error' && !/ERR_FAILED|Failed to load resource/i.test(m.text())) {
+      errores.push('console: ' + m.text());
+    }
+  });
+
+  /* config.js apunta al servidor de producción. Sin este corte, correr los
+     tests llenaría la base real con partidas de mentira. Sólo tests/sync.js
+     habla con un endpoint, y es uno simulado. */
+  await page.route('**/sync.php*', (r) => r.abort());
 
   await page.goto(URL);
   await page.waitForTimeout(700);
@@ -150,6 +160,29 @@ const dump = (page) => page.evaluate(() => new Promise((res) => {
   const detalle = (await page.textContent('#lose-detalle')).replace(/\s+/g, ' ').trim();
   check(/(pasaste por|faltó por|borde)/i.test(detalle) && /margen para ganar/i.test(detalle),
     'al perder se muestra por cuánto falló y cuál era el margen', detalle);
+
+  /* La copa del resultado debe mostrar la zona ganadora aunque el nivel de
+     dificultad la oculte durante el juego: ahí deja de ser una ayuda y pasa a
+     ser la explicación de por qué se perdió. */
+  const copaRes = await page.evaluate(() => {
+    const svg = document.querySelector('#lose-copa');
+    if (!svg) return null;
+    return {
+      vino: !!svg.querySelector('.pf-liq'),
+      banda: !!svg.querySelector('rect[fill^="url(#gbanda"]'),
+      marca: !!svg.querySelector('line[stroke-dasharray]'),
+      recortada: svg.getAttribute('viewBox') !== '0 0 300 470',
+    };
+  });
+  check(copaRes && copaRes.vino && copaRes.marca,
+    'la copa del resultado marca hasta dónde llegó el vino', copaRes);
+  check(copaRes && copaRes.banda,
+    'muestra la zona ganadora aunque al jugar estuviera oculta');
+  check(copaRes && copaRes.recortada,
+    'el viewBox se recorta al bowl para que la diferencia se note');
+  const leyenda = (await page.textContent('.copa-leyenda')).replace(/\s+/g, ' ').trim();
+  check(/serviste/i.test(leyenda) && /medida perfecta/i.test(leyenda),
+    'hay leyenda que explica las dos líneas', leyenda);
 
   await page.click('#btn-fin-lose');
   await page.waitForTimeout(400);

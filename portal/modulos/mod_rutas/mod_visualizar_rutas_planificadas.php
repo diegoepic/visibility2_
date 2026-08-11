@@ -1870,6 +1870,41 @@ function leaveRowWithoutRoute(row, reason) {
     row.sin_ruta = true;
 }
 
+function addUnreturnedRowsToNearestRoute(rows, routePlans, skippedById) {
+    const assignedIds = new Set(routePlans.flatMap(route => route.rows.map(row => String(row.row_id))));
+
+    rows.forEach(row => {
+        const rowId = String(row.row_id);
+        if (assignedIds.has(rowId) || skippedById.has(rowId)) return;
+
+        const sameUserRoutes = routePlans.filter(route => route.rows.some(candidate =>
+            String(candidate.usuario_id || candidate.usuario_login || candidate.usuario_nombre || '')
+            === String(row.usuario_id || row.usuario_login || row.usuario_nombre || '')
+        ));
+        const candidateRoutes = sameUserRoutes.length ? sameUserRoutes : routePlans;
+        let selectedRoute = null;
+        let insertAt = 0;
+        let nearestDistance = Infinity;
+
+        candidateRoutes.forEach(route => {
+            route.rows.forEach((candidate, index) => {
+                const distance = distanceBetweenRows(row, candidate);
+                if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    selectedRoute = route;
+                    insertAt = index + 1;
+                }
+            });
+        });
+
+        if (!selectedRoute) return;
+        selectedRoute.rows.splice(insertAt, 0, row);
+        selectedRoute.encodedPolyline = '';
+        row.observacion = 'Incorporado por cercanía: Google no lo devolvió en la ruta, pero tiene coordenadas válidas.';
+        assignedIds.add(rowId);
+    });
+}
+
 async function optimizeVisibleRoutes() {
     if (!planRows.length) {
         alert('Primero debes cargar un archivo.');
@@ -1915,6 +1950,7 @@ async function optimizeVisibleRoutes() {
         const googleResult = await requestGoogleRouteOptimization(candidates, dailyLoad, isolationKm);
         const routePlans = googleResult.routes;
         const skippedById = new Map(googleResult.skipped.map(item => [String(item.row_id), item]));
+        addUnreturnedRowsToNearestRoute(candidates, routePlans, skippedById);
         const assignedIds = new Set(routePlans.flatMap(route => route.rows.map(row => String(row.row_id))));
 
         candidates.forEach(row => {

@@ -22,6 +22,17 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 /* ─────────────────────────────────────────────────────────────
+ * Configuración
+ * ─────────────────────────────────────────────────────────────
+ * Hoja "Fotos Vehículo": incrusta cada foto dentro del .xlsx, así que el
+ * archivo crece muchísimo (cada imagen suma peso real al documento) y además
+ * obliga a leer y convertir todas las fotos del período en el servidor.
+ * Se desactiva por defecto. Poner en true SOLO si se necesita el informe con
+ * las fotos embebidas; el resto de las hojas no depende de esto.
+ */
+const INCLUIR_HOJA_FOTOS = false;
+
+/* ─────────────────────────────────────────────────────────────
  * Seguridad
  * ───────────────────────────────────────────────────────────── */
 $empresa_id = (int)($_SESSION['empresa_id'] ?? 0);
@@ -412,8 +423,14 @@ foreach ($nonPhotoQuestions as $qid => $qdef) {
 
 /* ─────────────────────────────────────────────────────────────
  * Query 5: Preguntas fotográficas y fotos del período
+ * Solo se ejecuta si la hoja de fotos está activa: traer todas las fotos del
+ * período es caro y no lo usa ninguna otra hoja.
  * ───────────────────────────────────────────────────────────── */
 $photoQuestions = []; // [qid => ['text'=>..., 'sort_order'=>...]]
+$photoRows      = []; // [uid][date][grupo] => [...]
+
+if (INCLUIR_HOJA_FOTOS) {
+
 $stmtPQ = $conn->prepare("
     SELECT id, question_text, COALESCE(sort_order, 0) AS sort_order
     FROM form_questions
@@ -431,8 +448,6 @@ while ($row = $resPQ->fetch_assoc()) {
     ];
 }
 $stmtPQ->close();
-
-$photoRows = []; // [uid][date][grupo] => ['visita_id','tipo','primera_hora','ultima_hora','photos'=>[qid=>[]]]
 
 $stmtF = $conn->prepare("
     SELECT
@@ -512,6 +527,8 @@ $stmtF->close();
 uasort($photoQuestions, static function ($a, $b) {
     return ($a['sort_order'] <=> $b['sort_order']) ?: strcmp($a['text'], $b['text']);
 });
+
+} // fin if (INCLUIR_HOJA_FOTOS) — Query 5
 
 /* ─────────────────────────────────────────────────────────────
  * Query 6: Vehículos activos asignados a ejecutores
@@ -1231,8 +1248,13 @@ foreach (['A' => 18, 'B' => 26, 'C' => 10, 'D' => 11,
 $ws4->freezePane('A' . ($hdrRow4 + 1));
 
 /* ═════════════════════════════════════════════════════════════
- * HOJA 5 — FOTOS VEHÍCULO
+ * HOJA 5 — FOTOS VEHÍCULO   (desactivada: ver INCLUIR_HOJA_FOTOS arriba)
+ * Las imágenes se incrustan en el .xlsx y disparan el peso del archivo.
  * ═════════════════════════════════════════════════════════════ */
+$tmpFiles = [];   // se usa en la limpieza final aunque la hoja esté apagada
+
+if (INCLUIR_HOJA_FOTOS) {
+
 $ws5 = $spreadsheet->createSheet()->setTitle('Fotos Vehículo');
 /** @var Worksheet $ws5 */
 $ws5 = $spreadsheet->getSheetByName('Fotos Vehículo');
@@ -1268,8 +1290,7 @@ foreach ($hdr5 as $i => $h) {
 applyHeaderStyle($ws5, 'A' . $hdrRow5 . ':' . $ws5LastLetter . $hdrRow5);
 $ws5->getRowDimension($hdrRow5)->setRowHeight(34);
 
-$r5       = $hdrRow5 + 1;
-$tmpFiles = [];
+$r5 = $hdrRow5 + 1;
 
 foreach ($users as $uid => $udata) {
     if (empty($photoRows[$uid])) {
@@ -1386,6 +1407,8 @@ for ($c = $fixedCols5 + 1; $c <= $ws5TotalCols; $c++) {
     $ws5->getColumnDimension(Coordinate::stringFromColumnIndex($c))->setWidth(24);
 }
 $ws5->freezePane(Coordinate::stringFromColumnIndex($fixedCols5 + 1) . ($hdrRow5 + 1));
+
+} // fin if (INCLUIR_HOJA_FOTOS) — Hoja 5
 
 /* ─────────────────────────────────────────────────────────────
  * Activar primera hoja y descargar

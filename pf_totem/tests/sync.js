@@ -38,11 +38,21 @@ const server = http.createServer((req, res) => {
       const j = JSON.parse(body || '{}');
       if (j.ping) { res.end(JSON.stringify({ ok: true, ping: true, server_time: 'x' })); return; }
       lotes++;
+      const fallidos = { sesiones: [], eventos: [], ganadores: [] };
       // upsert por uuid, igual que el ON DUPLICATE KEY UPDATE del PHP
       for (const k of ['sesiones', 'eventos', 'ganadores']) {
-        (j[k] || []).forEach((r) => recibido[k].set(r.uuid, r));
+        (j[k] || []).forEach((r) => {
+          // 'rechazaEventos' simula que la BD rechaza los eventos (p.ej. una
+          // columna que no existe) mientras el resto se guarda bien
+          if (modo === 'rechazaEventos' && k === 'eventos') { fallidos[k].push(r.uuid); return; }
+          recibido[k].set(r.uuid, r);
+        });
       }
-      res.end(JSON.stringify({ ok: true, server_time: new Date().toISOString() }));
+      res.end(JSON.stringify({
+        ok: true, fallidos,
+        error_db: fallidos.eventos.length ? "Unknown column 'x' in 'field list'" : null,
+        server_time: new Date().toISOString(),
+      }));
     });
     return;
   }
@@ -64,12 +74,21 @@ const totalPend = (p) => p.sesiones + p.eventos + p.ganadores;
   const errores = [];
   page.on('pageerror', (e) => errores.push(String(e)));
 
-  // inyecta la URL y el token del sync en config.js (en producción se editan a mano)
+  /* Apunta el sync al servidor de prueba. Por regex y no por texto literal:
+     config.js trae la URL real de producción, y si el reemplazo falla en
+     silencio el test termina mandándole datos de mentira al servidor de
+     verdad además de no probar nada. */
   await page.route('**/js/config.js', async (route) => {
-    const src = fs.readFileSync(path.join(RAIZ, 'js', 'config.js'), 'utf8')
-      .replace("url: ''", `url: '${base}/sync'`)
-      .replace("token: ''", `token: '${TOKEN}'`)
-      .replace('intervaloSeg: 120', 'intervaloSeg: 30');
+    const orig = fs.readFileSync(path.join(RAIZ, 'js', 'config.js'), 'utf8');
+    const src = orig
+      .replace(/url:\s*'[^']*'/, `url: '${base}/sync'`)
+      .replace(/token:\s*'[^']*'/, `token: '${TOKEN}'`)
+      .replace(/intervaloSeg:\s*\d+/, 'intervaloSeg: 30');
+    if (!src.includes(`${base}/sync`) || !src.includes(TOKEN)) {
+      console.error('\n✗ No se pudo apuntar el sync al servidor de prueba. ' +
+        'Revisa el bloque sync de js/config.js.');
+      process.exit(1);
+    }
     route.fulfill({ status: 200, contentType: 'text/javascript', body: src });
   });
 
@@ -77,6 +96,20 @@ const totalPend = (p) => p.sesiones + p.eventos + p.ganadores;
   modo = 'sinred';
   await page.goto(base + '/index.html');
   await page.waitForTimeout(800);
+
+  // vuelve al inicio desde cualquier pantalla (premio y derrota lo tapan)
+  const alInicio = async () => {
+    for (let i = 0; i < 6; i++) {
+      const act = await page.evaluate(() => (document.querySelector('.screen.active') || {}).id);
+      if (act === 's-attract') return;
+      await page.evaluate(() => {
+        const a = document.querySelector('.screen.active');
+        const b = a && a.querySelector('#btn-fin-lose, #btn-fin-premio');
+        if (b) b.click();
+      });
+      await page.waitForTimeout(350);
+    }
+  };
 
   /* extraMs se suma al tiempo justo de ESTA partida: la línea se sortea en
      cada una, así que no existe un tiempo fijo que sirva siempre. */
@@ -165,6 +198,28 @@ const totalPend = (p) => p.sesiones + p.eventos + p.ganadores;
     'reenviar el mismo lote no duplica nada (upsert por uuid)',
     { antes, ahora: { s: recibido.sesiones.size, e: recibido.eventos.size, g: recibido.ganadores.size } });
   check(totalPend(await pendientes(page)) === 0, 'tras el reenvío queda todo sincronizado');
+
+  /* El caso que rompía antes: el servidor responde ok:true pero no guardó
+     algunos registros. Si el tótem los diera por subidos, se perderían. */
+  console.log('\n--- La BD rechaza registros: no se pueden dar por subidos ---');
+  modo = 'rechazaEventos';
+  await alInicio();
+  await jugar(700);
+  await alInicio();
+  await page.evaluate(() => PFSync.tick());
+  await page.waitForTimeout(2500);
+  let pf = await pendientes(page);
+  check(pf.eventos > 0, 'los eventos rechazados quedan pendientes, no se pierden', pf);
+  check(pf.sesiones === 0, 'lo que sí se guardó queda marcado como sincronizado', pf);
+  const errBD = await page.evaluate(() => PFSync.getStatus().ultimoError);
+  check(/rechazados/i.test(String(errBD)), 'el panel muestra el motivo real del rechazo', errBD);
+
+  console.log('\n--- Se corrige la BD: sube lo que quedó pendiente ---');
+  modo = 'ok';
+  await page.evaluate(() => PFSync.tick());
+  await page.waitForTimeout(2500);
+  pf = await pendientes(page);
+  check(totalPend(pf) === 0, 'al arreglarse la BD sube todo lo pendiente', pf);
 
   console.log('\n--- Token ---');
   check(tokensMalos === 0, 'siempre se envió el token correcto');

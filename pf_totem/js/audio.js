@@ -49,14 +49,17 @@ window.PFAudio = (function () {
   }
 
   // Toque de UI: blip corto y discreto
-  function tick() { tone(880, 0.08, 'sine', 0.12); }
+  function tick() { tone(880, 0.08, 'sine', 0.12); vibrarToque(); }
 
   // Selección de tarjeta: dos notas suaves
-  function select() { tone(660, 0.1, 'sine', 0.15); tone(990, 0.12, 'sine', 0.12, 0.07); }
+  function select() { tone(660, 0.1, 'sine', 0.15); tone(990, 0.12, 'sine', 0.12, 0.07); vibrarToque(); }
 
   /* Servido: ruido blanco filtrado; el filtro sube de frecuencia con el
      nivel de la copa (como cuando se llena un vaso de verdad). */
   function pourStart() {
+    // la vibración va antes del guard: son dos canales independientes y
+    // apagar el sonido no debe apagar también el táctil
+    vibrarServir();
     if (!enabled || !ensure()) return;
     try {
       pourStop(true);
@@ -98,6 +101,7 @@ window.PFAudio = (function () {
 
   // Victoria: arpegio de campana ascendente
   function win() {
+    vibrarWin();
     var notas = [659.25, 830.61, 987.77, 1318.5]; // E5 G#5 B5 E6
     notas.forEach(function (f, i) {
       tone(f, 0.7, 'sine', 0.22, i * 0.12);
@@ -106,14 +110,45 @@ window.PFAudio = (function () {
   }
 
   // Derrota: dos notas suaves descendentes (amable, sin drama)
-  function lose() { tone(440, 0.35, 'sine', 0.18); tone(349.23, 0.5, 'sine', 0.16, 0.22); }
+  function lose() { vibrarLose(); tone(440, 0.35, 'sine', 0.18); tone(349.23, 0.5, 'sine', 0.16, 0.22); }
 
   // Burbuja de espumante: pops cortos aleatorios (lo llama game.js)
   function bubble() { tone(1200 + Math.random() * 900, 0.05, 'sine', 0.05); }
 
+  /* ---------- vibración ----------
+     Vive acá porque es feedback sensorial igual que el sonido y comparte el
+     mismo ciclo de vida. Sólo existe en Android; en iOS y en PC de escritorio
+     navigator.vibrate no está definido y todo esto no hace nada. */
+  var vibraOn = true;
+
+  function vibrar(patron) {
+    if (!vibraOn) return;
+    if (!navigator.vibrate) return;
+    try { navigator.vibrate(patron); } catch (e) {}
+  }
+
+  var PATRONES = {
+    toque: 12,                       // tap de UI, apenas perceptible
+    servir: 25,                      // arranca el vertido
+    win: [45, 55, 45, 55, 160],      // remate del brindis logrado
+    lose: 130,                       // un solo golpe seco
+  };
+
+  function vibrarToque()  { vibrar(PATRONES.toque); }
+  function vibrarServir() { vibrar(PATRONES.servir); }
+  function vibrarWin()    { vibrar(PATRONES.win); }
+  function vibrarLose()   { vibrar(PATRONES.lose); }
+
+  function setVibracion(v) { vibraOn = !!v; if (!v && navigator.vibrate) { try { navigator.vibrate(0); } catch (e) {} } }
+  function vibracionSoportada() { return !!navigator.vibrate; }
+
   function setEnabled(v) { enabled = !!v; if (!v) pourStop(true); }
   function setVolume(v) { volume = v; if (master) master.gain.value = v; }
-  function init(cfg) { enabled = cfg.activado; volume = cfg.volumen; }
+  function init(cfg) {
+    enabled = cfg.activado;
+    volume = cfg.volumen;
+    if (cfg.vibracion !== undefined) vibraOn = !!cfg.vibracion;
+  }
 
   return {
     init: init, ensure: ensure,
@@ -121,5 +156,10 @@ window.PFAudio = (function () {
     pourStart: pourStart, pourLevel: pourLevel, pourStop: pourStop,
     setEnabled: setEnabled, setVolume: setVolume,
     isEnabled: function () { return enabled; },
+    // vibración
+    vibrarToque: vibrarToque, vibrarServir: vibrarServir,
+    vibrarWin: vibrarWin, vibrarLose: vibrarLose,
+    setVibracion: setVibracion, vibracionSoportada: vibracionSoportada,
+    isVibracion: function () { return vibraOn; },
   };
 })();

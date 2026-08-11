@@ -8,6 +8,7 @@
   let states = [];
   let materials = [];
   let information = [];
+  let dataFields = [];
   let surveyQuestions = [];
   let plannedLocales = 0;
   let scope = null;
@@ -19,6 +20,9 @@
   let pendingQuestion = null;
   let pendingQuestionDetail = null;
   let pendingState = null;
+  let pendingDataField = null;
+  let copiedElement = null;
+  let pasteSequence = 0;
 
   const canvas = $("dashboard-canvas");
   const templateView = $("template-view");
@@ -26,6 +30,7 @@
   const modal = $("scope-modal");
   const kpiModal = $("kpi-modal");
   const chartModal = $("chart-modal");
+  const dataModal = $("data-modal");
   const divisionSelect = $("division-select");
   const subdivisionSelect = $("subdivision-select");
   const scopeDateFrom = $("scope-date-from");
@@ -413,6 +418,41 @@
       node.appendChild(img);
     } else if (item.type === "shape") {
       node.appendChild(shapeSvg(item));
+    } else if (item.type === "data_text") {
+      const content = document.createElement("div");
+      content.className = "element-content data-text-content";
+      const label = document.createElement("strong"); label.textContent = item.content || "Dato";
+      const value = document.createElement("span"); value.textContent = item.dataValue || "Sin datos";
+      content.append(label, value);
+      Object.assign(content.style, { fontFamily: item.fontFamily, fontSize: `${item.fontSize}px`, fontWeight: item.fontWeight, color: item.color, background: item.background, textAlign: item.align });
+      node.appendChild(content);
+    } else if (item.type === "data_card") {
+      const content = document.createElement("div");
+      content.className = "element-content kpi-content";
+      const label = document.createElement("span"); label.className = "kpi-label"; label.textContent = item.content || "Dato";
+      const value = document.createElement("strong"); value.className = "kpi-value"; value.textContent = item.dataValue || "0";
+      const detail = document.createElement("small"); detail.className = "kpi-detail"; detail.textContent = item.dataDetail || "Valores distintos";
+      content.append(label, value, detail);
+      Object.assign(content.style, { fontFamily: item.fontFamily, fontSize: `${item.fontSize}px`, fontWeight: item.fontWeight, color: item.color, background: item.background, textAlign: item.align });
+      node.appendChild(content);
+    } else if (item.type === "data_table") {
+      const content = document.createElement("div");
+      content.className = "element-content data-table-content";
+      const table = document.createElement("table");
+      const head = document.createElement("thead");
+      const headRow = document.createElement("tr");
+      (item.dataColumns || []).forEach((column) => { const th = document.createElement("th"); th.textContent = column.label; headRow.appendChild(th); });
+      head.appendChild(headRow);
+      const body = document.createElement("tbody");
+      (item.dataRows || []).slice(0, 20).forEach((row) => {
+        const tr = document.createElement("tr");
+        (item.dataColumns || []).forEach((column) => { const td = document.createElement("td"); td.textContent = row[column.id] ?? ""; tr.appendChild(td); });
+        body.appendChild(tr);
+      });
+      table.append(head, body);
+      content.appendChild(table);
+      Object.assign(content.style, { fontFamily: item.fontFamily, fontSize: `${item.fontSize}px`, color: item.color, background: item.background });
+      node.appendChild(content);
     } else if (item.type === "date_filter") {
       const content = document.createElement("div");
       content.className = "element-content canvas-date-filter";
@@ -478,6 +518,11 @@
   };
 
   const selectedElement = () => elements.find((item) => item.id === selectedId) || null;
+  const cloneElementData = (item) => JSON.parse(JSON.stringify(item));
+  const isEditableTarget = (target) => Boolean(
+    target instanceof Element
+    && target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]')
+  );
   const field = (id, value) => { const node = $(id); if (node) node.value = value ?? ""; };
 
   const syncProperties = () => {
@@ -520,6 +565,42 @@
     saveDraft();
   };
 
+  const removeSelectedElement = () => {
+    if (!selectedId) return false;
+    elements = elements.filter((item) => item.id !== selectedId);
+    selectedId = null;
+    renderElements();
+    syncProperties();
+    saveDraft();
+    return true;
+  };
+
+  const copySelectedElement = () => {
+    const item = selectedElement();
+    if (!item) return false;
+    copiedElement = cloneElementData(item);
+    delete copiedElement.id;
+    pasteSequence = 0;
+    showToast("Elemento copiado. Usa Ctrl+V para pegarlo.", "neutral");
+    return true;
+  };
+
+  const pasteCopiedElement = () => {
+    if (!copiedElement) return false;
+    pasteSequence += 1;
+    const copy = cloneElementData(copiedElement);
+    delete copy.id;
+    const offset = 24 * pasteSequence;
+    const canvasWidth = Math.max(640, Number($("canvas-width").value) || 1200);
+    const canvasHeight = Math.max(480, Number($("canvas-height").value) || 780);
+    copy.x = Math.min(Math.max(0, Number(copy.x || 0) + offset), Math.max(0, canvasWidth - Number(copy.width || 0)));
+    copy.y = Math.min(Math.max(0, Number(copy.y || 0) + offset), Math.max(0, canvasHeight - Number(copy.height || 0)));
+    copy.z = zIndex + 1;
+    createElement(copy);
+    showToast("Copia pegada en el lienzo.");
+    return true;
+  };
+
   const initializeCanvas = () => {
     elements = [];
     selectedId = null;
@@ -558,18 +639,21 @@
     const isState = kind === "state";
     const isMaterial = kind === "material";
     const isInformation = kind === "information";
+    const isData = kind === "data";
     const isSurvey = kind === "survey";
     const label = isSurvey ? item.question_text : item.label;
     const card = document.createElement("article");
-    card.className = `question-card source-card ${isState ? "state-card" : isMaterial ? "material-card" : isInformation ? "information-card" : "survey-card"}`;
+    card.className = `question-card source-card ${isState ? "state-card" : isMaterial ? "material-card" : isInformation || isData ? "information-card" : "survey-card"}`;
     const meta = document.createElement("div");
     meta.className = "question-meta";
-    const source = document.createElement("span"); source.textContent = isSurvey ? "Encuesta" : isInformation ? "Información" : item.group;
+    const source = document.createElement("span"); source.textContent = isSurvey ? "Encuesta" : isInformation ? "Información" : isData ? "Datos" : item.group;
     const usage = document.createElement("small");
     usage.textContent = isSurvey
       ? `${Number(item.formularios || 0).toLocaleString("es-CL")} formularios`
       : isInformation
         ? `${formatMetricNumber(item.value)} ${item.unit}`
+        : isData
+          ? item.group
         : `${Number(item.locales || 0).toLocaleString("es-CL")} locales distintos`;
     meta.append(source, usage);
     const name = document.createElement("strong"); name.textContent = label;
@@ -588,7 +672,7 @@
     }
     const add = document.createElement("button");
     add.type = "button";
-    add.textContent = "+ Agregar como KPI";
+    add.textContent = isData ? "+ Usar este dato" : "+ Agregar como KPI";
     add.addEventListener("click", () => {
       if (isSurvey) {
         openKpiConfigurator(item);
@@ -597,6 +681,10 @@
       if (isInformation) {
         addInformationKpi(item);
         showToast(`${item.label} agregado al lienzo.`);
+        return;
+      }
+      if (isData) {
+        openDataConfigurator(item);
         return;
       }
       openStateKpiConfigurator(item, isMaterial ? "material" : "state");
@@ -626,9 +714,10 @@
     const filteredStates = states.filter((item) => `${item.group} ${item.label}`.toLowerCase().includes(term));
     const filteredMaterials = materials.filter((item) => item.label.toLowerCase().includes(term));
     const filteredInformation = information.filter((item) => item.label.toLowerCase().includes(term));
+    const filteredData = dataFields.filter((item) => `${item.group} ${item.label}`.toLowerCase().includes(term));
     const filteredSurvey = surveyQuestions.filter((item) => item.question_text.toLowerCase().includes(term));
     list.replaceChildren();
-    if (!filteredStates.length && !filteredMaterials.length && !filteredInformation.length && !filteredSurvey.length) {
+    if (!filteredStates.length && !filteredMaterials.length && !filteredInformation.length && !filteredData.length && !filteredSurvey.length) {
       const empty = document.createElement("div");
       empty.className = "empty-state";
       empty.innerHTML = "<span>0</span><strong>Sin resultados</strong><small>Prueba con otra búsqueda.</small>";
@@ -667,6 +756,13 @@
       list.appendChild(createAccordion("Información", `${filteredInformation.length} indicadores`, Boolean(term), body));
     }
 
+    if (filteredData.length) {
+      const body = document.createElement("div");
+      body.className = "accordion-body";
+      filteredData.forEach((item) => body.appendChild(createSourceCard(item, "data")));
+      list.appendChild(createAccordion("Datos", `${filteredData.length} campos`, Boolean(term), body));
+    }
+
     if (filteredSurvey.length) {
       const body = document.createElement("div");
       body.className = "accordion-body";
@@ -676,6 +772,101 @@
   };
 
   $("question-search").addEventListener("input", renderQuestions);
+
+  const selectedDataDisplayType = () => document.querySelector('input[name="data-display-type"]:checked')?.value || "text";
+  const selectedDataFields = () => Array.from(document.querySelectorAll('#data-table-options input[type="checkbox"]:checked')).map((input) => input.value);
+  const syncDataDisplayOptions = () => {
+    const isTable = selectedDataDisplayType() === "table";
+    $("data-table-fieldset").hidden = !isTable;
+    $("create-data-element").disabled = isTable && selectedDataFields().length === 0;
+  };
+  const closeDataConfigurator = () => {
+    dataModal.classList.remove("show");
+    window.setTimeout(() => { dataModal.hidden = true; }, 180);
+    pendingDataField = null;
+    $("data-feedback").textContent = "";
+  };
+  const openDataConfigurator = (item) => {
+    pendingDataField = item;
+    $("data-field-label").textContent = `${item.group} · ${item.label}`;
+    $("data-feedback").textContent = "";
+    const defaultType = document.querySelector('input[name="data-display-type"][value="text"]');
+    if (defaultType) defaultType.checked = true;
+    const options = $("data-table-options");
+    options.replaceChildren();
+    dataFields.forEach((fieldItem) => {
+      const label = document.createElement("label"); label.className = "answer-option";
+      const input = document.createElement("input"); input.type = "checkbox"; input.value = fieldItem.id; input.checked = fieldItem.id === item.id;
+      input.addEventListener("change", () => {
+        const selected = selectedDataFields();
+        if (selected.length > 8) { input.checked = false; showToast("La tabla admite un máximo de 8 columnas.", "neutral"); }
+        syncDataDisplayOptions();
+      });
+      const copy = document.createElement("span");
+      const name = document.createElement("strong"); name.textContent = fieldItem.label;
+      const group = document.createElement("small"); group.textContent = fieldItem.group;
+      copy.append(name, group); label.append(input, copy); options.appendChild(label);
+    });
+    syncDataDisplayOptions();
+    dataModal.hidden = false;
+    requestAnimationFrame(() => dataModal.classList.add("show"));
+  };
+
+  document.querySelectorAll('input[name="data-display-type"]').forEach((input) => input.addEventListener("change", syncDataDisplayOptions));
+  $("cancel-data").addEventListener("click", closeDataConfigurator);
+  $("create-data-element").addEventListener("click", async () => {
+    if (!pendingDataField || !scope) return;
+    const displayType = selectedDataDisplayType();
+    const fieldIds = displayType === "table" ? selectedDataFields() : [pendingDataField.id];
+    if (!fieldIds.length) return;
+    const button = $("create-data-element");
+    button.disabled = true;
+    button.textContent = "Consultando datos...";
+    $("data-feedback").textContent = "";
+    const form = new FormData();
+    form.append("action", "data_preview");
+    form.append("csrf_token", config.csrf);
+    form.append("id_division", scope.id_division);
+    form.append("id_subdivision", scope.id_subdivision);
+    form.append("id_formulario", scope.id_formulario || 0);
+    form.append("date_from", scope.date_from);
+    fieldIds.forEach((fieldId) => form.append("fields[]", fieldId));
+    try {
+      const data = await apiRequest(config.api, { method: "POST", body: form });
+      const baseSource = { type: "data_field", fields: fieldIds, report_date_from: scope.date_from, limited: Boolean(data.limited) };
+      if (displayType === "text") {
+        createElement({
+          type: "data_text", x: 90, y: 650 + (elements.length % 5) * 22, width: 440, height: 72,
+          content: pendingDataField.label, dataValue: data.sample || "Sin datos", fontSize: 17, fontWeight: "700",
+          color: "#17243b", background: "#ffffff", align: "left", radius: 10, source: baseSource,
+        });
+      } else if (displayType === "card") {
+        createElement({
+          type: "data_card", x: 90, y: 650 + (elements.length % 5) * 22, width: 320, height: 145,
+          content: pendingDataField.label, dataValue: Number(data.distinct_count || 0).toLocaleString("es-CL"),
+          dataDetail: data.sample ? `Valores distintos · Ejemplo: ${data.sample}` : "Valores distintos",
+          fontSize: 15, fontWeight: "700", color: "#ffffff", background: "#7562a7", align: "left", radius: 14,
+          source: { ...baseSource, metric: "distinct", value: Number(data.distinct_count || 0) },
+        });
+      } else {
+        createElement({
+          type: "data_table", x: 80, y: 650 + (elements.length % 4) * 24,
+          width: Math.min(1100, Math.max(520, fieldIds.length * 185)), height: 360,
+          content: `Tabla · ${data.columns.map((column) => column.label).join(" · ")}`,
+          dataColumns: data.columns || [], dataRows: data.rows || [], fontSize: 14, fontWeight: "400",
+          color: "#344156", background: "#ffffff", align: "left", radius: 8, source: baseSource,
+        });
+      }
+      const addedLabel = pendingDataField.label;
+      closeDataConfigurator();
+      showToast(`${addedLabel} agregado al lienzo.`);
+    } catch (error) {
+      $("data-feedback").textContent = error.message;
+    } finally {
+      button.innerHTML = 'Agregar al lienzo <span>→</span>';
+      syncDataDisplayOptions();
+    }
+  });
 
   const closeKpiConfigurator = () => {
     kpiModal.classList.remove("show");
@@ -956,12 +1147,13 @@
       states = data.states || [];
       materials = data.materials || [];
       information = data.information || [];
+      dataFields = data.data_fields || [];
       surveyQuestions = data.survey_questions || [];
       plannedLocales = Number(data.planned_locales || 0);
       scope = { id_division: Number(divisionId), id_subdivision: Number(subdivisionId), id_formulario: Number(formId), division: data.scope.division, subdivision: data.scope.subdivision, activity: data.scope.activity, date_from: dateFrom };
       $("scope-division").textContent = scope.division;
       $("scope-subdivision").textContent = `${scope.subdivision} · ${scope.activity} · Desde ${scope.date_from}`;
-      $("question-count").textContent = `${states.length.toLocaleString("es-CL")} estados · ${materials.length.toLocaleString("es-CL")} materiales · ${information.length.toLocaleString("es-CL")} datos · ${surveyQuestions.length.toLocaleString("es-CL")} encuestas`;
+      $("question-count").textContent = `${states.length.toLocaleString("es-CL")} estados · ${materials.length.toLocaleString("es-CL")} materiales · ${information.length.toLocaleString("es-CL")} indicadores · ${dataFields.length.toLocaleString("es-CL")} datos · ${surveyQuestions.length.toLocaleString("es-CL")} encuestas`;
       $("editor-template-name").textContent = selectedTemplate.name;
       $("topbar-status").textContent = `${scope.division} · ${scope.subdivision}`;
       renderQuestions();
@@ -970,7 +1162,7 @@
       templateView.hidden = true;
       editorView.hidden = false;
       window.scrollTo({ top: 0, behavior: "smooth" });
-      showToast(`${states.length} estados, ${materials.length} materiales, ${information.length} indicadores y ${surveyQuestions.length} preguntas cargados.`);
+      showToast(`${states.length} estados, ${materials.length} materiales, ${information.length} indicadores, ${dataFields.length} datos y ${surveyQuestions.length} preguntas cargados.`);
     } catch (error) {
       $("scope-feedback").textContent = error.message;
     } finally {
@@ -1270,11 +1462,31 @@
     event.target.value = "";
   });
 
-  $("delete-element").addEventListener("click", () => {
-    if (!selectedId) return;
-    elements = elements.filter((item) => item.id !== selectedId);
-    selectedId = null;
-    renderElements(); syncProperties(); saveDraft();
+  $("delete-element").addEventListener("click", removeSelectedElement);
+
+  document.addEventListener("keydown", (event) => {
+    if (isEditableTarget(event.target)) return;
+    if (editorView.hidden || !scope) return;
+
+    const modifier = event.ctrlKey || event.metaKey;
+    const key = String(event.key || "").toLowerCase();
+
+    if (modifier && key === "c") {
+      if (copySelectedElement()) event.preventDefault();
+      return;
+    }
+
+    if (modifier && key === "v") {
+      if (pasteCopiedElement()) event.preventDefault();
+      return;
+    }
+
+    if (event.key === "Delete" || event.code === "Delete") {
+      if (removeSelectedElement()) {
+        event.preventDefault();
+        showToast("Elemento eliminado.", "neutral");
+      }
+    }
   });
 
   canvas.addEventListener("pointerdown", (event) => {

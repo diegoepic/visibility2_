@@ -122,6 +122,28 @@ try {
     $guardadas = ['sesiones' => 0, 'eventos' => 0, 'ganadores' => 0];
     $rechazadas = 0;
 
+    /* uuids que NO se pudieron guardar. El tótem sólo marca como sincronizado
+       lo que no venga en esta lista: sin esto, un INSERT que falla (columna
+       que no existe, dato fuera de rango, deadlock) se respondía igual con
+       ok:true, el tótem vaciaba su cola y esos registros se perdían para
+       siempre sin que nadie se enterara. */
+    $fallidos = ['sesiones' => [], 'eventos' => [], 'ganadores' => []];
+    $ultimoError = null;
+
+    /* Ejecuta un registro sin abortar el lote entero: un dato malo no puede
+       bloquear para siempre todo lo demás que sí es válido. */
+    $ejecutar = static function (mysqli_stmt $st, string $uuid, string $grupo)
+            use (&$guardadas, &$fallidos, &$ultimoError): void {
+        try {
+            if ($st->execute()) { $guardadas[$grupo]++; return; }
+            $fallidos[$grupo][] = $uuid;
+            $ultimoError = $st->error ?: 'execute() devolvió false';
+        } catch (Throwable $e) {
+            $fallidos[$grupo][] = $uuid;
+            $ultimoError = $e->getMessage();
+        }
+    };
+
     // ------------------------------------------------------------ sesiones
     $sesiones = is_array($in['sesiones'] ?? null) ? $in['sesiones'] : [];
     if ($sesiones) {
@@ -163,7 +185,7 @@ try {
                 $uuid, $dev, $inicio, $fin, $dur, $momento, $variedad,
                 $vino, $resultado, $precision, $nivel, $linea, $dificultad
             );
-            if ($st->execute()) $guardadas['sesiones']++;
+            $ejecutar($st, $uuid, 'sesiones');
         }
         $st->close();
     }
@@ -187,7 +209,7 @@ try {
                 ? mb_substr((string)json_encode($e['data'], JSON_UNESCAPED_UNICODE), 0, 4000)
                 : null;
             $st->bind_param('ssssss', $uuid, $sess, $dev, $ts, $tipo, $data);
-            if ($st->execute()) $guardadas['eventos']++;
+            $ejecutar($st, $uuid, 'eventos');
         }
         $st->close();
     }
@@ -218,17 +240,27 @@ try {
             $ts      = $aFecha($g['ts'] ?? null);
             $st->bind_param('sssssssis', $uuid, $sess, $dev, $nombre, $email,
                             $tel, $codigo, $consent, $ts);
-            if ($st->execute()) $guardadas['ganadores']++;
+            $ejecutar($st, $uuid, 'ganadores');
         }
         $st->close();
     }
 
     $conn->commit();
 
+    $totalFallidos = count($fallidos['sesiones']) + count($fallidos['eventos'])
+        + count($fallidos['ganadores']);
+    if ($totalFallidos > 0) {
+        error_log('[pf_totem_sync] ' . $totalFallidos . ' registros fallaron. Último error: '
+            . (string)$ultimoError);
+    }
+
     echo json_encode([
         'ok'          => true,
         'guardadas'   => $guardadas,
         'rechazadas'  => $rechazadas,
+        // el tótem NO marca como sincronizados los uuids de esta lista
+        'fallidos'    => $fallidos,
+        'error_db'    => $ultimoError,
         'device_id'   => $deviceId,
         'server_time' => date('Y-m-d H:i:s'),
     ], JSON_UNESCAPED_UNICODE);

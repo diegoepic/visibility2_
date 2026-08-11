@@ -11,26 +11,41 @@
 
 <!-- ============ PANTALLA 0: ATTRACT (inicio / reposo) ============ -->
 <section class="screen active" id="s-attract">
+  <!-- Zona invisible para abrir el panel: 5 toques seguidos. Va en la esquina
+       y no sobre el logo, así el logo entero sirve para empezar a jugar y no
+       queda una zona muerta justo en el centro de la pantalla. -->
+  <button id="admin-trigger" aria-label="Ajustes del tótem"></button>
   <div class="attract-inner">
-    <div class="monograma" id="monograma"><span>PF</span></div>
-    <h1 class="marca">PUNTÍ FERRER</h1>
-    <div class="submarca">— FINE WINES CHILE —</div>
+    <img class="logo-principal" src="assets/logo-pf-light.png"
+         alt="Puntí Ferrer · Viñedos y Bodega">
     <div class="claim" id="attract-claim">Brindemos lo real</div>
+
+    <!-- El premio va grande y arriba: la gente pasa caminando y decide en dos
+         segundos sin leer nada. Antes esto era una línea de texto al pie. -->
+    <div class="premio-gancho">
+      <span class="gancho-sobre">Sirve la medida perfecta y gana</span>
+      <span class="gancho-cifra">20% OFF</span>
+      <span class="gancho-bajo">en tienda.puntiferrer.cl</span>
+    </div>
+
+    <!-- La copa se llena y frena en la línea en loop: enseña la mecánica sin
+         que nadie tenga que leer una instrucción (ver demoAttract en game.js) -->
     <div class="copa-flotante" aria-hidden="true">
       <svg viewBox="0 0 300 470" id="attract-copa"></svg>
     </div>
+
     <div class="cta-inicio" id="cta-inicio">
       <span class="cta-anillo"></span>
       <span class="cta-texto">Toca la pantalla<br>para comenzar</span>
     </div>
-    <div class="attract-premio">Participa por un <b>20% OFF</b> en tienda.puntiferrer.cl</div>
+    <div class="contador-social oculto" id="contador-social"></div>
   </div>
 </section>
 
 <!-- ============ PANTALLA 1: ELIGE TU MOMENTO ============ -->
 <section class="screen" id="s-momento">
   <header class="cabecera">
-    <div class="cabecera-pf">PF</div>
+    <div class="cabecera-pf" role="img" aria-label="Punti Ferrer"></div>
     <div class="cabecera-linea"></div>
   </header>
   <h2 class="titulo-paso">Elige tu<br><em>momento ideal</em></h2>
@@ -79,7 +94,7 @@
 <!-- ============ PANTALLA 2: ELIGE TU VARIEDAD ============ -->
 <section class="screen" id="s-variedad">
   <header class="cabecera">
-    <div class="cabecera-pf">PF</div>
+    <div class="cabecera-pf" role="img" aria-label="Punti Ferrer"></div>
     <div class="cabecera-linea"></div>
   </header>
   <h2 class="titulo-paso">Elige tu<br><em>variedad favorita</em></h2>
@@ -106,7 +121,7 @@
 <!-- ============ PANTALLA 2.5: TU VINO IDEAL ============ -->
 <section class="screen" id="s-vino">
   <header class="cabecera">
-    <div class="cabecera-pf">PF</div>
+    <div class="cabecera-pf" role="img" aria-label="Punti Ferrer"></div>
     <div class="cabecera-linea"></div>
   </header>
   <div class="vino-tag" id="vino-tag">TU VINO IDEAL</div>
@@ -120,7 +135,7 @@
 <!-- ============ PANTALLA 3: SIRVE LA MEDIDA PERFECTA ============ -->
 <section class="screen" id="s-servir">
   <header class="cabecera">
-    <div class="cabecera-pf">PF</div>
+    <div class="cabecera-pf" role="img" aria-label="Punti Ferrer"></div>
     <div class="cabecera-linea"></div>
   </header>
   <h2 class="titulo-paso chico">Sirve la<br><em>medida perfecta</em></h2>
@@ -137,6 +152,8 @@
     <div class="destello" aria-hidden="true"></div>
     <div class="resultado-tag">¡LO LOGRASTE!</div>
     <h2 class="resultado-titulo">Brindaste<br><em>lo real</em></h2>
+    <!-- la copa como quedó: muestra la zona ganadora y dónde paró el vino -->
+    <div class="copa-resultado"><svg viewBox="0 0 300 470" id="win-copa"></svg></div>
     <div class="precision-caja">Precisión del brindis<br><b id="win-precision">100%</b></div>
     <p class="resultado-bajada">Te ganaste un <b>20% OFF</b> en tu próxima compra.<br>Déjanos tus datos para entregarte tu código.</p>
     <button class="btn-oro" id="btn-reclamar">Reclamar mi premio</button>
@@ -148,6 +165,12 @@
   <div class="resultado-inner">
     <div class="resultado-tag opaco" id="lose-tag">¡CASI!</div>
     <h2 class="resultado-titulo" id="lose-msg">Esta vez el brindis<br><em>no fue perfecto</em></h2>
+    <div class="copa-resultado"><svg viewBox="0 0 300 470" id="lose-copa"></svg></div>
+    <!-- sin esto las dos líneas de la copa no se interpretan solas -->
+    <div class="copa-leyenda">
+      <span><i class="ley-tuya"></i>hasta acá serviste</span>
+      <span><i class="ley-meta"></i>la medida perfecta</span>
+    </div>
     <div class="precision-caja lose-caja" id="lose-detalle"></div>
     <p class="resultado-bajada">Lo real también es intentarlo.<br>Encuentra tu vino ideal en <b>tienda.puntiferrer.cl</b></p>
     <button class="btn-linea" id="btn-fin-lose">Finalizar</button>
@@ -181,7 +204,7 @@
 <!-- ============ PANTALLA 5: TU PREMIO ============ -->
 <section class="screen" id="s-premio">
   <header class="cabecera">
-    <div class="cabecera-pf">PF</div>
+    <div class="cabecera-pf" role="img" aria-label="Punti Ferrer"></div>
     <div class="cabecera-linea"></div>
   </header>
   <div class="resultado-tag">TU PREMIO</div>
@@ -199,7 +222,7 @@
   <span data-paso="1">1</span><span data-paso="2">2</span><span data-paso="3">3</span><span data-paso="4">4</span><span data-paso="5">5</span>
 </footer>
 
-<!-- ============ ADMIN (oculto: 5 toques en el monograma PF) ============ -->
+<!-- ============ ADMIN (oculto: 5 toques en la esquina superior izquierda) ============ -->
 <div id="admin-overlay" class="oculto">
   <!-- Ingreso de PIN -->
   <div id="admin-pin">
@@ -260,6 +283,8 @@
           <div class="admin-nota">Se puede cambiar durante el evento según cómo
             reaccione la gente. Afecta solo a las partidas siguientes.</div>
           <label class="admin-campo fila"><input type="checkbox" id="admin-sonido"> Sonido activado</label>
+          <label class="admin-campo fila"><input type="checkbox" id="admin-vibra"> Vibración</label>
+          <div class="admin-nota" id="admin-vibra-nota"></div>
         </div>
         <div class="admin-bloque">
           <h4>Códigos únicos (modo pool)</h4>

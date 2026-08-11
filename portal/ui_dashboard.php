@@ -2288,15 +2288,16 @@ body.modal-open {
 
     <div class="modern-filter-field" style="justify-content:flex-end;">
       <label>&nbsp;</label>
-      <a
-        href="descargar_excel_dashboard.php?division=<?= (int)$division_seleccionada ?>&amp;estado=<?= (int)$estado_seleccionado ?>"
+      <button
+        type="button"
+        id="openDashboardExcelModal"
         class="modern-download-btn"
-        style="text-decoration:none; white-space:nowrap;"
+        style="white-space:nowrap; border:0;"
         title="Descargar Dashboard de campañas y rutas"
       >
         <i class="fas fa-file-excel"></i>
         <span>Descargar Dashboard</span>
-      </a>
+      </button>
     </div>
 
   </form>
@@ -3274,6 +3275,78 @@ body.modal-open {
   </div>
 </div>
 
+<!-- Modal: selección del contenido del Dashboard Excel -->
+<div class="modal fade" id="modalDashboardExcel" tabindex="-1" role="dialog" aria-labelledby="modalDashboardExcelLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="modalDashboardExcelLabel">Descargar Dashboard en Excel</h5>
+          <small class="text-muted">Selecciona las campañas y rutas que formarán parte del informe.</small>
+        </div>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div class="custom-control custom-checkbox border rounded px-3 py-2 mb-3" style="background:#f8fafc; padding-left:2.5rem !important;">
+          <input type="checkbox" class="custom-control-input" id="dashboardExcelSelectAll" checked>
+          <label class="custom-control-label font-weight-bold" for="dashboardExcelSelectAll">
+            Seleccionar todas
+          </label>
+          <span class="badge badge-light ml-2" id="dashboardExcelSelectedCount">0 seleccionadas</span>
+        </div>
+
+        <label for="dashboardExcelOptions" class="font-weight-bold">
+          Campañas activas y rutas disponibles
+        </label>
+        <select id="dashboardExcelOptions" class="form-control" multiple size="13" style="min-height:300px;">
+          <?php if ($campanasProgramadas): ?>
+            <optgroup label="Campañas activas (<?= count($campanasProgramadas) ?>)">
+              <?php foreach ($campanasProgramadas as $campanaDashboard): ?>
+                <option
+                  class="dashboard-excel-option"
+                  value="<?= (int)($campanaDashboard['id_campana'] ?? 0) ?>"
+                  selected
+                ><?= htmlspecialchars((string)($campanaDashboard['nombre_campana'] ?? ''), ENT_QUOTES, 'UTF-8') ?></option>
+              <?php endforeach; ?>
+            </optgroup>
+          <?php endif; ?>
+
+          <?php if ($rutasPlanificadas): ?>
+            <optgroup label="Rutas activas (<?= count($rutasPlanificadas) ?>)">
+              <?php foreach ($rutasPlanificadas as $rutaDashboard): ?>
+                <option
+                  class="dashboard-excel-option"
+                  value="<?= (int)($rutaDashboard['id_campana'] ?? 0) ?>"
+                  selected
+                ><?= htmlspecialchars((string)($rutaDashboard['nombre_campana'] ?? ''), ENT_QUOTES, 'UTF-8') ?></option>
+              <?php endforeach; ?>
+            </optgroup>
+          <?php endif; ?>
+        </select>
+        <small class="form-text text-muted">
+          Puedes usar Ctrl (Windows) o Cmd (Mac) para agregar o quitar elementos de la selección.
+        </small>
+
+        <?php if (!$campanasProgramadas && !$rutasPlanificadas): ?>
+          <div class="alert alert-light border mt-3 mb-0">
+            No hay campañas ni rutas para la división y estado seleccionados.
+          </div>
+        <?php endif; ?>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success" id="downloadSelectedDashboardExcel">
+          <i class="fas fa-file-excel mr-1"></i> Generar Excel
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: selección de descarga Excel -->
 <div class="modal fade" id="modalDescargaExcel" tabindex="-1" aria-labelledby="modalDescargaExcelLabel" aria-hidden="true">
   <div class="modal-dialog modal-sm modal-dialog-centered">
@@ -3846,6 +3919,80 @@ $('#btnDescargarExcelConfirm').on('click', function () {
 
   ocultarOverlayDescarga();
 });
+</script>
+
+<script>
+(() => {
+  const getDashboardOptions = () => Array.from(document.querySelectorAll('.dashboard-excel-option'));
+
+  const syncDashboardSelection = () => {
+    const options = getDashboardOptions();
+    const selected = options.filter(option => option.selected);
+    const selectAll = document.getElementById('dashboardExcelSelectAll');
+    const counter = document.getElementById('dashboardExcelSelectedCount');
+    const downloadButton = document.getElementById('downloadSelectedDashboardExcel');
+
+    if (selectAll) {
+      selectAll.checked = options.length > 0 && selected.length === options.length;
+      selectAll.indeterminate = selected.length > 0 && selected.length < options.length;
+    }
+    if (counter) {
+      counter.textContent = `${selected.length} seleccionada${selected.length === 1 ? '' : 's'}`;
+    }
+    if (downloadButton) {
+      downloadButton.disabled = selected.length === 0;
+    }
+  };
+
+  $('#openDashboardExcelModal').on('click', function () {
+    const options = getDashboardOptions();
+    if (options.length === 0) {
+      alert('No hay campañas ni rutas disponibles para los filtros seleccionados.');
+      return;
+    }
+
+    options.forEach(option => { option.selected = true; });
+    syncDashboardSelection();
+    $('#modalDashboardExcel').modal('show');
+  });
+
+  $('#dashboardExcelSelectAll').on('change', function () {
+    const checked = this.checked;
+    getDashboardOptions().forEach(option => { option.selected = checked; });
+    syncDashboardSelection();
+  });
+
+  $('#dashboardExcelOptions').on('change', syncDashboardSelection);
+
+  $('#downloadSelectedDashboardExcel').on('click', function () {
+    const ids = getDashboardOptions()
+      .filter(option => option.selected)
+      .map(option => option.value);
+
+    if (ids.length === 0) {
+      alert('Selecciona al menos una campaña o ruta.');
+      return;
+    }
+
+    const params = new URLSearchParams({
+      division: '<?= (int)$division_seleccionada ?>',
+      estado: '<?= (int)$estado_seleccionado ?>',
+      ids: ids.join(',')
+    });
+    const token = generarTokenDescarga();
+    params.set('download_token', token);
+
+    $('#modalDashboardExcel').modal('hide');
+    mostrarOverlayDescarga();
+    esperarDescargaReal(token, ocultarOverlayDescarga);
+    descargarEnIframe(
+      `descargar_excel_dashboard.php?${params.toString()}`,
+      'downloadFrameDashboard'
+    );
+  });
+
+  syncDashboardSelection();
+})();
 </script>
 
 <script>

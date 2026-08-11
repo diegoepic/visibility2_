@@ -11,6 +11,9 @@ fs.mkdirSync(OUT, { recursive: true });
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 0.5 });
+  // no tocar la base de produccion desde los tests
+  await page.route('**/sync.php*', (r) => r.abort());
+
   await page.goto(URL);
   await page.waitForTimeout(900);
 
@@ -121,7 +124,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await alInicio();
 
   // panel admin
-  for (let i = 0; i < 5; i++) { await page.click('#monograma'); await page.waitForTimeout(90); }
+  for (let i = 0; i < 5; i++) { await page.click('#admin-trigger'); await page.waitForTimeout(90); }
   await page.waitForTimeout(400);
   await shot('12-admin-pin');
   for (const d of ['2', '4', '6', '8']) await page.click(`.pin-pad button[data-d="${d}"]`);

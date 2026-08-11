@@ -105,6 +105,34 @@ function editorValidDate(string $value): bool
     return checkdate((int)$parts[2], (int)$parts[3], (int)$parts[1]);
 }
 
+function editorDataFields(): array
+{
+    return [
+        'codigo_local' => ['label' => 'Código de local', 'group' => 'Local', 'sql' => 'data_local.codigo'],
+        'nombre_local' => ['label' => 'Nombre local', 'group' => 'Local', 'sql' => 'data_local.nombre'],
+        'direccion' => ['label' => 'Dirección', 'group' => 'Local', 'sql' => 'data_local.direccion'],
+        'comuna' => ['label' => 'Comuna', 'group' => 'Ubicación', 'sql' => 'data_comuna.comuna'],
+        'region' => ['label' => 'Región', 'group' => 'Ubicación', 'sql' => 'data_region.region'],
+        'cuenta' => ['label' => 'Cuenta', 'group' => 'Local', 'sql' => 'data_cuenta.nombre'],
+        'fecha_planificada' => ['label' => 'Fecha planificada', 'group' => 'Planificación', 'sql' => 'DATE(fq.fechaPropuesta)'],
+        'fecha_visita' => ['label' => 'Fecha visita', 'group' => 'Visita', 'sql' => 'DATE(fq.fechaVisita)'],
+        'ejecutor' => ['label' => 'Ejecutor', 'group' => 'Visita', 'sql' => "TRIM(CONCAT_WS(' ', NULLIF(TRIM(data_user.nombre), ''), NULLIF(TRIM(data_user.apellido), '')))"],
+        'actividad' => ['label' => 'Actividad / gestión', 'group' => 'Gestión', 'sql' => 'f.nombre'],
+        'material' => ['label' => 'Material', 'group' => 'Gestión', 'sql' => 'fq.material'],
+        'cantidad_implementada' => ['label' => 'Cantidad implementada', 'group' => 'Gestión', 'sql' => 'fq.valor'],
+        'cantidad_planificada' => ['label' => 'Cantidad planificada', 'group' => 'Gestión', 'sql' => 'fq.valor_propuesto'],
+    ];
+}
+
+function editorDataFieldCatalog(): array
+{
+    $catalog = [];
+    foreach (editorDataFields() as $id => $definition) {
+        $catalog[] = ['id' => $id, 'label' => $definition['label'], 'group' => $definition['group']];
+    }
+    return $catalog;
+}
+
 function editorValidateScope(mysqli $db, int $divisionId, int $subdivisionId): ?array
 {
     if ($subdivisionId === 0) {
@@ -435,6 +463,123 @@ if ($action === 'activities') {
     $activities = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $stmt->close();
     editorJson(['ok' => true, 'activities' => $activities]);
+}
+
+if ($action === 'data_preview') {
+    editorRequireCsrf();
+    $divisionId = (int)($_POST['id_division'] ?? 0);
+    $subdivisionId = isset($_POST['id_subdivision']) ? (int)$_POST['id_subdivision'] : -1;
+    $formId = (int)($_POST['id_formulario'] ?? 0);
+    $dateFrom = trim((string)($_POST['date_from'] ?? ''));
+    $requestedFields = isset($_POST['fields']) && is_array($_POST['fields']) ? $_POST['fields'] : [];
+    $definitions = editorDataFields();
+    $fieldIds = [];
+    foreach (array_slice($requestedFields, 0, 8) as $fieldId) {
+        $fieldId = trim((string)$fieldId);
+        if (isset($definitions[$fieldId]) && !in_array($fieldId, $fieldIds, true)) $fieldIds[] = $fieldId;
+    }
+    if ($divisionId <= 0 || $subdivisionId < 0 || !editorValidDate($dateFrom) || !$fieldIds
+        || !editorCanAccessDivision($db, $divisionId, $sessionDivisionId, $canManage)) {
+        editorJson(['ok' => false, 'message' => 'La selección de datos o el alcance no es válido.'], 422);
+    }
+    if (!editorValidateScope($db, $divisionId, $subdivisionId)
+        || !editorValidateFormScope($db, $formId, $divisionId, $subdivisionId)) {
+        editorJson(['ok' => false, 'message' => 'La selección de datos no corresponde al alcance actual.'], 422);
+    }
+
+    $hasFormSubdivision = editorHasColumn($db, 'formulario', 'id_subdivision');
+    $allSubdivisions = $subdivisionId === 0;
+    $scopeJoin = ($hasFormSubdivision || $allSubdivisions) ? '' : ' INNER JOIN usuario data_scope_user ON data_scope_user.id = fq.id_usuario ';
+    $scopeCondition = $hasFormSubdivision ? 'f.id_subdivision = ?' : 'data_scope_user.id_subdivision = ?';
+    $selectParts = [];
+    $columns = [];
+    foreach ($fieldIds as $fieldId) {
+        $definition = $definitions[$fieldId];
+        $selectParts[] = $definition['sql'] . ' AS `' . $fieldId . '`';
+        $columns[] = ['id' => $fieldId, 'label' => $definition['label']];
+    }
+    $sql = 'SELECT ' . implode(', ', $selectParts) . '
+            FROM formularioQuestion fq
+            INNER JOIN formulario f ON f.id = fq.id_formulario
+            INNER JOIN local data_local ON data_local.id = fq.id_local
+            LEFT JOIN comuna data_comuna ON data_comuna.id = data_local.id_comuna
+            LEFT JOIN region data_region ON data_region.id = data_comuna.id_region
+            LEFT JOIN cuenta data_cuenta ON data_cuenta.id = data_local.id_cuenta
+            LEFT JOIN usuario data_user ON data_user.id = fq.id_usuario
+            ' . $scopeJoin . '
+            WHERE f.id_division = ?';
+    if ($formId > 0) $sql .= ' AND f.id = ?';
+    if (!$allSubdivisions) $sql .= " AND {$scopeCondition}";
+    $sql .= ' AND (fq.fechaVisita >= ? OR fq.fechaPropuesta >= ?)
+              ORDER BY COALESCE(fq.fechaVisita, fq.fechaPropuesta) DESC, data_local.codigo ASC
+              LIMIT 300';
+    $types = 'i';
+    $params = [$divisionId];
+    if ($formId > 0) { $types .= 'i'; $params[] = $formId; }
+    if (!$allSubdivisions) { $types .= 'i'; $params[] = $subdivisionId; }
+    $types .= 'ss'; $params[] = $dateFrom; $params[] = $dateFrom;
+    $stmt = $db->prepare($sql);
+    if (!$stmt) {
+        error_log('[perfect_store_editor][data_preview] ' . $db->error);
+        editorJson(['ok' => false, 'message' => 'No fue posible preparar los datos del reporte. Código: DATA-PREP'], 500);
+    }
+    $stmt->bind_param($types, ...$params);
+    if (!$stmt->execute()) {
+        error_log('[perfect_store_editor][data_preview_execute] ' . $stmt->error);
+        $stmt->close();
+        editorJson(['ok' => false, 'message' => 'No fue posible consultar los datos del reporte. Código: DATA-EXEC'], 500);
+    }
+    $rawDataRows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    $primaryId = $fieldIds[0];
+    $countSql = 'SELECT COUNT(DISTINCT ' . $definitions[$primaryId]['sql'] . ') AS total
+                 FROM formularioQuestion fq
+                 INNER JOIN formulario f ON f.id = fq.id_formulario
+                 INNER JOIN local data_local ON data_local.id = fq.id_local
+                 LEFT JOIN comuna data_comuna ON data_comuna.id = data_local.id_comuna
+                 LEFT JOIN region data_region ON data_region.id = data_comuna.id_region
+                 LEFT JOIN cuenta data_cuenta ON data_cuenta.id = data_local.id_cuenta
+                 LEFT JOIN usuario data_user ON data_user.id = fq.id_usuario
+                 ' . $scopeJoin . '
+                 WHERE f.id_division = ?';
+    if ($formId > 0) $countSql .= ' AND f.id = ?';
+    if (!$allSubdivisions) $countSql .= " AND {$scopeCondition}";
+    $countSql .= ' AND (fq.fechaVisita >= ? OR fq.fechaPropuesta >= ?)';
+    $countStmt = $db->prepare($countSql);
+    if (!$countStmt) {
+        error_log('[perfect_store_editor][data_count] ' . $db->error);
+        editorJson(['ok' => false, 'message' => 'No fue posible contabilizar los datos del reporte. Código: DATA-COUNT'], 500);
+    }
+    $countStmt->bind_param($types, ...$params);
+    $countStmt->execute();
+    $distinctCount = (int)($countStmt->get_result()->fetch_assoc()['total'] ?? 0);
+    $countStmt->close();
+
+    $rows = [];
+    $seenRows = [];
+    foreach ($rawDataRows as $row) {
+        foreach ($fieldIds as $fieldId) {
+            $row[$fieldId] = trim((string)($row[$fieldId] ?? ''));
+        }
+        $rowKey = json_encode(array_values($row), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($rowKey === false || isset($seenRows[$rowKey])) continue;
+        $seenRows[$rowKey] = true;
+        $rows[] = $row;
+        if (count($rows) >= 20) break;
+    }
+    $sample = '';
+    foreach ($rows as $row) {
+        if (($row[$primaryId] ?? '') !== '') { $sample = (string)$row[$primaryId]; break; }
+    }
+    editorJson([
+        'ok' => true,
+        'columns' => $columns,
+        'rows' => $rows,
+        'sample' => $sample,
+        'distinct_count' => $distinctCount,
+        'limited' => count($rows) >= 20 || count($rawDataRows) >= 300,
+    ]);
 }
 
 if ($action === 'question_options') {
@@ -885,7 +1030,16 @@ if ($action === 'questions') {
     }, $stmt->get_result()->fetch_all(MYSQLI_ASSOC));
     $stmt->close();
 
-    editorJson(['ok' => true, 'scope' => $scope, 'states' => $states, 'materials' => $materials, 'information' => $information, 'planned_locales' => $plannedLocales, 'survey_questions' => $surveyQuestions]);
+    editorJson([
+        'ok' => true,
+        'scope' => $scope,
+        'states' => $states,
+        'materials' => $materials,
+        'information' => $information,
+        'data_fields' => editorDataFieldCatalog(),
+        'planned_locales' => $plannedLocales,
+        'survey_questions' => $surveyQuestions,
+    ]);
 }
 
 if ($action === 'upload') {

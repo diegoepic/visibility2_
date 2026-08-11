@@ -278,8 +278,14 @@
     <div class="box">
       <label class="upload-label" for="archivoRuta">Archivo Excel o CSV</label>
       <input class="file-control" type="file" id="archivoRuta" accept=".xlsx,.xls,.csv">
+      <button class="btn btn-outline-info btn-block mt-2" id="btnDescargarTemplate" type="button">
+        <i class="fa fa-download"></i> Descargar template CSV
+      </button>
       <p class="hint">
         Formato esperado: Codigo Local, Nombre, Lat, Lng, Usuario Nombre, Fecha Ruta, Grupo Ruta y Orden Visita.
+      </p>
+      <p class="hint">
+        Para continuar correctamente el ciclo, incluye las rutas del período anterior con Fecha Ruta y Dia Plan.
       </p>
       <p class="hint">
         Rojo con !: error o sin ruta. Amarillo con !: sin ruta asignada con sugerencia. Colores neon: rutas planificadas.
@@ -305,7 +311,7 @@
         <i class="fa fa-calendar-alt"></i> Descargar como ruta mensual
       </button>
       <p class="hint">
-        Repite el patron de dias planificados sobre los dias habiles del mes. Evita repetir el mismo cliente en menos de 5 dias cuando existe alternativa.
+        Continúa desde la ruta siguiente a la última fecha planificada del archivo. Repite el patrón sobre los días hábiles y evita repetir el mismo cliente en menos de 5 días cuando existe alternativa.
       </p>
 
       <div class="status" id="estadoCarga">Esperando archivo...</div>
@@ -1179,6 +1185,13 @@ function routeSortValue(routeName, points, fallbackIndex) {
   return fallbackIndex + 1;
 }
 
+function plannedDateValue(point) {
+  const normalized = normalizeDateValue(point && point.fechaRuta);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null;
+  const value = new Date(`${normalized}T12:00:00`);
+  return Number.isNaN(value.getTime()) ? null : value;
+}
+
 function buildMonthlyTemplates() {
   const users = new Map();
   loadedPoints.forEach((point, index) => {
@@ -1196,10 +1209,25 @@ function buildMonthlyTemplates() {
         key: routeName,
         routeName,
         firstIndex: index,
+        latestDate: null,
         points: []
       });
     }
-    users.get(user).get(routeName).points.push(point);
+
+    const template = users.get(user).get(routeName);
+    const pointDate = plannedDateValue(point);
+    const pointTime = pointDate ? pointDate.getTime() : null;
+    const latestTime = template.latestDate ? template.latestDate.getTime() : null;
+
+    if (pointTime !== null && (latestTime === null || pointTime > latestTime)) {
+      template.latestDate = pointDate;
+      template.points = [point];
+    } else if (
+      (pointTime !== null && latestTime !== null && pointTime === latestTime)
+      || (pointTime === null && latestTime === null)
+    ) {
+      template.points.push(point);
+    }
   });
 
   const output = new Map();
@@ -1214,6 +1242,48 @@ function buildMonthlyTemplates() {
     output.set(user, templates);
   });
   return output;
+}
+
+function buildMonthlyHistory(userName, templates) {
+  const lastVisitByClient = new Map();
+  let latestPlannedTime = null;
+  const routesAtLatestDate = new Set();
+
+  loadedPoints.forEach(point => {
+    if (point.usuarioNombre !== userName || pointStatus(point).type !== 'ok') return;
+    const plannedDate = plannedDateValue(point);
+    if (!plannedDate) return;
+
+    const time = plannedDate.getTime();
+    const clientKey = point.codigo || point.nombre || point.id;
+    const previousClientDate = lastVisitByClient.get(clientKey);
+    if (!previousClientDate || time > previousClientDate.getTime()) {
+      lastVisitByClient.set(clientKey, plannedDate);
+    }
+
+    if (latestPlannedTime === null || time > latestPlannedTime) {
+      latestPlannedTime = time;
+      routesAtLatestDate.clear();
+      routesAtLatestDate.add(point.grupoRuta);
+    } else if (time === latestPlannedTime) {
+      routesAtLatestDate.add(point.grupoRuta);
+    }
+  });
+
+  let lastTemplateIndex = -1;
+  templates.forEach((template, index) => {
+    if (routesAtLatestDate.has(template.routeName)) {
+      lastTemplateIndex = Math.max(lastTemplateIndex, index);
+    }
+  });
+
+  return {
+    lastVisitByClient,
+    latestPlannedDate: latestPlannedTime === null ? null : new Date(latestPlannedTime),
+    nextTemplateIndex: lastTemplateIndex >= 0
+      ? (lastTemplateIndex + 1) % templates.length
+      : 0
+  };
 }
 
 function hasRecentClientConflict(template, lastVisitByClient, date, minDays) {
@@ -1291,9 +1361,17 @@ function downloadMonthlyWorkbook() {
   const rows = [];
 
   templatesByUser.forEach((templates, userName) => {
-    let templateIndex = 0;
-    const lastVisitByClient = new Map();
-    days.forEach((date, dayIndex) => {
+    const history = buildMonthlyHistory(userName, templates);
+    let templateIndex = history.nextTemplateIndex;
+    const lastVisitByClient = history.lastVisitByClient;
+    const latestPlannedMonth = history.latestPlannedDate
+      ? formatDateSql(history.latestPlannedDate).slice(0, 7)
+      : '';
+    const pendingDays = history.latestPlannedDate && latestPlannedMonth === monthValue
+      ? days.filter(date => date.getTime() > history.latestPlannedDate.getTime())
+      : days;
+
+    pendingDays.forEach((date, dayIndex) => {
       const chosen = chooseMonthlyTemplate(templates, templateIndex, lastVisitByClient, date);
       if (!chosen) return;
       templateIndex = chosen.nextIndex;
@@ -1304,6 +1382,11 @@ function downloadMonthlyWorkbook() {
       });
     });
   });
+
+  if (!rows.length) {
+    alert('No existen días posteriores a la última fecha planificada para el mes seleccionado.');
+    return;
+  }
 
   const headers = loadedHeaders.length
     ? loadedHeaders
@@ -1322,6 +1405,36 @@ function downloadMonthlyWorkbook() {
   XLSX.writeFile(workbook, `${currentFileBaseName}_mensual_${monthValue}.xlsx`);
 }
 
+function downloadRouteTemplate() {
+  const headers = [
+    'Codigo Local',
+    'Nombre',
+    'Direccion',
+    'Comuna',
+    'Lat',
+    'Lng',
+    'Usuario Nombre',
+    'Fecha Ruta',
+    'Grupo Ruta',
+    'Orden Visita',
+    'Dia Plan',
+    'Semana Plan',
+    'Dia Semana Nº',
+    'Dia Semana'
+  ];
+
+  const csv = '\uFEFF' + headers.join(';') + '\r\n';
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'template_ruta_mensual.csv';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 document.getElementById('archivoRuta').addEventListener('change', event => {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
@@ -1333,7 +1446,11 @@ document.getElementById('archivoRuta').addEventListener('change', event => {
   reader.onload = evt => {
     try {
       const data = new Uint8Array(evt.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
+      const workbook = XLSX.read(data, {
+        type: 'array',
+        raw: true,
+        cellDates: false
+      });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       handleRows(rowsFromWorksheet(sheet));
     } catch (error) {
@@ -1362,6 +1479,7 @@ document.getElementById('selectorRuta').addEventListener('change', () => {
 
 document.getElementById('btnDescargarRuta').addEventListener('click', downloadEditedWorkbook);
 document.getElementById('btnDescargarMensual').addEventListener('click', downloadMonthlyWorkbook);
+document.getElementById('btnDescargarTemplate').addEventListener('click', downloadRouteTemplate);
 document.getElementById('btnEditarSeleccion').addEventListener('click', openReassignModal);
 document.getElementById('modalUsuario').addEventListener('change', event => populateModalRoutes(event.target.value));
 document.getElementById('btnAplicarReasignacion').addEventListener('click', applyReassignment);

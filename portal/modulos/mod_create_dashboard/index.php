@@ -26,7 +26,7 @@ $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JS
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Creador visual de dashboards Perfect Store.">
     <title>Perfect Store Studio</title>
-    <link rel="stylesheet" href="assets/styles.css?v=18">
+    <link rel="stylesheet" href="assets/styles.css?v=19">
 </head>
 <body>
 <main class="studio-shell" id="top">
@@ -104,7 +104,7 @@ $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JS
                 <div class="panel-kicker">ALCANCE ACTUAL</div>
                 <div class="scope-summary"><strong id="scope-division">—</strong><span id="scope-subdivision">—</span><button type="button" id="change-scope">Cambiar</button></div>
                 <div class="panel-heading"><div><strong>Fuentes y variables KPI</strong><small id="question-count">Selecciona un alcance</small></div></div>
-                <label class="search-field"><span>⌕</span><input id="question-search" type="search" placeholder="Buscar estado o encuesta..." autocomplete="off"></label>
+                <label class="search-field"><span>⌕</span><input id="question-search" type="search" placeholder="Buscar estado, dato o encuesta..." autocomplete="off"></label>
                 <div class="question-list source-catalog" id="question-list"><div class="empty-state"><span>01</span><strong>Define el alcance</strong><small>Los estados y encuestas aparecerán aquí.</small></div></div>
             </aside>
 
@@ -174,6 +174,29 @@ $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JS
     </section>
 </div>
 
+<div class="modal-backdrop" id="data-modal" hidden>
+    <section class="scope-modal data-modal" role="dialog" aria-modal="true" aria-labelledby="data-modal-title">
+        <div class="modal-step">AGREGAR DATOS AL LIENZO</div>
+        <div class="kpi-modal-heading">
+            <div><h2 id="data-modal-title">¿Cómo quieres mostrar este dato?</h2><p id="data-field-label">—</p></div>
+            <span class="question-type-badge">DATOS</span>
+        </div>
+        <fieldset class="data-display-selector">
+            <legend>Tipo de elemento</legend>
+            <label><input type="radio" name="data-display-type" value="text" checked><span><strong>Texto</strong><small>Muestra el primer valor disponible.</small></span></label>
+            <label><input type="radio" name="data-display-type" value="card"><span><strong>Tarjeta</strong><small>Cuenta valores distintos del campo.</small></span></label>
+            <label><input type="radio" name="data-display-type" value="table"><span><strong>Tabla</strong><small>Combina hasta 8 campos y 20 filas.</small></span></label>
+        </fieldset>
+        <fieldset class="answer-selector data-table-fields" id="data-table-fieldset" hidden>
+            <legend>Columnas de la tabla · selecciona una o más</legend>
+            <div id="data-table-options"></div>
+        </fieldset>
+        <div class="counting-note"><span>◎</span><div><strong>Datos del alcance actual</strong><small>Se respetarán división, subdivisión, actividad y fecha inicial del informe.</small></div></div>
+        <div class="modal-feedback" id="data-feedback" role="status"></div>
+        <div class="modal-actions"><button type="button" class="secondary-button" id="cancel-data">Cancelar</button><button type="button" class="primary-button" id="create-data-element">Agregar al lienzo <span>→</span></button></div>
+    </section>
+</div>
+
 <div class="modal-backdrop" id="chart-modal" hidden>
     <section class="scope-modal chart-modal" role="dialog" aria-modal="true" aria-labelledby="chart-modal-title">
         <div class="modal-step">CREAR VISUALIZACIÓN</div>
@@ -212,6 +235,6 @@ $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JS
 <div class="toast" id="toast" role="status"></div>
 <script type="application/json" id="template-data"><?= json_encode($templates, $jsonFlags) ?></script>
 <script>window.PERFECT_STORE_CONFIG = <?= json_encode(['api' => 'api/editor.php', 'csrf' => $_SESSION['csrf_token']], $jsonFlags) ?>;</script>
-<script src="assets/app.js?v=18" defer></script>
+<script src="assets/app.js?v=19" defer></script>
 </body>
 </html>

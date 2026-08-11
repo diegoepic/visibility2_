@@ -1,0 +1,77 @@
+{
+    "exported_at": "2026-08-05T01:49:57.763Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "sw_version": "v7.1.4",
+    "stats": {
+        "today": {
+            "ymd": "2026-08-04",
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        },
+        "overall": {
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        }
+    },
+    "queue": {
+        "total_records": 0,
+        "last_created_at": null,
+        "last_updated_at": null
+    },
+    "recent_events": [],
+    "storage_estimate": {
+        "usage": 11490851,
+        "quota": 10748909091,
+        "percent_used": 0
+    },
+    "connection_info": {
+        "effectiveType": "3g",
+        "downlink": 1.350000000000000088817841970012523233890533447265625,
+        "rtt": 450,
+        "saveData": false
+    },
+    "service_worker": {
+        "active": "active",
+        "installing": null,
+        "waiting": null,
+        "scope": "https://visibility.cl/visibility2/app/"
+    },
+    "idb_databases": [
+        {
+            "name": "v2_journal",
+            "version": 9
+        },
+        {
+            "name": "v2_mappings",
+            "version": 1
+        },
+        {
+            "name": "v2_offline",
+            "version": 10
+        },
+        {
+            "name": "v2_route_cache",
+            "version": 1
+        },
+        {
+            "name": "visibility2-v2",
+            "version": 9
+        }
+    ],
+    "recent_errors": [],
+    "client_time": {
+        "local": "Tue Aug 04 2026 21:49:57 GMT-0400 (hora estándar de Chile)",
+        "timezone": "America/Santiago",
+        "offset_minutes": 240
+    },
+    "csrf_token": "eb6326d3eeff1df5f9f6980415bb64688c3333807d5c61d83d26a02d31d57a72"
+}
