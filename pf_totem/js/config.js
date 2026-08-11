@@ -9,7 +9,7 @@ window.PF_CONFIG = {
 
   // PIN de la pantalla admin (se abre con 5 toques seguidos en el
   // monograma PF de la pantalla de inicio)
-  adminPin: '2468',
+  adminPin: '2435',
 
   // Segundos sin tocar la pantalla antes de volver al inicio
   // (la partida en curso queda registrada como "abandono")
@@ -39,6 +39,17 @@ window.PF_CONFIG = {
        aceleracion  — cuánto se acelera el vertido por segundo (0 = constante)
        compensacion — segundos de latencia que se le perdonan al jugador
        mostrarBanda — dibujar la zona ganadora dentro de la copa
+       mostrarLinea — dibujar la línea dorada objetivo (default: sí). En
+                      `false` el jugador no ve dónde apuntar mientras juega;
+                      la línea real igual se muestra al final (ganó, o agotó
+                      los intentos) para que el resultado se explique solo.
+       intentos     — cuántos toques puede fallar antes de que la partida se
+                      cierre como perdida (default: 1, sin reintentos). Con
+                      intentos > 1, cada fallo con intentos restantes NO
+                      cierra la partida: sólo avisa la DIRECCIÓN ("más
+                      lleno"/"más vacío"), nunca el número — eso es lo que
+                      hace jugable un nivel sin línea sin que se sienta puro
+                      azar (ver evaluarServida en game.js).
 
      Sobre 'compensacion': nadie suelta exactamente cuando decide hacerlo.
      Entre que el ojo ve la línea, el cerebro ordena soltar y la pantalla
@@ -62,6 +73,13 @@ window.PF_CONFIG = {
     normal:   { tolerancia: 4.5, velocidad: 25, aceleracion: 0.45, compensacion: 0.10, mostrarBanda: true  }, // ~54% gana
     dificil:  { tolerancia: 3.0, velocidad: 25, aceleracion: 0.45, compensacion: 0.09, mostrarBanda: false }, // ~38% gana
     experta:  { tolerancia: 2.0, velocidad: 25, aceleracion: 0.45, compensacion: 0.09, mostrarBanda: false }, // ~27% gana
+    // Sin línea ni banda: el jugador sirve "a ojo" y sólo sabe si se pasó o
+    // le faltó después de soltar. `intentos` le da 3 toques por partida antes
+    // de perder — el tercer valor de la fila de abajo, editable acá mismo.
+    // ⚠ tolerancia sin calibrar todavía: es un punto de partida razonado (ver
+    // README § "Cómo se gana"), no una medición. Correr `node tests/dificultad.js`
+    // (trae un bloque informativo para este nivel) y ajustar antes del evento.
+    imposible: { tolerancia: 2.0, velocidad: 25, aceleracion: 0.45, compensacion: 0.09, mostrarBanda: false, mostrarLinea: false, intentos: 3 },
   },
 
   /* La línea NO puede estar siempre a la misma altura. En un stand la gente

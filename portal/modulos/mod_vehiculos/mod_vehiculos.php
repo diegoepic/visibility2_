@@ -2104,7 +2104,7 @@ body.fleet-photo-open {
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="modo"
                                        id="modoClasico" value="clasico" checked>
-                                <label class="form-check-label" for="modoClasico">Clásico</label>
+                                <label class="form-check-label" for="modoClasico">Fin de semana</label>
                             </div>
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="modo"

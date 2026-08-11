@@ -292,6 +292,15 @@ button { font-family: inherit; color: inherit; background: none; border: none; c
   color: var(--gris); line-height: 1.5; margin-bottom: 1vh;
 }
 .servir-instr b { color: var(--dorado-claro); font-weight: 500; }
+/* Puntos de intentos (sólo en niveles con dif().intentos > 1, ver
+   renderIntentos en game.js): dorado sólido = disponible, hueco = ya usado. */
+.servir-intentos { display: flex; gap: 10px; justify-content: center; margin-bottom: 1.4vh; }
+.servir-intentos .punto {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--dorado);
+  transition: background .25s ease, opacity .25s ease;
+}
+.servir-intentos .punto.usado { background: transparent; border: 1.5px solid rgba(201,164,92,.45); opacity: .7; }
 .servir-stage {
   flex: 1; width: 100%; display: flex; align-items: center; justify-content: center;
   touch-action: none;

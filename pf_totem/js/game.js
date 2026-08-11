@@ -36,6 +36,8 @@
   }
 
   function dif() { return C.dificultades[difActual] || C.dificultades.facil; }
+  function intentosMax() { return dif().intentos || 1; }
+  function debeMostrarLinea() { return dif().mostrarLinea !== false; }
 
   /* ---------- física del vertido ----------
      El vino acelera: v(t) = velocidad * (1 + aceleracion * t), así que el
@@ -352,6 +354,12 @@
     var esEspumante = varDef.id === 'espumante';
     var nivelIni = opts.nivelInicial || 0;
     var hIni = H * nivelIni / 100;
+    /* La línea se oculta en vivo cuando dif().mostrarLinea === false (nivel
+       "imposible": sirve a ojo, sin referencia). En el resultado se muestra
+       SIEMPRE, igual que la banda: ahí deja de ser una ayuda para jugar y
+       pasa a ser la explicación de por qué ganó o perdió. */
+    var ocultarLinea = opts.sinLinea ||
+      (!opts.decorativa && !opts.resultado && dif().mostrarLinea === false);
 
     var burbujas = '';
     if (esEspumante) {
@@ -398,7 +406,7 @@
       // chorro al servir
       '<rect class="pf-chorro" x="147.5" width="5" rx="2.5" y="' + (g.rim.cy - 30) + '" height="0" fill="url(#' + idChorro + ')"/>' +
       // línea dorada objetivo (es parte del juego: las copas de catálogo la omiten)
-      (opts.sinLinea ? '' :
+      (ocultarLinea ? '' :
         '<line x1="' + g.lineX1 + '" x2="' + g.lineX2 + '" y1="' + yLinea + '" y2="' + yLinea +
         '" stroke="#e8cf94" stroke-width="9" opacity="0.18" stroke-linecap="round"/>' +
         '<line x1="' + g.lineX1 + '" x2="' + g.lineX2 + '" y1="' + yLinea + '" y2="' + yLinea +
@@ -429,6 +437,7 @@
     elLiq: null, elChorro: null, elBubs: null,
     // oleaje: sólo visual, no entra en el cálculo del resultado
     amp: 0, tOla: 0, asentando: false,
+    intento: 1, // toque actual dentro de la partida (ver dif().intentos)
   };
 
   var OLA_CFG = {
@@ -449,6 +458,7 @@
     serve.amp = 0;
     serve.tOla = 0;
     serve.asentando = false;
+    serve.intento = 1;
     sortearLinea();   // altura distinta en cada partida: no se puede memorizar
     var svg = $('#copa-svg');
     svg.innerHTML = buildCopaSvg(varDef, { uid: 'juego' });
@@ -460,7 +470,26 @@
     serve.elBubs = svg.querySelector('.pf-bubs');
     $('#servir-hint').textContent = ' ';
     $('#servir-hint').classList.remove('err');
+    $('#servir-instr').innerHTML = debeMostrarLinea()
+      ? 'Mantén presionada la copa y suelta<br>justo en la <b>línea dorada</b>'
+      : 'No hay línea: mantén presionada la copa<br>y suelta donde creas que es la <b>medida perfecta</b>';
     $('#servir-instr').style.opacity = '1';
+    renderIntentos();
+  }
+
+  /* Puntos de "vidas" sobre la copa: sólo se muestran en niveles con
+     dif().intentos > 1. Dorado sólido = disponible, hueco = ya fallado. */
+  function renderIntentos() {
+    var el = $('#servir-intentos');
+    if (!el) return;
+    var max = intentosMax();
+    if (max <= 1) { el.classList.add('oculto'); el.innerHTML = ''; return; }
+    el.classList.remove('oculto');
+    var html = '';
+    for (var i = 1; i <= max; i++) {
+      html += '<span class="punto' + (i < serve.intento ? ' usado' : '') + '"></span>';
+    }
+    el.innerHTML = html;
   }
 
   function pintarNivel() {
@@ -575,6 +604,40 @@
     var diff = nivel - centro;
     var absd = Math.abs(diff);
     var gano = !derrame && absd <= tol;
+    var maxIntentos = intentosMax();
+
+    /* Nivel "sin línea, con reintentos" (dif().intentos > 1): un fallo con
+       intentos disponibles NO cierra la partida. Sólo se avisa la DIRECCIÓN
+       ("más lleno"/"más vacío"), nunca el número: si acá se mostrara el %
+       de diferencia, en 2-3 intentos se podría triangular la línea exacta y
+       el nivel dejaría de ser difícil para volverse un cálculo. El número
+       completo sí se muestra al final (ganó, o agotó los intentos): ahí ya
+       no hay partida que proteger y evita que la derrota se sienta al azar. */
+    if (!gano && serve.intento < maxIntentos) {
+      logEvent('servida_intento', {
+        intento: serve.intento, intentosMax: maxIntentos,
+        nivel: Math.round(nivel * 10) / 10, diferencia: Math.round(diff * 10) / 10,
+        derrame: !!derrame, dificultad: difActual,
+      });
+      serve.intento++;
+      var hintDir = $('#servir-hint');
+      hintDir.textContent = (derrame || diff > 0)
+        ? 'Más vacío — sirve un poco menos'
+        : 'Más lleno — sirve un poco más';
+      hintDir.classList.add('err');
+      renderIntentos();
+      setTimeout(function () {
+        if (pantalla !== 's-servir') return; // se fue de la pantalla mientras esperaba
+        serve.nivel = 0;
+        serve.tServido = 0;
+        serve.amp = 0;
+        serve.asentando = false;
+        serve.estado = 'ready';
+        pintarNivel();
+        $('#servir-instr').style.opacity = '1';
+      }, 1400);
+      return;
+    }
 
     var precision;
     if (gano) precision = Math.max(86, Math.round(100 - (absd / tol) * 14));
@@ -594,6 +657,7 @@
       resultado: session.resultado,
       precision: precision,
       dificultad: difActual,
+      intentos: serve.intento,
     });
 
     var hint = $('#servir-hint');
@@ -656,12 +720,13 @@
         $('#lose-msg').innerHTML = derrame
           ? 'La medida se pasó<br><em>de lo real</em>'
           : (diff > 0 ? 'Te pasaste<br><em>de la medida</em>' : 'Te faltó<br><em>un poco</em>');
+        var margenTxt = 'el margen para ganar era de ' + tol.toFixed(1).replace('.', ',') + '%';
+        if (maxIntentos > 1) margenTxt += ' · usaste tus ' + maxIntentos + ' intentos';
         $('#lose-detalle').innerHTML =
           (derrame ? 'Llenaste la copa hasta el <b>borde</b>'
                    : 'Te ' + (diff > 0 ? 'pasaste' : 'faltó') + ' por <b>' +
                      absd.toFixed(1).replace('.', ',') + '%</b>') +
-          '<br><span class="lose-margen">el margen para ganar era de ' +
-          tol.toFixed(1).replace('.', ',') + '%</span>';
+          '<br><span class="lose-margen">' + margenTxt + '</span>';
         logEvent('perdio', { motivo: derrame ? 'derrame' : (diff > 0 ? 'pasado' : 'corto') });
         finalizeSession('perdio');
         showScreen('s-lose');

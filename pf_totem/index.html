@@ -140,6 +140,8 @@
   </header>
   <h2 class="titulo-paso chico">Sirve la<br><em>medida perfecta</em></h2>
   <p class="servir-instr" id="servir-instr">Mantén presionada la copa y suelta<br>justo en la <b>línea dorada</b></p>
+  <!-- oculto salvo en niveles con dif().intentos > 1 (ver renderIntentos en game.js) -->
+  <div class="servir-intentos oculto" id="servir-intentos"></div>
   <div class="servir-stage" id="servir-stage">
     <svg viewBox="0 0 300 470" id="copa-svg"></svg>
   </div>
@@ -278,6 +280,7 @@
               <option value="normal">Normal — gana ~54%</option>
               <option value="dificil">Difícil — gana ~38%</option>
               <option value="experta">Experta — gana ~27%</option>
+              <option value="imposible">Imposible — sin línea, 3 intentos</option>
             </select>
           </label>
           <div class="admin-nota">Se puede cambiar durante el evento según cómo
