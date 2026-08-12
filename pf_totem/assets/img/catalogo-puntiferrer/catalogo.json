@@ -1,0 +1,83 @@
+{
+  "_nota": "Descargado de https://puntiferrer.com/ (linea.html por cada línea) el 2026-08-11. Fotos con canal alfa real (RGBA), no las genéricas de fondo blanco que menciona el README de pf_totem como pendiente del cliente. Útil para reemplazar el [PLACEHOLDER] de config.js → matriz.",
+  "lineas": [
+    {
+      "id": "signature",
+      "nombre": "Signature",
+      "badge": "Valle de Cachapoal",
+      "vinos": [
+        { "archivo": "signature-cabernet.png", "nombre": "Cabernet Sauvignon", "tipo": "Tinto", "cepa": "Cabernet Sauvignon", "valle": "Valle Central", "notas": "Cassis, cedro y taninos firmes pero elegantes.", "maridaje": "Cortes a la parrilla, cordero." },
+        { "archivo": "signature-carmenere.png", "nombre": "Carménère", "tipo": "Tinto", "cepa": "Carménère", "valle": "Valle Central", "notas": "Fruta roja madura, especias dulces y un final suave y jugoso.", "maridaje": "Asados, carnes rojas, quesos maduros." },
+        { "archivo": "signature-merlot.png", "nombre": "Merlot", "tipo": "Tinto", "cepa": "Merlot", "valle": "Valle Central", "notas": "Ciruela, guinda y un cuerpo redondo y amable.", "maridaje": "Pastas, cerdo, tablas." },
+        { "archivo": "signature-malbec.png", "nombre": "Malbec", "tipo": "Tinto", "cepa": "Malbec", "valle": "Valle Central", "notas": "Frutos negros, violetas y textura aterciopelada.", "maridaje": "Carnes, empanadas, asado." },
+        { "archivo": "signature-sauvignonblanc.png", "nombre": "Sauvignon Blanc", "tipo": "Blanco", "cepa": "Sauvignon Blanc", "valle": "Valle Central", "notas": "Cítricos, hierba fresca y acidez vibrante.", "maridaje": "Mariscos, ceviche, ensaladas." },
+        { "archivo": "signature-chardonnay.png", "nombre": "Chardonnay", "tipo": "Blanco", "cepa": "Chardonnay", "valle": "Valle Central", "notas": "Fruta blanca, un toque de vainilla y nuez tostada.", "maridaje": "Aves, pastas cremosas, pescados." },
+        { "archivo": "signature-rose.png", "nombre": "Rosé", "tipo": "Rosado", "cepa": "Rosé", "valle": "Chile", "notas": "Frutilla, frambuesa y un final fresco y seco.", "maridaje": "Aperitivo, sushi, comida picante." }
+      ]
+    },
+    {
+      "id": "reserva",
+      "nombre": "Reserva",
+      "badge": "Valle de Cachapoal",
+      "vinos": [
+        { "archivo": "reserva-cabernet.png", "nombre": "Cabernet Sauvignon", "tipo": "Tinto", "cepa": "Cabernet Sauvignon", "valle": "Valle del Rapel", "notas": "Estructura, cassis y un final largo.", "maridaje": "Carnes rojas." },
+        { "archivo": "reserva-carmenere.png", "nombre": "Carménère", "tipo": "Tinto", "cepa": "Carménère", "valle": "Valle del Rapel", "notas": "Especiado, redondo, con fruta roja y pimienta.", "maridaje": "Asados, guisos." },
+        { "archivo": "reserva-pinotnoir.png", "nombre": "Pinot Noir", "tipo": "Tinto", "cepa": "Pinot Noir", "valle": "Valle de Aconcagua", "notas": "Frutos rojos, delicado y sedoso.", "maridaje": "Salmón, aves, charcutería." },
+        { "archivo": "reserva-chardonnay.png", "nombre": "Chardonnay", "tipo": "Blanco", "cepa": "Chardonnay", "valle": "Valle de Cachapoal", "notas": "Cremoso y fresco, con fruta blanca y notas tostadas.", "maridaje": "Aves, pescados, pastas." },
+        { "archivo": "reserva-sauvignonblanc.png", "nombre": "Sauvignon Blanc", "tipo": "Blanco", "cepa": "Sauvignon Blanc", "valle": "Valle de Cachapoal", "notas": "Fresco y cítrico, con buena acidez.", "maridaje": "Mariscos, ensaladas." }
+      ]
+    },
+    {
+      "id": "granreserva",
+      "nombre": "Gran Reserva",
+      "badge": "Selección",
+      "vinos": [
+        { "archivo": "granreserva-cabernet.png", "nombre": "Cabernet Sauvignon", "tipo": "Tinto", "cepa": "Cabernet Sauvignon", "valle": "Valle de Cachapoal", "notas": "Concentrado, con cassis, cedro y guarda en barrica.", "maridaje": "Cortes nobles, cordero." },
+        { "archivo": "granreserva-carmenere.png", "nombre": "Carménère", "tipo": "Tinto", "cepa": "Carménère", "valle": "Valle de Cachapoal", "notas": "Profundo y especiado, taninos pulidos.", "maridaje": "Carnes, quesos maduros." },
+        { "archivo": "granreserva-malbec.png", "nombre": "Malbec", "tipo": "Tinto", "cepa": "Malbec", "valle": "Valle de Cachapoal", "notas": "Frutos negros, especias y gran estructura.", "maridaje": "Carnes, asado." },
+        { "archivo": "granreserva-chardonnay.png", "nombre": "Chardonnay", "tipo": "Blanco", "cepa": "Chardonnay", "valle": "Valle de Cachapoal", "notas": "Untuoso, con fruta blanca y crianza elegante.", "maridaje": "Aves, pastas cremosas." },
+        { "archivo": "granreserva-sauvignonblanc.png", "nombre": "Sauvignon Blanc", "tipo": "Blanco", "cepa": "Sauvignon Blanc", "valle": "Paredones · Colchagua Costa", "notas": "Fresco y mineral, de clima costero.", "maridaje": "Mariscos, ceviche." }
+      ]
+    },
+    {
+      "id": "premium",
+      "nombre": "Premium",
+      "badge": "Conforme · Edición premium",
+      "vinos": [
+        { "archivo": "premium-carmenere.png", "nombre": "Conforme · Carménère", "tipo": "Tinto", "cepa": "Carménère", "valle": "Valle de Cachapoal", "notas": "Selección de las mejores uvas, máxima guarda y complejidad.", "maridaje": "Para celebrar y regalar." },
+        { "archivo": "premium-cabernet.png", "nombre": "Conforme · Cabernet Sauvignon", "tipo": "Tinto", "cepa": "Cabernet Sauvignon", "valle": "Valle de Cachapoal", "notas": "Estructura noble, gran cuerpo y final persistente.", "maridaje": "Cortes nobles, ocasiones especiales." }
+      ]
+    },
+    {
+      "id": "espumantes",
+      "nombre": "Espumantes",
+      "badge": "Sparkling",
+      "vinos": [
+        { "archivo": "espumantes-pais.png", "nombre": "Espumante País Brut", "tipo": "Espumante", "cepa": "País", "valle": "Valle del Rapel", "notas": "Cepa País en versión espumante: fresco, frutal y con identidad.", "maridaje": "Aperitivo, mariscos, brindis." },
+        { "archivo": "espumantes-xtrabrut.png", "nombre": "Xtra Brut Sparkling", "tipo": "Espumante", "cepa": "Ensamblaje", "valle": "Valle de Cachapoal", "notas": "Burbuja elegante y seca, fina y persistente.", "maridaje": "Celebraciones, fritos, quesos." }
+      ]
+    },
+    {
+      "id": "innovation",
+      "nombre": "Innovation Series",
+      "badge": "Autor",
+      "vinos": [
+        { "archivo": "innovation-tinajas-malbec.png", "nombre": "Serie Tinajas · Malbec", "tipo": "Tinto", "cepa": "Malbec", "valle": "Valle de Cachapoal", "notas": "Vinificado en tinaja de greda: textura, frescura y pura fruta.", "maridaje": "Carnes, charcutería." },
+        { "archivo": "innovation-tinajas-tinto.png", "nombre": "Serie Tinajas · Tinto", "tipo": "Tinto", "cepa": "Ensamblaje tinto", "valle": "Valle de Cachapoal", "notas": "Mezcla tinta en greda, especiada y de gran identidad.", "maridaje": "Asados, guisos." },
+        { "archivo": "innovation-huevosdelloco.png", "nombre": "Huevos del Loco · Sauvignon Blanc", "tipo": "Blanco", "cepa": "Sauvignon Blanc", "valle": "Valle de Cachapoal", "notas": "Cítrico, herbal y vibrante. Premiado por Tim Atkin MW.", "maridaje": "Mariscos, ceviche." }
+      ]
+    },
+    {
+      "id": "punticero",
+      "nombre": "Puntí Cero",
+      "badge": "0,0 · sin alcohol",
+      "vinos": [
+        { "archivo": "punticero-tinto.png", "nombre": "Tinto", "tipo": "Sin alcohol", "cepa": "Tinto sin alcohol", "valle": "Chile", "notas": "Vino tinto sin alcohol: fruta y cuerpo, 0,0.", "maridaje": "Comida de todos los días." },
+        { "archivo": "punticero-blanco.png", "nombre": "Blanco", "tipo": "Sin alcohol", "cepa": "Blanco sin alcohol", "valle": "Chile", "notas": "Fresco y frutal, sin alcohol.", "maridaje": "Ensaladas, pescados." },
+        { "archivo": "punticero-rosado.png", "nombre": "Rosado", "tipo": "Sin alcohol", "cepa": "Rosado sin alcohol", "valle": "Chile", "notas": "Ligero y frutal, ideal frío.", "maridaje": "Aperitivo, picoteo." },
+        { "archivo": "punticero-sangria.png", "nombre": "Sangría", "tipo": "Sin alcohol", "cepa": "Sangría sin alcohol", "valle": "Chile", "notas": "Sangría sin alcohol, con fruta. Para compartir.", "maridaje": "Tardes, juntas, calor." },
+        { "archivo": "punticero-sparkling.png", "nombre": "Sparkling Brut", "tipo": "Sin alcohol", "cepa": "Espumante sin alcohol", "valle": "Chile", "notas": "Espumante sin alcohol: burbuja para brindar 0,0.", "maridaje": "Celebraciones, brindis." }
+      ]
+    }
+  ]
+}

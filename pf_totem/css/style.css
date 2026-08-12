@@ -250,12 +250,22 @@ button { font-family: inherit; color: inherit; background: none; border: none; c
   text-align: center; letter-spacing: .05em; color: var(--dorado-claro);
   margin-bottom: 1.4vh;
 }
+.vino-linea {
+  font-size: clamp(11px, 2vw, 14px); letter-spacing: .16em; text-transform: uppercase;
+  color: var(--gris); margin-bottom: 1.6vh;
+}
+.vino-linea:empty { display: none; }
 .vino-desc {
   font-size: clamp(16px, 3vw, 24px); color: var(--crema);
   text-align: center; max-width: 620px; line-height: 1.45; font-weight: 300;
 }
 .vino-foto { height: clamp(180px, 30vh, 360px); margin: 3vh 0; }
 .vino-foto svg { height: 100%; width: auto; }
+/* Foto real del producto (PNG con canal alfa): misma caja que la copa SVG de
+   respaldo, con una sombra para que la botella no flote sin peso sobre el
+   negro del stand (mismo tratamiento que .logo-principal). */
+.vino-foto img { height: 100%; width: auto; max-width: 100%; object-fit: contain;
+  filter: drop-shadow(0 20px 40px rgba(0,0,0,.55)); }
 .vino-reto { text-align: center; font-size: clamp(15px, 2.8vw, 22px); color: var(--gris); line-height: 1.5; margin-bottom: 3vh; }
 .vino-reto b { color: var(--crema); font-weight: 500; }
 
@@ -306,6 +316,15 @@ button { font-family: inherit; color: inherit; background: none; border: none; c
   touch-action: none;
 }
 .servir-stage svg { height: 100%; max-height: 58vh; }
+/* Confirma con el cuerpo, no sólo con sonido, que el toque se registró al
+   soltar (ver pulsoSuelta en game.js). Sin esto la copa no daba ninguna señal
+   táctil propia, a diferencia de todos los botones del resto del juego. */
+@keyframes pfPulsoSuelta {
+  0% { transform: scale(1); }
+  40% { transform: scale(.94); }
+  100% { transform: scale(1); }
+}
+.servir-stage.pf-pulso svg { animation: pfPulsoSuelta .3s ease; }
 .servir-hint {
   min-height: 2.4em;
   text-align: center;

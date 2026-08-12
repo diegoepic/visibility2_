@@ -145,22 +145,74 @@ window.PF_CONFIG = {
       copa: 'flauta', colorVino: ['#f7edc4', '#e3cc86'] },
   ],
 
-  /* [PLACEHOLDER] Matriz momento × variedad → vino recomendado.
-     Reemplazar por los vinos reales del portafolio Puntí Ferrer
-     cuando el cliente entregue la lista (nombre + descripción). */
+  /* Matriz momento × variedad → POOL de 2 vinos recomendados (antes era 1 fijo
+     por celda; con pool, dos personas que elijan lo mismo no ven siempre la
+     misma botella — se sortea uno del pool en cada partida, ver el click de
+     .card-variedad en game.js). Datos, fotos y `linea` reales del catálogo de
+     puntiferrer.com (ver assets/img/catalogo-puntiferrer/catalogo.json para
+     los vinos que quedaron fuera de estos pools). `foto` es la imagen real
+     del producto (PNG con canal alfa) que se muestra en "Tu vino ideal"; si
+     algún día se agrega una combinación sin `foto`, el juego cae solo a la
+     copa dibujada en SVG. `linea` alimenta el badge (Signature/Reserva/Gran
+     Reserva/Premium/Espumantes/Innovation Series) sobre el nombre del vino.
+
+     ⚠ El emparejamiento momento↔vino (qué línea/varietal representa cada
+     "encuentro", "relajo", etc.) es un criterio editorial nuestro a partir de
+     las notas de cata reales, NO algo que haya definido el cliente — conviene
+     que marketing/ventas de Puntí Ferrer lo revise antes del evento. Los
+     nombres y descripciones sí son reales (adaptados de las notas de cata del
+     sitio, no inventados). El pool de espumante es el mismo en las 4 celdas:
+     el catálogo real sólo tiene 2 (País Brut y Xtra Brut), no da para variar
+     por momento como en tinto/blanco. */
   matriz: {
-    'encuentro|tinto':     { nombre: 'Carmenère Reserva',          desc: 'Especiado y envolvente, hecho para conversaciones que se alargan.' },
-    'relajo|tinto':        { nombre: 'Merlot',                      desc: 'Suave y redondo, el compañero perfecto de una pausa.' },
-    'celebracion|tinto':   { nombre: 'Cabernet Sauvignon Gran Reserva', desc: 'Estructura y carácter para los grandes momentos.' },
-    'desconexion|tinto':   { nombre: 'Pinot Noir',                  desc: 'Delicado y silencioso, para desconectar de verdad.' },
-    'encuentro|blanco':    { nombre: 'Sauvignon Blanc',             desc: 'Fresco y vibrante, rompe el hielo por ti.' },
-    'relajo|blanco':       { nombre: 'Chardonnay',                  desc: 'Cremoso y amable, como una tarde sin apuro.' },
-    'celebracion|blanco':  { nombre: 'Chardonnay Reserva',          desc: 'Elegancia dorada para brindar en grande.' },
-    'desconexion|blanco':  { nombre: 'Riesling',                    desc: 'Ligero y aromático, un momento solo tuyo.' },
-    'encuentro|espumante': { nombre: 'Brut',                        desc: 'Burbujas finas para encuentros que chispean.' },
-    'relajo|espumante':    { nombre: 'Demi-Sec',                    desc: 'Un dulzor sutil para soltar el día.' },
-    'celebracion|espumante': { nombre: 'Extra Brut',                desc: 'El clásico de toda celebración real.' },
-    'desconexion|espumante': { nombre: 'Rosé',                      desc: 'Burbujas rosadas para perderse un rato.' },
+    'encuentro|tinto': [
+      { nombre: 'Carménère Reserva', linea: 'Reserva', desc: 'Especiado y redondo, con fruta roja y un toque de pimienta — perfecto para una mesa que se alarga.', foto: 'assets/img/catalogo-puntiferrer/reserva-carmenere.png' },
+      { nombre: 'Cabernet Sauvignon Reserva', linea: 'Reserva', desc: 'Estructura, cassis y un final largo — ideal para compartir en una buena mesa.', foto: 'assets/img/catalogo-puntiferrer/reserva-cabernet.png' },
+    ],
+    'relajo|tinto': [
+      { nombre: 'Merlot Signature', linea: 'Signature', desc: 'Ciruela, guinda y un cuerpo redondo y amable, el compañero perfecto de una pausa.', foto: 'assets/img/catalogo-puntiferrer/signature-merlot.png' },
+      { nombre: 'Malbec Signature', linea: 'Signature', desc: 'Frutos negros, violetas y una textura aterciopelada, fácil de disfrutar sin apuro.', foto: 'assets/img/catalogo-puntiferrer/signature-malbec.png' },
+    ],
+    'celebracion|tinto': [
+      { nombre: 'Cabernet Sauvignon Gran Reserva', linea: 'Gran Reserva', desc: 'Concentrado, con cassis, cedro y crianza en barrica — estructura y carácter para los grandes momentos.', foto: 'assets/img/catalogo-puntiferrer/granreserva-cabernet.png' },
+      { nombre: 'Conforme · Carménère Premium', linea: 'Premium', desc: 'Selección de las mejores uvas, máxima guarda y complejidad — para celebrar en grande.', foto: 'assets/img/catalogo-puntiferrer/premium-carmenere.png' },
+    ],
+    'desconexion|tinto': [
+      { nombre: 'Pinot Noir Reserva', linea: 'Reserva', desc: 'Frutos rojos, delicado y sedoso: para desconectar de verdad.', foto: 'assets/img/catalogo-puntiferrer/reserva-pinotnoir.png' },
+      { nombre: 'Serie Tinajas · Malbec', linea: 'Innovation Series', desc: 'Vinificado en tinaja de greda: textura, frescura y pura fruta, distinto a todo lo demás.', foto: 'assets/img/catalogo-puntiferrer/innovation-tinajas-malbec.png' },
+    ],
+    'encuentro|blanco': [
+      { nombre: 'Sauvignon Blanc Signature', linea: 'Signature', desc: 'Cítricos, hierba fresca y acidez vibrante — rompe el hielo por ti.', foto: 'assets/img/catalogo-puntiferrer/signature-sauvignonblanc.png' },
+      { nombre: 'Sauvignon Blanc Gran Reserva', linea: 'Gran Reserva', desc: 'Fresco y mineral, de clima costero, con una acidez que despierta los sentidos.', foto: 'assets/img/catalogo-puntiferrer/granreserva-sauvignonblanc.png' },
+    ],
+    'relajo|blanco': [
+      { nombre: 'Chardonnay Signature', linea: 'Signature', desc: 'Fruta blanca, un toque de vainilla y nuez tostada, como una tarde sin apuro.', foto: 'assets/img/catalogo-puntiferrer/signature-chardonnay.png' },
+      { nombre: 'Chardonnay Reserva', linea: 'Reserva', desc: 'Cremoso y fresco, con fruta blanca y un toque de tostado — perfecto sin ninguna prisa.', foto: 'assets/img/catalogo-puntiferrer/reserva-chardonnay.png' },
+    ],
+    'celebracion|blanco': [
+      { nombre: 'Chardonnay Gran Reserva', linea: 'Gran Reserva', desc: 'Untuoso, con fruta blanca y una crianza elegante para brindar en grande.', foto: 'assets/img/catalogo-puntiferrer/granreserva-chardonnay.png' },
+      { nombre: 'Sauvignon Blanc Gran Reserva', linea: 'Gran Reserva', desc: 'Fresco y mineral, de clima costero — luminoso para un brindis en grande.', foto: 'assets/img/catalogo-puntiferrer/granreserva-sauvignonblanc.png' },
+    ],
+    'desconexion|blanco': [
+      { nombre: 'Huevos del Loco', linea: 'Innovation Series', desc: 'Cítrico, herbal y vibrante — un descubrimiento premiado (Tim Atkin MW) para un momento solo tuyo.', foto: 'assets/img/catalogo-puntiferrer/innovation-huevosdelloco.png' },
+      { nombre: 'Sauvignon Blanc Reserva', linea: 'Reserva', desc: 'Fresco y cítrico, con buena acidez — liviano y fácil de querer.', foto: 'assets/img/catalogo-puntiferrer/reserva-sauvignonblanc.png' },
+    ],
+    'encuentro|espumante': [
+      { nombre: 'Espumante País Brut', linea: 'Espumantes', desc: 'Fresco, frutal y con identidad propia — burbujas para encuentros que chispean.', foto: 'assets/img/catalogo-puntiferrer/espumantes-pais.png' },
+      { nombre: 'Xtra Brut Sparkling', linea: 'Espumantes', desc: 'Burbuja elegante y seca, fina y persistente — el clásico de toda celebración real.', foto: 'assets/img/catalogo-puntiferrer/espumantes-xtrabrut.png' },
+    ],
+    'relajo|espumante': [
+      { nombre: 'Espumante País Brut', linea: 'Espumantes', desc: 'Fresco y frutal, con la identidad de la cepa País — ideal para soltar el día.', foto: 'assets/img/catalogo-puntiferrer/espumantes-pais.png' },
+      { nombre: 'Xtra Brut Sparkling', linea: 'Espumantes', desc: 'Burbuja fina y persistente, elegante y seca, para no pensar en nada.', foto: 'assets/img/catalogo-puntiferrer/espumantes-xtrabrut.png' },
+    ],
+    'celebracion|espumante': [
+      { nombre: 'Xtra Brut Sparkling', linea: 'Espumantes', desc: 'Burbuja elegante y seca, fina y persistente — el clásico de toda celebración real.', foto: 'assets/img/catalogo-puntiferrer/espumantes-xtrabrut.png' },
+      { nombre: 'Espumante País Brut', linea: 'Espumantes', desc: 'Fresco, frutal y con identidad propia — para celebrar sin ponerse solemne.', foto: 'assets/img/catalogo-puntiferrer/espumantes-pais.png' },
+    ],
+    'desconexion|espumante': [
+      { nombre: 'Xtra Brut Sparkling', linea: 'Espumantes', desc: 'Burbuja fina, elegante y seca: tu propio momento de calma.', foto: 'assets/img/catalogo-puntiferrer/espumantes-xtrabrut.png' },
+      { nombre: 'Espumante País Brut', linea: 'Espumantes', desc: 'Fresco y frutal, con la identidad de la cepa País — para perderse un rato.', foto: 'assets/img/catalogo-puntiferrer/espumantes-pais.png' },
+    ],
   },
 
   textos: {

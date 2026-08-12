@@ -112,6 +112,13 @@ window.PFAudio = (function () {
   // Derrota: dos notas suaves descendentes (amable, sin drama)
   function lose() { vibrarLose(); tone(440, 0.35, 'sine', 0.18); tone(349.23, 0.5, 'sine', 0.16, 0.22); }
 
+  /* Pista de dirección en niveles sin línea (ver dif().intentos en game.js):
+     un glissando que sube pide más lleno, uno que baja pide más vacío. Es un
+     canal de información aparte del texto en pantalla — útil con el stand
+     ruidoso o con quien no está mirando fijo la pantalla en ese momento. */
+  function masLleno() { vibrarToque(); tone(480, 0.24, 'sine', 0.18, 0, 760); }
+  function masVacio() { vibrarToque(); tone(760, 0.24, 'sine', 0.18, 0, 480); }
+
   // Burbuja de espumante: pops cortos aleatorios (lo llama game.js)
   function bubble() { tone(1200 + Math.random() * 900, 0.05, 'sine', 0.05); }
 
@@ -153,6 +160,7 @@ window.PFAudio = (function () {
   return {
     init: init, ensure: ensure,
     tick: tick, select: select, win: win, lose: lose, bubble: bubble,
+    masLleno: masLleno, masVacio: masVacio,
     pourStart: pourStart, pourLevel: pourLevel, pourStop: pourStop,
     setEnabled: setEnabled, setVolume: setVolume,
     isEnabled: function () { return enabled; },

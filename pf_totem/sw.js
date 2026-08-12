@@ -18,7 +18,7 @@
    ============================================================ */
 'use strict';
 
-var VERSION = 'pf-totem-v7';
+var VERSION = 'pf-totem-v9';
 var CACHE = VERSION;
 
 /* Todo lo que el juego necesita para arrancar sin red. Si se agrega un
@@ -37,6 +37,27 @@ var PRECACHE = [
   'js/game.js',
   'assets/fonts/Cinzel.ttf',
   'assets/fonts/Jost.ttf',
+  // fotos reales de "Tu vino ideal" (ver matriz en config.js). Sólo las que
+  // el juego usa de verdad, no las 29 del catálogo completo en
+  // assets/img/catalogo-puntiferrer/ — esa carpeta es material de referencia.
+  'assets/img/catalogo-puntiferrer/reserva-carmenere.png',
+  'assets/img/catalogo-puntiferrer/signature-merlot.png',
+  'assets/img/catalogo-puntiferrer/granreserva-cabernet.png',
+  'assets/img/catalogo-puntiferrer/reserva-pinotnoir.png',
+  'assets/img/catalogo-puntiferrer/signature-sauvignonblanc.png',
+  'assets/img/catalogo-puntiferrer/signature-chardonnay.png',
+  'assets/img/catalogo-puntiferrer/granreserva-chardonnay.png',
+  'assets/img/catalogo-puntiferrer/innovation-huevosdelloco.png',
+  'assets/img/catalogo-puntiferrer/espumantes-pais.png',
+  'assets/img/catalogo-puntiferrer/espumantes-xtrabrut.png',
+  // sumadas al pasar la matriz de 1 vino fijo a un pool de 2 por celda
+  'assets/img/catalogo-puntiferrer/reserva-cabernet.png',
+  'assets/img/catalogo-puntiferrer/signature-malbec.png',
+  'assets/img/catalogo-puntiferrer/premium-carmenere.png',
+  'assets/img/catalogo-puntiferrer/innovation-tinajas-malbec.png',
+  'assets/img/catalogo-puntiferrer/granreserva-sauvignonblanc.png',
+  'assets/img/catalogo-puntiferrer/reserva-chardonnay.png',
+  'assets/img/catalogo-puntiferrer/reserva-sauvignonblanc.png',
 ];
 
 self.addEventListener('install', function (e) {

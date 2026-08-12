@@ -126,8 +126,16 @@
   </header>
   <div class="vino-tag" id="vino-tag">TU VINO IDEAL</div>
   <h2 class="vino-nombre" id="vino-nombre">—</h2>
+  <!-- línea del vino (Signature/Reserva/Gran Reserva/...), viene de
+       matriz[].linea en config.js -->
+  <div class="vino-linea" id="vino-linea"></div>
   <p class="vino-desc" id="vino-desc">—</p>
-  <div class="vino-foto"><svg viewBox="0 0 300 470" id="vino-copa"></svg></div>
+  <!-- foto real del producto (config.js → matriz[].foto); si falta, game.js
+       cae al dibujo SVG de #vino-copa como respaldo -->
+  <div class="vino-foto">
+    <img id="vino-foto-img" class="oculto" alt="">
+    <svg viewBox="0 0 300 470" id="vino-copa" class="oculto"></svg>
+  </div>
   <p class="vino-reto">Ahora demuestra que sabes brindar:<br><b>sírvelo en su medida perfecta y gana.</b></p>
   <button class="btn-oro" id="btn-servir">Servir mi copa</button>
 </section>
@@ -253,6 +261,11 @@
           <h4>Total evento</h4>
           <table class="admin-tabla" id="admin-stats-total"></table>
         </div>
+      </div>
+      <div class="admin-bloque">
+        <h4>Por dificultad (total evento)</h4>
+        <table class="admin-tabla" id="admin-stats-dificultad"></table>
+        <div class="admin-nota" id="admin-imposible-intentos"></div>
       </div>
       <div class="admin-bloque">
         <h4>Sincronización</h4>

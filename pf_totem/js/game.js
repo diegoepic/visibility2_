@@ -15,6 +15,8 @@
   var deviceId = null;
   var session = null;          // partida en curso
   var ultimaSessionUuid = null; // uuid de la última partida cerrada (para ligar al ganador)
+  var vinoElegido = null;      // objeto completo del pool (nombre/desc/foto/linea) de la partida en curso
+  var ultimoVinoGanado = null; // snapshot al ganar: session queda en null antes de llegar a la pantalla de premio
   var pantalla = 's-attract';
   var difActual = C.dificultad;
   var timers = { inactividad: null, autoVolver: null, autoVolverInt: null };
@@ -66,6 +68,18 @@
     return lineaPartida;
   }
 
+  /* Mismo sorteo que sortearLinea(), pero sin tocar lineaPartida: la copa del
+     attract es decorativa y no debe interferir con la partida real. Si el
+     demo sirviera siempre al mismo nivel fijo, alguien que mira jugar a los
+     de adelante memorizaría ese número gratis, exactamente lo que sortear la
+     línea en cada partida real ya evita (ver comentario de arriba). */
+  function sortearObjetivoDemo() {
+    var r = C.lineaAleatoria;
+    return (r && r.activo)
+      ? Math.round((r.min + Math.random() * (r.max - r.min)) * 10) / 10
+      : C.lineaObjetivo;
+  }
+
   /* Centro real de la zona ganadora: el nivel al que llega quien suelta
      'compensacion' segundos después de ver el vino cruzar la línea. Se
      calcula sobre el tiempo (no como velocidad × latencia) porque con
@@ -82,7 +96,7 @@
      requestAnimationFrame girando detrás de otra pantalla es gastar
      batería y CPU del tótem por nada.
      ============================================================ */
-  var demo = { raf: null, t0: 0, svg: null, elLiq: null, geo: null, objetivo: 62 };
+  var demo = { raf: null, t0: 0, svg: null, elLiq: null, geo: null, objetivo: 62, ciclo: -1, varDef: null };
   var DEMO_CICLO = { llena: 1.9, pausa: 1.3, vacia: 0.6, espera: 0.7 };
 
   function pintarDemo(nivel, destello, amp, t) {
@@ -98,6 +112,20 @@
     var c = DEMO_CICLO;
     var total = c.llena + c.pausa + c.vacia + c.espera;
     var t = (performance.now() - demo.t0) / 1000;
+    /* Un objetivo nuevo por vuelta del loop (no uno fijo por visita a la
+       pantalla): así quien mira jugar a varios antes que él no puede
+       memorizar "siempre llena hasta acá". Se reconstruye la copa entera
+       (no sólo el líquido) porque la línea dorada dibujada también tiene
+       que moverse con el objetivo, si no quedan desalineadas. */
+    var ciclo = Math.floor(t / total);
+    if (ciclo !== demo.ciclo) {
+      demo.ciclo = ciclo;
+      demo.objetivo = sortearObjetivoDemo();
+      if (demo.svg && demo.varDef) {
+        demo.svg.innerHTML = buildCopaSvg(demo.varDef, { uid: 'attract', decorativa: true, linea: demo.objetivo });
+        demo.elLiq = demo.svg.querySelector('.pf-liq');
+      }
+    }
     var f = t % total;
     var nivel, destello = false, amp;
     if (f < c.llena) {
@@ -128,7 +156,8 @@
     if (!demo.svg) return;
     demo.elLiq = demo.svg.querySelector('.pf-liq');
     demo.geo = GEO.copa;
-    demo.objetivo = C.lineaObjetivo;
+    demo.varDef = C.variedades[0];
+    demo.ciclo = -1;                    // fuerza sortear el objetivo en el primer paso
     demo.t0 = performance.now();
     demo.raf = requestAnimationFrame(pasoDemo);
   }
@@ -180,6 +209,7 @@
 
   // ---------- sesión (partida) ----------
   function startSession() {
+    vinoElegido = null;
     session = {
       uuid: PFDB.uuid(),
       device_id: deviceId,
@@ -340,7 +370,7 @@
     var idBanda = 'gbanda_' + uid;
     var idChorro = 'gchorro_' + uid;
     var g = GEO[varDef.copa] || GEO.copa;
-    var linea = opts.decorativa ? C.lineaObjetivo : lineaPartida;
+    var linea = opts.linea != null ? opts.linea : (opts.decorativa ? C.lineaObjetivo : lineaPartida);
     var centro = centroEfectivo();
     var tol = dif().tolerancia;
     var H = g.liqBottom - g.liqTop;
@@ -553,7 +583,18 @@
     /* Al soltar, el vino chapotea y se va acomodando. El NIVEL ya quedó fijo
        (el resultado se calcula con él); esto sólo anima la superficie. Cabe
        justo en el segundo que evaluarServida espera antes de pasar de pantalla. */
-    if (estabaSirviendo && !silencioso) iniciarAsentamiento();
+    if (estabaSirviendo && !silencioso) { iniciarAsentamiento(); pulsoSuelta(); }
+  }
+
+  /* Confirma con el cuerpo (no sólo con sonido) que el toque se registró al
+     soltar: sin esto la copa era el único control del juego sin ningún
+     feedback táctil propio. */
+  function pulsoSuelta() {
+    var stage = $('#servir-stage');
+    if (!stage) return;
+    stage.classList.remove('pf-pulso');
+    void stage.offsetWidth; // fuerza reflow: permite repetir la animación en soltadas seguidas
+    stage.classList.add('pf-pulso');
   }
 
   function iniciarAsentamiento() {
@@ -620,11 +661,12 @@
         derrame: !!derrame, dificultad: difActual,
       });
       serve.intento++;
+      var pasado = derrame || diff > 0;
       var hintDir = $('#servir-hint');
-      hintDir.textContent = (derrame || diff > 0)
-        ? 'Más vacío — sirve un poco menos'
-        : 'Más lleno — sirve un poco más';
+      hintDir.textContent = pasado ? 'Más vacío — sirve un poco menos' : 'Más lleno — sirve un poco más';
       hintDir.classList.add('err');
+      // glissando ascendente/descendente: pista audible además de la de texto
+      (pasado ? PFAudio.masVacio : PFAudio.masLleno)();
       renderIntentos();
       setTimeout(function () {
         if (pantalla !== 's-servir') return; // se fue de la pantalla mientras esperaba
@@ -696,6 +738,10 @@
         pintarResultado('#win-copa');
         $('#win-precision').textContent = precision + '%';
         logEvent('gano');
+        // snapshot para personalizar la pantalla de premio: session queda en
+        // null tras finalizeSession, y el premio se reclama recién después
+        // de llenar el formulario
+        ultimoVinoGanado = vinoElegido;
         /* Se cierra la partida YA, sin esperar a que reclame el premio: si se
            corta la luz en esta pantalla (pasa cada noche del evento) el "ganó"
            igual queda firme, y el conteo del reporte no depende del timeout.
@@ -806,6 +852,12 @@
         PFKeyboard.detach();
         renderQR(premio.codigo);
         $('#premio-codigo').textContent = premio.codigo;
+        // personaliza con el vino que ganó (si se pudo rastrear); si no,
+        // se queda con el texto genérico de config.js → textos.premioBajada
+        $('#premio-bajada').innerHTML = ultimoVinoGanado
+          ? 'Tu <b>' + ultimoVinoGanado.nombre + '</b> te espera en ' +
+            C.premio.urlTienda.replace(/^https?:\/\//, '')
+          : C.textos.premioBajada;
         PFSync.tick();   // el ganador es el dato más valioso: se intenta subir de inmediato
         showScreen('s-premio');
         autoVolver($('#premio-count'), 45);
@@ -858,12 +910,58 @@
       '<tr><td>Abandonos</td><td>' + st.abandonos + '</td></tr>';
   }
 
+  /* Desglose por dificultad: con "imposible" recién calibrándose en vivo (ver
+     README § El nivel imposible), conviene ver de un vistazo si su tasa de
+     victoria se aleja mucho de las demás antes de decidir si seguir con él
+     durante el evento. */
+  function statsPorDificultad(sesiones) {
+    var out = {};
+    sesiones.forEach(function (s) {
+      var d = s.dificultad || '—';
+      if (!out[d]) out[d] = { jugadas: 0, ganadas: 0 };
+      out[d].jugadas++;
+      if (s.resultado === 'gano') out[d].ganadas++;
+    });
+    return out;
+  }
+
+  function tablaDificultad(porDif) {
+    var niveles = Object.keys(porDif).sort(function (a, b) { return porDif[b].jugadas - porDif[a].jugadas; });
+    if (!niveles.length) return '<tr><td>Sin partidas todavía</td><td></td></tr>';
+    return niveles.map(function (d) {
+      var st = porDif[d];
+      var pct = st.jugadas ? Math.round(100 * st.ganadas / st.jugadas) : 0;
+      return '<tr><td>' + d + '</td><td>' + st.jugadas + ' · ' + pct + '% gana</td></tr>';
+    }).join('');
+  }
+
+  /* No vive en `sesiones` (ver evaluarServida: sólo se loguean los intentos
+     FALLIDOS como evento, para no tocar el esquema que sync.php sube al
+     servidor) — se calcula al vuelo desde `eventos` sólo para el panel admin. */
+  function intentosPromedioImposible() {
+    return PFDB.getAll('eventos').then(function (eventos) {
+      var vals = eventos
+        .filter(function (e) { return e.tipo === 'servida_fin' && e.data && e.data.dificultad === 'imposible' && typeof e.data.intentos === 'number'; })
+        .map(function (e) { return e.data.intentos; });
+      if (!vals.length) return null;
+      return { promedio: vals.reduce(function (a, b) { return a + b; }, 0) / vals.length, n: vals.length };
+    });
+  }
+
   function refrescarPanel() {
     PFDB.getAll('sesiones').then(function (todas) {
       var hoy = new Date().toDateString();
       var deHoy = todas.filter(function (s) { return new Date(s.inicio).toDateString() === hoy; });
       $('#admin-stats-hoy').innerHTML = tablaStats(statsDe(deHoy));
       $('#admin-stats-total').innerHTML = tablaStats(statsDe(todas));
+      $('#admin-stats-dificultad').innerHTML = tablaDificultad(statsPorDificultad(todas));
+    });
+    intentosPromedioImposible().then(function (r) {
+      var el = $('#admin-imposible-intentos');
+      if (!el) return;
+      el.textContent = r
+        ? 'Intentos promedio en "imposible": ' + r.promedio.toFixed(1) + ' (de ' + r.n + ' partidas resueltas)'
+        : 'Sin partidas en "imposible" todavía.';
     });
     renderSync(PFSync.getStatus());
     PFSync.refreshPendientes();
@@ -983,16 +1081,37 @@
         if (!session || !session.momento) return;
         PFAudio.select();
         session.variedad = card.dataset.variedad;
-        var vino = C.matriz[session.momento + '|' + session.variedad] ||
-          { nombre: card.dataset.variedad, desc: '' };
+        // cada celda es un POOL de 2 vinos reales: se sortea uno por partida
+        // para que dos personas que elijan lo mismo no vean siempre la misma
+        // botella (ver matriz en config.js)
+        var pool = C.matriz[session.momento + '|' + session.variedad];
+        var vino = (pool && pool.length)
+          ? pool[Math.floor(Math.random() * pool.length)]
+          : { nombre: card.dataset.variedad, desc: '' };
+        vinoElegido = vino;
         session.vino = vino.nombre;
         saveSession();
-        logEvent('variedad_elegida', { variedad: session.variedad, vino: vino.nombre });
-        var varDef = C.variedades.find(function (v) { return v.id === session.variedad; });
+        logEvent('variedad_elegida', { variedad: session.variedad, vino: vino.nombre, linea: vino.linea });
         $('#vino-nombre').textContent = vino.nombre;
         $('#vino-desc').textContent = vino.desc;
-        $('#vino-copa').innerHTML = buildCopaSvg(varDef,
-          { uid: 'vino', decorativa: true, sinLinea: true, nivelInicial: 58, ola: 1.3 });
+        $('#vino-linea').textContent = vino.linea || '';
+        var fotoEl = $('#vino-foto-img');
+        var copaEl = $('#vino-copa');
+        if (vino.foto) {
+          // foto real del producto (ver matriz en config.js): así se ve la
+          // botella de verdad, no la copa genérica dibujada en SVG
+          fotoEl.src = vino.foto;
+          fotoEl.alt = vino.nombre;
+          fotoEl.classList.remove('oculto');
+          copaEl.classList.add('oculto');
+        } else {
+          // sin foto todavía para esta combinación: se dibuja la copa como antes
+          var varDef = C.variedades.find(function (v) { return v.id === session.variedad; });
+          copaEl.innerHTML = buildCopaSvg(varDef,
+            { uid: 'vino', decorativa: true, sinLinea: true, nivelInicial: 58, ola: 1.3 });
+          copaEl.classList.remove('oculto');
+          fotoEl.classList.add('oculto');
+        }
         showScreen('s-vino');
       });
     });
@@ -1236,6 +1355,7 @@
     nivelActual: function () { return serve.nivel; },
     refrescarContador: actualizarContadorSocial,
     demoCorriendo: function () { return !!demo.raf; },
+    demoObjetivo: function () { return demo.objetivo; },
     pathLiquido: pathLiquido,
   };
 

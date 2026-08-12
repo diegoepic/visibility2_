@@ -55,10 +55,29 @@ async function muestrear(page, veces, esperaMs) {
   check(Math.min(...m) <= 3, 'el ciclo llega a vaciarse', { min: Math.min(...m) });
   check(Math.max(...m) > Math.min(...m) + 25,
     'recorre el rango completo: se llena y se vacía', { min: Math.min(...m), max: Math.max(...m) });
-  const objetivo = await page.evaluate(() => PF_CONFIG.lineaObjetivo);
-  check(Math.max(...m) <= objetivo + 1,
+  /* El objetivo del demo se sortea por ciclo (ver sortearObjetivoDemo en
+     game.js) dentro del mismo rango que usa la partida real, así que el
+     tope a chequear es el máximo del rango, no un valor fijo. */
+  const rangoDemo = await page.evaluate(() => PF_CONFIG.lineaAleatoria);
+  const objetivoCfg = await page.evaluate(() => PF_CONFIG.lineaObjetivo);
+  const topeDemo = (rangoDemo && rangoDemo.activo) ? rangoDemo.max : objetivoCfg;
+  check(Math.max(...m) <= topeDemo + 1,
     'nunca pasa de la línea: muestra la medida perfecta, no un derrame',
-    { maxVisto: Math.max(...m), linea: objetivo });
+    { maxVisto: Math.max(...m), tope: topeDemo });
+
+  console.log('\n--- El demo sortea un objetivo distinto en cada vuelta ---');
+  /* Si siempre sirviera hasta el mismo nivel, alguien parado en el stand
+     memorizaría ese número mirando el loop sin ni siquiera jugar. */
+  const objetivos = [];
+  for (let i = 0; i < 12; i++) {
+    objetivos.push(await page.evaluate(() => PFGame.demoObjetivo()));
+    await page.waitForTimeout(500); // 6s > 4.5s (un ciclo completo): asegura cruzar al menos un borde
+  }
+  const distintosObj = new Set(objetivos).size;
+  check(distintosObj >= 2, 'el objetivo del demo cambia de una vuelta a otra',
+    objetivos);
+  check(objetivos.every((o) => o >= rangoDemo.min && o <= rangoDemo.max),
+    'siempre sortea dentro del mismo rango que la partida real', { objetivos, rangoDemo });
 
   console.log('\n--- La demo se detiene fuera del inicio ---');
   await page.click('#s-attract');

@@ -171,6 +171,21 @@ const dump = (page) => page.evaluate(() => new Promise((res) => {
   intentosLog = data.eventos.filter((e) => e.tipo === 'servida_intento');
   check(intentosLog.length === 4, '2 fallos de la partida 1 + 2 fallos intermedios de la partida 2 = 4', intentosLog.length);
 
+  console.log('\n--- Panel admin: desglose por dificultad ---');
+  await page.click('#btn-fin-lose'); await page.waitForTimeout(400);
+  for (let i = 0; i < 5; i++) { await page.click('#admin-trigger'); await page.waitForTimeout(60); }
+  await page.waitForTimeout(200);
+  for (const d of ['2', '4', '3', '5', 'OK']) { await page.click(`.pin-pad button[data-d="${d}"]`); await page.waitForTimeout(60); }
+  await page.waitForTimeout(400); // refrescarPanel() lee IndexedDB async
+  const panel = await page.evaluate(() => ({
+    dificultad: document.querySelector('#admin-stats-dificultad').textContent.replace(/\s+/g, ' ').trim(),
+    intentos: document.querySelector('#admin-imposible-intentos').textContent.trim(),
+  }));
+  check(/imposible/i.test(panel.dificultad), 'el panel admin desglosa "imposible" en la tabla por dificultad', panel.dificultad);
+  // ambas partidas gastaron sus 3 intentos (una ganando en el 3ro, la otra perdiendo tras el 3ro): promedio = 3.0
+  check(/3\.0/.test(panel.intentos) && /2 partidas/.test(panel.intentos),
+    'muestra el promedio de intentos usados en "imposible"', panel.intentos);
+
   console.log('\n--- Errores de JS ---');
   check(errores.length === 0, 'sin errores en consola', errores.slice(0, 4));
 
