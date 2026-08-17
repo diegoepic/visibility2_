@@ -149,7 +149,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'all') {
   if ($view === 'implementacion') {
     // -------- SELECT A: GV --------
     $sqlA = "
-      SELECT fv.url AS url, u.usuario AS usuario, COALESCE(m.nombre, fq.material, '—') AS material, l.codigo AS codigo
+      SELECT fv.url AS url, u.usuario AS usuario, COALESCE(m.nombre, fq.material, '—') AS material, l.codigo AS codigo, l.direccion AS direccion
       FROM gestion_visita gv
       JOIN formulario f ON f.id = gv.id_formulario AND f.id = ? AND f.id_empresa = ?
       JOIN usuario u ON u.id = gv.id_usuario
@@ -171,7 +171,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'all') {
 
     // -------- SELECT B: LEGACY-ONLY --------
     $sqlB = "
-      SELECT fv.url AS url, u.usuario AS usuario, COALESCE(m.nombre, fq.material, '—') AS material, l.codigo AS codigo
+      SELECT fv.url AS url, u.usuario AS usuario, COALESCE(m.nombre, fq.material, '—') AS material, l.codigo AS codigo, l.direccion AS direccion
       FROM formularioQuestion fq
       JOIN formulario f ON f.id = fq.id_formulario AND f.id = ? AND f.id_empresa = ?
       JOIN usuario u ON u.id = fq.id_usuario
@@ -204,7 +204,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'all') {
   }
   elseif ($view === 'encuesta') {
     $sql = "
-      SELECT fqr.answer_text AS url, u.usuario AS usuario, fq.question_text AS pregunta, l.codigo AS codigo
+      SELECT fqr.answer_text AS url, u.usuario AS usuario, fq.question_text AS pregunta, l.codigo AS codigo, l.direccion AS direccion
       FROM form_question_responses fqr
       JOIN form_questions fq ON fq.id = fqr.id_form_question
       JOIN usuario u         ON u.id = fqr.id_usuario
@@ -223,7 +223,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'all') {
   }
   elseif ($view === 'locales_no_visitados') {
     $sql = "
-      SELECT fq.observacion, u.usuario, l.codigo
+      SELECT fq.observacion, u.usuario, l.codigo, l.direccion AS direccion
       FROM formularioQuestion fq
       JOIN usuario u ON u.id = fq.id_usuario
       JOIN local l   ON l.id = fq.id_local
@@ -240,12 +240,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'all') {
     $rows = [];
     foreach ($rowsRaw as $r) {
       $u = parseFirstUrlFromObservacion($r['observacion'] ?? '');
-      if ($u) { $rows[] = ['url' => $u, 'usuario' => $r['usuario'], 'codigo' => $r['codigo']]; }
+      if ($u) { $rows[] = ['url' => $u, 'usuario' => $r['usuario'], 'codigo' => $r['codigo'], 'direccion' => $r['direccion']]; }
     }
   }
   else { // genérica (id_local=0)
     $sql = "
-      SELECT fqr.answer_text AS url, u.usuario AS usuario, '' AS pregunta, '' AS codigo
+      SELECT fqr.answer_text AS url, u.usuario AS usuario, '' AS pregunta, '' AS codigo, '' AS direccion
       FROM form_question_responses fqr
       JOIN form_questions fq ON fq.id = fqr.id_form_question
       JOIN usuario u         ON u.id = fqr.id_usuario
@@ -268,14 +268,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'all') {
     if (!$url) continue;
     $usuario = sanitizeFilename($r['usuario'] ?? 'user');
     $codigo  = sanitizeFilename($r['codigo']  ?? 'local');
-    $prefix  = $usuario . '_' . $codigo;
+    $direccion = sanitizeFilename($r['direccion'] ?? 'sin_direccion');
+    $prefix  = $direccion . '_' . $usuario . '_' . $codigo;
 
     if ($view === 'implementacion') {
       $mat = sanitizeFilename($r['material'] ?? 'material');
-      $prefix = $usuario . '_' . $mat . '_' . $codigo;
+      $prefix = $direccion . '_' . $usuario . '_' . $mat . '_' . $codigo;
     } elseif ($view === 'encuesta') {
       $pre = sanitizeFilename($r['pregunta'] ?? 'encuesta');
-      $prefix = $usuario . '_' . $pre . '_' . $codigo;
+      $prefix = $direccion . '_' . $usuario . '_' . $pre . '_' . $codigo;
     }
 
     $basename = basename(parse_url($url, PHP_URL_PATH) ?? 'foto.jpg');

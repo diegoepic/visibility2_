@@ -27,6 +27,21 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/vendor/autoload.ph
 
 mysqli_set_charset($conn, 'utf8mb4');
 
+$usuarioSesionId = (int)$_SESSION['usuario_id'];
+$soloOrigenExterno = false;
+$stmtUsuarioSesion = $conn->prepare('SELECT clasificacion_usuario FROM usuario WHERE id = ? AND activo = 1 LIMIT 1');
+if ($stmtUsuarioSesion) {
+    $stmtUsuarioSesion->bind_param('i', $usuarioSesionId);
+    $stmtUsuarioSesion->execute();
+    $stmtUsuarioSesion->bind_result($clasificacionSesion);
+    $stmtUsuarioSesion->fetch();
+    $stmtUsuarioSesion->close();
+    $soloOrigenExterno = strtolower(trim((string)$clasificacionSesion)) === 'externo';
+}
+$filtroOrigenExternoSql = $soloOrigenExterno
+    ? "\n      AND EXISTS (SELECT 1 FROM usuario usuario_origen WHERE usuario_origen.id = fq.id_usuario AND usuario_origen.clasificacion_usuario = 'externo')"
+    : '';
+
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -127,6 +142,7 @@ $sqlDet = "
     LEFT  JOIN cuenta cu  ON cu.id = l.id_cuenta
     LEFT  JOIN usuario u  ON u.id = fq.id_usuario
     WHERE fq.id_formulario = ?
+      {$filtroOrigenExternoSql}
     ORDER BY l.codigo, fq.material
 ";
 $stmt = $conn->prepare($sqlDet);

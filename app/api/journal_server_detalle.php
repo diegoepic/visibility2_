@@ -66,7 +66,9 @@ try {
             u.apellido AS usuario_apellido
         FROM visita v
         INNER JOIN formulario f   ON f.id = v.id_formulario
-        INNER JOIN local      l   ON l.id = v.id_local
+        /* LEFT (no INNER): las complementarias sin local guardan id_local = 0 y
+           con INNER el detalle respondia que la visita no existe. */
+        LEFT JOIN local       l   ON l.id = v.id_local
         LEFT JOIN distrito    dstr ON dstr.id = l.id_distrito
         LEFT JOIN usuario     u   ON u.id = v.id_usuario
         WHERE
@@ -103,8 +105,9 @@ try {
             'latitud'      => $head['latitud'],
             'longitud'     => $head['longitud'],
         ],
+        /* null cuando la complementaria no requiere local (id_local = 0) */
         'local' => [
-            'id'         => (int)$head['id_local'],
+            'id'         => ((int)$head['id_local'] > 0) ? (int)$head['id_local'] : null,
             'codigo'     => $head['local_codigo'],
             'nombre'     => $head['local_nombre'],
             'direccion'  => $head['local_direccion'],

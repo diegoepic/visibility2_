@@ -2364,13 +2364,14 @@ body.gallery-modern-body {
                 <?php foreach ($data as $row): ?>
                     <?php
                     $safeUsuario   = preg_replace('/[^a-zA-Z0-9]/', '_', $row['usuario']);
+                    $safeDireccion = preg_replace('/[^a-zA-Z0-9]/', '_', $row['local_direccion'] ?? 'sin_direccion');
                     $safeMaterial  = isset($row['material']) ? preg_replace('/[^a-zA-Z0-9]/', '_', $row['material']) : 'sematerial';
                     $safeCodigo    = preg_replace('/[^a-zA-Z0-9]/', '_', $row['local_codigo']);
                     $thumb         = htmlspecialchars($row['thumbnail'], ENT_QUOTES);
                     $badge         = $row['photos_count'];
                     $fieldFecha    = $view === 'implementacion' ? 'fechaVisita' : 'fechaSubida';
                     $fecha         = formatearFecha($row[$fieldFecha] ?? null);
-                    $phpPrefix     = "{$safeUsuario}_{$safeMaterial}_{$safeCodigo}";
+                    $phpPrefix     = "{$safeDireccion}_{$safeUsuario}_{$safeMaterial}_{$safeCodigo}";
                     ?>
                     <tr>
                         <td>
@@ -2457,9 +2458,10 @@ body.gallery-modern-body {
                 <?php foreach ($data as $row): ?>
                     <?php
                     $safeUsuario   = preg_replace('/[^a-zA-Z0-9]/', '_', $row['usuario']);
+                    $safeDireccion = preg_replace('/[^a-zA-Z0-9]/', '_', $row['local_direccion'] ?? 'sin_direccion');
                     $safePregunta  = preg_replace('/[^a-zA-Z0-9]/', '_', $row['pregunta'] ?? 'encuesta');
                     $safeCodigo    = preg_replace('/[^a-zA-Z0-9]/', '_', $row['local_codigo']);
-                    $phpPrefix     = "{$safeUsuario}_{$safePregunta}_{$safeCodigo}";
+                    $phpPrefix     = "{$safeDireccion}_{$safeUsuario}_{$safePregunta}_{$safeCodigo}";
                     $thumb         = htmlspecialchars($row['thumbnail'], ENT_QUOTES);
                     $badge         = $row['photos_count'];
                     $fecha         = formatearFecha($row['fechaSubida'] ?? null);

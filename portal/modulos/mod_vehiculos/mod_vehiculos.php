@@ -1436,6 +1436,187 @@ body.fleet-photo-open {
     padding: 20px 22px;
     margin-bottom: 22px;
 }
+
+/* =========================================================
+   INFORME ESTATUS DEL VEHÍCULO (vista en pantalla)
+========================================================= */
+#modalEstatus .modal-xl { --bs-modal-width: 96vw; }
+
+.ev-meta {
+    font-size: 13px;
+    color: #28446f;
+    background: rgba(244,248,255,.96);
+    border: 1px solid rgba(215,228,246,.95);
+    border-radius: 12px;
+    padding: 8px 14px;
+}
+
+.ev-kpi-row {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 12px;
+}
+.ev-kpi {
+    background: rgba(255,255,255,.9);
+    border: 1px solid rgba(220,230,245,.95);
+    border-radius: 16px;
+    padding: 12px 14px;
+    box-shadow: 0 8px 20px rgba(70,95,140,.06);
+}
+.ev-kpi span {
+    display: block;
+    font-size: 11px;
+    font-weight: 850;
+    color: #6e809e;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: 4px;
+}
+.ev-kpi strong { font-size: 22px; font-weight: 950; color: var(--vz-text); }
+
+.ev-tab-content {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(215,228,246,.95);
+    border-top: 0;
+    border-radius: 0 0 16px 16px;
+    background: #fff;
+}
+#modalEstatus .tab-pane.active { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+.ev-scroll { flex: 1; overflow: auto; }
+
+.ev-tabla { margin: 0 !important; border-spacing: 0 !important; }
+.ev-tabla thead th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: #f4f8ff !important;
+    font-size: 11px !important;
+    white-space: nowrap;
+    padding: 10px !important;
+}
+.ev-tabla tbody td {
+    font-size: 12.5px !important;
+    padding: 9px 10px !important;
+    border-radius: 0 !important;
+    white-space: nowrap;
+}
+.ev-tabla tbody tr { box-shadow: none !important; }
+
+/* Semáforo de cumplimiento */
+.ev-pct {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 900;
+    font-size: 12px;
+}
+.ev-ok    { background: #d7f2df; color: #0f8a4d; }
+.ev-medio { background: #fff3cd; color: #8a6100; }
+.ev-malo  { background: #ffe1e1; color: #c0392b; }
+strong.ev-ok, strong.ev-medio, strong.ev-malo { background: none; padding: 0; }
+
+/* Matriz día a día */
+.ev-matriz .ev-col-dia { min-width: 62px; text-align: center; font-size: 10px !important; }
+.ev-cel { text-align: center; font-weight: 900; }
+.ev-cel-ok { background: #d7f2df !important; color: #0f8a4d; }
+.ev-cel-no { background: #ffe1e1 !important; color: #c0392b; }
+
+/* Subida en día no esperado */
+.ev-fila-noesperada td { background: #fffbeb !important; }
+
+/* ── Filtros por columna (estilo Excel) ── */
+.ev-tabla thead th { position: sticky; top: 0; }
+.ev-th-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: space-between;
+}
+.ev-fbtn {
+    cursor: pointer;
+    color: #8aa0c0;
+    font-size: 11px;
+    padding: 2px 4px;
+    border-radius: 5px;
+    flex: 0 0 auto;
+}
+.ev-fbtn:hover { background: #dfeaff; color: #2c5fc7; }
+.ev-fbtn.activo { color: #fff; background: var(--vz-blue); }
+
+.ev-fpanel {
+    position: fixed;
+    z-index: 40050;
+    width: 260px;
+    max-height: 340px;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid rgba(185,202,230,.9);
+    border-radius: 14px;
+    box-shadow: 0 18px 42px rgba(20,45,90,.22);
+    overflow: hidden;
+}
+.ev-fpanel-head { padding: 10px; border-bottom: 1px solid #eef2f9; }
+.ev-fpanel-head input {
+    width: 100%;
+    font-size: 12px;
+    padding: 6px 9px;
+    border: 1px solid rgba(185,202,230,.9);
+    border-radius: 9px;
+}
+.ev-fpanel-list { flex: 1; overflow-y: auto; padding: 6px 4px; }
+.ev-fitem {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    font-size: 12px;
+    border-radius: 7px;
+    cursor: pointer;
+    color: #28446f;
+}
+.ev-fitem:hover { background: #f2f7ff; }
+.ev-fitem input { cursor: pointer; margin: 0; }
+.ev-fitem span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ev-fitem.ev-ftodos { font-weight: 800; border-bottom: 1px solid #eef2f9; border-radius: 0; }
+.ev-fpanel-foot {
+    display: flex;
+    gap: 6px;
+    padding: 9px 10px;
+    border-top: 1px solid #eef2f9;
+    background: #f8fbff;
+}
+.ev-fpanel-foot button {
+    flex: 1;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 6px;
+    border-radius: 9px;
+    border: 0;
+    cursor: pointer;
+}
+.ev-fbtn-ok  { background: var(--vz-blue); color: #fff; }
+.ev-fbtn-off { background: #e9eef7; color: #4a5f80; }
+
+.ev-sin-filas td {
+    text-align: center;
+    color: #8194b1;
+    padding: 22px !important;
+}
+
+@media (max-width: 1200px) {
+    .ev-kpi-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 768px) {
+    .ev-kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
     </style>
 </head>
 
@@ -1452,6 +1633,10 @@ body.fleet-photo-open {
         <div class="d-flex gap-2">
             <button class="btn btn-outline-light btn-main" onclick="abrirModalReporte()">
                 <i class="fa-solid fa-chart-table me-1"></i> Reporte
+            </button>
+
+            <button class="btn btn-outline-light btn-main" onclick="abrirModalEstatus()">
+                <i class="fa-solid fa-gauge-high me-1"></i> Estatus vehículo
             </button>
 
             <button class="btn btn-outline-light btn-main" onclick="abrirModalDescargaExcel()">
@@ -2098,20 +2283,10 @@ body.fleet-photo-open {
                         </div>
                     </div>
 
-                    <div class="mt-3">
-                        <label class="form-label">Modo del informe</label>
-                        <div class="d-flex gap-3 mt-1">
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="modo"
-                                       id="modoClasico" value="clasico" checked>
-                                <label class="form-check-label" for="modoClasico">Fin de semana</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="modo"
-                                       id="modoDiario" value="diario">
-                                <label class="form-check-label" for="modoDiario">Diario</label>
-                            </div>
-                        </div>
+                    <div class="alert alert-info mt-3 mb-0">
+                        <i class="fa-solid fa-circle-info me-1"></i>
+                        El cumplimiento se evalúa <strong>por día hábil</strong>: se esperan dos
+                        subidas, una antes de las 12:00 y otra desde las 12:00.
                     </div>
 
                 </div>
@@ -2128,6 +2303,164 @@ body.fleet-photo-open {
         </div>
     </div>
 </div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODAL — INFORME "ESTATUS DEL VEHÍCULO" EN VIVO
+     Réplica en pantalla del Excel. Mismo cálculo (lib_estatus_vehiculo.php),
+     pero siempre con el dato del momento en que se consulta.
+     ══════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalEstatus" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content" style="height:95vh">
+
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fa-solid fa-gauge-high me-2"></i> Estatus del vehículo — cumplimiento
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body d-flex flex-column" style="overflow:hidden">
+
+                <!-- Filtros -->
+                <div class="row g-2 mb-3 align-items-end">
+                    <div class="col-md-2">
+                        <label class="form-label">Desde</label>
+                        <input type="date" id="evStart" class="form-control">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Hasta</label>
+                        <input type="date" id="evEnd" class="form-control">
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-dark w-100 btn-main" onclick="cargarEstatus()">
+                            <i class="fa-solid fa-rotate me-1"></i> Consultar
+                        </button>
+                    </div>
+                    <div class="col-md-4">
+                        <input type="text" id="evBuscar" class="form-control"
+                               placeholder="Buscar..." oninput="evFiltrar()">
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-outline-secondary w-100 btn-main"
+                                onclick="evLimpiarFiltros()" title="Quitar todos los filtros de columna">
+                            <i class="fa-solid fa-filter-circle-xmark me-1"></i> Limpiar
+                        </button>
+                    </div>
+                </div>
+
+                <div class="alert alert-info py-2 mb-2" style="font-size:12px">
+                    <i class="fa-solid fa-circle-info me-1"></i>
+                    Usa el ícono <i class="fa-solid fa-filter"></i> de cada columna para filtrar por
+                    sus valores, igual que en Excel. Se pueden combinar varias columnas a la vez.
+                </div>
+
+                <div id="evMeta" class="ev-meta mb-2"></div>
+
+                <div id="evLoading" class="text-center py-5" style="display:none">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="text-muted mt-3 mb-0">Calculando el informe con los datos actuales...</p>
+                </div>
+
+                <div id="evError" class="alert alert-danger" style="display:none">
+                    <i class="fa-solid fa-circle-exclamation me-1"></i>
+                    <span id="evErrorMsg"></span>
+                </div>
+
+                <div id="evContenido" class="d-flex flex-column" style="display:none;flex:1;overflow:hidden">
+
+                    <div id="evKpis" class="ev-kpi-row mb-3"></div>
+
+                    <ul class="nav nav-tabs" role="tablist">
+                        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab"
+                            data-bs-target="#evTabResumen" type="button">Resumen por ejecutor</button></li>
+                        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab"
+                            data-bs-target="#evTabMatriz" type="button">Cumplimiento día a día</button></li>
+                        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab"
+                            data-bs-target="#evTabDetalle" type="button">Detalle de subidas</button></li>
+                        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab"
+                            data-bs-target="#evTabDup" type="button">
+                            Fotos duplicadas <span class="badge bg-danger" id="evTabDupCount">0</span></button></li>
+                    </ul>
+
+                    <div class="tab-content ev-tab-content">
+
+                        <div class="tab-pane fade show active" id="evTabResumen">
+                            <div class="ev-scroll">
+                                <table class="table table-hover align-middle ev-tabla">
+                                    <thead><tr>
+                                        <th>Usuario</th><th>RUT</th><th>Nombre</th><th>Patente</th><th>División</th>
+                                        <th>Esperadas</th><th>Realizadas</th><th>Pendientes</th>
+                                        <th>% Cumpl.</th><th>Duplicadas</th><th>Días patente distinta</th>
+                                    </tr></thead>
+                                    <tbody id="evTbodyResumen"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="evTabMatriz">
+                            <div class="ev-scroll">
+                                <table class="table table-hover align-middle ev-tabla ev-matriz">
+                                    <thead id="evTheadMatriz"></thead>
+                                    <tbody id="evTbodyMatriz"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="evTabDetalle">
+                            <div class="ev-scroll">
+                                <table class="table table-hover align-middle ev-tabla">
+                                    <thead><tr>
+                                        <th>Usuario</th><th>Nombre</th><th>Fecha</th><th>Día</th>
+                                        <th>Patente</th><th>División</th>
+                                        <th>Primera subida</th><th>Última subida</th><th>Fotos</th>
+                                        <th>¿Esperado?</th><th>Patente ingresada</th><th>Respuestas</th>
+                                    </tr></thead>
+                                    <tbody id="evTbodyDetalle"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="evTabDup">
+                            <div class="ev-scroll">
+                                <table class="table table-hover align-middle ev-tabla">
+                                    <thead><tr>
+                                        <th>Usuario</th><th>Nombre</th><th>División</th>
+                                        <th>SHA1</th><th>Subidas</th>
+                                        <th>Días distintos</th><th>Fechas</th><th>Primera</th><th>Última</th>
+                                    </tr></thead>
+                                    <tbody id="evTbodyDup"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <span class="text-muted me-auto" style="font-size:12px">
+                    <i class="fa-solid fa-circle-info me-1"></i>
+                    Los datos se calculan al momento de consultar. Vuelve a presionar
+                    <strong>Consultar</strong> para actualizarlos.
+                </span>
+                <button type="button" class="btn btn-success btn-main" onclick="evDescargarExcel()">
+                    <i class="fa-solid fa-file-excel me-1"></i> Descargar este informe
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-main" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Descarga del Excel con los MISMOS filtros que se ven en pantalla -->
+<form id="evFormExcel" method="POST" target="_blank"
+      action="/visibility2/portal/informes/descargar_excel_estatus_vehiculo.php">
+    <input type="hidden" name="start_date" id="evExcelStart">
+    <input type="hidden" name="end_date"   id="evExcelEnd">
+<!-- El informe siempre se evalúa en modo diario -->
+</form>
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
@@ -3571,6 +3904,401 @@ function abrirModalDescargaExcel() {
     modalDescargaExcel.show();
 }
 
+/* =========================================================================
+   INFORME "ESTATUS DEL VEHÍCULO" EN PANTALLA
+   Mismo cálculo que el Excel (informes/lib_estatus_vehiculo.php). Existe para
+   que los coordinadores consulten el dato en vivo en vez de trabajar todo el
+   día sobre un Excel bajado en la mañana.
+   ========================================================================= */
+let modalEstatus = null;
+let evDatos      = null;   // último payload recibido
+
+function evEsc(s){
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    })[c]);
+}
+
+function evClasePct(pct){
+    if (pct >= 80) return 'ev-ok';
+    if (pct >= 50) return 'ev-medio';
+    return 'ev-malo';
+}
+
+function abrirModalEstatus(){
+    if (!modalEstatus) {
+        modalEstatus = new bootstrap.Modal(document.getElementById('modalEstatus'));
+    }
+    // Por defecto: mes en curso hasta hoy
+    const hoy = new Date();
+    const y = hoy.getFullYear();
+    const m = String(hoy.getMonth() + 1).padStart(2, '0');
+    const d = String(hoy.getDate()).padStart(2, '0');
+    if (!document.getElementById('evStart').value) {
+        document.getElementById('evStart').value = `${y}-${m}-01`;
+        document.getElementById('evEnd').value   = `${y}-${m}-${d}`;
+    }
+    modalEstatus.show();
+    if (!evDatos) cargarEstatus();
+}
+
+async function cargarEstatus(){
+    const start = document.getElementById('evStart').value;
+    const end   = document.getElementById('evEnd').value;
+    // Evaluación siempre diaria: ya no hay selector de modo.
+
+    if (!start || !end) { alert('Selecciona el rango de fechas.'); return; }
+    if (start > end)    { alert('La fecha inicial no puede ser mayor a la final.'); return; }
+
+    document.getElementById('evLoading').style.display = '';
+    document.getElementById('evContenido').style.display = 'none';
+    document.getElementById('evError').style.display = 'none';
+
+    try {
+        const params = new URLSearchParams({ start_date:start, end_date:end });
+        const resp = await fetch('/visibility2/portal/modulos/mod_vehiculos/ajax_estatus_vehiculo.php?' + params,
+                                 { credentials:'same-origin' });
+        const txt = await resp.text();
+        let r;
+        try { r = JSON.parse(txt); }
+        catch(e){ throw new Error('Respuesta inesperada del servidor (HTTP ' + resp.status + ')'); }
+
+        if (!r.ok) throw new Error(r.message || 'No se pudo generar el informe.');
+
+        evDatos = r;
+        evPintar(r);
+        document.getElementById('evContenido').style.display = '';
+    } catch (e) {
+        document.getElementById('evErrorMsg').textContent = e.message || String(e);
+        document.getElementById('evError').style.display = '';
+    } finally {
+        document.getElementById('evLoading').style.display = 'none';
+    }
+}
+
+function evPintar(r){
+    // Cabecera
+    document.getElementById('evMeta').innerHTML =
+        '<strong>' + evEsc(r.meta.periodo) + '</strong> · ' + evEsc(r.meta.modo_label) +
+        ' · <span class="text-muted">Datos al ' + evEsc(r.meta.generado) + '</span>';
+
+    // KPIs
+    const k = r.kpis;
+    document.getElementById('evKpis').innerHTML = `
+        <div class="ev-kpi"><span>Ejecutores</span><strong>${k.ejecutores}</strong></div>
+        <div class="ev-kpi"><span>Cumplimiento promedio</span>
+            <strong class="${evClasePct(k.cumplimiento_prom)}">${k.cumplimiento_prom}%</strong></div>
+        <div class="ev-kpi"><span>Subidas esperadas</span><strong>${k.subidas_esperadas}</strong></div>
+        <div class="ev-kpi"><span>Sin ninguna subida</span>
+            <strong class="${k.sin_subidas ? 'ev-malo' : ''}">${k.sin_subidas}</strong></div>
+        <div class="ev-kpi"><span>Con fotos duplicadas</span>
+            <strong class="${k.con_duplicados ? 'ev-malo' : ''}">${k.con_duplicados}</strong></div>
+        <div class="ev-kpi"><span>Fotos subidas</span><strong>${k.total_fotos}</strong></div>`;
+
+    /* --- Resumen --- */
+    let h = '';
+    if (!r.resumen.length) {
+        h = '<tr><td colspan="11" class="text-center text-muted py-4">Sin ejecutores para el período.</td></tr>';
+    } else {
+        r.resumen.forEach(u => {
+            h += `<tr>
+                <td>${evEsc(u.usuario)}</td>
+                <td>${evEsc(u.rut)}</td>
+                <td>${evEsc(u.nombre)}</td>
+                <td><span class="vehicle-plate">${evEsc(u.patente)}</span></td>
+                <td>${evEsc(u.division)}</td>
+                <td class="text-center">${u.expected}</td>
+                <td class="text-center">${u.complied}</td>
+                <td class="text-center">${u.missed}</td>
+                <td class="text-center"><span class="ev-pct ${evClasePct(u.pct)}">${u.pct}%</span></td>
+                <td class="text-center">${u.has_dups
+                    ? '<span class="ev-pct ev-malo">Sí</span>' : 'No'}</td>
+                <td class="text-center">${u.dias_patente_distinta > 0
+                    ? '<span class="ev-pct ev-malo">' + u.dias_patente_distinta + '</span>'
+                    : '0'}</td>
+            </tr>`;
+        });
+    }
+    document.getElementById('evTbodyResumen').innerHTML = h;
+
+    /* --- Matriz de cumplimiento --- */
+    let th = '<tr><th>Usuario</th><th>Nombre</th><th>Patente</th><th>División</th>';
+    r.matriz.cols.forEach(c => { th += '<th class="ev-col-dia">' + evEsc(c.label) + '</th>'; });
+    th += '<th>%</th></tr>';
+    document.getElementById('evTheadMatriz').innerHTML = th;
+
+    let hm = '';
+    if (!r.matriz.filas.length) {
+        hm = '<tr><td class="text-center text-muted py-4">Sin datos.</td></tr>';
+    } else {
+        r.matriz.filas.forEach(f => {
+            hm += `<tr><td>${evEsc(f.usuario)}</td><td>${evEsc(f.nombre)}</td>
+                       <td><span class="vehicle-plate">${evEsc(f.patente)}</span></td>
+                       <td>${evEsc(f.division)}</td>`;
+            f.celdas.forEach(ok => {
+                hm += ok ? '<td class="ev-cel ev-cel-ok">✓</td>' : '<td class="ev-cel ev-cel-no">✗</td>';
+            });
+            hm += `<td class="text-center"><span class="ev-pct ${evClasePct(f.pct)}">${f.pct}%</span></td></tr>`;
+        });
+    }
+    document.getElementById('evTbodyMatriz').innerHTML = hm;
+
+    /* --- Detalle de subidas --- */
+    let hd = '';
+    if (!r.detalle.length) {
+        hd = '<tr><td colspan="12" class="text-center text-muted py-4">Sin subidas en el período.</td></tr>';
+    } else {
+        r.detalle.forEach(d => {
+            const extra = d.respuestas
+                .filter(x => x.valor !== '—')
+                .map(x => evEsc(x.pregunta) + ': <strong>' + evEsc(x.valor) + '</strong>')
+                .join('<br>');
+            let coincide = '—';
+            if (d.coincide === true)  coincide = '<span class="ev-pct ev-ok">✓</span>';
+            if (d.coincide === false) coincide = '<span class="ev-pct ev-malo">✗</span>';
+
+            hd += `<tr class="${d.esperado ? '' : 'ev-fila-noesperada'}">
+                <td>${evEsc(d.usuario)}</td>
+                <td>${evEsc(d.nombre)}</td>
+                <td>${evEsc(d.fecha)}</td>
+                <td>${evEsc(d.dia)}</td>
+                <td><span class="vehicle-plate">${evEsc(d.patente)}</span></td>
+                <td>${evEsc(d.division)}</td>
+                <td>${evEsc(d.primera)}</td>
+                <td>${evEsc(d.ultima)}</td>
+                <td class="text-center">${d.fotos}</td>
+                <td class="text-center">${d.esperado ? 'Sí' : 'No'}</td>
+                <td>${evEsc(d.patente_ing)} ${coincide}</td>
+                <td style="font-size:12px">${extra || '—'}</td>
+            </tr>`;
+        });
+    }
+    document.getElementById('evTbodyDetalle').innerHTML = hd;
+
+    /* --- Duplicadas --- */
+    let hx = '';
+    if (!r.duplicadas.length) {
+        hx = '<tr><td colspan="9" class="text-center text-muted py-4">Sin fotos duplicadas detectadas en el período.</td></tr>';
+    } else {
+        r.duplicadas.forEach(x => {
+            hx += `<tr>
+                <td>${evEsc(x.usuario)}</td>
+                <td>${evEsc(x.nombre)}</td>
+                <td>${evEsc(x.division)}</td>
+                <td style="font-family:monospace;font-size:12px">${evEsc(x.sha1)}</td>
+                <td class="text-center">${x.subidas}</td>
+                <td class="text-center"><span class="ev-pct ev-malo">${x.dias}</span></td>
+                <td style="font-size:12px">${evEsc(x.fechas)}</td>
+                <td>${evEsc(x.primera)}</td>
+                <td>${evEsc(x.ultima)}</td>
+            </tr>`;
+        });
+    }
+    document.getElementById('evTbodyDup').innerHTML = hx;
+
+    document.getElementById('evTabDupCount').textContent = r.duplicadas.length;
+
+    // Los datos cambiaron: se reconstruyen los filtros de columna con los
+    // valores nuevos y se reaplica el buscador general.
+    evInitFiltrosCol();
+    evAplicarFiltros();
+}
+
+/* =========================================================================
+   FILTROS POR COLUMNA (estilo Excel)
+   Cada encabezado abre un desplegable con TODOS los valores distintos de esa
+   columna. Se combinan así: dentro de una columna, los valores marcados suman
+   (OR); entre columnas distintas, se acumulan (AND). El buscador general se
+   aplica encima de eso.
+
+   Los valores se leen del DOM ya renderizado, así funciona igual en las cuatro
+   pestañas sin depender de la forma de cada payload — incluida la matriz, cuyas
+   columnas son dinámicas (una por día).
+   ========================================================================= */
+const evFiltrosCol = {};      // { idTabla: { indiceColumna: Set(valores) } }
+let   evPanelAbierto = null;
+
+function evTextoCelda(td){
+    const t = (td?.textContent || '').replace(/\s+/g, ' ').trim();
+    return t === '' ? '(vacío)' : t;
+}
+
+/** Reconstruye los botones de filtro. Se llama tras cada render. */
+function evInitFiltrosCol(){
+    document.querySelectorAll('#modalEstatus table.ev-tabla').forEach(tabla => {
+        const id = tabla.closest('.tab-pane')?.id || 'tabla';
+        tabla.dataset.evId = id;
+        evFiltrosCol[id] = {};      // los datos cambiaron: filtros previos ya no aplican
+
+        const ths = tabla.tHead ? tabla.tHead.rows[0]?.cells : null;
+        if (!ths) return;
+
+        Array.from(ths).forEach((th, idx) => {
+            const texto = th.textContent.replace(/\s+/g, ' ').trim();
+            th.innerHTML = '<div class="ev-th-wrap"><span>' + evEsc(texto) +
+                           '</span><i class="fa-solid fa-filter ev-fbtn" title="Filtrar columna"></i></div>';
+            th.querySelector('.ev-fbtn').addEventListener('click', e => {
+                e.stopPropagation();
+                evAbrirPanelFiltro(tabla, idx, e.currentTarget);
+            });
+        });
+    });
+}
+
+function evCerrarPanelFiltro(){
+    if (evPanelAbierto) { evPanelAbierto.remove(); evPanelAbierto = null; }
+}
+
+function evAbrirPanelFiltro(tabla, idx, btn){
+    const yaAbierto = evPanelAbierto && evPanelAbierto.dataset.col === String(idx)
+                      && evPanelAbierto.dataset.tabla === tabla.dataset.evId;
+    evCerrarPanelFiltro();
+    if (yaAbierto) return;
+
+    const id = tabla.dataset.evId;
+
+    // Valores distintos: se leen de TODAS las filas, no solo de las visibles,
+    // si no sería imposible volver a incluir un valor ya filtrado.
+    const valores = new Set();
+    Array.from(tabla.tBodies[0]?.rows || []).forEach(tr => {
+        if (tr.classList.contains('ev-sin-filas')) return;
+        if (tr.cells[idx]) valores.add(evTextoCelda(tr.cells[idx]));
+    });
+
+    const orden = Array.from(valores).sort((a, b) =>
+        a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' }));
+
+    const activos = evFiltrosCol[id]?.[idx] || null;   // null = sin filtro (todos)
+
+    const panel = document.createElement('div');
+    panel.className = 'ev-fpanel';
+    panel.dataset.col = String(idx);
+    panel.dataset.tabla = id;
+    panel.innerHTML = `
+        <div class="ev-fpanel-head">
+            <input type="text" placeholder="Buscar valor..." class="ev-fbuscar">
+        </div>
+        <div class="ev-fpanel-list">
+            <label class="ev-fitem ev-ftodos">
+                <input type="checkbox" class="ev-ftodos-chk" ${!activos ? 'checked' : ''}>
+                <span>(Seleccionar todo)</span>
+            </label>
+            ${orden.map((v, i) => `
+                <label class="ev-fitem" data-val="${evEsc(v)}">
+                    <input type="checkbox" value="${evEsc(v)}"
+                        ${(!activos || activos.has(v)) ? 'checked' : ''}>
+                    <span title="${evEsc(v)}">${evEsc(v)}</span>
+                </label>`).join('')}
+        </div>
+        <div class="ev-fpanel-foot">
+            <button type="button" class="ev-fbtn-off">Quitar filtro</button>
+            <button type="button" class="ev-fbtn-ok">Aplicar</button>
+        </div>`;
+
+    document.body.appendChild(panel);
+    evPanelAbierto = panel;
+
+    // Posicionado respecto al botón; se corrige si se sale de la pantalla
+    const r = btn.getBoundingClientRect();
+    panel.style.top  = Math.min(r.bottom + 4, window.innerHeight - 350) + 'px';
+    panel.style.left = Math.min(r.left, window.innerWidth - 270) + 'px';
+
+    panel.addEventListener('click', e => e.stopPropagation());
+
+    panel.querySelector('.ev-fbuscar').addEventListener('input', function(){
+        const q = this.value.toLowerCase();
+        panel.querySelectorAll('.ev-fitem[data-val]').forEach(it => {
+            it.style.display = it.dataset.val.toLowerCase().includes(q) ? '' : 'none';
+        });
+    });
+
+    panel.querySelector('.ev-ftodos-chk').addEventListener('change', function(){
+        panel.querySelectorAll('.ev-fitem[data-val] input').forEach(chk => {
+            if (chk.closest('.ev-fitem').style.display !== 'none') chk.checked = this.checked;
+        });
+    });
+
+    panel.querySelector('.ev-fbtn-ok').addEventListener('click', () => {
+        const sel = new Set();
+        panel.querySelectorAll('.ev-fitem[data-val] input:checked').forEach(c => sel.add(c.value));
+
+        if (!evFiltrosCol[id]) evFiltrosCol[id] = {};
+        // Si quedaron todos marcados, es lo mismo que no filtrar
+        if (sel.size === orden.length || sel.size === 0) delete evFiltrosCol[id][idx];
+        else evFiltrosCol[id][idx] = sel;
+
+        evCerrarPanelFiltro();
+        evAplicarFiltros();
+    });
+
+    panel.querySelector('.ev-fbtn-off').addEventListener('click', () => {
+        if (evFiltrosCol[id]) delete evFiltrosCol[id][idx];
+        evCerrarPanelFiltro();
+        evAplicarFiltros();
+    });
+}
+
+document.addEventListener('click', evCerrarPanelFiltro);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') evCerrarPanelFiltro(); });
+
+/** Aplica buscador general + filtros de columna sobre las cuatro tablas. */
+function evAplicarFiltros(){
+    const q = (document.getElementById('evBuscar')?.value || '').trim().toLowerCase();
+
+    document.querySelectorAll('#modalEstatus table.ev-tabla').forEach(tabla => {
+        const id      = tabla.dataset.evId || '';
+        const filtros = evFiltrosCol[id] || {};
+        const cols    = Object.keys(filtros);
+        let visibles  = 0;
+
+        Array.from(tabla.tBodies[0]?.rows || []).forEach(tr => {
+            if (tr.classList.contains('ev-sin-filas')) { tr.remove(); return; }
+
+            let ok = !q || tr.textContent.toLowerCase().includes(q);
+            if (ok) {
+                for (const c of cols) {
+                    const celda = tr.cells[c];
+                    if (!celda || !filtros[c].has(evTextoCelda(celda))) { ok = false; break; }
+                }
+            }
+            tr.style.display = ok ? '' : 'none';
+            if (ok) visibles++;
+        });
+
+        // Marca visualmente qué columnas están filtradas
+        Array.from(tabla.tHead?.rows[0]?.cells || []).forEach((th, idx) => {
+            th.querySelector('.ev-fbtn')?.classList.toggle('activo', !!filtros[idx]);
+        });
+
+        if (visibles === 0 && (tabla.tBodies[0]?.rows.length || 0) > 0) {
+            const tr = tabla.tBodies[0].insertRow();
+            tr.className = 'ev-sin-filas';
+            const td = tr.insertCell();
+            td.colSpan = tabla.tHead?.rows[0]?.cells.length || 1;
+            td.textContent = 'Ningún registro coincide con los filtros aplicados.';
+        }
+    });
+}
+
+/* Buscador general (mantiene el nombre por el oninput del HTML) */
+function evFiltrar(){ evAplicarFiltros(); }
+
+/** Limpia todos los filtros de columna del informe. */
+function evLimpiarFiltros(){
+    Object.keys(evFiltrosCol).forEach(k => evFiltrosCol[k] = {});
+    const b = document.getElementById('evBuscar');
+    if (b) b.value = '';
+    evAplicarFiltros();
+}
+
+/* Envía los mismos filtros de pantalla al generador de Excel */
+function evDescargarExcel(){
+    const f = document.getElementById('evFormExcel');
+    document.getElementById('evExcelStart').value = document.getElementById('evStart').value;
+    document.getElementById('evExcelEnd').value   = document.getElementById('evEnd').value;
+    // (el modo ya no se envía: el informe es siempre diario)
+    f.submit();
+}
 </script>
 
 </body>

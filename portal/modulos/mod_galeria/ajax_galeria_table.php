@@ -371,6 +371,10 @@ if ($divisionLogin !== 1 && $divisionLogin > 0) {
 }
 
 $preguntaFiltro   = trim($_GET['pregunta'] ?? '');
+// Filtro de material (sólo vista implementación). Se compara por NOMBRE normalizado y no por
+// material.id porque la FK fotoVisita.id_material sólo viene poblada en ~65% de las fotos;
+// el resto sólo tiene el texto libre formularioQuestion.material.
+$materialFiltro   = trim($_GET['material'] ?? '');
 $start_date       = trim($_GET['start_date'] ?? '');
 $end_date         = trim($_GET['end_date'] ?? '');
 $filtrosAplicados = isset($_GET['filtrar']) && $_GET['filtrar'] === '1';
@@ -669,6 +673,14 @@ if ($view === 'encuesta' && $preguntaFiltro !== '') {
     $params[] = mb_strtoupper(trim($preguntaFiltro), 'UTF-8');
 }
 
+// filtro material solo en implementación. La expresión tiene que ser IDÉNTICA a la que arma
+// el desplegable en ajax_materiales_galeria.php, o el valor elegido no calzaría con ninguna fila.
+if ($view === 'implementacion' && $materialFiltro !== '') {
+    $where .= " AND UPPER(TRIM(COALESCE(m.nombre, fq.material))) = ?";
+    $types .= "s";
+    $params[] = mb_strtoupper(trim($materialFiltro), 'UTF-8');
+}
+
 // -----------------------------------------------------------------------------
 // 5) Query principal
 // -----------------------------------------------------------------------------
@@ -678,7 +690,9 @@ if ($view === 'implementacion') {
         SELECT
             MIN(fv.id) AS foto_id,
             GROUP_CONCAT(COALESCE(fv.url,'') SEPARATOR '||') AS urls,
-            fq.material,
+            -- Se prefiere el nombre del catálogo (mismo criterio que mod_galeria.php) para que
+            -- lo que se muestra coincida con el valor por el que se filtra.
+            ANY_VALUE(COALESCE(m.nombre, fq.material, '—')) AS material,
             fq.fechaVisita,
             ANY_VALUE(f.nombre) AS campaña_nombre,
             ANY_VALUE(l.codigo) AS local_codigo_completo,
@@ -705,6 +719,9 @@ if ($view === 'implementacion') {
         INNER JOIN cadena c       ON c.id = l.id_cadena
         INNER JOIN cuenta ct      ON ct.id = l.id_cuenta
         INNER JOIN usuario u      ON u.id = fv.id_usuario
+        -- LEFT porque la FK sólo existe en ~65% de las fotos; el resto se resuelve por el
+        -- texto de fq.material. Es 1:1 contra la PK, así que no multiplica filas.
+        LEFT JOIN material m      ON m.id = fv.id_material
         WHERE {$where}
           AND fq.fechaVisita IS NOT NULL
         GROUP BY u.id, l.id, fq.material, fq.fechaVisita
@@ -768,6 +785,9 @@ $cachePayload = [
     'jefeVentaFiltro'   => $jefeVentaFiltro,
     'codigoLocalFiltro' => $codigoLocalFiltro,
     'preguntaFiltro'    => $preguntaFiltro,
+    // Sin esto, dos materiales distintos compartirían entrada de caché durante 5 minutos y el
+    // segundo filtro devolvería los resultados del primero.
+    'materialFiltro'    => $materialFiltro,
     'start_date'        => $start_date,
     'end_date'          => $end_date
 ];

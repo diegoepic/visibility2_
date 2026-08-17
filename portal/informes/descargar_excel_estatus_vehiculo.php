@@ -11,6 +11,10 @@ if (session_status() === PHP_SESSION_NONE) {
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/vendor/autoload.php';
+/* Cálculo compartido con la vista en pantalla (mod_vehiculos → Estatus vehículo).
+   Acá solo queda la presentación en Excel; los números salen de la librería,
+   así ambas vistas no pueden discrepar. */
+require_once __DIR__ . '/lib_estatus_vehiculo.php';
 
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
@@ -50,9 +54,8 @@ $feriados   = array_values(array_filter(
     (array)($_POST['feriados'] ?? []),
     static fn($d) => (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$d)
 ));
-$modo = in_array($_POST['modo'] ?? '', ['clasico', 'diario'], true)
-    ? $_POST['modo']
-    : 'clasico';
+/* Evaluación siempre DIARIA: el modo "clásico" se eliminó cuando la operación
+   pasó a exigir dos subidas por día hábil. */
 
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $start_date) ||
     !preg_match('/^\d{4}-\d{2}-\d{2}$/', $end_date)   ||
@@ -76,105 +79,6 @@ mysqli_set_charset($conn, 'utf8mb4');
 /* ─────────────────────────────────────────────────────────────
  * Helpers de fecha
  * ───────────────────────────────────────────────────────────── */
-function isoWeekKey(string $date): string
-{
-    $d = new DateTime($date);
-    return $d->format('o') . '-W' . $d->format('W');
-}
-
-function consecutiveBlocks(array $dates): array
-{
-    if (empty($dates)) return [];
-    sort($dates);
-    $blocks = [[$dates[0]]];
-    for ($i = 1, $n = count($dates); $i < $n; $i++) {
-        $diff = (int)(new DateTime($dates[$i]))->diff(new DateTime($dates[$i - 1]))->days;
-        if ($diff === 1) {
-            $blocks[count($blocks) - 1][] = $dates[$i];
-        } else {
-            $blocks[] = [$dates[$i]];
-        }
-    }
-    return $blocks;
-}
-
-/**
- * Calcula los días de subida esperados para un rango, excluyendo feriados.
- * Devuelve [['date'=>'YYYY-MM-DD','tipo'=>'inicio'|'termino'], ...] ordenados.
- */
-function calcExpectedDays(string $start, string $end, array $holidays): array
-{
-    $byWeek  = [];
-    $weekOrd = [];
-    $current = new DateTime($start);
-    $last    = new DateTime($end);
-
-    while ($current <= $last) {
-        $dow = (int)$current->format('N'); // 1=Lun…7=Dom
-        if ($dow <= 5) {
-            $date = $current->format('Y-m-d');
-            if (!in_array($date, $holidays, true)) {
-                $key = isoWeekKey($date);
-                if (!isset($byWeek[$key])) {
-                    $byWeek[$key] = [];
-                    $weekOrd[]    = $key;
-                }
-                $byWeek[$key][] = $date;
-            }
-        }
-        $current->modify('+1 day');
-    }
-
-    $result = [];
-    $seen   = [];
-
-    foreach ($weekOrd as $key) {
-        foreach (consecutiveBlocks($byWeek[$key]) as $block) {
-            $first = $block[0];
-            $last2 = $block[count($block) - 1];
-
-            $k1 = $first . '|inicio';
-            if (!isset($seen[$k1])) {
-                $seen[$k1] = true;
-                $result[]  = ['date' => $first, 'tipo' => 'inicio'];
-            }
-
-            $k2 = $last2 . '|termino';
-            if (!isset($seen[$k2])) {
-                $seen[$k2] = true;
-                $result[]  = ['date' => $last2, 'tipo' => 'termino'];
-            }
-        }
-    }
-
-    return $result;
-}
-
-/**
- * Modo diario: devuelve 2 entradas por cada día hábil (inicio + termino).
- * El cumplimiento se evalúa por hora: inicio = primera subida antes de las 12:00,
- * termino = última subida a las 12:00 o después.
- */
-function calcExpectedDaysDaily(string $start, string $end, array $holidays): array
-{
-    $result  = [];
-    $current = new DateTime($start);
-    $last    = new DateTime($end);
-
-    while ($current <= $last) {
-        $dow = (int)$current->format('N'); // 1=Lun…7=Dom
-        if ($dow <= 5) {
-            $date = $current->format('Y-m-d');
-            if (!in_array($date, $holidays, true)) {
-                $result[] = ['date' => $date, 'tipo' => 'inicio'];
-                $result[] = ['date' => $date, 'tipo' => 'termino'];
-            }
-        }
-        $current->modify('+1 day');
-    }
-    return $result;
-}
-
 function fmtDate(string $date): string
 {
     $d = DateTime::createFromFormat('Y-m-d', $date);
@@ -219,207 +123,27 @@ $ES_DAYS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado',
 $ES_DAYS_SHORT = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
 /* ─────────────────────────────────────────────────────────────
- * Calcular días/slots esperados según modo
+ * Cálculo del informe (evaluación diaria)
  * ───────────────────────────────────────────────────────────── */
-$expectedDays = ($modo === 'diario')
-    ? calcExpectedDaysDaily($start_date, $end_date, $feriados)
-    : calcExpectedDays($start_date, $end_date, $feriados);
+/* Todo el cálculo (usuarios, subidas, duplicadas, respuestas, vehículos y
+   estadísticas de cumplimiento) viene de la librería compartida. */
+$evData = ev_calcular_informe($conn, $empresa_id, $start_date, $end_date, $feriados);
 
-/* Mapa date → tipos para lookup rápido */
-$expectedMap = []; // ['YYYY-MM-DD' => ['inicio','termino'] o subconjunto]
-foreach ($expectedDays as $e) {
-    $expectedMap[$e['date']][] = $e['tipo'];
-}
-
-/* Fechas esperadas únicas (para contar cumplimiento) */
-$expectedDatesUnique = array_keys($expectedMap);
-sort($expectedDatesUnique);
-
-/* ─────────────────────────────────────────────────────────────
- * Query 1: Usuarios elegibles
- * ───────────────────────────────────────────────────────────── */
-$users = [];
-$stmtU = $conn->prepare("
-    SELECT u.id,
-           COALESCE(u.rut, '') AS rut,
-           u.usuario,
-           CONCAT(COALESCE(u.nombre,''), ' ', COALESCE(u.apellido,'')) AS nombre_completo,
-           COALESCE(u.email, '') AS email,
-           COALESCE(de.nombre, '—') AS division
-    FROM usuario u
-    LEFT JOIN division_empresa de ON de.id = u.id_division
-    WHERE u.activo = 1
-      AND u.clasificacion_usuario = 'interno'
-      AND u.id_perfil = 3
-      AND u.id_empresa = ?
-      AND u.id <> 50
-    ORDER BY u.usuario ASC
-");
-$stmtU->bind_param('i', $empresa_id);
-$stmtU->execute();
-$resU = $stmtU->get_result();
-while ($row = $resU->fetch_assoc()) {
-    $users[(int)$row['id']] = [
-        'rut'             => trim($row['rut']),
-        'usuario'         => trim($row['usuario']),
-        'nombre_completo' => trim($row['nombre_completo']),
-        'email'           => trim($row['email']),
-        'division'        => trim($row['division']),
-    ];
-}
-$stmtU->close();
-
-/* ─────────────────────────────────────────────────────────────
- * Query 2: Subidas reales (usuario × día)
- * ───────────────────────────────────────────────────────────── */
-$uploads = []; // [user_id][date] => ['total','primera_hora','ultima_hora']
-$allUploadRows = []; // para Hoja 3
-
-$stmtS = $conn->prepare("
-    SELECT
-        r.id_usuario,
-        DATE(COALESCE(m.created_at, r.created_at))     AS fecha_subida,
-        COUNT(*)                                         AS total_fotos,
-        MIN(COALESCE(m.created_at, r.created_at))       AS primera_hora,
-        MAX(COALESCE(m.created_at, r.created_at))       AS ultima_hora
-    FROM form_question_responses r
-    LEFT JOIN form_question_photo_meta m ON m.resp_id = r.id
-    JOIN form_questions fq ON fq.id = r.id_form_question
-    WHERE fq.id_formulario = 138
-      AND fq.id_question_type = 7
-      AND COALESCE(m.created_at, r.created_at) BETWEEN ? AND ?
-    GROUP BY r.id_usuario, fecha_subida
-    ORDER BY r.id_usuario, fecha_subida
-");
-$startDt = $start_date . ' 00:00:00';
-$endDt   = $end_date   . ' 23:59:59';
-$stmtS->bind_param('ss', $startDt, $endDt);
-$stmtS->execute();
-$resS = $stmtS->get_result();
-while ($row = $resS->fetch_assoc()) {
-    $uid  = (int)$row['id_usuario'];
-    $date = (string)$row['fecha_subida'];
-    $uploads[$uid][$date] = [
-        'total'   => (int)$row['total_fotos'],
-        'primera' => (string)$row['primera_hora'],
-        'ultima'  => (string)$row['ultima_hora'],
-    ];
-    $allUploadRows[] = [
-        'id_usuario'   => $uid,
-        'fecha'        => $date,
-        'total_fotos'  => (int)$row['total_fotos'],
-        'primera_hora' => (string)$row['primera_hora'],
-        'ultima_hora'  => (string)$row['ultima_hora'],
-    ];
-}
-$stmtS->close();
-
-/* ─────────────────────────────────────────────────────────────
- * Query 3: Fotos duplicadas (por SHA1, misma campaña, días distintos)
- * ───────────────────────────────────────────────────────────── */
-$duplicates = [];
-$dupsByUser = []; // [user_id] = true  (para columna "Con duplicados")
-
-$stmtD = $conn->prepare("
-    SELECT
-        r.id_usuario,
-        CONCAT(COALESCE(u.nombre,''), ' ', COALESCE(u.apellido,'')) AS nombre_completo,
-        COALESCE(u.usuario, CONCAT('user_', r.id_usuario))           AS username,
-        JSON_UNQUOTE(JSON_EXTRACT(m.meta_json,'$.sha1'))              AS sha1,
-        COUNT(*)                                                       AS total_subidas,
-        COUNT(DISTINCT DATE(m.created_at))                            AS dias_distintos,
-        GROUP_CONCAT(DISTINCT DATE(m.created_at)
-                     ORDER BY DATE(m.created_at) SEPARATOR ', ')      AS fechas,
-        MIN(m.created_at)                                              AS primera_subida,
-        MAX(m.created_at)                                              AS ultima_subida,
-        MIN(m.foto_url)                                                AS primera_url
-    FROM form_question_photo_meta m
-    JOIN form_question_responses r ON r.id = m.resp_id
-    JOIN form_questions fq ON fq.id = r.id_form_question
-    JOIN usuario u ON u.id = r.id_usuario AND u.activo = 1
-    WHERE fq.id_formulario = 138
-      AND fq.id_question_type = 7
-      AND JSON_EXTRACT(m.meta_json,'$.sha1') IS NOT NULL
-      AND DATE(m.created_at) BETWEEN ? AND ?
-    GROUP BY r.id_usuario, JSON_UNQUOTE(JSON_EXTRACT(m.meta_json,'$.sha1'))
-    HAVING COUNT(DISTINCT DATE(m.created_at)) > 1
-    ORDER BY primera_subida DESC
-");
-$stmtD->bind_param('ss', $start_date, $end_date);
-$stmtD->execute();
-$resD = $stmtD->get_result();
-while ($row = $resD->fetch_assoc()) {
-    $duplicates[] = $row;
-    $dupsByUser[(int)$row['id_usuario']] = true;
-}
-$stmtD->close();
-
-/* ─────────────────────────────────────────────────────────────
- * Query 4: Respuestas texto/numéricas del formulario 138
- * (ej. "Ingrese Kilometraje Camioneta", "INGRESE PATENTE…")
- * ───────────────────────────────────────────────────────────── */
-$nonPhotoQuestions = []; // [qid => ['text'=>..., 'type'=>...]]
-$textNumAnswers    = []; // [uid][date][qid] => ['answer_text'=>..., 'valor'=>...]
-
-$stmtNPQ = $conn->prepare("
-    SELECT id, question_text, id_question_type
-    FROM form_questions
-    WHERE id_formulario = 138
-      AND id_question_type IN (4, 5)
-      AND deleted_at IS NULL
-    ORDER BY sort_order ASC
-");
-$stmtNPQ->execute();
-$resNPQ = $stmtNPQ->get_result();
-while ($row = $resNPQ->fetch_assoc()) {
-    $nonPhotoQuestions[(int)$row['id']] = [
-        'text' => trim($row['question_text']),
-        'type' => (int)$row['id_question_type'],
-    ];
-}
-$stmtNPQ->close();
-
-if (!empty($nonPhotoQuestions)) {
-    $qidList = implode(',', array_map('intval', array_keys($nonPhotoQuestions)));
-    $stmtNPR = $conn->prepare("
-        SELECT
-            r.id_usuario,
-            DATE(r.created_at) AS fecha,
-            r.id_form_question,
-            r.answer_text,
-            r.valor
-        FROM form_question_responses r
-        WHERE r.id_form_question IN ($qidList)
-          AND r.created_at BETWEEN ? AND ?
-        ORDER BY r.id_usuario, fecha
-    ");
-    $stmtNPR->bind_param('ss', $startDt, $endDt);
-    $stmtNPR->execute();
-    $resNPR = $stmtNPR->get_result();
-    while ($row = $resNPR->fetch_assoc()) {
-        $uid  = (int)$row['id_usuario'];
-        $date = (string)$row['fecha'];
-        $qid  = (int)$row['id_form_question'];
-        $textNumAnswers[$uid][$date][$qid] = [
-            'answer_text' => (string)($row['answer_text'] ?? ''),
-            'valor'       => $row['valor'],
-        ];
-    }
-    $stmtNPR->close();
-}
-
-/* Detectar QIDs de patente y km restantes dinámicamente */
-$qid_patente_encuesta = null;
-$qid_km_restantes     = null;
-foreach ($nonPhotoQuestions as $qid => $qdef) {
-    $t = mb_strtolower($qdef['text'], 'UTF-8');
-    if ($qid_patente_encuesta === null && str_contains($t, 'patente')) {
-        $qid_patente_encuesta = $qid;
-    }
-    if ($qid_km_restantes === null && str_contains($t, 'restantes')) {
-        $qid_km_restantes = $qid;
-    }
-}
+$expectedDays        = $evData['expectedDays'];
+$expectedMap         = $evData['expectedMap'];
+$expectedDatesUnique = $evData['expectedDatesUnique'];
+$users               = $evData['users'];
+$uploads             = $evData['uploads'];
+$allUploadRows       = $evData['allUploadRows'];
+$duplicates          = $evData['duplicates'];
+$dupsByUser          = $evData['dupsByUser'];
+$nonPhotoQuestions   = $evData['nonPhotoQuestions'];
+$textNumAnswers      = $evData['textNumAnswers'];
+$vehicleInfo         = $evData['vehicleInfo'];
+$userStats           = $evData['userStats'];
+$matrixCols          = $evData['matrixCols'];
+$qid_patente_encuesta = $evData['qid_patente_encuesta'];
+$qid_km_restantes     = $evData['qid_km_restantes'];
 
 /* ─────────────────────────────────────────────────────────────
  * Query 5: Preguntas fotográficas y fotos del período
@@ -530,95 +254,7 @@ uasort($photoQuestions, static function ($a, $b) {
 
 } // fin if (INCLUIR_HOJA_FOTOS) — Query 5
 
-/* ─────────────────────────────────────────────────────────────
- * Query 6: Vehículos activos asignados a ejecutores
- * Se cruza por vehiculo.id_merchan = usuario.id = form_question_responses.id_usuario.
- * ───────────────────────────────────────────────────────────── */
-$vehiclePatentes = []; // [id_merchan][patente] = true
-$vehicleModelos  = []; // [id_merchan][modelo] = true
-$vehicleInfo     = []; // [id_merchan] => ['patente'=>..., 'modelo'=>...]
-
-$stmtV = $conn->prepare("
-    SELECT
-        v.id_merchan,
-        v.patente,
-        v.modelo
-    FROM vehiculo v
-    WHERE v.id_empresa = ?
-      AND v.estado = 1
-      AND v.deleted_at IS NULL
-      AND v.id_merchan IS NOT NULL
-    ORDER BY v.id_merchan ASC, v.updated_at DESC, v.id DESC
-");
-$stmtV->bind_param('i', $empresa_id);
-$stmtV->execute();
-$resV = $stmtV->get_result();
-while ($row = $resV->fetch_assoc()) {
-    $mid = (int)$row['id_merchan'];
-    $pat = trim((string)($row['patente'] ?? '')) ?: '—';
-    $mod = trim((string)($row['modelo'] ?? '')) ?: '—';
-
-    $vehiclePatentes[$mid][$pat] = true;
-    $vehicleModelos[$mid][$mod]  = true;
-}
-$stmtV->close();
-
-foreach ($vehiclePatentes as $mid => $patentes) {
-    $vehicleInfo[$mid] = [
-        'patente' => implode(' / ', array_keys($patentes)),
-        'modelo'  => implode(' / ', array_keys($vehicleModelos[$mid] ?? ['—' => true])),
-    ];
-}
-
 $conn->close();
-
-/* ─────────────────────────────────────────────────────────────
- * Estadísticas por usuario (para Hoja 1)
- * ───────────────────────────────────────────────────────────── */
-$userStats = [];
-foreach ($users as $uid => $udata) {
-    $complied = 0;
-
-    if ($modo === 'diario') {
-        /* Modo diario: cada slot (date, tipo) verificado por hora de subida */
-        $expected = count($expectedDays);
-        foreach ($expectedDays as $e) {
-            $d    = $e['date'];
-            $tipo = $e['tipo'];
-            if (!isset($uploads[$uid][$d])) continue;
-            if ($tipo === 'inicio') {
-                $h = (int)(new DateTime($uploads[$uid][$d]['primera']))->format('H');
-                if ($h < 12) $complied++;
-            } else {
-                $h = (int)(new DateTime($uploads[$uid][$d]['ultima']))->format('H');
-                if ($h >= 12) $complied++;
-            }
-        }
-    } else {
-        /* Modo clásico: una subida (cualquier hora) en la fecha esperada = cumplido */
-        $expected = count($expectedDatesUnique);
-        foreach ($expectedDatesUnique as $d) {
-            if (isset($uploads[$uid][$d])) {
-                $complied++;
-            }
-        }
-    }
-
-    $missed  = $expected - $complied;
-    $pct     = $expected > 0 ? round($complied / $expected * 100, 1) : 0.0;
-    $hasDups = isset($dupsByUser[$uid]);
-
-    $userStats[$uid] = [
-        'expected' => $expected,
-        'complied' => $complied,
-        'missed'   => $missed,
-        'pct'      => $pct,
-        'has_dups' => $hasDups,
-    ];
-}
-
-/* Ordenar por % cumplimiento ASC (peor primero) */
-uasort($userStats, static fn($a, $b) => $a['pct'] <=> $b['pct']);
 
 /* ─────────────────────────────────────────────────────────────
  * Helpers PhpSpreadsheet
@@ -743,10 +379,10 @@ function addPhotoDrawing(Worksheet $ws, string $cell, string $fotoUrl,
  * Crear libro
  * ───────────────────────────────────────────────────────────── */
 $spreadsheet = new Spreadsheet();
-$modoTitleLabel = $modo === 'diario' ? 'Modo Diario' : 'Modo Clásico';
+$modoTitleLabel = 'Evaluación Diaria';
 $spreadsheet->getProperties()
     ->setTitle('Informe Estatus Vehículo')
-    ->setSubject('ESTATUS VEHICULO ' . strtoupper($modo) . ' ' . $start_date . ' a ' . $end_date)
+    ->setSubject('ESTATUS VEHICULO DIARIO ' . $start_date . ' a ' . $end_date)
     ->setCreator('Sistema Visibility');
 
 $now   = (new DateTime())->format('d/m/Y H:i');
@@ -771,7 +407,7 @@ $ws1->getStyle('A1')->applyFromArray([
 $ws1->getRowDimension(1)->setRowHeight(28);
 
 $ws1->mergeCells('A2:' . $ws1LastLetter . '2');
-$modoDescripcion = $modo === 'diario' ? 'Diario (2 subidas/día hábil)' : 'Clásico (lun mañana + vie tarde)';
+$modoDescripcion = 'Diario (2 subidas por día hábil: mañana y tarde)';
 setStr($ws1, 1, 2, 'Período: ' . fmtDate($start_date) . ' → ' . fmtDate($end_date)
     . '    |    Generado: ' . $now
     . '    |    Modo: ' . $modoDescripcion
@@ -902,37 +538,8 @@ $ws2 = $spreadsheet->createSheet()->setTitle('Cumplimiento');
 /** @var Worksheet $ws2 */
 $ws2 = $spreadsheet->getSheetByName('Cumplimiento');
 
-/* Construir columnas de la matriz según modo */
-$matrixCols = [];
-if ($modo === 'diario') {
-    /* Modo diario: dos columnas por día (M = mañana, T = tarde) */
-    foreach ($expectedDays as $e) {
-        $d        = new DateTime($e['date']);
-        $dowNum   = (int)$d->format('N');
-        $dayShort = $ES_DAYS_SHORT[$dowNum] ?? '?';
-        $dateFmt  = $dayShort . ' ' . $d->format('d/m');
-        $label    = $dateFmt . "\n" . ($e['tipo'] === 'inicio' ? 'M' : 'T');
-        $matrixCols[] = ['date' => $e['date'], 'tipo' => $e['tipo'], 'label' => $label];
-    }
-} else {
-    /* Modo clásico: una columna por fecha esperada (puede ser mañana, tarde o ambos) */
-    foreach ($expectedDatesUnique as $date) {
-        $tipos    = $expectedMap[$date];
-        $d        = new DateTime($date);
-        $dowNum   = (int)$d->format('N');
-        $dayShort = $ES_DAYS_SHORT[$dowNum] ?? '?';
-        $dateFmt  = $dayShort . ' ' . $d->format('d/m');
-
-        if (in_array('inicio', $tipos, true) && in_array('termino', $tipos, true)) {
-            $label = $dateFmt . "\nambos";
-        } elseif (in_array('inicio', $tipos, true)) {
-            $label = $dateFmt . "\nmañana";
-        } else {
-            $label = $dateFmt . "\ntarde";
-        }
-        $matrixCols[] = ['date' => $date, 'tipos' => $tipos, 'tipo' => null, 'label' => $label];
-    }
-}
+/* Columnas de la matriz: vienen de la librería compartida (ev_matrixCols), la
+   misma que usa la vista en pantalla, para que ambas muestren los mismos días. */
 
 /* Título */
 $totalCols2 = count($matrixCols) + 7; // 6 fijas + días + %
@@ -979,20 +586,9 @@ foreach ($userStats as $uid => $stats) {
 
     $col2 = 7;
     foreach ($matrixCols as $mc) {
-        if ($modo === 'diario') {
-            $complied_cell = false;
-            if (isset($uploads[$uid][$mc['date']])) {
-                if ($mc['tipo'] === 'inicio') {
-                    $h = (int)(new DateTime($uploads[$uid][$mc['date']]['primera']))->format('H');
-                    $complied_cell = ($h < 12);
-                } else {
-                    $h = (int)(new DateTime($uploads[$uid][$mc['date']]['ultima']))->format('H');
-                    $complied_cell = ($h >= 12);
-                }
-            }
-        } else {
-            $complied_cell = isset($uploads[$uid][$mc['date']]);
-        }
+        // Regla de cumplimiento centralizada en la librería: el Excel y la vista
+        // en pantalla evalúan la celda exactamente igual.
+        $complied_cell = ev_cumpleCelda($uploads[$uid] ?? [], $mc);
         $symbol = $complied_cell ? '✓' : '✗';
         setVal($ws2, $col2, $r2, $symbol);
         $cellRef = cellRef($col2, $r2);
@@ -1415,7 +1011,7 @@ $ws5->freezePane(Coordinate::stringFromColumnIndex($fixedCols5 + 1) . ($hdrRow5 
  * ───────────────────────────────────────────────────────────── */
 $spreadsheet->setActiveSheetIndex(0);
 
-$modoLabel = $modo === 'diario' ? 'Diario' : 'Clasico';
+$modoLabel = 'Diario';
 $filename = 'Informe_Estatus_Vehiculo_' . $modoLabel . '_'
           . str_replace('-', '', $start_date)
           . '_' . str_replace('-', '', $end_date) . '.xlsx';

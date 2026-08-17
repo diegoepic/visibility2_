@@ -223,6 +223,7 @@ try {
             'Empresa',
             'División',
             'Subdivisión',
+            'RUT Actual',            
             'Merchan Actual',
             'Usuario Merchan',
             'Fecha Inicio Asignación'
@@ -244,6 +245,7 @@ try {
                 UPPER(d.nombre) AS division,
                 UPPER(s.nombre) AS subdivision,
                 UPPER(TRIM(CONCAT(COALESCE(u.nombre, ''), ' ', COALESCE(u.apellido, '')))) AS merchan,
+                UPPER(u.rut) AS usuario_rut,                
                 UPPER(u.usuario) AS usuario_merchan,
                 h.fecha_inicio
 
@@ -290,6 +292,7 @@ try {
                 $row['empresa'] ?? '',
                 $row['division'] ?? '',
                 $row['subdivision'] ?? '',
+                $row['usuario_rut'] ?? '',                
                 trim($row['merchan'] ?? ''),
                 $row['usuario_merchan'] ?? '',
                 $row['fecha_inicio'] ?? ''

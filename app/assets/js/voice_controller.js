@@ -189,12 +189,18 @@
     const trimmedText = text.trim();
     if (!trimmedText) return false;
 
-    // Evitar repetición inmediata del mismo texto
-    if (trimmedText === lastSpokenInstruction && Date.now() - lastSpokenTime < 5000) {
+    // Evitar repetición inmediata del mismo texto.
+    // La clave incluye la prioridad: "gire a la derecha" anunciado a 200 m (high) y otra vez a
+    // 50 m (interrupt) son dos avisos distintos y el segundo no se debe descartar.
+    const dedupeKey = trimmedText + '|' + priority;
+    if (dedupeKey === lastSpokenInstruction && Date.now() - lastSpokenTime < 2500) {
       return false;
     }
 
     const utterance = createUtterance(trimmedText);
+    // Viaja con la utterance porque el dedupe se registra recién al terminar de hablar, y para
+    // entonces ya pasó por la cola (processQueue sólo conserva la utterance).
+    utterance._dedupeKey = dedupeKey;
 
     if (priority === 'interrupt') {
       // Interrumpir todo y hablar inmediatamente
@@ -240,7 +246,7 @@
     utterance.onend = () => {
       speaking = false;
       currentUtterance = null;
-      lastSpokenInstruction = text;
+      lastSpokenInstruction = utterance._dedupeKey || text;
       lastSpokenTime = Date.now();
 
       // Pequeño delay antes del siguiente

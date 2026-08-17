@@ -130,7 +130,9 @@ SELECT
     MAX(gv.fecha_visita)         AS ultima_gestion_at
 FROM visita v
 INNER JOIN formulario f   ON f.id = v.id_formulario
-INNER JOIN local l        ON l.id = v.id_local
+/* LEFT (no INNER): las campañas complementarias que NO requieren local guardan
+   visita.id_local = 0, así que un INNER JOIN las dejaba fuera del journal. */
+LEFT JOIN local l         ON l.id = v.id_local
 LEFT JOIN distrito dstr   ON dstr.id = l.id_distrito
 LEFT JOIN gestion_visita gv
        ON gv.visita_id = v.id
@@ -194,8 +196,11 @@ try {
             'visita_id'            => (int)$row['visita_id'],
             'client_guid'          => $row['client_guid'] ?? null,
 
+            /* id_local = 0 significa "actividad complementaria sin local".
+               Se devuelve null para que el cliente lo distinga de un local real
+               y no pinte "Local #0". */
             'local' => [
-                'id'         => (int)$row['id_local'],
+                'id'         => ((int)$row['id_local'] > 0) ? (int)$row['id_local'] : null,
                 'codigo'     => $row['local_codigo'],
                 'nombre'     => $row['local_nombre'],
                 'direccion'  => $row['local_direccion'],

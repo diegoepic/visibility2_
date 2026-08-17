@@ -2785,7 +2785,6 @@ body.modal-open {
                 <div class="modern-plan-check">
                   <input type="checkbox"
                          id="chk-ipt<?= (int)$rowIpt['id_campana']; ?>"
-                         class="route-bulk-checkbox"
                          value="<?= (int)$rowIpt['id_campana']; ?>"
                          data-modalidad="<?= $modalidadRuta; ?>">
                 </div>
@@ -3758,7 +3757,7 @@ $(document).on('click', '.download-excel-trigger', function (e) {
   $('#modalDescargaExcel').modal('show');
 });
 
-const prepararDescargaMasiva = (checkboxSelector, mode = 'bulk') => {
+const prepararDescargaMasiva = (checkboxSelector) => {
   const seleccionados = Array.from(document.querySelectorAll(checkboxSelector));
 
   if (seleccionados.length === 0) {
@@ -3768,7 +3767,7 @@ const prepararDescargaMasiva = (checkboxSelector, mode = 'bulk') => {
 
   campanaDescargaExcel = null;
   campanaModalidadExcel = '';
-  modoDescargaExcel = mode;
+  modoDescargaExcel = 'bulk';
   campanasSeleccionadasExcel = seleccionados.map(cb => cb.value);
 
   const modalidades = seleccionados.map(cb => cb.dataset.modalidad || '');
@@ -3780,11 +3779,6 @@ const prepararDescargaMasiva = (checkboxSelector, mode = 'bulk') => {
 $('#bulkDownloadBtn').on('click', function (e) {
   e.preventDefault();
   prepararDescargaMasiva('.campaign-bulk-checkbox:checked');
-});
-
-$('#bulkDownloadBtnIPT').on('click', function (e) {
-  e.preventDefault();
-  prepararDescargaMasiva('.route-bulk-checkbox:checked', 'bulk_ipt');
 });
 
 $('#selectAllCheckbox').on('change', function () {
@@ -3799,17 +3793,10 @@ $(document).on('change', '.campaign-bulk-checkbox', function () {
   $('#selectAllCheckbox').prop('checked', total > 0 && total === checked);
 });
 
-$(document).on('change', '.route-bulk-checkbox', function () {
-  const total = $('.route-bulk-checkbox').length;
-  const checked = $('.route-bulk-checkbox:checked').length;
-
-  $('#selectAllCheckboxIPT').prop('checked', total > 0 && total === checked);
-});
-
 $('#btnDescargarExcelConfirm').on('click', function () {
   const params = new URLSearchParams();
 
-  if (modoDescargaExcel === 'bulk' || modoDescargaExcel === 'bulk_ipt') {
+  if (modoDescargaExcel === 'bulk') {
     if (campanasSeleccionadasExcel.length === 0) return;
     params.set('ids', campanasSeleccionadasExcel.join(','));
   } else {
@@ -3833,14 +3820,11 @@ $('#btnDescargarExcelConfirm').on('click', function () {
   $('#modalDescargaExcel').modal('hide');
   mostrarOverlayDescarga();
 
-  if (modoDescargaExcel === 'bulk' || modoDescargaExcel === 'bulk_ipt') {
+  if (modoDescargaExcel === 'bulk') {
     const token = generarTokenDescarga();
     params.set('download_token', token);
 
-    const endpointBulk = modoDescargaExcel === 'bulk_ipt'
-      ? '/visibility2/portal/informes/descarga_excel_masivo_ipt.php'
-      : '/visibility2/portal/informes/descarga_excel_masivo.php';
-    const urlBulk = `${endpointBulk}?${params.toString()}`;
+    const urlBulk = `/visibility2/portal/informes/descarga_excel_masivo.php?${params.toString()}`;
 
     esperarDescargaReal(token, function () {
       ocultarOverlayDescarga();

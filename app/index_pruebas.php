@@ -5,6 +5,7 @@ if (!isset($_SESSION['usuario_id'])) {
     exit();
 }
 
+
 require_once __DIR__ . '/lib/security_headers.php';
 emit_security_headers();
 
@@ -48,6 +49,20 @@ $precacheLimit  = isset($_ENV['GESTIONAR_PRECACHE_LIMIT']) ? (int)$_ENV['GESTION
 $precacheLimit  = $precacheLimit > 0 ? $precacheLimit : 10;
 $googleMapsApiKey = getenv('GOOGLE_MAPS_API_KEY');
 $googleMapsApiKey = is_string($googleMapsApiKey) ? trim($googleMapsApiKey) : '';
+
+// Map ID de Google Cloud. Sólo un mapa VECTORIAL (Map type: JavaScript, Rendering type: Vector,
+// con Tilt y Rotation habilitados) admite inclinación y rotación de cámara; en un mapa raster
+// moveCamera() ignora tilt/heading en silencio. Si está vacío, la navegación cae automáticamente
+// a la versión 2D (recentrado suave + flecha de rumbo) sin ningún error.
+$googleMapsMapId = getenv('GOOGLE_MAPS_MAP_ID');
+$googleMapsMapId = is_string($googleMapsMapId) ? trim($googleMapsMapId) : '';
+
+// Versión de los assets propios. Va como ?v= en las etiquetas script y link para saltarse el
+// cache HTTP del navegador.
+// IMPORTANTE: al subirla hay que subir también VERSION en app/sw.js y SW_VERSION en
+// assets/js/v2_cache.js al MISMO valor, o el service worker seguirá sirviendo los archivos viejos
+// (sw.js usa cacheFirst sin revalidación para /visibility2/app).
+$assetVer = 'v7.1.7';
 
 $TEST_MODE = getenv('V2_TEST_MODE') === '1';
 // URL del proxy backend de Routes API. Por defecto activo; se puede desactivar con la env
@@ -585,7 +600,7 @@ foreach ($locales_reag as $local) {
     <link rel="stylesheet" href="assets/css/offline.css">
     <link rel="stylesheet" href="assets/css/nav_ar.css">
      <link rel="stylesheet" href="assets/css/journal.css">
-     <link rel="stylesheet" href="css/index.css">
+     <link rel="stylesheet" href="css/index.css?v=<?php echo rawurlencode($assetVer); ?>">
     <style>
       .badge-botilleria {
           display: inline-block;
@@ -1308,13 +1323,16 @@ if (isset($_SESSION['success'])) {
               <div class="nav-chips" id="navChips">
                 <span class="nav-chip nav-chip--gps" id="navGps"><i class="fa fa-location-arrow"></i> GPS</span>
                 <span class="nav-chip" id="navNet"><i class="fa fa-road"></i> —</span>
+                <!-- Deja ver de un vistazo si el mapa está inclinando (vectorial) o plano (raster) -->
+                <span class="nav-chip" id="navVista" title="Tipo de vista del mapa">2D</span>
                 <span class="nav-chip" id="navNextStop"><i class="fa fa-flag-checkered"></i> —</span>
               </div>
               <div class="nav-bottom">
+                <div class="nav-progress"><div id="hudProgress" class="nav-progress-bar"></div></div>
                 <button id="btnExitNav" class="btn btn-default btn-sm" title="Salir de la navegación"><i class="fa fa-times"></i> Salir</button>
                 <div class="nav-stats">
                   <div><small>Llegada</small><span id="hudEta">—</span></div>
-                  <div><small>Restante</small><span id="hudRemain">—</span></div>
+                  <div><small>Falta</small><span id="hudRemain">—</span></div>
                   <div><small>Tiempo</small><span id="hudTime">—</span></div>
                 </div>
                 <button id="btnVozNav" class="btn btn-default btn-sm" title="Silenciar / activar voz"><i class="fa fa-volume-up"></i></button>
@@ -1652,14 +1670,19 @@ foreach ($locales_reag as $row) {
 <script src="assets/plugins/bootstrap/js/bootstrap.min.js" defer></script>
 <script>
   window.__GOOGLE_MAPS_API_KEY = "<?php echo htmlspecialchars($googleMapsApiKey, ENT_QUOTES, 'UTF-8'); ?>";
+  window.__GOOGLE_MAPS_MAP_ID  = "<?php echo htmlspecialchars($googleMapsMapId, ENT_QUOTES, 'UTF-8'); ?>";
   window.__ROUTES_PROXY_URL = "<?php echo htmlspecialchars($routesProxyUrl, ENT_QUOTES, 'UTF-8'); ?>";
 </script>
-<script src="assets/js/route_preferences.js"></script>
-<script src="assets/js/route_engine.js"></script>
-<script src="assets/js/route_selection.js"></script>
-<script src="assets/js/route_planner.js"></script>
-<script src="assets/js/nav_engine.js"></script>
-<script src="assets/js/ar_view_lite.js"></script>
+<?php $v = '?v=' . rawurlencode($assetVer); ?>
+<script src="assets/js/route_preferences.js<?php echo $v; ?>"></script>
+<script src="assets/js/route_engine.js<?php echo $v; ?>"></script>
+<script src="assets/js/route_selection.js<?php echo $v; ?>"></script>
+<script src="assets/js/route_planner.js<?php echo $v; ?>"></script>
+<!-- Antes de nav_engine: el motor usa VoiceController, y el shim de más abajo sólo se instala
+     si este archivo no cargó (guarda `if (!window.VoiceController)`). -->
+<script src="assets/js/voice_controller.js<?php echo $v; ?>"></script>
+<script src="assets/js/nav_engine.js<?php echo $v; ?>"></script>
+<script src="assets/js/nav_camera.js<?php echo $v; ?>"></script>
 
 <script>
 // ============ Preferencias/estado ============
@@ -1723,7 +1746,9 @@ loadExcluded();
 
 // ============ Utilidades de ruta ============
 const GOOGLE_MAPS_API_KEY = window.__GOOGLE_MAPS_API_KEY || '';
-const MAP_ID = "YOUR_VECTOR_MAP_ID";
+// Map ID vectorial (viene de GOOGLE_MAPS_MAP_ID en app/.env). Vacío = mapa raster: la
+// navegación funciona igual, sólo que sin inclinación 3D. Ver nav_camera.js.
+const MAP_ID = window.__GOOGLE_MAPS_MAP_ID || '';
 const MAPS_LIBRARIES = 'geometry';
 const IS_TEST_MODE = <?php echo $TEST_MODE ? 'true' : 'false'; ?>;
 let mapsScriptPromise = null;
@@ -1903,8 +1928,14 @@ function clearRouteNumbers(){
   });
 }
 
-// Texto a voz (toggleable)
-function speak(text){
+// Texto a voz. Delega en VoiceController (cola con prioridades, voz es-CL, sin cortar la frase
+// anterior). La rama de abajo es el camino legacy y sólo corre si voice_controller.js no cargó:
+// hace cancel() en cada llamada, que es justamente lo que cortaba los anuncios a la mitad.
+function speak(text, priority){
+  if(window.VoiceController && typeof window.VoiceController.isEnabled === 'function'){
+    window.VoiceController.speak(text, priority || 'normal');
+    return;
+  }
   if(!window.voiceEnabled) return;
   try{
     window.speechSynthesis.cancel();
@@ -1915,6 +1946,23 @@ function speak(text){
     speechSynthesis.speak(u);
   }catch(_){}
 }
+
+// Un solo lugar pinta los dos botones de voz (#btnVoz en el panel, #btnVozNav en el HUD) y
+// mantiene window.voiceEnabled en sintonía con el estado real del controller.
+window.addEventListener('voice-enabled-changed', function(e){
+  const on = !!(e.detail && e.detail.enabled);
+  window.voiceEnabled = on;
+  $('#btnVoz').toggleClass('btn-info', on);
+  $('#btnVozNav').find('i').attr('class', on ? 'fa fa-volume-up' : 'fa fa-volume-off');
+});
+
+// Estado inicial: la preferencia queda persistida en RoutePreferences entre sesiones.
+$(function(){
+  if(window.VoiceController && typeof window.VoiceController.isEnabled === 'function'){
+    window.voiceEnabled = window.VoiceController.isEnabled();
+    window.dispatchEvent(new CustomEvent('voice-enabled-changed', { detail:{ enabled: window.voiceEnabled } }));
+  }
+});
 
 function logRouteEvent(payload){
   const now=new Date();
@@ -2115,8 +2163,19 @@ function updateCounts(){
   const markers=(mode==='prog')?window.markersProg:window.markersReag;
   const count=Object.values(markers).filter(m=>m.marker.getMap()!==null).length;
   $('#countMapa').text(count);
-  const selId = (mode==='prog')?'#filtroFechaProg':'#filtroFechaReag'; const fechaSel = $(selId).val();
-  let excl=0; Object.keys(markers).forEach(id=>{ if (window.excluded.has(`${mode}|${fechaSel}|${id}`)) excl++; }); $('#countEx').text(excl);
+  // Excluidos: se cuenta fila por fila sobre las tablas VISIBLES, usando la fecha propia de
+  // cada tabla. Antes se contaba sólo contra la fecha del <select>, así que en una búsqueda que
+  // mezcla fechas los locales desmarcados de los otros días no aparecían y el contador decía 0.
+  let excl = 0;
+  $(panel + ' table[data-fechaTabla]:visible tbody tr:visible').each(function(){
+    const $tr   = $(this);
+    const id    = parseInt($tr.data('idlocal'), 10);
+    const fecha = $tr.closest('table').data('fechatabla');
+    const $chk  = $tr.find('.in-route');
+    const desmarcado = $chk.length ? !$chk.prop('checked') : false;
+    if (desmarcado || window.excluded.has(`${mode}|${fecha}|${id}`)) excl++;
+  });
+  $('#countEx').text(excl);
 }
 
 // Fix #3: shim de VoiceController que delega en speak() local
@@ -2139,7 +2198,9 @@ if (!window.VoiceController) {
 const _fechasOkKeyByMode = { prog: null, reag: null };
 
 // applyFilters: respeta campañas tachadas + fecha + excluidos + checkboxes
-window.applyFilters = function(){
+// opts.skipPlan: no agendar el recálculo de ruta al terminar. Lo usa quien va a pedir un
+// cálculo explícito justo después (abrir el modal del mapa), para no lanzar dos en paralelo.
+window.applyFilters = function(opts){
   const modo      = window.modoLocal || 'prog';
   const selId     = (modo==='prog') ? '#filtroFechaProg' : '#filtroFechaReag';
   const searchId  = (modo==='prog') ? '#filtroLocalesProg' : '#filtroLocalesReag';
@@ -2224,6 +2285,7 @@ window.applyFilters = function(){
     const b = new google.maps.LatLngBounds(); visibles.forEach(m=>b.extend(m.marker.getPosition())); window.mapa.fitBounds(b);
   }
   updateCounts();
+  if (opts && opts.skipPlan) return;
   const pos = window.ejecutorMarker?.getPosition();
   if (isMapVisible && pos && !(window.navigator3D && window.navigator3D.active)) window.debouncedPlanRoute(pos.toJSON());
 };
@@ -2317,10 +2379,13 @@ window.initMap=function(){
     if(geoWatchId!=null || !navigator.geolocation) return;
     geoWatchId = navigator.geolocation.watchPosition(pos=>{
       const cur=new google.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
-      window.ejecutorMarker.setPosition(cur);
+      const navegando = !!(window.navigator3D && window.navigator3D.active);
+      // Durante la navegación el marcador lo anima NavCamera con la posición proyectada sobre la
+      // vía e interpolada entre fixes; moverlo también desde acá con el fix crudo lo haría saltar.
+      if(!navegando) window.ejecutorMarker.setPosition(cur);
       if(!lastPos || google.maps.geometry.spherical.computeDistanceBetween(lastPos, cur) > MIN_MOVE_METERS){
         lastPos=cur; const json=cur.toJSON();
-        if (window.navigator3D && window.navigator3D.active) return;
+        if (navegando) return;
         if (window.autoRecalc && isMapVisible) window.debouncedPlanRoute(json);
       }
     },err=>{ console.error(err); if(isMapVisible) mostrarToast('No se pudo obtener tu ubicación.', 'warn'); },
@@ -2332,12 +2397,23 @@ window.initMap=function(){
   $('#modalMapa').on('shown.bs.modal', function(){
     isMapVisible=true; startGeoWatch();
     google.maps.event.trigger(window.mapa, 'resize');
-    ensureDateSelectedFor(window.modoLocal||'prog'); applyFilters();
+    ensureDateSelectedFor(window.modoLocal||'prog');
+    // applyFilters() termina agendando su propio recálculo (debouncedPlanRoute). Si se deja
+    // correr, al abrir el mapa se lanzan DOS cálculos de ruta: el suyo y el de acá. En rutas de
+    // varias fechas eso significaba dos veces el modal de confirmación. Se suprime el de
+    // applyFilters porque en seguida se pide uno explícito, inmediato y forzado.
+    applyFilters({ skipPlan: true });
     const pos=window.ejecutorMarker?.getPosition();
     if(pos && !(window.navigator3D && window.navigator3D.active)) window.planRouteFromSelection(pos.toJSON(),{force:true, trigger:'modal_open'});
   });
   $('#modalMapa').on('hidden.bs.modal', function(){
     isMapVisible=false; stopGeoWatch();
+    // Si el modal se cierra con ESC o con el backdrop mientras se navega, la clase de pantalla
+    // completa quedaría pegada en <body> y descuadraría el resto de la página.
+    if(window.setNavFullscreen) window.setNavFullscreen(false);
+    // Barrido de backdrops sueltos: el modal de ruta cross-date se abre ENCIMA de este, y
+    // cualquier desincronización entre ambos dejaba la capa oscura tapando la página.
+    if(window.RouteSelection && RouteSelection.limpiarBackdropHuerfano) RouteSelection.limpiarBackdropHuerfano();
   });
 
   // Botones
@@ -2373,7 +2449,18 @@ window.initMap=function(){
   });
   $('#optimizeOrder').on('change', function(){ window.optimizeOrder=$(this).is(':checked'); const pos=window.ejecutorMarker?.getPosition(); if (isMapVisible && pos && !(window.navigator3D && window.navigator3D.active)) window.planRouteFromSelection(pos.toJSON(),{trigger:'optimize_toggle'}); });
   $('#autoRecalc').on('change', function(){ window.autoRecalc=$(this).is(':checked'); });
-  $('#btnVoz').on('click', function(){ window.voiceEnabled=!window.voiceEnabled; $(this).toggleClass('btn-info', window.voiceEnabled); if (window.voiceEnabled) speak('Voz activada.'); else { try{ speechSynthesis.cancel(); }catch(_){}} });
+  // El repintado de ambos botones lo hace el listener de 'voice-enabled-changed'.
+  // VoiceController.toggle() ya dice "Voz activada" DENTRO del click: iOS exige un gesto de
+  // usuario para la primera locución, así que ese speak no se puede mover fuera del handler.
+  $('#btnVoz').on('click', function(){
+    if(window.VoiceController && typeof window.VoiceController.toggle === 'function'){
+      window.VoiceController.toggle();
+      return;
+    }
+    window.voiceEnabled = !window.voiceEnabled;
+    $(this).toggleClass('btn-info', window.voiceEnabled);
+    if (window.voiceEnabled) speak('Voz activada.'); else { try{ speechSynthesis.cancel(); }catch(_){} }
+  });
   // ---- Export a Google Maps por bloques (respeta el límite de waypoints por URL: 3 móvil / 9 desktop) ----
   function detectExportEnv(){
     return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '') ? 'mobile' : 'desktop';
@@ -2466,14 +2553,26 @@ window.initMap=function(){
 
       $('#navPrimary').text(step ? (step.text || 'Sigue la vía') : 'Calculando…');
       $('#navIcon').html(`<i class="fa ${step ? U.getManeuverIcon(step.maneuver) : 'fa-location-arrow'}"></i>`);
-      $('#navSecondary').text((step && navLastPos) ? U.formatDistance(U.haversine(navLastPos, step.end)) : '—');
+
+      // Distancia a la maniobra medida SOBRE LA VÍA. La versión vieja usaba la línea recta hasta
+      // el fin del paso, que en una curva se queda corta por decenas de metros.
+      // El typeof es la red de seguridad para el caso en que el service worker sirva un
+      // nav_engine.js viejo junto a esta página nueva: se degrada en vez de reventar.
+      let distStep = null;
+      if(step){
+        if(typeof nav.distToStepEnd === 'function') distStep = nav.distToStepEnd();
+        else if(navLastPos) distStep = U.haversine(navLastPos, step.end);
+      }
+      $('#navSecondary').text(distStep === null ? '—' : U.formatDistance(distStep));
 
       if(next){ $('#navNextNext').show().text('Después: ' + (next.text || '')); }
       else { $('#navNextNext').hide(); }
 
-      $('#hudEta').text(nav.getETA().toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit' }));
-      $('#hudRemain').text(U.formatDistance(nav.getRemainingDistance()));
-      $('#hudTime').text(U.formatDuration(nav.getRemainingDuration()));
+      renderNavStats();
+
+      if(typeof nav.getProgress === 'function'){
+        $('#hudProgress').css('width', nav.getProgress().toFixed(1) + '%');
+      }
 
       const wp = nav.waypoints && nav.waypoints[nav.waypointIdx];
       let stopTxt = 'Destino final';
@@ -2482,11 +2581,64 @@ window.initMap=function(){
     }
     window.renderNavHud = renderNavHud;
 
-    // Muestra/oculta el HUD y colapsa el bottom sheet durante la navegación.
+    /**
+     * Panel de datos: llegada / distancia / tiempo a la PRÓXIMA parada.
+     * Al ejecutor le sirve saber cuándo llega al local siguiente; el total de la jornada ya está
+     * en el bottom sheet (#distanciaTotal / #duracionEstimada).
+     * Se separa de renderNavHud porque además se repinta solo cada 15 s: si el vehículo está
+     * detenido no llegan fixes, y sin esto la hora de llegada quedaría congelada en una hora
+     * que ya pasó.
+     */
+    function renderNavStats(){
+      const nav = window.navigator3D;
+      if(!nav || !nav.active) return;
+      const U = NavEngine.utils;
+
+      let dist, secs;
+      if(typeof nav.getStopMetrics === 'function'){
+        const m = nav.getStopMetrics();
+        dist = m.dist; secs = m.sec;
+      }else{
+        dist = nav.getRemainingDistance(); secs = nav.getRemainingDuration();
+      }
+
+      $('#hudEta').text(new Date(Date.now() + secs * 1000)
+        .toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit' }));
+      $('#hudRemain').text(U.formatDistance(dist));
+      $('#hudTime').text(U.formatDuration(secs));
+    }
+    let navStatsTimer = null;
+
+    /**
+     * Muestra/oculta el HUD, colapsa el bottom sheet y pasa el mapa a pantalla completa.
+     * El fullscreen es por clase CSS en <body>, no con la Fullscreen API: esta última pelea con
+     * los z-index de los controles de Google Maps y exige un gesto de usuario cada vez.
+     * Tras cambiar el tamaño hay que avisarle al mapa o queda renderizado al tamaño viejo.
+     */
     function showHud(show){
       $('#navHud').css('display', show ? 'block' : 'none');
       $('#panelInfoRuta').toggleClass('sheet-collapsed', !!show);
+      setNavFullscreen(!!show);
+
+      clearInterval(navStatsTimer); navStatsTimer = null;
+      if(show){
+        // Detenido no llegan fixes de GPS: sin este repintado la hora de llegada se congela.
+        navStatsTimer = setInterval(renderNavStats, 15000);
+      }
     }
+
+    function setNavFullscreen(on){
+      const yaEsta = $('body').hasClass('nav-fullscreen');
+      if(yaEsta === !!on) return;
+      $('body').toggleClass('nav-fullscreen', !!on);
+      // 350 ms > la transición del modal; el mapa recalcula su viewport con el tamaño nuevo.
+      setTimeout(()=>{
+        if(window.mapa && window.google && google.maps && google.maps.event){
+          google.maps.event.trigger(window.mapa, 'resize');
+        }
+      }, 350);
+    }
+    window.setNavFullscreen = setNavFullscreen;
 
     function ensureNav(){
       if(!navigator3D){
@@ -2498,26 +2650,33 @@ window.initMap=function(){
             renderNavHud();
             if(isReroute) speak('Ruta recalculada');
           },
-          onPosition:(cur)=>{ navLastPos = cur; if(window.ARViewLite) ARViewLite.updatePosition(cur); renderNavHud(); },
-          onStep:(idx, step)=>{ renderNavHud(); if(step && window.voiceEnabled){ window.speechSynthesis.cancel(); speak(step.text||''); } },
+          // `cur` ya viene proyectado sobre la vía por nav_engine: el punto azul no aparece
+          // sobre la vereda ni dentro de una manzana aunque el GPS traiga error lateral.
+          onPosition:(cur)=>{ navLastPos = cur; renderNavHud(); },
+          // Sin voz acá: el único dueño de los anuncios es _announcePreventive del motor, que
+          // sabe la distancia a la maniobra. Antes hablaban tres lugares a la vez y se pisaban.
+          onStep:()=>{ renderNavHud(); },
           onGpsStatus:(status)=>{
             const $g = $('#navGps');
             if(status==='weak') setChip($g, '<i class="fa fa-exclamation-triangle"></i> GPS débil', 'nav-chip--warn');
             else setChip($g, '<i class="fa fa-location-arrow"></i> GPS OK', 'nav-chip--ok');
           },
           // cameraTracking de nav_engine es la única fuente: alterna el botón Recentrar.
-          onCameraTrackingChanged:(tracking)=>{ $('#btnRecenter').toggleClass('show', !tracking); },
+          onCameraTrackingChanged:(tracking)=>{
+            $('#btnRecenter').toggleClass('show', !tracking);
+            if(window.NavCamera) NavCamera.setTracking(tracking);
+          },
           onStop:()=>{
             showHud(false);
             $('#btnRecenter').removeClass('show');
-            if(window.ARViewLite) ARViewLite.stop();
+            if(window.NavCamera) NavCamera.stop();
             window.navigator3D = navigator3D; // active=false tras stop
           },
-          onCamera:(cur, speed, heading)=>{
-            if(!window.mapa) return;
-            const zoom = speed>45 ? 16 : 17;
-            window.mapa.moveCamera({ center: cur, zoom, tilt:55, heading: heading || 0 }); // rota con el avance
-          }
+          onArrival:()=>{ if(window.NavCamera) NavCamera.setTracking(false); },
+          onError:(err)=>{ console.warn('[nav] error', err); },
+          // Toda la cámara vive en NavCamera: interpola entre fixes para que el mapa no salte,
+          // y decide sola si puede inclinar (mapa vectorial) o sólo recentrar (raster).
+          onCamera:(cur, speed, heading)=>{ if(window.NavCamera) NavCamera.update(cur, speed, heading); }
         });
         window.navigator3D = navigator3D; // exponer para guards externos
       }
@@ -2534,6 +2693,7 @@ window.initMap=function(){
       try{
         await nav.startFromSelection({ origin, destination, waypoints, optimize:window.optimizeOrder });
         navLastPos = origin;
+        if(window.NavCamera) NavCamera.start(window.mapa, window.ejecutorMarker);
         showHud(true);
         $('#btnRecenter').removeClass('show');
         renderNavHud();
@@ -2543,6 +2703,10 @@ window.initMap=function(){
     $('#btnExitNav').on('click', ()=>{ const nav=ensureNav(); nav.stop(); });
     $('#btnRecenter').on('click', ()=>{ const nav=window.navigator3D; if(nav) nav.recenter(); $('#btnRecenter').removeClass('show'); });
     $('#btnVozNav').on('click', function(){
+      if(window.VoiceController && typeof window.VoiceController.toggle === 'function'){
+        window.VoiceController.toggle();   // el listener de voice-enabled-changed repinta ambos botones
+        return;
+      }
       window.voiceEnabled = !window.voiceEnabled;
       $(this).find('i').attr('class', window.voiceEnabled ? 'fa fa-volume-up' : 'fa fa-volume-off');
       $('#btnVoz').toggleClass('btn-info', window.voiceEnabled);
@@ -2565,10 +2729,39 @@ window.initMap=function(){
       if(id){
         const modo = window.modoLocal || 'prog';
         const modalId = (modo==='prog' ? '#responsiveProg' : '#responsiveReag') + id;
-        actions.push({ label:'Gestionar', cls:'btn-info', fn:()=>{ $(modalId).modal('show'); } });
+        actions.push({ label:'Gestionar', cls:'btn-info', fn:()=>{
+          // Salir de pantalla completa antes de abrir la gestión: Bootstrap 3 maneja un solo
+          // backdrop y una sola clase modal-open, así que apilar sobre el mapa a pantalla
+          // completa deja el scroll bloqueado o un backdrop huérfano.
+          setNavFullscreen(false);
+          $(modalId).modal('show');
+        } });
       }
       actions.push({ label:'Saltar', cls:'btn-default', fn:()=>{ const nav=window.navigator3D; if(nav) nav.skipCurrentStop(); } });
       mostrarToast('Llegaste a ' + lbl + '.', 'success', 9000, actions);
+    });
+
+    // Recálculo fallido: antes sólo quedaba un console.error y el chip se quedaba en
+    // "Recalculando…" para siempre. El motor reintenta con backoff (5s/15s/45s).
+    window.addEventListener('nav:reroute_failed', (e)=>{
+      const intento = (e.detail && e.detail.attempt) || 1;
+      setChip($('#navNet'), '<i class="fa fa-exclamation-triangle"></i> Sin recalcular', 'nav-chip--bad');
+      if(intento === 1){
+        mostrarToast('No se pudo recalcular la ruta. Se reintentará solo; puedes seguir con la ruta actual.', 'warn', 8000,
+          [{ label:'Reintentar', cls:'btn-info', fn:()=>{ const nav=window.navigator3D; if(nav && nav.active) nav._reroute(nav.lastPos); } }]);
+      }
+    });
+
+    // Se recuperó la ruta tras un desvío.
+    window.addEventListener('nav:on_route', ()=>{ setChip($('#navNet'), '<i class="fa fa-road"></i> En ruta', ''); });
+
+    // Vista del mapa: 3D sólo si el mapa es vectorial (hay Map ID y el dispositivo soporta WebGL).
+    window.addEventListener('nav:camera_mode', (e)=>{
+      const tres = !!(e.detail && e.detail.is3D);
+      setChip($('#navVista'), tres ? '<i class="fa fa-cube"></i> 3D' : '2D', tres ? 'nav-chip--ok' : '');
+      $('#navVista').attr('title', tres
+        ? 'Mapa vectorial: la vista se inclina y rota con el avance'
+        : 'Mapa plano: falta configurar el Map ID vectorial (GOOGLE_MAPS_MAP_ID)');
     });
   })();
 

@@ -1,0 +1,77 @@
+{
+    "exported_at": "2026-08-14T11:31:59.654Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 16; moto g86 power 5G Build/W1VNS36H.60-82-6; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/150.0.7871.181 Mobile Safari/537.36 VisibilityWrapper/1.0",
+    "sw_version": "v7.1.5",
+    "stats": {
+        "today": {
+            "ymd": "2026-08-14",
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        },
+        "overall": {
+            "pending": 0,
+            "running": 0,
+            "success": 0,
+            "error": 0,
+            "blocked": 0,
+            "total": 0
+        }
+    },
+    "queue": {
+        "total_records": 0,
+        "last_created_at": null,
+        "last_updated_at": null
+    },
+    "recent_events": [],
+    "storage_estimate": {
+        "usage": 11006656,
+        "quota": 10748424896,
+        "percent_used": 0
+    },
+    "connection_info": {
+        "effectiveType": "4g",
+        "downlink": 9.199999999999999289457264239899814128875732421875,
+        "rtt": null,
+        "saveData": false
+    },
+    "service_worker": {
+        "active": "active",
+        "installing": null,
+        "waiting": null,
+        "scope": "https://visibility.cl/visibility2/app/"
+    },
+    "idb_databases": [
+        {
+            "name": "v2_journal",
+            "version": 9
+        },
+        {
+            "name": "v2_mappings",
+            "version": 1
+        },
+        {
+            "name": "v2_offline",
+            "version": 10
+        },
+        {
+            "name": "v2_route_cache",
+            "version": 1
+        },
+        {
+            "name": "visibility2-v2",
+            "version": 9
+        }
+    ],
+    "recent_errors": [],
+    "client_time": {
+        "local": "Fri Aug 14 2026 07:31:59 GMT-0400 (hora estándar de Chile)",
+        "timezone": "America/Santiago",
+        "offset_minutes": 240
+    },
+    "csrf_token": "7a3dc2e0a3975d269343b5822a7b51924be0987c78e81624249a9aa193fc5234"
+}

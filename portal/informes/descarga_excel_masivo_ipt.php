@@ -1,5 +1,5 @@
 <?php
-// descargar_excel_masivo.php (HOMOLOGADO a descargar_excel.php en orden de columnas)
+// descarga_excel_masivo_ipt.php: descarga masiva exclusiva de rutas IPT.
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -80,7 +80,7 @@ $incluirFotosEncuesta = !isset($_GET['fotos_encuesta'])
     || strtolower((string)$_GET['fotos_encuesta']) === 'true';
 
 if (!isset($_GET['ids'])) {
-    die('No se recibieron campañas para descargar.');
+    die('No se recibieron rutas IPT para descargar.');
 }
 
 $raw = $_GET['ids'];
@@ -93,7 +93,7 @@ if (is_array($raw)) {
 
 $ids = array_values(array_unique(array_filter($ids, fn($v) => $v > 0)));
 if (empty($ids)) {
-    die('Lista de campañas inválida.');
+    die('Lista de rutas IPT inválida.');
 }
 
 // -----------------------------------------------------------------------------
@@ -146,7 +146,7 @@ function renderValorConImagen(string $valor, bool $inline): string {
 function getFormularioMeta(int $idForm): array {
     global $conn;
 
-    $stmt = $conn->prepare('SELECT nombre, modalidad FROM formulario WHERE id = ? LIMIT 1');
+    $stmt = $conn->prepare('SELECT nombre, modalidad FROM formulario WHERE id = ? AND tipo = 3 LIMIT 1');
     if (!$stmt) {
         fail('Error preparando getFormularioMeta: ' . $conn->error);
     }
@@ -968,7 +968,7 @@ foreach ($ids as $formulario_id) {
 }
 
 if (empty($reportes)) {
-    die('No se encontraron datos para las campañas seleccionadas.');
+    die('No se encontraron datos para las rutas IPT seleccionadas.');
 }
 
 // -----------------------------------------------------------------------------
@@ -1097,7 +1097,7 @@ header("Cache-Control: no-cache, must-revalidate");
 header("Pragma: no-cache");
 header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
 header("Expires: 0");
-header('Content-Disposition: attachment; filename=Reporte_Masivo_' . date('Ymd_His') . '.xls');
+header('Content-Disposition: attachment; filename=Reporte_Masivo_IPT_' . date('Ymd_His') . '.xls');
 header("Content-Length: " . strlen($content));
 echo $content;
 exit;

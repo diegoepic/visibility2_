@@ -261,10 +261,27 @@ function dashboardAplicarTarjeta(Worksheet $sheet, string $range, string $labelR
 
 $empresaSesion = (int)($_SESSION['empresa_id'] ?? 0);
 $divisionSesion = (int)($_SESSION['division_id'] ?? 0);
+$usuarioSesion = (int)($_SESSION['usuario_id'] ?? 0);
 
-if ($empresaSesion <= 0 || $divisionSesion <= 0) {
-    dashboardFail('La sesion no contiene empresa o division activa.', 403);
+if ($empresaSesion <= 0 || $divisionSesion <= 0 || $usuarioSesion <= 0) {
+    dashboardFail('La sesion no contiene usuario, empresa o division activa.', 403);
 }
+
+$clasificacionSesion = '';
+$stmtUsuarioSesion = $conn->prepare('SELECT clasificacion_usuario FROM usuario WHERE id = ? AND activo = 1 LIMIT 1');
+if (!$stmtUsuarioSesion) {
+    dashboardFail('No fue posible validar el usuario de la sesion.', 500);
+}
+$stmtUsuarioSesion->bind_param('i', $usuarioSesion);
+$stmtUsuarioSesion->execute();
+$stmtUsuarioSesion->bind_result($clasificacionSesion);
+$stmtUsuarioSesion->fetch();
+$stmtUsuarioSesion->close();
+
+$soloDatosExternos = mb_strtolower(trim((string)$clasificacionSesion), 'UTF-8') === 'externo';
+$filtroClasificacionSql = $soloDatosExternos
+    ? "\n      AND EXISTS (\n          SELECT 1\n          FROM usuario usuario_origen\n          WHERE usuario_origen.id = fq.id_usuario\n            AND usuario_origen.clasificacion_usuario = 'externo'\n      )"
+    : '';
 
 $empresaNombre = '';
 $stmtEmpresa = $conn->prepare('SELECT nombre FROM empresa WHERE id = ? LIMIT 1');
@@ -388,6 +405,7 @@ $sqlResumen = "
     INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
     WHERE {$whereSql}
       AND (f.tipo <> 3 OR fq.id_usuario <> 50)
+      {$filtroClasificacionSql}
 ";
 
 $resultadoResumen = $conn->query($sqlResumen);
@@ -436,6 +454,7 @@ $sqlResumenEjecutivo = "
     LEFT JOIN trade t ON t.id = f.id_trade
     WHERE {$whereSql}
       AND (f.tipo <> 3 OR fq.id_usuario <> 50)
+      {$filtroClasificacionSql}
     GROUP BY f.id, f.tipo, f.nombre, t.nombre, f.fechaInicio, f.fechaTermino
     ORDER BY f.tipo ASC, f.fechaInicio DESC, f.nombre ASC
 ";
@@ -483,6 +502,7 @@ $sqlAvanceRegional = "
     LEFT JOIN trade t ON t.id = f.id_trade
     WHERE {$whereSql}
       AND (f.tipo <> 3 OR fq.id_usuario <> 50)
+      {$filtroClasificacionSql}
     GROUP BY f.id, f.tipo, f.nombre, t.nombre, r.id, r.region, f.fechaInicio, f.fechaTermino
     ORDER BY f.tipo ASC, f.nombre ASC, r.region ASC
 ";
@@ -509,6 +529,7 @@ $sqlAvanceDiario = "
     LEFT JOIN region r ON r.id = cm.id_region
     WHERE {$whereSql}
       AND (f.tipo <> 3 OR fq.id_usuario <> 50)
+      {$filtroClasificacionSql}
       AND fq.fechaVisita IS NOT NULL
       AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
     GROUP BY f.id, COALESCE(r.id, 0), DATE(fq.fechaVisita)
@@ -549,6 +570,7 @@ $sqlMaxFotos = "
          AND fv.id_formularioQuestion = fq.id
         WHERE {$whereSql}
           AND (f.tipo <> 3 OR fq.id_usuario <> 50)
+          {$filtroClasificacionSql}
         GROUP BY fq.id_formulario, fq.id_local
     ) x
 ";
@@ -598,6 +620,7 @@ $sqlDetalle = "
      AND fv.id_formularioQuestion = fq.id
     WHERE {$whereSql}
       AND (f.tipo <> 3 OR fq.id_usuario <> 50)
+      {$filtroClasificacionSql}
     ORDER BY f.tipo ASC, f.fechaInicio DESC, f.nombre ASC, f.id ASC, l.codigo ASC, l.id ASC, fq.id ASC, fv.id ASC
 ";
 

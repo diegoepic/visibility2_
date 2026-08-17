@@ -453,6 +453,39 @@
     box-shadow:0 6px 24px rgba(0,0,0,.12); padding:8px 10px; font-weight:700;
 }
 
+/* ===== Pase 3: navegación a pantalla completa + barra de progreso ===== */
+
+/* Barra de progreso de la ruta. Va pegada al borde inferior del HUD (que es inset:0 dentro del
+   .modal-body), así que se ve como una línea de avance bajo el panel de datos. */
+.nav-progress{
+    position:absolute; left:0; right:0; bottom:0; height:4px;
+    background:rgba(0,0,0,.12); pointer-events:none; overflow:hidden;
+}
+.nav-progress-bar{
+    height:100%; width:0; background:#1a73e8; transition:width .4s linear;
+}
+
+/* Pantalla completa durante la navegación.
+   Se hace con una clase en <body> y no con la Fullscreen API: esa última pelea con los z-index
+   de los controles de Google Maps y exige un gesto de usuario en cada activación.
+   OJO con la altura: 100dvh es obligatorio en móvil porque 100vh incluye la barra de
+   direcciones del navegador y dejaría el mapa cortado por abajo. El 100vh queda de fallback
+   para navegadores sin dvh. */
+body.nav-fullscreen #modalMapa .modal-dialog{
+    width:100%; max-width:none; margin:0;
+}
+body.nav-fullscreen #modalMapa .modal-content{
+    border-radius:0; border:0; height:100vh; height:100dvh;
+}
+body.nav-fullscreen #modalMapa .modal-header,
+body.nav-fullscreen #modalMapa .modal-footer{ display:none; }
+body.nav-fullscreen #modalMapa .modal-body{
+    padding:0; height:100vh; height:100dvh;
+}
+body.nav-fullscreen #map{
+    height:100vh !important; height:100dvh !important;
+}
+
 /* Toasts no bloqueantes */
 .v2-toasts{
     position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:20000;

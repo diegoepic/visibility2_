@@ -796,7 +796,15 @@
     el.innerHTML = html;
   }
 
-  function tipoGestionDesdeModalidad(modalidad){
+  /**
+   * Etiqueta del tipo de gestión.
+   * Las campañas complementarias (formulario.tipo = 2) son encuestas: su
+   * modalidad no describe lo que hizo el ejecutor, así que se rotulan como
+   * "Encuesta IW" en vez de heredar etiquetas de implementación/auditoría.
+   */
+  function tipoGestionDesdeModalidad(modalidad, tipoFormulario){
+    if (Number(tipoFormulario) === 2) return 'Encuesta IW';
+
     const m = (modalidad || '').toLowerCase();
     if (m === 'solo_auditoria') return 'Auditoría';
     if (m === 'solo_implementacion') return 'Implementación';
@@ -819,7 +827,7 @@
     const photosMisc = Array.isArray(payload.photos_misc) ? payload.photos_misc : [];
 
     const modalidad   = form.modalidad || '';
-    const tipoGestion = tipoGestionDesdeModalidad(modalidad);
+    const tipoGestion = tipoGestionDesdeModalidad(modalidad, form.tipo);
 
     // Duración aproximada si tenemos inicio/fin
     let durTxt = '';
@@ -1184,7 +1192,12 @@
     const conteos  = item.conteos     || {};
     const distrito = (local.distrito && local.distrito.nombre) ? local.distrito.nombre : '';
 
-    const lName  = local.nombre ? esc(local.nombre) : (local.id ? `Local #${local.id}` : '—');
+    // Las campañas complementarias que no requieren local llegan sin sala
+    // asociada: se rotula la actividad en vez de dejar un guión suelto.
+    const sinLocal = !local.id && !local.nombre;
+    const lName  = sinLocal
+      ? 'Actividad complementaria'
+      : (local.nombre ? esc(local.nombre) : `Local #${local.id}`);
     const codigo = local.codigo ? ` (${esc(local.codigo)})` : '';
     const comuna = distrito     ? ` · ${esc(distrito)}`      : '';
     const dir    = local.direccion ? esc(local.direccion)   : '';
@@ -1199,8 +1212,8 @@
     const mats  = Number(conteos.materiales_distintos || 0);
     const preg  = Number(conteos.preguntas_respondidas || 0);
 
-    // Tipo de gestión según modalidad
-    const tipoGestion = tipoGestionDesdeModalidad(modalidad);
+    // Tipo de gestión: las complementarias (tipo 2) se rotulan "Encuesta IW"
+    const tipoGestion = tipoGestionDesdeModalidad(modalidad, form.tipo);
 
     const detailParts = [];
 

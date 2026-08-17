@@ -1345,12 +1345,12 @@ body.layout-fixed {
             </a>
             <ul class="nav nav-treeview">
               <?php if (puedeVerModulo($conn, 'galeria.campanas')): ?>
-              <li class="nav-item">
-                 <a href="modulos/mod_galeria/mod_galeria_programadas.php" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Campañas</p>
-                </a>
-              </li>
+                <li class="nav-item" style="display:none;">
+                    <a href="modulos/mod_galeria/mod_galeria_programadas.php" class="nav-link">
+                        <i class="far fa-circle nav-icon"></i>
+                        <p>Campañas</p>
+                    </a>
+                </li>
               <?php endif; ?>
               <?php if (puedeVerModulo($conn, 'galeria.imagenes')): ?>
               <li class="nav-item">

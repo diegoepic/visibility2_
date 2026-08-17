@@ -30,11 +30,15 @@ $view              = in_array(trim($_GET['view'] ?? 'implementacion'), ['impleme
     : 'implementacion';
 
 $preguntaFiltro    = trim($_GET['pregunta'] ?? '');
+$materialFiltro    = trim($_GET['material'] ?? '');
 $start_date        = trim($_GET['start_date'] ?? '');
 $end_date          = trim($_GET['end_date'] ?? '');
 $filtrosAplicados  = isset($_GET['filtrar']) && $_GET['filtrar'] === '1';
 
 $puedeVerFiltroPregunta = ($view === 'encuesta' && in_array($divisionLogin, [1, 14], true));
+// El material sólo aplica a fotos de implementación: en encuesta las fotos cuelgan de una
+// pregunta, no de un material.
+$puedeVerFiltroMaterial = ($view === 'implementacion');
 
 $divisiones = [];
 $resDiv = $conn->query("
@@ -148,18 +152,18 @@ if ($puedeVerFiltroPregunta) {
   <div class="gallery-filter-card">
     <div class="gallery-filter-head">
       <div class="gallery-filter-title-wrap">
-        <div class="gallery-kicker">PHOTO MANAGEMENT</div>
-        <h2 class="gallery-title">Gallery Implementation Explorer</h2>
+        <div class="gallery-kicker">GESTIÓN FOTOGRÁFICA</div>
+        <h2 class="gallery-title">Explorador de Fotos de Implementación</h2>
       </div>
 
       <a href="?view=<?= urlencode($view) ?>" class="gallery-clear-link">
-        Clear All Filters
+        Limpiar todos los filtros
       </a>
     </div>
 
     <div class="gallery-filter-subhead">
       <div class="gallery-filter-subtitle">
-        <i class="fas fa-sliders-h mr-2"></i>Filter Workspace
+        <i class="fas fa-sliders-h mr-2"></i>Área de filtros
       </div>
     </div>
 
@@ -243,6 +247,21 @@ if ($puedeVerFiltroPregunta) {
           >
         </div>
 
+        <?php if ($puedeVerFiltroMaterial): ?>
+          <div class="col-lg-3 col-md-6 mb-4">
+            <label for="materialSelect" class="gallery-label">Material</label>
+            <select id="materialSelect" name="material" class="form-control gallery-control">
+              <option value="">-- Todos --</option>
+              <?php if ($materialFiltro !== ''): ?>
+                <?php /* Se preselecciona el valor del GET; el AJAX repuebla la lista al cargar. */ ?>
+                <option value="<?= htmlspecialchars($materialFiltro, ENT_QUOTES) ?>" selected>
+                  <?= htmlspecialchars($materialFiltro, ENT_QUOTES) ?>
+                </option>
+              <?php endif; ?>
+            </select>
+          </div>
+        <?php endif; ?>
+
         <?php if ($puedeVerFiltroPregunta): ?>
           <div class="col-lg-3 col-md-6 mb-4">
             <label for="preguntaSelect" class="gallery-label">Pregunta</label>
@@ -279,7 +298,7 @@ if ($puedeVerFiltroPregunta) {
 
         <div class="col-lg-3 col-md-6 mb-4 d-flex align-items-end">
           <button type="submit" id="btnFiltrar" class="btn gallery-btn-primary btn-block">
-            <i class="fas fa-search mr-2"></i>Apply Refined Search
+            <i class="fas fa-search mr-2"></i>Aplicar filtros
           </button>
         </div>
       </div>
@@ -289,15 +308,15 @@ if ($puedeVerFiltroPregunta) {
   <div class="gallery-stats-row">
     <div class="gallery-stat-pill">
       <i class="far fa-image mr-2"></i>
-      <span id="galleryTotalLabel">Total Images</span>
+      <span id="galleryTotalLabel">Total de imágenes</span>
     </div>
     <div class="gallery-stat-pill">
       <i class="far fa-check-circle mr-2"></i>
-      <span id="gallerySelectedLabel">Selected: 0</span>
+      <span id="gallerySelectedLabel">Seleccionadas: 0</span>
     </div>
     <div class="gallery-stat-pill">
       <i class="far fa-clock mr-2"></i>
-      <span>AJAX Table Mode</span>
+      <span>Tabla dinámica</span>
     </div>
   </div>
 
@@ -406,6 +425,78 @@ $(function () {
     allowClear: true,
     width: '100%'
   });
+
+  <?php if ($puedeVerFiltroMaterial): ?>
+  /* ===============================
+     MATERIAL (vista implementación)
+     Lista encadenada a los demás filtros, igual que el filtro Pregunta de la vista encuesta.
+     Cada opción muestra la división a la que pertenece el material: hay nombres repetidos
+     entre divisiones (AFICHE existe en 6), así que sin eso no se pueden distinguir.
+  =============================== */
+  $('#materialSelect').select2({
+    placeholder: "Buscar material...",
+    allowClear: true,
+    width: '100%'
+  });
+
+  var _materialTimer = null;
+
+  function actualizarFiltroMateriales() {
+    clearTimeout(_materialTimer);
+    _materialTimer = setTimeout(function () {
+      // El <select> de división sólo existe para MC; para el resto la división va en un hidden.
+      // Ojo: no se puede usar `parseInt(...) || fallback` porque "0" (= Todas) es falsy y
+      // terminaría reemplazado por la división de la URL.
+      var $divSel = $('#divisionSelect');
+      var divisionVal = $divSel.length
+        ? (parseInt($divSel.val(), 10) || 0)
+        : <?= (int)$division ?>;
+
+      var params = {
+        division:     divisionVal,
+        subdivision:  parseInt($('#subdivisionSelect').val())  || 0,
+        region:       parseInt($('#regionSelect').val())       || 0,
+        comuna:       parseInt($('#comunaSelect').val())       || 0,
+        zona:         parseInt($('#zonaSelect').val())         || 0,
+        distrito:     parseInt($('#distritoSelect').val())     || 0,
+        usuario:      parseInt($('#usuarioSelect').val())      || 0,
+        jefe_venta:   parseInt($('#jefe_ventaSelect').val())   || 0,
+        codigo_local: ($('#codigoLocalInput').val() || '').trim(),
+        start_date:   $('input[name="start_date"]').val() || '',
+        end_date:     $('input[name="end_date"]').val()   || ''
+      };
+
+      $.getJSON('/visibility2/portal/modulos/mod_galeria/ajax_materiales_galeria.php',
+        params,
+        function (materiales) {
+          var sel    = $('#materialSelect');
+          var actual = sel.val();
+          sel.empty().append('<option value="">-- Todos --</option>');
+
+          materiales.forEach(function (m) {
+            var etiqueta = m.material;
+            if (m.divisiones) etiqueta += '  ·  ' + m.divisiones;
+            sel.append($('<option>', { value: m.material, text: etiqueta }));
+          });
+
+          // Conservar la selección si el material sigue existiendo con los filtros nuevos.
+          var sigue = materiales.some(function (m) { return m.material === actual; });
+          sel.val(sigue ? actual : '');
+          sel.trigger('change.select2');
+        }
+      );
+    }, 400);
+  }
+
+  $('#divisionSelect, #subdivisionSelect, #regionSelect, #comunaSelect, ' +
+    '#zonaSelect, #distritoSelect, #usuarioSelect, #jefe_ventaSelect')
+    .on('change', actualizarFiltroMateriales);
+
+  $('#codigoLocalInput').on('input', actualizarFiltroMateriales);
+  $('input[name="start_date"], input[name="end_date"]').on('change', actualizarFiltroMateriales);
+
+  actualizarFiltroMateriales();   // carga inicial
+  <?php endif; ?>
 
   <?php if ($puedeVerFiltroPregunta): ?>
   var _preguntaTimer = null;
@@ -905,6 +996,63 @@ $(document).ready(function () {
     $('#carouselIndicatorsFotos').html('');
     $('#contadorFotosModal').text('');
     $('#fullSizeModalLabel').text('Vista de fotos');
+  });
+});
+</script>
+
+<script>
+// La tabla se carga por AJAX, por eso los eventos se delegan en document.
+$(document).on('change', '#selectAll', function () {
+  $('.imgCheckbox').prop('checked', this.checked).trigger('change');
+});
+
+$(document).on('change', '.imgCheckbox', function () {
+  const total = $('.imgCheckbox').length;
+  const selected = $('.imgCheckbox:checked').length;
+  $('#selectAll').prop('checked', total > 0 && total === selected);
+  $('#gallerySelectedLabel').text(`Seleccionadas: ${selected}`);
+});
+
+$(document).on('click', '#btnDownloadSelected', function (event) {
+  event.preventDefault();
+
+  const fotos = [];
+  $('.imgCheckbox:checked').each(function () {
+    const urls = String($(this).data('urls') || '').split('||');
+    const prefix = String($(this).data('prefix') || 'foto');
+
+    urls.forEach(function (url) {
+      if (!url) return;
+      fotos.push({
+        url: url,
+        filename: `${prefix}_${url.split('/').pop() || 'foto.jpg'}`
+      });
+    });
+  });
+
+  if (fotos.length === 0) {
+    alert('Selecciona al menos una foto.');
+    return;
+  }
+
+  $.ajax({
+    url: 'download_zip.php',
+    method: 'POST',
+    data: { jsonFotos: JSON.stringify(fotos) },
+    xhrFields: { responseType: 'blob' }
+  }).done(function (data, _status, xhr) {
+    const disposition = xhr.getResponseHeader('Content-Disposition') || '';
+    const match = disposition.match(/filename[^;=\n]*=\s*(['"]?)([^'"\n]*)/);
+    const blob = new Blob([data], { type: 'application/zip' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = match && match[2] ? match[2] : 'fotos_seleccionadas.zip';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(link.href);
+  }).fail(function () {
+    alert('No fue posible crear el archivo ZIP.');
   });
 });
 </script>

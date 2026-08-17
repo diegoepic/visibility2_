@@ -31,11 +31,21 @@
       const fecha = $tr.closest('table').data('fechatabla') || fechaSel;
       fechas.add(fecha);
 
-      const hasCheck = $tr.find('.in-route').length > 0;
-      const include  = hasCheck
-        ? $tr.find('.in-route').prop('checked')
-        : !(excluded && excluded.has(`${modo}|${fecha}|${idLocal}`));
-      if (!include) return;
+      /*
+       * Un local entra a la ruta sólo si el checkbox está marcado Y no está en el set de
+       * exclusiones persistido. Antes se miraba UNA de las dos fuentes:
+       *   - con checkbox presente, sólo el checkbox;
+       *   - sin checkbox, sólo el set.
+       * En rutas de varias fechas eso se rompía: applyFilters() sincroniza los checkboxes
+       * desde `excluded`, pero sólo recorre TODAS las tablas cuando hay texto de búsqueda,
+       * así que una fila de otra fecha podía llegar marcada (viene `checked` del servidor)
+       * pese a estar excluida, y la ruta terminaba tomando todos los locales del día.
+       * Exigir ambas condiciones hace que la exclusión mande siempre.
+       */
+      const $chk       = $tr.find('.in-route');
+      const marcado    = $chk.length ? $chk.prop('checked') : true;
+      const estaExcl   = !!(excluded && excluded.has(`${modo}|${fecha}|${idLocal}`));
+      if (!marcado || estaExcl) return;
 
       const isBotilleria = $tr.data('isbotilleria') === 'true' || $tr.data('isbotilleria') === true;
       pts.push({ idLocal, lat, lng, isBotilleria, fecha, modo });
@@ -66,12 +76,23 @@
     };
   }
 
+  // Promesa de la confirmación cross-date en curso.
+  // planRouteFromSelection se dispara desde varios lados a la vez (al abrir el modal del mapa
+  // lo lanzan tanto applyFilters() como el handler shown.bs.modal), así que sin este candado
+  // se abrían DOS modales: el segundo hacía .remove() del primero mientras seguía visible,
+  // dejando su backdrop huérfano — la pantalla negra que no deja hacer clic.
+  let _pendiente = null;
+
   /**
    * Muestra un modal de confirmación cuando la ruta mezcla varias fechas.
+   * Si ya hay una confirmación abierta devuelve LA MISMA promesa, de modo que todas las
+   * llamadas concurrentes se resuelven con la única respuesta que dio el usuario.
    * Retorna Promise<boolean>.
    */
   function confirmCrossDate(fechas){
-    return new Promise(function(resolve){
+    if (_pendiente) return _pendiente;
+
+    _pendiente = new Promise(function(resolve){
       const listaFechas = Array.from(fechas)
         .sort()
         .map(f => {
@@ -103,31 +124,67 @@
           </div>
         </div>`;
 
-      // Remover modal previo si existe
+      // Acá no puede haber una confirmación viva: el candado _pendiente impide entrar mientras
+      // haya una abierta. Si quedó un elemento suelto es basura de una ejecución anterior.
+      // Ojo: este modal se abre ENCIMA del modal del mapa, así que los backdrops sobrantes se
+      // barren sólo si no queda ningún modal visible (si no, se le quitaría el suyo al mapa).
       $('#modalCrossDate').remove();
+      if ($('.modal.in').length === 0) {
+        $('.modal-backdrop').remove();
+        $('body').removeClass('modal-open').css('padding-right', '');
+      }
+
       $('body').append(modalHtml);
       const $modal = $('#modalCrossDate');
 
+      // El elemento se destruye recién cuando Bootstrap terminó de ocultarlo: en ese momento el
+      // backdrop ya fue retirado y body.modal-open limpiado.
       $modal.on('hidden.bs.modal', function(){
         $modal.remove();
-        // Si ya fue resuelto no hacer nada
+        limpiarBackdropHuerfano();
       });
 
-      $('#crossDateCancel').off('click').on('click', function(){
+      // Handlers acotados a ESTE modal (antes eran selectores globales por id).
+      $modal.find('#crossDateCancel').on('click', function(){
         $modal.modal('hide');
         resolve(false);
       });
 
-      $('#crossDateConfirm').off('click').on('click', function(){
+      $modal.find('#crossDateConfirm').on('click', function(){
         $modal.modal('hide');
         resolve(true);
       });
 
+      // Un solo modal(): pasarle opciones ya lo muestra (show:true viene en los DEFAULTS de
+      // Bootstrap 3), así que el .modal('show') que había después era una segunda apertura.
       $modal.modal({ backdrop: 'static', keyboard: false });
-      $modal.modal('show');
     });
+
+    // Se libera el candado pase lo que pase, para que la próxima ruta cross-date sí pregunte.
+    _pendiente.then(function(){ _pendiente = null; }, function(){ _pendiente = null; });
+    return _pendiente;
   }
 
-  window.RouteSelection = { collect, confirmCrossDate };
+  /**
+   * Red de seguridad contra el "fade negro" que bloquea la pantalla.
+   * Bootstrap 3 mantiene un único body.modal-open y un backdrop por modal; si alguno queda
+   * suelto (modal removido en caliente, dos modales encimados), la capa oscura sigue ahí y se
+   * come todos los clics. Si no queda ningún modal visible, se barre lo que haya sobrado.
+   */
+  function limpiarBackdropHuerfano(){
+    setTimeout(function(){
+      if ($('.modal.in').length === 0) {
+        $('.modal-backdrop').remove();
+        $('body').removeClass('modal-open').css('padding-right', '');
+      } else {
+        // Bootstrap 3 no contempla modales anidados: al cerrar el de encima le quita
+        // body.modal-open aunque siga abierto el de abajo, y la página de atrás recupera el
+        // scroll. Se repone mientras quede alguno visible.
+        $('body').addClass('modal-open');
+      }
+    }, 300); // > la transición de 150 ms de Bootstrap
+  }
+
+  window.RouteSelection = { collect, confirmCrossDate, limpiarBackdropHuerfano };
 
 })(window);

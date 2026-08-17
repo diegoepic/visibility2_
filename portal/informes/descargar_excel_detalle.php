@@ -18,6 +18,29 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/vendor/autoload.ph
 
 mysqli_set_charset($conn, 'utf8mb4');
 
+$soloOrigenExterno = false;
+$usuarioSesionId = (int)($_SESSION['usuario_id'] ?? 0);
+if ($usuarioSesionId > 0) {
+    $stmtUsuarioSesion = $conn->prepare('SELECT clasificacion_usuario FROM usuario WHERE id = ? AND activo = 1 LIMIT 1');
+    if ($stmtUsuarioSesion) {
+        $stmtUsuarioSesion->bind_param('i', $usuarioSesionId);
+        $stmtUsuarioSesion->execute();
+        $stmtUsuarioSesion->bind_result($clasificacionSesion);
+        $stmtUsuarioSesion->fetch();
+        $stmtUsuarioSesion->close();
+        $soloOrigenExterno = strtolower(trim((string)$clasificacionSesion)) === 'externo';
+    }
+}
+
+function filtroOrigenExterno(string $columnaUsuario): string
+{
+    global $soloOrigenExterno;
+
+    return $soloOrigenExterno
+        ? "\n          AND EXISTS (SELECT 1 FROM usuario usuario_origen WHERE usuario_origen.id = {$columnaUsuario} AND usuario_origen.clasificacion_usuario = 'externo')"
+        : '';
+}
+
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -101,6 +124,7 @@ function obtenerFormularioBase(mysqli $conn, int $idForm): array
 
 function getCampaignData(mysqli $conn, int $idForm): array
 {
+    $filtroExterno = filtroOrigenExterno('fq.id_usuario');
     $sql = "
         SELECT
             f.id,
@@ -133,6 +157,7 @@ function getCampaignData(mysqli $conn, int $idForm): array
         INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
         INNER JOIN local l               ON l.id = fq.id_local
         WHERE f.id = ?
+        {$filtroExterno}
         GROUP BY
             f.id, f.nombre, f.fechaInicio, f.fechaTermino,
             f.modalidad, f.tipo, e.nombre, de.nombre
@@ -158,6 +183,7 @@ function getCampaignData(mysqli $conn, int $idForm): array
 
 function getLocalesDetails(mysqli $conn, int $idForm): array
 {
+    $filtroExterno = filtroOrigenExterno('fq.id_usuario');
     $sql = "
         SELECT
             f.id AS id_campana,
@@ -274,6 +300,7 @@ function getLocalesDetails(mysqli $conn, int $idForm): array
         INNER JOIN comuna cm ON cm.id = l.id_comuna
         INNER JOIN region re ON re.id = cm.id_region
         WHERE f.id = ?
+        {$filtroExterno}
         ORDER BY l.codigo ASC, fq.fechaVisita ASC
     ";
 
