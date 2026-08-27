@@ -26,7 +26,7 @@ $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JS
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Creador visual de dashboards Perfect Store.">
     <title>Perfect Store Studio</title>
-    <link rel="stylesheet" href="assets/styles.css?v=19">
+    <link rel="stylesheet" href="assets/styles.css?v=21">
 </head>
 <body>
 <main class="studio-shell" id="top">
@@ -48,6 +48,10 @@ $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JS
                 <div class="step-label"><span>01</span> Selecciona el canal</div>
                 <h1>Crea tu próximo<br>Perfect Store.</h1>
                 <p class="intro">Elige el tipo de punto de venta. Luego podrás definir su alcance y construir el dashboard sobre un lienzo flexible.</p>
+                <div class="saved-dashboards" id="saved-dashboards" hidden>
+                    <div class="saved-dashboards-heading">Tus dashboards</div>
+                    <div class="saved-dashboards-list" id="saved-dashboards-list"></div>
+                </div>
                 <div class="template-list" role="listbox" aria-label="Plantillas disponibles">
                     <?php foreach ($templates as $index => $template): ?>
                         <button type="button" class="template-option<?= $index === 0 ? ' is-active' : '' ?>" role="option" aria-selected="<?= $index === 0 ? 'true' : 'false' ?>" data-template-id="<?= htmlspecialchars($template['id'], ENT_QUOTES, 'UTF-8') ?>" style="--template-tone: <?= htmlspecialchars($template['tone'], ENT_QUOTES, 'UTF-8') ?>">
@@ -76,8 +80,9 @@ $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JS
 
     <section class="editor-view" id="editor-view" hidden>
         <div class="editor-toolbar">
-            <div class="editor-title"><button type="button" class="back-button" id="editor-back" aria-label="Volver">←</button><div><small>EDITANDO PLANTILLA</small><strong id="editor-template-name">Almacén</strong></div></div>
+            <div class="editor-title"><button type="button" class="back-button" id="editor-back" aria-label="Volver">←</button><div><small>EDITANDO PLANTILLA</small><strong id="editor-template-name">Almacén</strong></div><span class="server-save-status" id="server-save-status">Sin guardar en el servidor</span></div>
             <div class="toolbar-actions">
+                <button type="button" class="primary-button" id="save-dashboard">Guardar dashboard</button>
                 <button type="button" class="tool-button" id="add-text">+ Texto</button>
                 <button type="button" class="tool-button chart-tool-button" id="add-chart">+ Gráfico</button>
                 <div class="shape-picker">
@@ -118,6 +123,7 @@ $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JS
                 <div class="canvas-scroll" id="canvas-scroll">
                     <div class="dashboard-canvas" id="dashboard-canvas" style="width:1200px;height:780px;transform:scale(.7)"></div>
                 </div>
+                <div class="sheet-tabs" id="sheet-tabs" aria-label="Hojas del dashboard"></div>
             </section>
 
             <aside class="properties-panel">
@@ -232,9 +238,28 @@ $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JS
     </section>
 </div>
 
+<div class="modal-backdrop" id="save-modal" hidden>
+    <section class="scope-modal" role="dialog" aria-modal="true" aria-labelledby="save-modal-title">
+        <div class="modal-step">GUARDAR DASHBOARD</div>
+        <h2 id="save-modal-title">Guarda tu dashboard</h2>
+        <p>Queda disponible para ti y, si lo marcas como plantilla, para toda tu división.</p>
+        <div class="scope-fields save-fields">
+            <label class="wide">Nombre<input id="save-name" type="text" maxlength="150" placeholder="Ej: Panel Tradicional CCU - Región Metropolitana"></label>
+            <label class="wide">Descripción (opcional)<input id="save-description" type="text" maxlength="255" placeholder="Para qué sirve este dashboard"></label>
+            <label class="save-template-toggle"><input id="save-as-template" type="checkbox"><span>Guardar como plantilla reutilizable por mi división</span></label>
+        </div>
+        <div class="modal-feedback" id="save-feedback" role="status"></div>
+        <div class="modal-actions">
+            <button type="button" class="secondary-button" id="cancel-save">Cancelar</button>
+            <button type="button" class="secondary-button" id="save-as-copy" hidden>Guardar como copia propia</button>
+            <button type="button" class="primary-button" id="confirm-save">Guardar <span>→</span></button>
+        </div>
+    </section>
+</div>
+
 <div class="toast" id="toast" role="status"></div>
 <script type="application/json" id="template-data"><?= json_encode($templates, $jsonFlags) ?></script>
 <script>window.PERFECT_STORE_CONFIG = <?= json_encode(['api' => 'api/editor.php', 'csrf' => $_SESSION['csrf_token']], $jsonFlags) ?>;</script>
-<script src="assets/app.js?v=19" defer></script>
+<script src="assets/app.js?v=22" defer></script>
 </body>
 </html>

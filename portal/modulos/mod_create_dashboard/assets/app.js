@@ -23,6 +23,16 @@
   let pendingDataField = null;
   let copiedElement = null;
   let pasteSequence = 0;
+  let currentDashboardId = null;
+  let currentDashboardEsMio = true;
+  let currentDashboardName = "";
+  let currentDashboardDescription = "";
+  // Multi-hoja: `elements` es siempre la hoja activa. `sheets` guarda las demás
+  // (elementos + tamaño de lienzo); se sincroniza justo antes de cambiar de hoja
+  // o de guardar, para no duplicar el estado de la que se está editando.
+  let sheets = [{ nombre: "Hoja 1", elements: [], canvas: null }];
+  let activeSheet = 0;
+  const MAX_SHEETS = 20;
 
   const canvas = $("dashboard-canvas");
   const templateView = $("template-view");
@@ -154,7 +164,15 @@
 
   const saveDraft = () => {
     if (!scope) return;
-    const draft = { version: 1, template: selectedTemplate, scope, canvas: { width: Number($("canvas-width").value), height: Number($("canvas-height").value) }, elements };
+    // Vuelca la hoja activa antes de serializar: operaciones como eliminar un
+    // elemento reasignan `elements` a un array nuevo y romperían la referencia
+    // que sheets[activeSheet] mantiene.
+    commitActiveSheet();
+    const draft = {
+      version: 2, template: selectedTemplate, scope,
+      canvas: { width: Number($("canvas-width").value), height: Number($("canvas-height").value) },
+      sheets, activeSheet,
+    };
     try { localStorage.setItem("perfectStoreDashboardDraft", JSON.stringify(draft)); } catch (_) { /* El editor continúa aunque el navegador bloquee el borrador local. */ }
     $("save-state").innerHTML = "<i></i> Borrador actualizado";
     window.clearTimeout(saveDraft.timer);
@@ -606,11 +624,140 @@
     selectedId = null;
     nextId = 1;
     zIndex = 1;
+    // El reset de hojas va antes de crear elementos: createElement dispara saveDraft,
+    // que vuelca la hoja activa -- si `sheets` todavía apuntara al dashboard anterior,
+    // escribiría ahí.
+    sheets = [{ nombre: "Hoja 1", elements, canvas: null }];
+    activeSheet = 0;
     createElement({ type: "image", x: 20, y: 20, width: 1160, height: 500, content: `Plantilla ${selectedTemplate.name}`, src: selectedTemplate.image, objectFit: "contain", radius: 10, z: 1 });
     createElement({ type: "text", x: 54, y: 548, width: 650, height: 74, content: `PERFECT STORE · ${selectedTemplate.name.toUpperCase()}`, fontSize: 34, fontWeight: "900", color: "#17243b", background: "transparent", radius: 0, z: 2 });
     selectedId = null;
     renderElements();
+    renderSheetTabs();
     syncProperties();
+  };
+
+  /* ===================== Multi-hoja ===================== */
+
+  const currentCanvasSize = () => ({
+    width: Number($("canvas-width").value) || 1200,
+    height: Number($("canvas-height").value) || 780,
+  });
+
+  // Vuelca lo que está en el editor hacia sheets[activeSheet]. Hay que llamarlo
+  // antes de cambiar de hoja, guardar o exportar: `elements` es la única copia viva
+  // de la hoja activa.
+  const commitActiveSheet = () => {
+    if (!sheets[activeSheet]) return;
+    sheets[activeSheet].elements = elements;
+    sheets[activeSheet].canvas = currentCanvasSize();
+  };
+
+  const switchToSheet = (index) => {
+    if (index === activeSheet || !sheets[index]) return;
+    commitActiveSheet();
+    activeSheet = index;
+    const sheet = sheets[index];
+    elements = Array.isArray(sheet.elements) ? sheet.elements : [];
+    selectedId = null;
+    zIndex = elements.reduce((max, item) => Math.max(max, Number(item.z || 0)), 1);
+    nextId = elements.reduce((max, item) => {
+      const n = parseInt(String(item.id).split("-").pop(), 10);
+      return Number.isFinite(n) && n >= max ? n + 1 : max;
+    }, 1);
+    if (sheet.canvas) {
+      $("canvas-width").value = sheet.canvas.width;
+      $("canvas-height").value = sheet.canvas.height;
+    }
+    updateCanvasSize();
+    renderElements();
+    renderSheetTabs();
+    syncProperties();
+  };
+
+  const addSheet = () => {
+    if (sheets.length >= MAX_SHEETS) {
+      showToast(`Un dashboard admite hasta ${MAX_SHEETS} hojas.`, "error");
+      return;
+    }
+    commitActiveSheet();
+    sheets.push({ nombre: `Hoja ${sheets.length + 1}`, elements: [], canvas: currentCanvasSize() });
+    activeSheet = sheets.length - 1;
+    elements = [];
+    selectedId = null;
+    nextId = 1;
+    zIndex = 1;
+    renderElements();
+    renderSheetTabs();
+    syncProperties();
+    saveDraft();
+    showToast("Hoja agregada.");
+  };
+
+  const renameSheet = (index) => {
+    const sheet = sheets[index];
+    if (!sheet) return;
+    const nombre = window.prompt("Nombre de la hoja:", sheet.nombre);
+    if (nombre === null) return;
+    sheet.nombre = nombre.trim().slice(0, 100) || `Hoja ${index + 1}`;
+    renderSheetTabs();
+    saveDraft();
+  };
+
+  const removeSheet = (index) => {
+    if (sheets.length <= 1) {
+      showToast("El dashboard debe tener al menos una hoja.", "error");
+      return;
+    }
+    if (!window.confirm(`¿Eliminar "${sheets[index].nombre}"?`)) return;
+    commitActiveSheet();
+    sheets.splice(index, 1);
+    // Si se elimina la hoja activa, o una anterior, el índice activo se corre.
+    activeSheet = Math.min(activeSheet > index ? activeSheet - 1 : activeSheet, sheets.length - 1);
+    const sheet = sheets[activeSheet];
+    elements = Array.isArray(sheet.elements) ? sheet.elements : [];
+    selectedId = null;
+    if (sheet.canvas) {
+      $("canvas-width").value = sheet.canvas.width;
+      $("canvas-height").value = sheet.canvas.height;
+    }
+    updateCanvasSize();
+    renderElements();
+    renderSheetTabs();
+    syncProperties();
+    saveDraft();
+    showToast("Hoja eliminada.", "neutral");
+  };
+
+  const renderSheetTabs = () => {
+    const bar = $("sheet-tabs");
+    if (!bar) return;
+    bar.replaceChildren();
+    sheets.forEach((sheet, index) => {
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = `sheet-tab${index === activeSheet ? " is-active" : ""}`;
+      tab.textContent = sheet.nombre;
+      tab.title = "Doble clic para renombrar";
+      tab.addEventListener("click", () => switchToSheet(index));
+      tab.addEventListener("dblclick", () => renameSheet(index));
+      if (sheets.length > 1) {
+        const close = document.createElement("span");
+        close.className = "sheet-tab-close";
+        close.textContent = "×";
+        close.setAttribute("role", "button");
+        close.setAttribute("aria-label", `Eliminar ${sheet.nombre}`);
+        close.addEventListener("click", (event) => { event.stopPropagation(); removeSheet(index); });
+        tab.appendChild(close);
+      }
+      bar.appendChild(tab);
+    });
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "sheet-tab-add";
+    add.textContent = "+ Hoja";
+    add.addEventListener("click", addSheet);
+    bar.appendChild(add);
   };
 
   const formatMetricNumber = (value) => new Intl.NumberFormat("es-CL", { maximumFractionDigits: 2 }).format(Number(value || 0));
@@ -1132,6 +1279,23 @@
     }
   });
 
+  const activateScope = async (divisionId, subdivisionId, formId, dateFrom) => {
+    const data = await apiRequest(`${config.api}?action=questions&id_division=${encodeURIComponent(divisionId)}&id_subdivision=${encodeURIComponent(subdivisionId)}&id_formulario=${encodeURIComponent(formId)}&date_from=${encodeURIComponent(dateFrom)}`);
+    states = data.states || [];
+    materials = data.materials || [];
+    information = data.information || [];
+    dataFields = data.data_fields || [];
+    surveyQuestions = data.survey_questions || [];
+    plannedLocales = Number(data.planned_locales || 0);
+    scope = { id_division: Number(divisionId), id_subdivision: Number(subdivisionId), id_formulario: Number(formId), division: data.scope.division, subdivision: data.scope.subdivision, activity: data.scope.activity, date_from: dateFrom };
+    $("scope-division").textContent = scope.division;
+    $("scope-subdivision").textContent = `${scope.subdivision} · ${scope.activity} · Desde ${scope.date_from}`;
+    $("question-count").textContent = `${states.length.toLocaleString("es-CL")} estados · ${materials.length.toLocaleString("es-CL")} materiales · ${information.length.toLocaleString("es-CL")} indicadores · ${dataFields.length.toLocaleString("es-CL")} datos · ${surveyQuestions.length.toLocaleString("es-CL")} encuestas`;
+    $("topbar-status").textContent = `${scope.division} · ${scope.subdivision}`;
+    renderQuestions();
+    return data;
+  };
+
   $("continue-scope").addEventListener("click", async () => {
     const divisionId = divisionSelect.value;
     const subdivisionId = subdivisionSelect.value;
@@ -1143,21 +1307,14 @@
     button.textContent = "Cargando estados, materiales y encuestas...";
     $("scope-feedback").textContent = "Consultando estados, materiales y respuestas...";
     try {
-      const data = await apiRequest(`${config.api}?action=questions&id_division=${encodeURIComponent(divisionId)}&id_subdivision=${encodeURIComponent(subdivisionId)}&id_formulario=${encodeURIComponent(formId)}&date_from=${encodeURIComponent(dateFrom)}`);
-      states = data.states || [];
-      materials = data.materials || [];
-      information = data.information || [];
-      dataFields = data.data_fields || [];
-      surveyQuestions = data.survey_questions || [];
-      plannedLocales = Number(data.planned_locales || 0);
-      scope = { id_division: Number(divisionId), id_subdivision: Number(subdivisionId), id_formulario: Number(formId), division: data.scope.division, subdivision: data.scope.subdivision, activity: data.scope.activity, date_from: dateFrom };
-      $("scope-division").textContent = scope.division;
-      $("scope-subdivision").textContent = `${scope.subdivision} · ${scope.activity} · Desde ${scope.date_from}`;
-      $("question-count").textContent = `${states.length.toLocaleString("es-CL")} estados · ${materials.length.toLocaleString("es-CL")} materiales · ${information.length.toLocaleString("es-CL")} indicadores · ${dataFields.length.toLocaleString("es-CL")} datos · ${surveyQuestions.length.toLocaleString("es-CL")} encuestas`;
+      await activateScope(divisionId, subdivisionId, formId, dateFrom);
+      currentDashboardId = null;
+      currentDashboardEsMio = true;
+      currentDashboardName = selectedTemplate.name;
+      currentDashboardDescription = "";
       $("editor-template-name").textContent = selectedTemplate.name;
-      $("topbar-status").textContent = `${scope.division} · ${scope.subdivision}`;
-      renderQuestions();
       initializeCanvas();
+      updateServerSaveStatus();
       closeScopeModal();
       templateView.hidden = true;
       editorView.hidden = false;
@@ -1170,6 +1327,58 @@
       validateScopeForm();
     }
   });
+
+  const openSavedDashboard = async (id) => {
+    try {
+      const data = await apiRequest(`${config.api}?action=load_dashboard&id=${encodeURIComponent(id)}`);
+      const design = data.design || {};
+      const savedScope = design.scope || {};
+      const savedDivision = Number(savedScope.id_division);
+      const savedSubdivision = Number(savedScope.id_subdivision);
+      if (!(savedDivision > 0) || !(savedSubdivision >= 0) || !savedScope.date_from) {
+        throw new Error("El dashboard guardado no tiene un alcance válido.");
+      }
+      await activateScope(savedDivision, savedSubdivision, Number(savedScope.id_formulario) || 0, savedScope.date_from);
+      selectedTemplate = templates.find((item) => item.id === design.template?.id) || selectedTemplate;
+      currentDashboardId = data.dashboard.id;
+      currentDashboardEsMio = Boolean(data.dashboard.es_mio);
+      currentDashboardName = data.dashboard.nombre;
+      currentDashboardDescription = data.dashboard.descripcion || "";
+      // El backend siempre responde en formato multi-hoja, incluso para dashboards
+      // guardados antes de la Fase 3 (los envuelve en una hoja única).
+      const savedSheets = Array.isArray(design.sheets) && design.sheets.length
+        ? design.sheets
+        : [{ nombre: "Hoja 1", canvas: design.canvas, elements: design.elements || [] }];
+      sheets = savedSheets.map((sheet, index) => ({
+        nombre: String(sheet.nombre || `Hoja ${index + 1}`),
+        canvas: sheet.canvas || design.canvas || null,
+        elements: Array.isArray(sheet.elements) ? sheet.elements.map(cloneElementData) : [],
+      }));
+      activeSheet = 0;
+      elements = sheets[0].elements;
+      selectedId = null;
+      zIndex = elements.reduce((max, item) => Math.max(max, Number(item.z || 0)), 1);
+      nextId = elements.reduce((max, item) => {
+        const n = parseInt(String(item.id).split("-").pop(), 10);
+        return Number.isFinite(n) && n >= max ? n + 1 : max;
+      }, 1);
+      $("canvas-width").value = sheets[0].canvas?.width || design.canvas?.width || 1200;
+      $("canvas-height").value = sheets[0].canvas?.height || design.canvas?.height || 780;
+      updateCanvasSize();
+      renderElements();
+      renderSheetTabs();
+      syncProperties();
+      $("editor-template-name").textContent = currentDashboardName;
+      updateServerSaveStatus();
+      closeScopeModal();
+      templateView.hidden = true;
+      editorView.hidden = false;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      showToast(`Dashboard "${currentDashboardName}" cargado.`);
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  };
 
   const exitEditor = () => {
     editorView.hidden = true;
@@ -1561,7 +1770,7 @@
   });
 
   $("download-design").addEventListener("click", () => {
-    const design = { version: 1, created_at: new Date().toISOString(), template: selectedTemplate, scope, canvas: { width: Number($("canvas-width").value), height: Number($("canvas-height").value) }, elements };
+    const design = buildDesignPayload();
     const blob = new Blob([JSON.stringify(design, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -1569,4 +1778,185 @@
     document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
     showToast("Diseño descargado como JSON.");
   });
+
+  /* ===================== Persistencia: Mis dashboards ===================== */
+
+  const updateServerSaveStatus = (state = "idle") => {
+    const el = $("server-save-status");
+    if (!el) return;
+    if (state === "saving") { el.textContent = "Guardando…"; el.className = "server-save-status is-saving"; return; }
+    if (currentDashboardId) { el.textContent = "Guardado en Visibility Studio"; el.className = "server-save-status is-saved"; }
+    else { el.textContent = "Sin guardar en el servidor"; el.className = "server-save-status"; }
+  };
+
+  const renderSavedDashboardItem = (item) => {
+    const row = document.createElement("div");
+    row.className = "saved-dashboard-item";
+    const info = document.createElement("div");
+    info.className = "saved-dashboard-info";
+    const nameLine = document.createElement("strong");
+    nameLine.textContent = item.nombre;
+    if (item.es_plantilla) {
+      const badge = document.createElement("span");
+      badge.className = "template-badge";
+      badge.textContent = "Plantilla";
+      nameLine.appendChild(badge);
+    }
+    const meta = document.createElement("small");
+    const bits = [item.division_nombre].filter(Boolean);
+    if (!item.es_mio && (item.creador || "").trim()) bits.push(`por ${item.creador.trim()}`);
+    meta.textContent = bits.join(" · ");
+    info.append(nameLine, meta);
+
+    const actions = document.createElement("div");
+    actions.className = "saved-dashboard-actions";
+    const openBtn = document.createElement("button");
+    openBtn.type = "button"; openBtn.textContent = "Abrir";
+    openBtn.addEventListener("click", () => openSavedDashboard(item.id));
+    const dupBtn = document.createElement("button");
+    dupBtn.type = "button"; dupBtn.textContent = "Duplicar";
+    dupBtn.addEventListener("click", () => duplicateSavedDashboard(item.id));
+    actions.append(openBtn, dupBtn);
+    if (item.es_mio) {
+      const delBtn = document.createElement("button");
+      delBtn.type = "button"; delBtn.className = "danger-link"; delBtn.textContent = "Eliminar";
+      delBtn.addEventListener("click", () => deleteSavedDashboard(item.id, item.nombre));
+      actions.appendChild(delBtn);
+    }
+    row.append(info, actions);
+    return row;
+  };
+
+  const renderSavedDashboardGroup = (heading, items) => {
+    const group = document.createElement("div");
+    group.className = "saved-dashboard-group";
+    const title = document.createElement("small");
+    title.className = "saved-dashboard-group-title";
+    title.textContent = heading;
+    group.appendChild(title);
+    items.forEach((item) => group.appendChild(renderSavedDashboardItem(item)));
+    return group;
+  };
+
+  const loadSavedDashboards = async () => {
+    const wrapper = $("saved-dashboards");
+    const container = $("saved-dashboards-list");
+    if (!wrapper || !container) return;
+    try {
+      const data = await apiRequest(`${config.api}?action=list_dashboards`);
+      const mine = data.mine || [];
+      const others = (data.templates || []).filter((item) => !item.es_mio);
+      if (!mine.length && !others.length) { wrapper.hidden = true; return; }
+      container.replaceChildren();
+      if (mine.length) container.appendChild(renderSavedDashboardGroup("Mis dashboards", mine));
+      if (others.length) container.appendChild(renderSavedDashboardGroup("Plantillas de mi división", others));
+      wrapper.hidden = false;
+    } catch (error) {
+      wrapper.hidden = true;
+    }
+  };
+
+  const duplicateSavedDashboard = async (id) => {
+    try {
+      const form = new FormData();
+      form.append("action", "duplicate_dashboard");
+      form.append("csrf_token", config.csrf);
+      form.append("id", String(id));
+      await apiRequest(config.api, { method: "POST", body: form });
+      showToast("Copia creada en Mis dashboards.");
+      loadSavedDashboards();
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  };
+
+  const deleteSavedDashboard = async (id, nombre) => {
+    if (!window.confirm(`¿Eliminar "${nombre}"?`)) return;
+    try {
+      const form = new FormData();
+      form.append("action", "delete_dashboard");
+      form.append("csrf_token", config.csrf);
+      form.append("id", String(id));
+      await apiRequest(config.api, { method: "POST", body: form });
+      showToast("Dashboard eliminado.");
+      loadSavedDashboards();
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  };
+
+  const buildDesignPayload = () => {
+    commitActiveSheet();
+    return {
+      version: 2,
+      created_at: new Date().toISOString(),
+      template: selectedTemplate,
+      scope,
+      canvas: currentCanvasSize(),
+      sheets: sheets.map((sheet) => ({
+        nombre: sheet.nombre,
+        canvas: sheet.canvas || currentCanvasSize(),
+        elements: sheet.elements || [],
+      })),
+    };
+  };
+
+  const saveModal = $("save-modal");
+  const openSaveModal = () => {
+    if (!scope) { showToast("Selecciona primero el alcance del informe.", "error"); return; }
+    $("save-name").value = currentDashboardName || `${selectedTemplate.name} · ${scope.division}`;
+    $("save-description").value = currentDashboardDescription || "";
+    $("save-as-template").checked = false;
+    $("save-feedback").textContent = "";
+    $("save-as-copy").hidden = !(currentDashboardId && !currentDashboardEsMio);
+    saveModal.hidden = false;
+    requestAnimationFrame(() => saveModal.classList.add("show"));
+  };
+  const closeSaveModal = () => {
+    saveModal.classList.remove("show");
+    window.setTimeout(() => { saveModal.hidden = true; }, 180);
+  };
+  $("save-dashboard").addEventListener("click", openSaveModal);
+  $("cancel-save").addEventListener("click", closeSaveModal);
+  saveModal.addEventListener("click", (event) => { if (event.target === saveModal) closeSaveModal(); });
+
+  const persistDashboard = async (asCopy) => {
+    const nombre = $("save-name").value.trim();
+    if (!nombre) { $("save-feedback").textContent = "Ponle un nombre al dashboard."; return; }
+    const button = asCopy ? $("save-as-copy") : $("confirm-save");
+    const originalLabel = button.innerHTML;
+    button.disabled = true;
+    button.textContent = "Guardando...";
+    updateServerSaveStatus("saving");
+    try {
+      const form = new FormData();
+      form.append("action", "save_dashboard");
+      form.append("csrf_token", config.csrf);
+      form.append("id", asCopy ? "0" : String(currentDashboardId || 0));
+      form.append("nombre", nombre);
+      form.append("descripcion", $("save-description").value.trim());
+      form.append("es_plantilla", $("save-as-template").checked ? "1" : "0");
+      form.append("design_json", JSON.stringify(buildDesignPayload()));
+      const data = await apiRequest(config.api, { method: "POST", body: form });
+      currentDashboardId = data.id;
+      currentDashboardEsMio = true;
+      currentDashboardName = nombre;
+      currentDashboardDescription = $("save-description").value.trim();
+      $("editor-template-name").textContent = currentDashboardName;
+      updateServerSaveStatus();
+      closeSaveModal();
+      showToast(data.created ? "Dashboard guardado." : "Dashboard actualizado.");
+      loadSavedDashboards();
+    } catch (error) {
+      $("save-feedback").textContent = error.message;
+      updateServerSaveStatus();
+    } finally {
+      button.disabled = false;
+      button.innerHTML = originalLabel;
+    }
+  };
+  $("confirm-save").addEventListener("click", () => persistDashboard(false));
+  $("save-as-copy").addEventListener("click", () => persistDashboard(true));
+
+  loadSavedDashboards();
 })();
