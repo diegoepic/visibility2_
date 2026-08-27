@@ -9,6 +9,14 @@ if (!isset($_SESSION['usuario_id'])) {
 require_once __DIR__ . '/lib/security_headers.php';
 emit_security_headers();
 
+/* Aviso del cambio de acceso a RUT. Lo deja procesar_login.php SÓLO cuando la
+   persona entró con su nombre de usuario, o sea cuando de verdad va a quedar
+   afuera en la fecha de corte. Se consume acá (una vez por inicio de sesión):
+   si sigue entrando con el usuario lo vuelve a ver, y deja de verlo cuando
+   empieza a usar el RUT. */
+$avisoRut = $_SESSION['aviso_login_rut'] ?? null;
+unset($_SESSION['aviso_login_rut']);
+
 $nombre         = htmlspecialchars($_SESSION['usuario_nombre'], ENT_QUOTES, 'UTF-8');
 $apellido       = htmlspecialchars($_SESSION['usuario_apellido'], ENT_QUOTES, 'UTF-8');
 $empresa_id     = intval($_SESSION['empresa_id']);
@@ -1166,6 +1174,51 @@ if (isset($_SESSION['success'])) {
       </div><!-- /.container -->
    </div><!-- /.main-content -->
 </div><!-- /.main-container -->
+
+<?php if ($avisoRut): ?>
+<!-- Aviso del cambio de acceso a RUT. Sale sólo a quien entró con su nombre de
+     usuario (ver procesar_login.php); el que ya usa su RUT nunca lo ve.
+     Va con backdrop estático: es información que no conviene descartar de un
+     toque accidental al abrir la app. -->
+<div id="modalAvisoRut" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="modalAvisoRutLabel" aria-hidden="true" data-backdrop="static">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#f0ad4e;color:#fff;">
+        <h4 class="modal-title" id="modalAvisoRutLabel">
+          <i class="fa fa-id-card-o"></i> Cambia la forma de ingresar
+        </h4>
+      </div>
+      <div class="modal-body" style="text-align:center;">
+        <p style="font-size:16px;margin-bottom:14px;">
+          <?php if ((int)$avisoRut['dias'] === 0): ?>
+            Desde <b>hoy</b> el ingreso a Visibility es <b>solo con tu RUT</b>.
+          <?php elseif ((int)$avisoRut['dias'] === 1): ?>
+            Desde <b>mañana</b> el ingreso a Visibility será <b>solo con tu RUT</b>.
+          <?php else: ?>
+            A partir del <b><?php echo htmlspecialchars($avisoRut['corte'], ENT_QUOTES, 'UTF-8'); ?></b>
+            —en <b><?php echo (int)$avisoRut['dias']; ?> días</b>— el ingreso a Visibility
+            será <b>solo con tu RUT</b>.
+          <?php endif; ?>
+        </p>
+
+        <div style="font-size:13px;letter-spacing:.12em;color:#777;text-transform:uppercase;">Tu RUT es</div>
+        <div style="font-size:30px;font-weight:700;letter-spacing:2px;color:#2c3e50;margin:6px 0 4px;">
+          <?php echo htmlspecialchars($avisoRut['rut'], ENT_QUOTES, 'UTF-8'); ?>
+        </div>
+        <div style="font-size:13px;color:#888;">sin puntos ni guion</div>
+
+        <p style="margin-top:16px;color:#555;">
+          Tu contraseña <b>no cambia</b>. La próxima vez, escribe tu RUT en vez
+          de tu nombre de usuario.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-warning" data-dismiss="modal">Entendido</button>
+      </div>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
 
 <!-- Modal de ayuda "¿Cómo funciona?" -->
 <div id="modalAyudaFuncionamiento" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="modalAyudaFuncionamientoLabel" aria-hidden="true">
@@ -2888,6 +2941,14 @@ function setTachadoCamps($lis, tachar){
 // ======= Wire-up básico =======
 $(document).ready(function(){
   setTimeout(()=>$('#success-alert').fadeOut('slow'),3000);
+
+  /* Aviso del cambio de acceso a RUT. El modal sólo existe en el HTML cuando
+     corresponde mostrarlo, así que el largo del selector es toda la condición.
+     Con retardo para que no compita con el render inicial de la ruta. */
+  if ($('#modalAvisoRut').length) {
+    setTimeout(function(){ $('#modalAvisoRut').modal('show'); }, 900);
+  }
+
   $('#filtroFechaProg, #filtroFechaReag').off('change').on('change', function(){ applyFilters(); });
   $(document).on('click', '.todo-actions', function(){
     const $li = $(this).closest('li');
