@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Política de Privacidad · Visibility</title>
+<!--
+  BORRADOR — PENDIENTE DE REVISIÓN
+
+  Este documento lo redactó el equipo de desarrollo describiendo lo que el
+  sistema efectivamente hace, verificado sobre el código. NO es asesoría legal.
+
+  Antes de publicarlo hay que completar los campos marcados como [COMPLETAR] y
+  que lo revise quien corresponda en el negocio. Los plazos de conservación en
+  particular son una decisión comercial y contractual, no técnica.
+
+  Se sirve como .html a propósito: el guard de sesión del portal se aplica vía
+  auto_prepend_file, que solo intercepta .php. Siendo .html queda accesible sin
+  iniciar sesión, que es lo que corresponde para una política de privacidad, y
+  sigue disponible aunque PHP esté caído.
+-->
+<style>
+  :root{
+    --ink:#1b2430; --ink-2:#4d5866; --line:#dde3ea;
+    --accent:#1c6e7e; --ground:#f6f8fa; --surface:#fff;
+    --warn-bg:#fdf4e3; --warn-line:#e0b45c; --warn-ink:#8a5d15;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--ground); color:var(--ink);
+    font:16px/1.65 "Segoe UI",system-ui,-apple-system,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:48rem;margin:0 auto;padding:0 1.25rem}
+  header{background:var(--surface);border-bottom:2px solid var(--ink)}
+  header .wrap{padding:2.5rem 1.25rem 1.75rem}
+  .eyebrow{
+    font-size:.7rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 .6rem
+  }
+  h1{margin:0;font-size:2.1rem;line-height:1.15;letter-spacing:-.02em}
+  .updated{margin:.75rem 0 0;color:var(--ink-2);font-size:.9rem}
+  main .wrap{padding:2rem 1.25rem 3.5rem}
+  h2{
+    margin:2.25rem 0 .75rem;font-size:1.25rem;letter-spacing:-.01em;
+    padding-bottom:.4rem;border-bottom:1px solid var(--line)
+  }
+  h3{margin:1.5rem 0 .5rem;font-size:1rem}
+  p,li{color:var(--ink-2)}
+  li{margin-bottom:.4rem}
+  strong{color:var(--ink)}
+  a{color:var(--accent)}
+  .draft{
+    background:var(--warn-bg);border:1px solid var(--warn-line);
+    border-left:4px solid var(--warn-line);
+    padding:1rem 1.15rem;margin:1.75rem 0;border-radius:3px
+  }
+  .draft p{margin:0;color:var(--warn-ink);font-size:.92rem}
+  .draft strong{color:var(--warn-ink)}
+  .todo{
+    background:#eef2f6;border-radius:3px;padding:.1em .4em;
+    font-family:ui-monospace,Menlo,monospace;font-size:.85em;color:#5a6675
+  }
+  footer{border-top:1px solid var(--line);background:var(--surface)}
+  footer .wrap{padding:1.5rem 1.25rem;color:var(--ink-2);font-size:.85rem}
+  @media (prefers-color-scheme:dark){
+    :root{
+      --ink:#e6ebf1; --ink-2:#a4b0bd; --line:#2b333d;
+      --accent:#63b7c6; --ground:#12161b; --surface:#191f26;
+      --warn-bg:#33280f; --warn-line:#8a6a24; --warn-ink:#e0bd76;
+    }
+    .todo{background:#242c35;color:#9aa6b3}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="eyebrow">Visibility · Mentecreativa</p>
+    <h1>Política de Privacidad</h1>
+    <p class="updated">Última actualización: <span class="todo">[COMPLETAR: fecha de publicación]</span></p>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <div class="draft">
+      <p>
+        <strong>Documento en borrador.</strong> Describe el funcionamiento real
+        del sistema, verificado sobre el código, pero está pendiente de revisión
+        por el área correspondiente. Los campos marcados como
+        <span class="todo">[COMPLETAR]</span> deben definirse antes de publicarlo.
+      </p>
+    </div>
+
+    <h2>Quiénes somos</h2>
+    <p>
+      Visibility es una plataforma de gestión de terreno operada por
+      <strong>Mentecreativa</strong> <span class="todo">[COMPLETAR: razón social y RUT]</span>,
+      con domicilio en <span class="todo">[COMPLETAR: dirección]</span>.
+      Para cualquier consulta sobre esta política o sobre tus datos, escribe a
+      <span class="todo">[COMPLETAR: correo de contacto]</span>.
+    </p>
+    <p>
+      La plataforma la usan dos grupos: <strong>ejecutores de terreno</strong>, que
+      registran visitas a locales desde la aplicación móvil, y <strong>personal
+      administrativo</strong> de Mentecreativa y de sus clientes, que consulta esos
+      registros desde el portal web.
+    </p>
+
+    <h2>Qué datos recogemos</h2>
+
+    <h3>Datos de tu cuenta</h3>
+    <p>
+      Al crear un usuario registramos <strong>RUT, nombre, apellido, correo
+      electrónico y teléfono</strong>, junto con la empresa, división y perfil que
+      determinan a qué información puedes acceder. La contraseña se guarda
+      siempre cifrada con un algoritmo de un solo sentido: <strong>nadie en
+      Mentecreativa puede leerla</strong>, ni siquiera el equipo técnico.
+    </p>
+
+    <h3>Ubicación</h3>
+    <p>
+      Cuando usas la aplicación en terreno, registramos tu ubicación en dos
+      situaciones:
+    </p>
+    <ul>
+      <li>
+        <strong>Al registrar una gestión o tomar una fotografía</strong> guardamos
+        las coordenadas del momento. Sirven para verificar que la evidencia
+        corresponde al local visitado.
+      </li>
+      <li>
+        <strong>Mientras la navegación guiada está activa</strong>, la aplicación
+        sigue tu posición de forma continua para poder indicarte el camino y
+        recalcular la ruta. Ese seguimiento se detiene al cerrar la navegación.
+      </li>
+    </ul>
+    <p>
+      La ubicación se recoge solo con la aplicación abierta. <strong>No hay
+      seguimiento en segundo plano</strong> ni fuera de la jornada.
+    </p>
+
+    <h3>Fotografías</h3>
+    <p>
+      La aplicación toma fotografías de la implementación de materiales en los
+      locales. De cada imagen guardamos también sus coordenadas y una
+      <strong>huella digital</strong> que permite detectar si la misma fotografía
+      se reutilizó en otro local. Esa huella no permite reconstruir la imagen: es
+      un mecanismo de control de calidad de la evidencia frente a nuestros
+      clientes.
+    </p>
+
+    <h3>Registros de acceso</h3>
+    <p>
+      Por seguridad guardamos <strong>dirección IP, navegador, fecha y resultado</strong>
+      de cada intento de inicio de sesión, junto con los bloqueos de cuenta y los
+      accesos desde dispositivos nuevos. Es lo que nos permite detectar accesos no
+      autorizados y avisarte por correo cuando ocurren.
+    </p>
+
+    <h3>Datos de terceros</h3>
+    <p>
+      La plataforma contiene información de contacto de <strong>vendedores y jefes
+      de venta</strong> asociados a los locales. Si eres una de esas personas y
+      quieres saber qué datos tuyos tenemos, escríbenos a la dirección de contacto.
+    </p>
+
+    <h2>Para qué los usamos</h2>
+    <ul>
+      <li>Asignar y mostrar las rutas de visita de cada jornada.</li>
+      <li>Registrar la ejecución en los locales y elaborar los informes que se entregan a los clientes.</li>
+      <li>Verificar que la evidencia fotográfica corresponde al local y a la fecha declarados.</li>
+      <li>Proteger las cuentas frente a accesos no autorizados.</li>
+    </ul>
+    <p>
+      <strong>No vendemos datos personales, no los usamos para publicidad y no los
+      cedemos a terceros ajenos a la operación.</strong>
+    </p>
+
+    <h2>Con quién los compartimos</h2>
+    <p>
+      Los registros de visita, las fotografías y los informes se comparten con el
+      <strong>cliente dueño de cada campaña</strong>, que es quien encarga el
+      trabajo de terreno. Cada cliente ve únicamente la información de su propia
+      división.
+    </p>
+    <p>
+      Usamos servicios externos para funciones concretas:
+      <strong>Google Maps</strong> para mostrar mapas y calcular rutas, y
+      <strong>Microsoft Power BI</strong> para algunos tableros de informes. Estos
+      proveedores tratan los datos según sus propias políticas.
+    </p>
+
+    <h2>Cuánto tiempo los conservamos</h2>
+    <p>
+      Los registros de gestión y las fotografías se conservan durante
+      <span class="todo">[COMPLETAR: plazo, normalmente ligado a la duración del contrato con cada cliente]</span>.
+      Los registros de acceso se conservan
+      <span class="todo">[COMPLETAR: plazo]</span>. Al desactivarse una cuenta, sus
+      datos personales se conservan
+      <span class="todo">[COMPLETAR: plazo]</span> y luego se eliminan o anonimizan.
+    </p>
+
+    <h2>Cómo los protegemos</h2>
+    <ul>
+      <li>Todo el tráfico viaja cifrado mediante HTTPS.</li>
+      <li>Las contraseñas se almacenan con cifrado de un solo sentido y nunca en texto legible.</li>
+      <li>Solo se permite una sesión activa por cuenta: al entrar en un dispositivo, la sesión anterior se cierra.</li>
+      <li>Las cuentas se bloquean temporalmente tras varios intentos fallidos, y te avisamos por correo.</li>
+      <li>El acceso a la información está limitado por división: nadie ve datos de una división que no le corresponde.</li>
+    </ul>
+
+    <h2>Tus derechos</h2>
+    <p>
+      Conforme a la <strong>Ley N.º 19.628 sobre Protección de la Vida Privada</strong>
+      y a la <span class="todo">[COMPLETAR: referencia a la Ley 21.719 si ya está vigente al publicar]</span>,
+      puedes solicitar:
+    </p>
+    <ul>
+      <li><strong>Acceder</strong> a los datos personales que tenemos sobre ti.</li>
+      <li><strong>Rectificar</strong> los que estén equivocados o incompletos.</li>
+      <li><strong>Eliminar</strong> los que ya no sean necesarios para la finalidad que los originó.</li>
+      <li><strong>Oponerte</strong> a determinados tratamientos.</li>
+    </ul>
+    <p>
+      Para ejercerlos, escribe a <span class="todo">[COMPLETAR: correo de contacto]</span>.
+      Responderemos dentro de <span class="todo">[COMPLETAR: plazo]</span>.
+    </p>
+    <p>
+      Ten presente que parte de la información —los registros de visita y la
+      evidencia fotográfica— constituye <strong>respaldo del trabajo facturado a
+      nuestros clientes</strong>, por lo que su eliminación puede estar limitada
+      por obligaciones contractuales y tributarias.
+    </p>
+
+    <h2>Permisos de la aplicación</h2>
+    <p>
+      La aplicación solicita <strong>ubicación</strong> y <strong>cámara</strong>.
+      Ambos son necesarios para registrar visitas: sin ubicación no se puede validar
+      la presencia en el local, y sin cámara no se puede documentar la
+      implementación. Puedes revocarlos desde los ajustes de tu teléfono, pero la
+      aplicación dejará de funcionar para su propósito principal.
+    </p>
+
+    <h2>Cambios a esta política</h2>
+    <p>
+      Si modificamos esta política, actualizaremos la fecha del encabezado y
+      avisaremos por los canales habituales de la operación.
+    </p>
+
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    Visibility · Mentecreativa — <a href="/visibility2/portal/index.php">Volver al portal</a>
+  </div>
+</footer>
+
+</body>
+</html>

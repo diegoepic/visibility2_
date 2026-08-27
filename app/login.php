@@ -252,6 +252,8 @@ $rutFecha    = date('d/m/Y', strtotime(login_fecha_corte()));
 
       <div class="copyright">
         2025 &copy; Visibility 2
+        &middot;
+        <a href="/visibility2/portal/legal/politica-privacidad.html" style="color:inherit;text-decoration:underline;">Política de Privacidad</a>
       </div>
     </div>
 

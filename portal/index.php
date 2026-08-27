@@ -78,7 +78,7 @@ if (isset($_SESSION['success_forgot'])) {
   min-height: 100%;
   width: auto;
   height: auto;
-  z-index: -1; /* Para que quede detr¨¢s del contenido */
+  z-index: -1; /* Para que quede detrï¿½ï¿½s del contenido */
   background-size: cover;
 }
 </style>
@@ -100,7 +100,7 @@ if (isset($_SESSION['success_forgot'])) {
                 Por favor, ingrese su nombre y contrase&ntilde;a para iniciar sesi&oacute;n.
             </p>
             <form class="form-login" action="modulos/procesar_login.php" method="POST">
-                <!-- Mensaje de Error de Inicio de Sesi¨®n -->
+                <!-- Mensaje de Error de Inicio de Sesiï¿½ï¿½n -->
                 <?php /* Cambio de acceso a RUT: lo ve todo el mundo, porque quien
                          entra con nombre de usuario no tiene otra forma de enterarse. */ ?>
                 <div class="alert <?php echo $rutSoloYa ? 'alert-info' : 'alert-warning'; ?>">
@@ -122,20 +122,20 @@ if (isset($_SESSION['success_forgot'])) {
                     </div>
                 <?php endif; ?>
 
-                <!-- Mensaje de Error de Restablecimiento de Contrase0Š9a -->
+                <!-- Mensaje de Error de Restablecimiento de Contraseï¿½0ï¿½9a -->
                 <?php if ($error_forgot != ""): ?>
                     <div class="errorHandler alert alert-danger">
                         <i class="fa fa-remove-sign"></i> <?php echo htmlspecialchars($error_forgot); ?>
                     </div>
                 <?php endif; ?>
 
-                <!-- Mensaje de 0‡7xito de Restablecimiento de Contrase0Š9a -->
+                <!-- Mensaje de ï¿½0ï¿½7xito de Restablecimiento de Contraseï¿½0ï¿½9a -->
                 <?php if ($success_forgot != ""): ?>
                     <div class="errorHandler alert alert-success">
                         <i class="fa fa-check-sign"></i> <?php echo htmlspecialchars($success_forgot); ?>
                     </div>
                 <?php endif; ?>
-                <!-- Mensajes de Error o 0‡7xito -->
+                <!-- Mensajes de Error o ï¿½0ï¿½7xito -->
                 <?php
                 if (isset($_SESSION['error_solicitud'])) {
                     echo '<div class="errorHandler alert alert-danger">' . htmlspecialchars($_SESSION['error_solicitud']) . '</div>';
@@ -184,21 +184,21 @@ if (isset($_SESSION['success_forgot'])) {
             </form>
         </div>
 
-        <!-- Formulario de Restablecimiento de Contrase0Š9a -->
+        <!-- Formulario de Restablecimiento de Contraseï¿½0ï¿½9a -->
         <div class="box-forgot">
             <h3>Olvidaste tu contrase&ntilde;a?</h3>
             <p>
                 Ingrese su direcci&oacuten de correo electr&oacutenico a continuaci&oacuten para restablecer su contrase&ntilde;a.
             </p>
             <form class="form-forgot" action="modulos/restablecer_contrasena.php" method="POST">
-                <!-- Mensaje de Error de Restablecimiento de Contrase0Š9a -->
+                <!-- Mensaje de Error de Restablecimiento de Contraseï¿½0ï¿½9a -->
                 <?php if ($error_forgot != ""): ?>
                     <div class="errorHandler alert alert-danger">
                         <i class="fa fa-remove-sign"></i> <?php echo htmlspecialchars($error_forgot); ?>
                     </div>
                 <?php endif; ?>
 
-                <!-- Mensaje de 0‡7xito de Restablecimiento de Contrase0Š9a -->
+                <!-- Mensaje de ï¿½0ï¿½7xito de Restablecimiento de Contraseï¿½0ï¿½9a -->
                 <?php if ($success_forgot != ""): ?>
                     <div class="errorHandler alert alert-success">
                         <i class="fa fa-check-sign"></i> <?php echo htmlspecialchars($success_forgot); ?>
@@ -270,7 +270,7 @@ if (isset($_SESSION['success_forgot'])) {
                         >
                     </div>
                     
-                    <!-- Campo de Correo Electr¨®nico -->
+                    <!-- Campo de Correo Electrï¿½ï¿½nico -->
                     <div class="form-group">
                         <span class="input-icon">
                             <input 
@@ -299,6 +299,8 @@ if (isset($_SESSION['success_forgot'])) {
 
         <div class="copyright">
             2024 &copy; Visibility por Mentecreativa.
+            &middot;
+            <a href="/visibility2/portal/legal/politica-privacidad.html" style="color:inherit;text-decoration:underline;">PolÃ­tica de Privacidad</a>
         </div>
     </div>
 
