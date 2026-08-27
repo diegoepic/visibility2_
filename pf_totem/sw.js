@@ -18,7 +18,7 @@
    ============================================================ */
 'use strict';
 
-var VERSION = 'pf-totem-v9';
+var VERSION = 'pf-totem-v16';
 var CACHE = VERSION;
 
 /* Todo lo que el juego necesita para arrancar sin red. Si se agrega un

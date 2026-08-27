@@ -3,8 +3,9 @@
 Juego para tótem touch de la activación de Puntí Ferrer en el Walmart Holiday
 Meeting (Espacio Riesco, fines de agosto, 2 días). El jugador elige su momento y
 su variedad, recibe un vino recomendado y tiene que **servir la medida perfecta**
-manteniendo presionada la copa y soltando en la línea dorada. Si acierta, gana un
-20% OFF y se lleva un código QR.
+manteniendo presionada la copa y soltando en la línea dorada — la medida real de
+servicio de esa variedad. Si acierta, gana un premio que **se retira en el mismo
+stand** (sin cupón, sin QR: corrección del cliente del 18-08-2026).
 
 Funciona **100% offline**. Los datos se guardan en el tótem y suben solos al
 servidor visibility cuando hay señal.
@@ -66,8 +67,24 @@ están las consultas de reporte para el cliente.
    - **Windows:** `chrome.exe --kiosk --disable-pinch --overscroll-history-navigation=0 "file:///C:/pf_totem/index.html"`
    - **Android:** empaquetar como WebView igual que `VisibilityWebWrapper`, o usar
      Fully Kiosk Browser apuntando al `index.html` local.
-4. Verificar en el panel admin (5 toques en el monograma PF → PIN `2468`) que
-   "Probar conexión" responda OK.
+4. Verificar en el panel admin (5 toques en la esquina superior izquierda → PIN
+   `2435`) que "Probar conexión" responda OK.
+
+**Sobre la pantalla completa.** Ningún navegador deja entrar en pantalla completa
+al cargar la página: la API exige un gesto del usuario. Por eso hay tres caminos,
+de mejor a peor:
+
+| Camino | Cuándo entra | Se puede salir |
+|---|---|---|
+| **Modo kiosko** (paso 3) | solo, al abrir | no, es lo que hay que usar en el evento |
+| `pantallaCompleta: true` | al primer toque del attract | sí, con ESC |
+| Botón **Pantalla completa** | cuando el promotor lo toca | sí, con ESC |
+
+El botón vive **dentro del panel admin**, en el bloque "Juego", y no a la vista
+del público: ahí nadie del stand lo toca por accidente y además permite SALIR,
+que es lo que hace falta para mantenimiento. La etiqueta dice lo que va a pasar
+al tocarlo ("Activar" / "Salir"), y se esconde en equipos que no soportan la API
+(iPhone) en vez de quedar ahí sin efecto.
 
 **Importante:** no borrar los datos del navegador entre los dos días del evento —
 ahí vive todo lo que aún no se ha sincronizado.
@@ -101,8 +118,9 @@ arranque, o de inmediato con *Instalar y reiniciar* en el panel admin.
 
 ## Panel admin
 
-5 toques seguidos en el monograma **PF** de la pantalla de inicio → PIN (`2468`,
-cambiar en `config.js` antes del evento). Permite:
+5 toques seguidos en la **esquina superior izquierda** de la pantalla de inicio
+(una zona invisible de 100×100 px — NO sobre el monograma PF, que sirve para
+empezar a jugar) → PIN `2435`, el valor de `adminPin` en `js/config.js`. Permite:
 
 - ver jugadas/ganadas/perdidas/abandonos del día y del total;
 - forzar sincronización y probar la conexión;

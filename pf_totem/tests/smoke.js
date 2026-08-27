@@ -148,17 +148,33 @@
     await page.click('#btn-enviar-datos');
     await page.waitForTimeout(700);
     check(await activa(page) === 's-premio', 'datos válidos → pantalla de premio');
-    const qr = await page.evaluate(() => {
-      const s = document.querySelector('#premio-qr svg');
-      return { hay: !!s, codigo: document.querySelector('#premio-codigo').textContent };
+    /* El premio se retira en el stand (correo del cliente, 18-08-2026): sin QR
+       y sin código. Lo que queda es el PASE con el nombre del ganador, que es
+       con lo que el promotor coteja a quién le entrega. */
+    const prem = await page.evaluate(() => {
+      const svg = document.querySelector('.brindis svg');
+      return {
+        hayQR: !!document.querySelector('#premio-qr-marco'),
+        hayCodigo: !!document.querySelector('#premio-codigo'),
+        brindisVisible: !!svg && svg.getBoundingClientRect().height > 40,
+        // todo el texto visible de la pantalla, para revisarlo entero
+        texto: document.querySelector('#s-premio').innerText.replace(/\s+/g, ' ').trim(),
+      };
     });
-    check(qr.hay, 'el QR se generó offline', qr.codigo);
+    check(!prem.hayQR && !prem.hayCodigo,
+      'la pantalla de premio ya no muestra QR ni código', prem);
+    check(prem.brindisVisible,
+      'la ilustración del brindis ocupa el espacio y se dibuja con alto real',
+      { brindisVisible: prem.brindisVisible });
+    check(/retíralo aquí/i.test(prem.texto),
+      'queda el mensaje principal', prem.texto);
 
-    // la bajada del premio se personaliza con el vino que ganó (ver
-    // ultimoVinoGanado en game.js): debe mencionar el mismo nombre que se
-    // mostró en la pantalla "Tu vino ideal", no el texto genérico de siempre
-    const bajada = await page.textContent('#premio-bajada');
-    check(bajada.includes(vino), 'el premio menciona el vino real que ganó', { vino, bajada });
+    /* El premio es genérico: en el stand no se sabe cuál toca. Nombrar el vino
+       recomendado en ESTA pantalla haría que el ganador llegue al mesón pidiendo
+       una botella que nadie le ofreció, así que se revisa la pantalla completa
+       y no sólo un elemento. */
+    check(!prem.texto.includes(vino),
+      'el premio NO promete el vino recomendado', { vino, texto: prem.texto });
 
     await page.click('#btn-fin-premio');
     await page.waitForTimeout(500);
@@ -267,14 +283,23 @@
       await page.evaluate(() => document.querySelector('#s-attract').click());
       await page.waitForTimeout(150);
     }
+    /* Desde el evento Walmart la línea ya no se sortea libre: sale de la MEDIDA
+       DE SERVICIO de la variedad (acá siempre 'tinto') más un jitter de
+       ±PF_CONFIG.jitterMedida. Se verifica que (a) siga variando, para que no
+       se pueda memorizar el tiempo mirando jugar a los de adelante, y (b) que
+       no se aleje de la medida que la marca quiere enseñar. */
     const distintas = new Set(lineas).size;
     const rango = { min: Math.min(...lineas), max: Math.max(...lineas) };
-    const cfgRango = await page.evaluate(() => PF_CONFIG.lineaAleatoria);
+    const cfg = await page.evaluate(() => ({
+      medida: PF_CONFIG.variedades.find(v => v.id === 'tinto').medida,
+      jitter: PF_CONFIG.jitterMedida,
+    }));
     check(distintas >= 10, 'la línea cambia en cada partida', distintas + ' valores distintos de 12');
-    check(rango.min >= cfgRango.min && rango.max <= cfgRango.max,
-      'la línea se mantiene dentro del rango configurado', rango);
-    check(rango.max - rango.min > 10,
-      'el rango sorteado es amplio, no se concentra en un punto', rango);
+    check(rango.min >= cfg.medida - cfg.jitter - 0.1 && rango.max <= cfg.medida + cfg.jitter + 0.1,
+      'la línea se queda dentro de la medida de servicio ± jitter',
+      { rango, medida: cfg.medida, jitter: cfg.jitter });
+    check(rango.max - rango.min > cfg.jitter,
+      'el jitter reparte de verdad (no queda clavada en la medida)', rango);
 
     console.log('\n--- Errores de JS ---');
     check(errores.length === 0, 'sin errores en consola', errores.slice(0, 4));
