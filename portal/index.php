@@ -7,6 +7,12 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 
+// Aviso del cambio de acceso a RUT (ver /visibility2/lib_login_rut.php)
+require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/lib_login_rut.php';
+$rutSoloYa = login_solo_rut_activo();
+$rutDias   = login_dias_para_corte();
+$rutFecha  = date('d/m/Y', strtotime(login_fecha_corte()));
+
 $error_login = "";
 $error_forgot = "";
 $success_forgot = "";
@@ -95,6 +101,21 @@ if (isset($_SESSION['success_forgot'])) {
             </p>
             <form class="form-login" action="modulos/procesar_login.php" method="POST">
                 <!-- Mensaje de Error de Inicio de Sesi®Æn -->
+                <?php /* Cambio de acceso a RUT: lo ve todo el mundo, porque quien
+                         entra con nombre de usuario no tiene otra forma de enterarse. */ ?>
+                <div class="alert <?php echo $rutSoloYa ? 'alert-info' : 'alert-warning'; ?>">
+                    <i class="fa fa-id-card-o"></i>
+                    <?php if ($rutSoloYa): ?>
+                        El ingreso es con tu <b>RUT</b> (sin puntos ni guion) o tu <b>email</b>.
+                        El nombre de usuario ya no sirve para entrar.
+                    <?php else: ?>
+                        A partir del <b><?php echo htmlspecialchars($rutFecha); ?></b>
+                        se ingresa con el <b>RUT</b> (sin puntos ni guion) o el <b>email</b>:
+                        el nombre de usuario deja de servir<?php if ($rutDias > 1) { echo ' (faltan ' . (int)$rutDias . ' d√≠as)'; } ?>.
+                        Tu contrase√±a no cambia.
+                    <?php endif; ?>
+                </div>
+
                 <?php if ($error_login != ""): ?>
                     <div class="errorHandler alert alert-danger">
                         <i class="fa fa-remove-sign"></i> <?php echo htmlspecialchars($error_login); ?>

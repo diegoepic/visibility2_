@@ -36,6 +36,8 @@ register_shutdown_function(function () {
 });
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
+// Regla de ingreso por RUT (se activa sola en la fecha de corte)
+require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/lib_login_rut.php';
 
 /* ===================== Config ===================== */
 const LOGIN_URL             = '/index.php';
@@ -420,7 +422,19 @@ try {
         fail_and_back_generic();
     }
 
-    /* ===================== Buscar usuario ===================== */
+    /* ===================== Buscar usuario =====================
+       Antes de la fecha de corte se acepta RUT, nombre de usuario o email;
+       desde ahí, RUT o email (el email se mantiene por decisión del negocio;
+       lo que se retira es el nombre de usuario). Ver lib_login_rut.php: el
+       cambio lo activa la fecha, no hay que subir nada ese día.
+       El RUT tecleado se normaliza igual que al crearlo en el portal, así que
+       da lo mismo si lo escriben con puntos y guion. */
+    $soloRut = login_solo_rut_activo();
+    $rutIn   = login_normalizar_rut($usuario);
+
+    $where = $soloRut
+        ? '(u.rut = ? OR u.email = ?)'
+        : '(u.rut = ? OR u.usuario = ? OR u.email = ?)';
 
     $stmt = $conn->prepare("
         SELECT
@@ -443,7 +457,7 @@ try {
         FROM usuario AS u
         INNER JOIN perfil AS p  ON p.id = u.id_perfil
         INNER JOIN empresa AS e ON e.id = u.id_empresa
-        WHERE (u.usuario = ? OR u.email = ?)
+        WHERE {$where}
           AND u.activo = 1
         LIMIT 1
     ");
@@ -452,12 +466,33 @@ try {
         throw new RuntimeException('No se pudo preparar la consulta de login: ' . $conn->error);
     }
 
-    $stmt->bind_param('ss', $usuario, $usuario);
+    if ($soloRut) { $stmt->bind_param('ss', $rutIn, $usuario); }
+    else          { $stmt->bind_param('sss', $rutIn, $usuario, $usuario); }
     $stmt->execute();
     $res   = $stmt->get_result();
     $found = $res && $res->num_rows === 1;
     $u     = $found ? $res->fetch_assoc() : null;
     $stmt->close();
+
+    /* Ya rige el RUT y lo tecleado es un nombre de usuario que EXISTE: sin este
+       aviso la persona lee "credenciales incorrectas", cree que le bloquearon la
+       cuenta y llama a soporte. Se comprueba el usuario pero NO la clave, así que
+       no revela nada que no se supiera al escribirlo. */
+    if (!$found && $soloRut) {
+        $q = $conn->prepare("SELECT 1 FROM usuario WHERE usuario = ? AND activo = 1 LIMIT 1");
+        if ($q) {
+            $q->bind_param('s', $usuario);
+            $q->execute();
+            $existeUsuario = $q->get_result()->num_rows === 1;
+            $q->close();
+            if ($existeUsuario) {
+                $_SESSION['error_login'] = 'Desde el ' . date('d/m/Y', strtotime(login_fecha_corte()))
+                    . ' se ingresa con el RUT (sin puntos ni guion) o con tu email. '
+                    . 'El nombre de usuario ya no sirve para entrar.';
+                safe_redirect(LOGIN_URL);
+            }
+        }
+    }
 
     /* ===================== Chequear lock por cuenta ===================== */
 
@@ -555,6 +590,22 @@ try {
         log_attempt($conn, (int)$u['id'], $usuario, 'failure', 'perfil_denegado');
         $_SESSION['error_login'] = 'Perfil sin permisos, ingresa desde la app.';
         safe_redirect(LOGIN_URL);
+    }
+
+    /* Aviso del cambio a RUT: sólo a quien entró con el nombre de usuario, que
+       es el único que va a quedar afuera. Quien usa su RUT o su email no ve
+       nada. No se guarda "ya lo vio" a propósito: el aviso desaparece solo
+       cuando la persona cambia de hábito, que es lo que se busca. */
+    $rutGuardado = login_normalizar_rut((string)($u['rut'] ?? ''));
+    $emailGuard  = mb_strtolower(trim((string)($u['email'] ?? '')));
+    $entroPorRut   = ($rutGuardado !== '' && $rutIn === $rutGuardado);
+    $entroPorEmail = ($emailGuard !== '' && mb_strtolower($usuario) === $emailGuard);
+    if (!$soloRut && $rutGuardado !== '' && !$entroPorRut && !$entroPorEmail) {
+        $_SESSION['aviso_login_rut'] = [
+            'rut'   => $rutGuardado,
+            'dias'  => login_dias_para_corte(),
+            'corte' => date('d/m/Y', strtotime(login_fecha_corte())),
+        ];
     }
 
     $secBefore = get_user_security($conn, (int)$u['id']);
