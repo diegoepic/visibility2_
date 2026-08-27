@@ -5,6 +5,19 @@ declare(strict_types=1);
 if (PHP_SAPI === 'cli') { return; }
 
 /* ------------------------------------------------------------------
+   Cabeceras de seguridad
+   Van ANTES del corte por allowlist a propósito: así la pantalla de login,
+   que es pública, también queda cubierta. Como este archivo se ejecuta vía
+   auto_prepend_file, con esto queda cubierto el portal entero.
+   La CSP sale en modo REPORTE (no bloquea); ver security_headers_portal.php.
+   ------------------------------------------------------------------ */
+$v2HeadersFile = __DIR__ . '/lib/security_headers_portal.php';
+if (is_readable($v2HeadersFile)) {
+    require_once $v2HeadersFile;
+    portal_security_headers();
+}
+
+/* ------------------------------------------------------------------
    Allowlist de scripts públicos dentro de /portal (sin sesión)
    ------------------------------------------------------------------ */
 $script = str_replace('\\', '/', $_SERVER['SCRIPT_FILENAME'] ?? '');

@@ -2179,8 +2179,11 @@ if ($fqTieneCadena && $esCampanaConLocales) {
 <script src="https://cdn.datatables.net/1.10.12/js/dataTables.bootstrap.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/1.2.2/js/buttons.bootstrap.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/2.5.0/jszip.min.js"></script>
-<script src="https://cdn.rawgit.com/bpampuch/pdfmake/0.1.18/build/vfs_fonts.js"></script>
-<script src="https://cdn.rawgit.com/bpampuch/pdfmake/0.1.18/build/pdfmake.min.js"></script>
+<!-- rawgit se dio de baja en octubre de 2019: estos dos scripts llevaban anos
+     sin cargar y la exportacion a PDF estaba rota. Se repunta a cdnjs 0.2.7,
+     que es lo que ya usa el resto del portal. pdfmake va ANTES que vfs_fonts. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
 
 <script>
 const formularioId = <?= json_encode((int)$formulario_id) ?>;
