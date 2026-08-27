@@ -42,9 +42,25 @@ portal/RESTful/cache/
 *.tmp
 *.log
 
+# Excepcion: las migraciones SI se versionan. La regla *.sql de arriba existe
+# para los volcados completos (el respaldo pesa ~1,6 GB), pero se estaba
+# tragando tambien scripts/, que es el UNICO registro de que cambios de esquema
+# existen -- no hay runner de migraciones ni tabla de control.
+!scripts/*.sql
+
 # === Variables de entorno (nunca commitear) ===
 .env
+/.env
 app/.env
+
+# === Correspondencia con clientes ===
+# Los PDF de correos traen RUT, nombres y correos de personas reales.
+# En git quedarian para siempre: se guardan fuera del repositorio.
+*.pdf
+
+# === Cache en disco (se regenera; el .htaccess que lo protege SI se versiona) ===
+portal/modulos/mod_create_dashboard/api/cache_editor/*
+!portal/modulos/mod_create_dashboard/api/cache_editor/.htaccess
 
 # === Cosas de IDE / sistema ===
 .vscode/
