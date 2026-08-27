@@ -2,23 +2,12 @@
 
     error_reporting(E_ALL & ~E_NOTICE);
 
-    // Cargar .env si existe y a¨²n no se han cargado las variables de entorno
-    (static function (): void {
-        $envFile = __DIR__ . '/.env';
-        if (!is_readable($envFile)) return;
-        foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
-            $line = trim($line);
-            if ($line === '' || $line[0] === '#') continue;
-            if (!str_contains($line, '=')) continue;
-            [$key, $val] = explode('=', $line, 2);
-            $key = trim($key);
-            $val = trim($val, " \t\"'");
-            if ($key !== '' && getenv($key) === false) {
-                putenv("$key=$val");
-                $_ENV[$key] = $val;
-            }
-        }
-    })();
+    // El cargador vive ahora en la raiz para que el portal lea el mismo .env.
+    // Es el mismo codigo que estaba aqui: misma precedencia (el entorno real
+    // gana sobre el archivo) y sigue encontrando app/.env si el de la raiz aun
+    // no esta subido.
+    require_once __DIR__ . '/../lib_env.php';
+    v2_load_env();
 
     $servername = getenv('DB_HOST')     ?: 'localhost';
     $username   = getenv('DB_USER')     ?: '';
@@ -31,7 +20,7 @@
     if ($conn->connect_error) {
         error_log("DB connection failed: " . $conn->connect_error);
         http_response_code(503);
-        die("Error de conexi¨®n con la base de datos.");
+        die("Error de conexiï¿½ï¿½n con la base de datos.");
     }
 
     if (!$conn->set_charset("utf8")) {
