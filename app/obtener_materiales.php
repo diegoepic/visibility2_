@@ -24,9 +24,18 @@ $sql_materiales = "
       MAX(fq.valor) AS valor, 
       MAX(fq.fechaVisita) AS fechaVisita,
       MAX(fq.observacion) AS observacion,
-      m.ref_image
+      MAX(m.ref_image) AS ref_image
     FROM formularioQuestion fq
-    LEFT JOIN material m ON fq.material = m.nombre
+    -- La division se toma de la campana. Aqui no hay una variable PHP con la
+    -- division (a diferencia de gestionarPruebas.php), asi que se deriva del
+    -- propio formulario: evita sumar un parametro y no puede desalinearse.
+    -- Sin este filtro el nombre del material matchea el de otras divisiones y
+    -- se muestra una foto de referencia ajena.
+    INNER JOIN formulario f ON f.id = fq.id_formulario
+    LEFT JOIN material m
+           ON m.nombre = fq.material
+          AND m.id_division = f.id_division
+          AND m.deleted_at IS NULL
     WHERE fq.id_local = ? AND fq.id_formulario = ? AND fq.id_usuario = ?
     GROUP BY fq.id, fq.material, fq.valor_propuesto
 ";

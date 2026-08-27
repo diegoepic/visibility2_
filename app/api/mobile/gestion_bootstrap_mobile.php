@@ -228,7 +228,13 @@ $sqlMateriales = "
       MAX(fq.observacion) AS observacion,
       MAX(m.ref_image) AS ref_image
     FROM formularioQuestion fq
-    LEFT JOIN material m ON fq.material = m.nombre
+    -- Mismo filtro por division que gestionarPruebas.php: el nombre del material
+    -- se repite entre divisiones y sin esto el MAX(m.ref_image) devuelve la foto
+    -- de otra. La division sale de la campana (formulario.id_division).
+    LEFT JOIN material m
+           ON m.nombre = fq.material
+          AND m.id_division = ?
+          AND m.deleted_at IS NULL
     WHERE fq.id_local = ?
       AND fq.id_formulario = ?
       AND fq.id_usuario = ?
@@ -236,11 +242,13 @@ $sqlMateriales = "
     ORDER BY fq.id ASC
 ";
 
+// El parametro del JOIN va ANTES que los del WHERE.
+$idDivisionCampana = (int)$headerRow['idDivision'];
 $rowsMateriales = dbFetchAllAssocMobile(
     $conn,
     $sqlMateriales,
-    "iii",
-    [$idLocal, $idCampana, $usuarioId]
+    "iiii",
+    [$idDivisionCampana, $idLocal, $idCampana, $usuarioId]
 );
 
 $materiales = [];

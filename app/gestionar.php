@@ -149,7 +149,13 @@ $sql_materiales = "
       MAX(fq.observacion) AS observacion,
       ANY_VALUE(m.ref_image) AS ref_image
     FROM formularioQuestion fq
-    LEFT JOIN material m ON fq.material = m.nombre
+    -- Mismo filtro por division que gestionarPruebas.php: el nombre del material
+    -- se repite entre divisiones y sin esto el ANY_VALUE(m.ref_image) devuelve la
+    -- foto de otra. La division sale de la campana (formulario.id_division).
+    LEFT JOIN material m
+           ON m.nombre = fq.material
+          AND m.id_division = ?
+          AND m.deleted_at IS NULL
     WHERE fq.id_local = ?
       AND fq.id_formulario = ?
       AND fq.id_usuario = ?
@@ -159,7 +165,8 @@ $sql_materiales = "
 
 $stmt_materiales = $conn->prepare($sql_materiales);
 if ($stmt_materiales) {
-    $stmt_materiales->bind_param("iii", $idLocal, $idCampana, $usuario_id);
+    // El parametro del JOIN va ANTES que los del WHERE.
+    $stmt_materiales->bind_param("iiii", $idDivision, $idLocal, $idCampana, $usuario_id);
     $stmt_materiales->execute();
     $result_materiales = $stmt_materiales->get_result();
     $materiales = [];

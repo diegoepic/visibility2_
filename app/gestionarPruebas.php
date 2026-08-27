@@ -287,18 +287,28 @@ $sql_materiales = "
         WHERE fv2.id_formularioQuestion = fq.id AND fv2.kind = 'retirado'
       ) AS urls_retirado
     FROM formularioQuestion fq
-    LEFT JOIN material m ON fq.material = m.nombre
+    -- El catalogo tiene UNIQUE(nombre, id_division): el mismo nombre existe en
+    -- varias divisiones (STOPPER esta en REDBULL, ABL y CPW). Sin este filtro el
+    -- MAX(m.ref_image) de arriba traia la foto de cualquiera de ellas -- en la
+    -- practica la de quien tuviera imagen cargada -- y el ejecutor veia material
+    -- ajeno. $idDivision sale de formulario.id_division, no de la sesion, para
+    -- que un usuario MC abriendo una campana de otra division siga viendo bien.
+    LEFT JOIN material m
+           ON m.nombre = fq.material
+          AND m.id_division = ?
+          AND m.deleted_at IS NULL
     WHERE fq.id_local = ?
       AND fq.id_formulario = ?
       AND fq.id_usuario = ?
     GROUP BY fq.id, fq.material, fq.categoria, fq.marca, fq.valor_propuesto, fq.etapa_material
 ";
 
+// El parametro del JOIN va ANTES que los del WHERE.
 $rowsMateriales = dbFetchAllAssoc(
     $conn,
     $sql_materiales,
-    "iii",
-    [$idLocal, $idCampana, $usuario_id]
+    "iiii",
+    [$idDivision, $idLocal, $idCampana, $usuario_id]
 );
 
 $materiales = [];
