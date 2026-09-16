@@ -409,9 +409,48 @@ if (!function_exists('idempo_get_status')) {
 }
 
 // ============================================================================
-// GARBAGE COLLECTION AUTOMÁTICO (Eventual - 1%)
+// LIMPIEZA
 // ============================================================================
+//
+// Antes, aquí abajo había esto:
+//
+//     if (mt_rand(1, 100) === 1 && isset($conn) && $conn instanceof mysqli) {
+//         idempo_gc($conn);
+//     }
+//
+// Este archivo lo incluyen 8 endpoints, así que una de cada cien gestiones pagaba tres
+// sentencias de limpieza —una de ellas recorriendo request_log entera— con el teléfono de
+// un ejecutor esperando, muchas veces con mala señal. Mantenimiento en la ruta de una
+// petición de usuario.
+//
+// La limpieza vive ahora en scripts/cron_gc.php, programado de madrugada. Ver ese archivo
+// para la línea de cron.
+//
+// RED DE SEGURIDAD: si el hosting no permite programar cron, poniendo V2_GC_INLINE=1 en
+// .env vuelve una versión mucho más suave —1 de cada 2000 peticiones, y sólo las dos
+// sentencias baratas, las que ya tienen índice— para que request_log no crezca sin
+// límite. Está apagada por defecto a propósito: es peor que el cron, y quien la encienda
+// debe saber que lo está haciendo.
+if (getenv('V2_GC_INLINE') === '1'
+    && mt_rand(1, 2000) === 1
+    && isset($conn) && $conn instanceof mysqli) {
 
-if (mt_rand(1, 100) === 1 && isset($conn) && $conn instanceof mysqli) {
-    idempo_gc($conn);
+    @$conn->query("
+        UPDATE request_log
+           SET status = 'failed'
+         WHERE status = 'processing'
+           AND ( (timeout_at IS NOT NULL AND timeout_at < NOW())
+              OR (timeout_at IS NULL AND created_at < NOW() - INTERVAL " . IDEMPO_PROCESSING_TIMEOUT_MINUTES . " MINUTE) )
+         LIMIT 500
+    ");
+
+    // Sólo lo viejo de 'pending'/'failed': son un puñado y el índice idx_timeout_cleanup
+    // (status, timeout_at) ya los acota. El borrado de 'completed' —el caro— se deja
+    // exclusivamente al cron.
+    @$conn->query("
+        DELETE FROM request_log
+         WHERE status IN ('pending','failed')
+           AND created_at < NOW() - INTERVAL 2 DAY
+         LIMIT 500
+    ");
 }

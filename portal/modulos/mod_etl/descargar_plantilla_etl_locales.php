@@ -8,11 +8,14 @@ if (!isset($usuario_id)) {
 }
 
 header('Content-Type: text/csv; charset=utf-8');
-header('Content-Disposition: attachment; filename="plantilla_actualizacion_direcciones_locales.csv"');
+header('Content-Disposition: attachment; filename="plantilla_actualizacion_locales.csv"');
 header('Cache-Control: no-store, no-cache, must-revalidate');
 
 $fp = fopen('php://output', 'w');
 fwrite($fp, "\xEF\xBB\xBF");
-fputcsv($fp, ['Código Local', 'Nombre', 'Dirección', 'Comuna', 'Cadena', 'Cuenta'], ';');
+fputcsv($fp, [
+    'Código Local', 'División', 'Nombre', 'Dirección', 'Comuna', 'Zona', 'Distrito', 'Cadena', 'Cuenta',
+    'Vendedor', 'Jefe de Venta'
+], ';');
 fclose($fp);
 exit();

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 session_start();
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
 
@@ -35,6 +35,12 @@ $formulario_estado = $_GET['formulario_estado'] ?? 'activos';
 
 $fecha_desde = $_GET['fecha_desde'] ?? '';
 $fecha_hasta = $_GET['fecha_hasta'] ?? '';
+// Mismo alcance del panel: en curso/todos es global; sólo finalizados admite fechas.
+$permitirFiltroFecha = $formulario_estado === 'inactivos' && $estado_gestion !== 'activa';
+if (!$permitirFiltroFecha) {
+    $fecha_desde = '';
+    $fecha_hasta = '';
+}
 $usarFechaVisita = !empty($fecha_desde) || !empty($fecha_hasta);
 $fechaMedicionSql = $usarFechaVisita ? 'fq.fechaVisita' : 'fq.fechaPropuesta';
 
@@ -55,10 +61,18 @@ $fechaValida = "
     AND CAST(fq.fechaPropuesta AS CHAR(10)) <> '0000-00-00'
 ";
 
+$fechaVisitaValida = "
+    fq.fechaVisita IS NOT NULL
+    AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
+    AND CAST(fq.fechaVisita AS CHAR(10)) <> '0000-00-00'
+";
+
+$fechaMedicionValida = $usarFechaVisita ? $fechaVisitaValida : $fechaValida;
+
 $gestionFinalizada = "
     (
         COALESCE(fq.countVisita, 0) > 0
-        OR fq.pregunta IN (
+        OR COALESCE(fq.pregunta, '') IN (
             'solo_auditoria',
             'solo_implementado',
             'implementado_auditado',
@@ -101,7 +115,7 @@ $sql = "
         ON sf.id = f.id_subdivision
 
     WHERE fq.id_usuario = ?
-      AND $fechaValida
+      AND $fechaMedicionValida
 ";
 
 $types = "ii";
@@ -396,7 +410,7 @@ $sqlPct = "
         ON sf.id = f.id_subdivision
 
     WHERE fq.id_usuario = ?
-      AND $fechaValida
+      AND $fechaMedicionValida
 ";
 
 $typesPct = "ii";

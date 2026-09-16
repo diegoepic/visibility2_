@@ -11,7 +11,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';
 
 // -----------------------------------------------------------------------------
-// 1) Validar sesión
+// 1) Validar sesi篓庐n
 // -----------------------------------------------------------------------------
 if (!isset($_SESSION['usuario_id'])) {
     header("Location: ../index.php");
@@ -110,7 +110,7 @@ function resolverEstadoMapa(array $preguntas): array
 }
 
 // -----------------------------------------------------------------------------
-// 3) Parámetros de sesión / filtros
+// 3) Par篓垄metros de sesi篓庐n / filtros
 // -----------------------------------------------------------------------------
 $id_empresa       = (int)($_SESSION['empresa_id'] ?? 0);
 $user_division_id = (int)($_SESSION['division_id'] ?? 0);
@@ -125,10 +125,10 @@ $filter_distrito    = (int)($_GET['id_distrito'] ?? 0);
 $fecha_desde        = cleanDate($_GET['desde'] ?? '');
 $fecha_hasta        = cleanDate($_GET['hasta'] ?? '');
 $accionBuscar       = (int)($_GET['buscar'] ?? 0);
-$tipoCampana        = (int)($_GET['tipo_gestion'] ?? 0); // 1=Campaña, 3=Ruta, 0=Todas
+$tipoCampana        = (int)($_GET['tipo_gestion'] ?? 0); // 1=Campa聛0艩9a, 3=Ruta, 0=Todas
 
 // -----------------------------------------------------------------------------
-// 4) Catálogos cacheados
+// 4) Cat篓垄logos cacheados
 // -----------------------------------------------------------------------------
 $divisiones = [];
 if ($isMC) {
@@ -185,6 +185,9 @@ $locales = [];
 if ($accionBuscar === 1) {
     $sql = "
         SELECT
+            fq.id AS id_formulario_question,
+            fq.id_formulario,
+            fq.id_usuario,
             CASE
                 WHEN f.modalidad = 'solo_auditoria' THEN 'AUDITORIA'
                 WHEN f.modalidad = 'solo_implementacion' THEN 'IMPLEMENTACION'
@@ -225,6 +228,13 @@ if ($accionBuscar === 1) {
 
     $params = [$id_empresa];
     $types  = 'i';
+
+    // El detalle reutiliza exactamente los permisos y filtros de este listado.
+    if (!empty($mapaDetalleLocalId)) {
+        $sql .= " AND l.id = ? ";
+        $params[] = $mapaDetalleLocalId;
+        $types .= 'i';
+    }
 
     if (in_array($tipoCampana, [1, 3], true)) {
         $sql .= " AND f.tipo = ? ";
@@ -283,6 +293,7 @@ if ($accionBuscar === 1) {
     $sql .= " ORDER BY fq.fechaPropuesta DESC, l.nombre ASC";
 
     $cachePayload = [
+        'detalle_local'      => $mapaDetalleLocalId ?? 0,
         'id_empresa'         => $id_empresa,
         'user_division_id'   => $user_division_id,
         'isMC'               => $isMC ? 1 : 0,
@@ -299,8 +310,10 @@ if ($accionBuscar === 1) {
     ];
 
     try {
-        $locales = cacheRemember(
-            'mapa_locales_v2',
+        $locales = !empty($mapaDetalleLocalId)
+            ? fetchAllPrepared($conn, $sql, $types, $params)
+            : cacheRemember(
+            'mapa_locales_v3',
             $cachePayload,
             300,
             function () use ($conn, $sql, $types, $params) {
@@ -309,6 +322,9 @@ if ($accionBuscar === 1) {
         );
     } catch (Throwable $e) {
         error_log('[mapa_data][locales] ' . $e->getMessage());
+        if (!empty($mapaDetalleLocalId)) {
+            throw $e;
+        }
         $locales = [];
     }
 }
@@ -376,5 +392,7 @@ if ($accionBuscar === 1) {
     }
 }
 
-$conn->close();
+if (empty($mapaDetalleLocalId)) {
+    $conn->close();
+}
 ?>

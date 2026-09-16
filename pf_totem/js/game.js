@@ -60,7 +60,21 @@
      (ver prepararServir) para que no se pueda memorizar el tiempo. */
   var lineaPartida = C.lineaObjetivo;
 
-  function sortearLinea() {
+  /* La altura sale de la MEDIDA DE SERVICIO de la variedad elegida (tinto y
+     blanco a 1/3 de copa, espumante a 2/3 de flauta), que es justamente lo
+     que la marca quiere enseñar. Encima se le suma un jitter de ±jitterMedida
+     puntos: sin él la línea sería fija y bastaría con memorizar el tiempo
+     mirando jugar a los de adelante.
+     Si la variedad no trae `medida` se cae al sorteo libre de antes. */
+  function sortearLinea(varDef) {
+    var med = varDef && varDef.medida;
+    if (med != null) {
+      var j = C.jitterMedida || 0;
+      var val = med + (Math.random() * 2 - 1) * j;
+      // Nunca fuera de la copa ni tan abajo que se confunda con un toque suelto.
+      lineaPartida = Math.round(Math.min(92, Math.max(C.nivelMinimoValido + 4, val)) * 10) / 10;
+      return lineaPartida;
+    }
     var r = C.lineaAleatoria;
     lineaPartida = (r && r.activo)
       ? Math.round((r.min + Math.random() * (r.max - r.min)) * 10) / 10
@@ -74,6 +88,16 @@
      de adelante memorizaría ese número gratis, exactamente lo que sortear la
      línea en cada partida real ya evita (ver comentario de arriba). */
   function sortearObjetivoDemo() {
+    /* Se toma una de las medidas reales (al azar entre las variedades) en vez
+       de un número libre: el attract es lo que ve la gente desde el pasillo, y
+       si mostrara una línea que el juego nunca usa estaría enseñando una
+       medida que no existe. */
+    var conMedida = (C.variedades || []).filter(function (v) { return v.medida != null; });
+    if (conMedida.length) {
+      var v = conMedida[Math.floor(Math.random() * conMedida.length)];
+      var j = C.jitterMedida || 0;
+      return Math.round((v.medida + (Math.random() * 2 - 1) * j) * 10) / 10;
+    }
     var r = C.lineaAleatoria;
     return (r && r.activo)
       ? Math.round((r.min + Math.random() * (r.max - r.min)) * 10) / 10
@@ -489,7 +513,7 @@
     serve.tOla = 0;
     serve.asentando = false;
     serve.intento = 1;
-    sortearLinea();   // altura distinta en cada partida: no se puede memorizar
+    sortearLinea(varDef);   // medida de servicio de ESTA variedad + jitter
     var svg = $('#copa-svg');
     svg.innerHTML = buildCopaSvg(varDef, { uid: 'juego' });
     /* Referencias dentro de ESTE svg: en el documento vive también la copa
@@ -797,8 +821,25 @@
     if (nombre.length < 2) return { ok: false, msg: 'Escribe tu nombre para continuar' };
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) return { ok: false, msg: 'Revisa tu email, parece incompleto' };
     if (tel && tel.replace(/\D/g, '').length < 8) return { ok: false, msg: 'El teléfono parece incompleto (o déjalo vacío)' };
-    if (!$('#chk-consent').checked) return { ok: false, msg: 'Debes aceptar el uso de tus datos para recibir el código' };
+    if (!$('#chk-consent').checked) return { ok: false, msg: 'Debes aceptar el uso de tus datos para recibir tu premio' };
     return { ok: true, nombre: nombre, email: email, telefono: tel };
+  }
+
+  /* Folio correlativo del tótem (PF-001, PF-002...). Como el premio se retira
+     en el stand, el ganador necesita algo corto que mostrarle al promotor y
+     que después permita cuadrar la entrega contra la lista de ganadores.
+     Vive en localStorage porque es un kiosko único y así no depende de una
+     lectura asíncrona a IndexedDB justo en el momento de mostrar el premio.
+     Va en el campo `codigo`, que es el que el servidor ya persiste (no sirve
+     inventar un campo nuevo: pf_totem_api/sync.php mapea columnas explícitas
+     y descartaría cualquier otra cosa). */
+  function siguienteFolio() {
+    var n = 1;
+    try {
+      n = (parseInt(localStorage.getItem('pf_folio'), 10) || 0) + 1;
+      localStorage.setItem('pf_folio', String(n));
+    } catch (e) { /* modo privado: se sigue igual, sólo pierde el correlativo */ }
+    return (C.premio.folioPrefijo || 'PF-') + String(n).padStart(3, '0');
   }
 
   function asignarCodigo() {
@@ -806,12 +847,16 @@
       return PFDB.poolTomar().then(function (codigo) {
         if (codigo) return { codigo: codigo, modo: 'pool' };
         logEvent('pool_agotado');
-        return { codigo: C.premio.codigoGenerico, modo: 'generico_fallback' };
+        return { codigo: siguienteFolio(), modo: 'generico_fallback' };
       });
     }
-    return Promise.resolve({ codigo: C.premio.codigoGenerico, modo: 'generico' });
+    return Promise.resolve({ codigo: siguienteFolio(), modo: 'generico' });
   }
 
+  /* SIN USO desde que el premio pasa a retirarse en el stand: la pantalla de
+     premio ya no tiene el marco #premio-qr. Se conserva para no rehacerlo si
+     la marca vuelve a una promo online — en ese caso hay que devolver el
+     <div class="premio-qr-marco"> a index.html y volver a llamar acá. */
   function renderQR(codigo) {
     var cont = $('#premio-qr');
     var url = (C.premio.qrTemplate || C.premio.urlTienda).replace('{CODE}', encodeURIComponent(codigo));
@@ -850,14 +895,12 @@
       return PFDB.put('ganadores', ganador).then(function () {
         logEvent('codigo_asignado', { codigo: premio.codigo, modo: premio.modo });
         PFKeyboard.detach();
-        renderQR(premio.codigo);
-        $('#premio-codigo').textContent = premio.codigo;
-        // personaliza con el vino que ganó (si se pudo rastrear); si no,
-        // se queda con el texto genérico de config.js → textos.premioBajada
-        $('#premio-bajada').innerHTML = ultimoVinoGanado
-          ? 'Tu <b>' + ultimoVinoGanado.nombre + '</b> te espera en ' +
-            C.premio.urlTienda.replace(/^https?:\/\//, '')
-          : C.textos.premioBajada;
+        /* La pantalla de premio quedó sin código, sin nombre y sin bajada: sólo
+           el "¡Retíralo aquí!" y el brindis. El premio se entrega en el mesón y
+           el promotor lo coteja contra la lista por nombre. Nada nombra el vino
+           recomendado — ese es la sugerencia del paso "Tu vino ideal", no el
+           premio, y confundirlos hace que el ganador llegue pidiendo una
+           botella que nadie le ofreció. */
         PFSync.tick();   // el ganador es el dato más valioso: se intenta subir de inmediato
         showScreen('s-premio');
         autoVolver($('#premio-count'), 45);
@@ -976,6 +1019,7 @@
     $('#admin-vibra').disabled = !PFAudio.vibracionSoportada();
     $('#admin-vibra-nota').textContent = PFAudio.vibracionSoportada()
       ? '' : 'Este equipo no soporta vibración (normal en PC y en iOS).';
+    sincronizarBotonPantalla();   // el estado puede haber cambiado con ESC/F11
     $('#admin-meta').textContent = 'Dispositivo ' + deviceId + ' · v' + C.version + ' · ' + C.evento;
   }
 
@@ -1047,12 +1091,24 @@
       if (e.target.closest('#admin-trigger')) return; // la esquina oculta es para el panel admin
       PFAudio.ensure();
       pedirWakeLock();
-      if (C.pantallaCompleta && document.documentElement.requestFullscreen && !document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(function () {});
-      }
+      if (C.pantallaCompleta && !enPantallaCompleta()) pedirPantallaCompleta();
       PFAudio.select();
       startSession();
       showScreen('s-momento');
+    });
+
+    // ---- botón de pantalla completa (dentro del panel admin: alterna)
+    $('#btn-fullscreen').addEventListener('click', function () {
+      var dentro = enPantallaCompleta();
+      if (dentro) { salirPantallaCompleta(); }
+      else { PFAudio.ensure(); pedirPantallaCompleta(); pedirWakeLock(); }
+      logEvent('pantalla_completa_manual', { activar: !dentro });
+    });
+
+    // El navegador puede entrar o salir sin pasar por el botón (tecla ESC, F11,
+    // gesto del sistema), así que el estado se sigue por evento, no al hacer clic.
+    ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (ev) {
+      document.addEventListener(ev, sincronizarBotonPantalla);
     });
 
     // ---- zona oculta en la esquina: 5 toques → PIN admin
@@ -1252,6 +1308,67 @@
     });
   }
 
+  /* ============================================================
+     PANTALLA COMPLETA
+     Ningún navegador deja entrar en pantalla completa al cargar: la API exige
+     un gesto del usuario, así que SIEMPRE hace falta un toque. Por eso hay dos
+     caminos y los dos son "un toque":
+       - el primer toque en el attract (si C.pantallaCompleta está en true), y
+       - el botón #btn-fullscreen del panel admin, para el momento de montar
+         el stand (y para salir, en mantenimiento).
+     Para que arranque en pantalla completa SIN ningún toque hay que lanzar el
+     navegador en modo kiosko (chrome --kiosk) — ver README.
+     Los prefijos webkit están por los WebView Android antiguos, que es lo que
+     suele haber dentro de un tótem.
+     ============================================================ */
+  function pantallaCompletaSoportada() {
+    var e = document.documentElement;
+    return !!(e.requestFullscreen || e.webkitRequestFullscreen);
+  }
+
+  function enPantallaCompleta() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  function pedirPantallaCompleta() {
+    var e = document.documentElement;
+    try {
+      var p = e.requestFullscreen ? e.requestFullscreen() : (e.webkitRequestFullscreen && e.webkitRequestFullscreen());
+      if (p && p.catch) p.catch(function () {});
+    } catch (_) { /* el navegador puede negarlo; el botón queda como estaba */ }
+  }
+
+  function salirPantallaCompleta() {
+    try {
+      var p = document.exitFullscreen ? document.exitFullscreen()
+        : (document.webkitExitFullscreen && document.webkitExitFullscreen());
+      if (p && p.catch) p.catch(function () {});
+    } catch (_) {}
+  }
+
+  /* El botón alterna, y la etiqueta dice lo que va a pasar al tocarlo. Está
+     dentro del panel admin, así que poder SALIR es útil (mantenimiento) y no
+     hay riesgo de que un visitante lo toque. En equipos sin soporte de la API
+     (iPhone) se esconde: dejarlo visible sin efecto sólo confunde al promotor. */
+  function sincronizarBotonPantalla() {
+    var b = $('#btn-fullscreen');
+    if (!b) return;
+    var soportado = pantallaCompletaSoportada();
+    b.classList.toggle('oculto', !soportado);
+    var nota = $('#admin-fs-nota');
+    if (!soportado) {
+      if (nota) nota.textContent = 'Este equipo no permite pantalla completa desde el navegador (normal en iPhone).';
+      return;
+    }
+    var dentro = enPantallaCompleta();
+    b.textContent = dentro ? 'Salir de pantalla completa' : 'Activar pantalla completa';
+    if (nota) {
+      nota.textContent = dentro
+        ? 'Activa. Para que arranque así sola hay que abrir el navegador en modo kiosko.'
+        : 'También se activa con el primer toque en la pantalla de inicio.';
+    }
+  }
+
   // mantener pantalla despierta (donde el navegador lo permita)
   var wakeLock = null;
   function pedirWakeLock() {
@@ -1296,7 +1413,6 @@
 
       $('#consent-text').textContent = C.textos.consentimiento;
       $('#attract-claim').textContent = C.textos.claim;
-      $('#premio-bajada').textContent = C.textos.premioBajada;
 
       // copa decorativa del attract (tinto servido en la línea)
       $('#attract-copa').innerHTML = buildCopaSvg(C.variedades[0],
@@ -1334,7 +1450,12 @@
         else PFKeyboard.detach();
       });
       bindEventos();
-      logEvent('boot', { version: C.version, dificultad: difActual });
+      sincronizarBotonPantalla();
+      logEvent('boot', {
+        version: C.version, dificultad: difActual,
+        pantallaCompleta: enPantallaCompleta(),
+        fsSoportado: pantallaCompletaSoportada(),
+      });
       resetInactividad();
       showScreen('s-attract');
     }).catch(function (e) {

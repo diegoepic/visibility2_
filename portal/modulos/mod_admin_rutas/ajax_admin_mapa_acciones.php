@@ -27,7 +27,7 @@ try {
     $idAdmin = (int)($_SESSION['usuario_id'] ?? 0);
     $idEmpresaSesion = (int)($_SESSION['empresa_id'] ?? 0);
 
-    if ($idAdmin <= 0) {
+    if ($idAdmin <= 0 || $idEmpresaSesion <= 0) {
         responder(false, 'Sesión no válida. No se encontró usuario_id en sesión.');
     }
 
@@ -75,7 +75,7 @@ try {
     $accion = $data['accion'] ?? '';
     $seleccionados = $data['seleccionados'] ?? [];
 
-    if (!in_array($accion, ['reasignar_usuario', 'cambiar_fecha', 'eliminar'], true)) {
+    if (!in_array($accion, ['reasignar_usuario', 'cambiar_fecha', 'mover_planificacion', 'eliminar'], true)) {
         responder(false, 'Acción no permitida.');
     }
 
@@ -129,6 +129,7 @@ try {
             OR CAST(fechaVisita AS CHAR) = '0000-00-00 00:00:00'
         )
     ";
+    $condicionPendienteFq = str_replace('fechaVisita', 'fq.fechaVisita', $condicionPendiente);
 
     if ($accion === 'reasignar_usuario') {
         $idUsuario = (int)($data['id_usuario'] ?? 0);
@@ -208,6 +209,85 @@ try {
         $stmt->close();
     }
 
+    if ($accion === 'mover_planificacion') {
+        $destino = $data['destino'] ?? [];
+        $idFormularioDestino = (int)($destino['id_formulario'] ?? 0);
+        $idLocalDestino = (int)($destino['id_local'] ?? 0);
+
+        if ($idFormularioDestino <= 0 || $idLocalDestino <= 0) {
+            throw new Exception('La planificación de destino no es válida.');
+        }
+
+        foreach ($pares as $origen) {
+            if ($origen['id_formulario'] !== $idFormularioDestino) {
+                throw new Exception('Todos los locales deben pertenecer a la misma campaña o ruta de destino.');
+            }
+            if ($origen['id_local'] === $idLocalDestino) {
+                throw new Exception('El local de destino no puede formar parte de la selección de origen.');
+            }
+        }
+
+        // Los datos de la planificación se leen desde BD; no se confía en fecha/usuario
+        // enviados por el navegador.
+        $stmtDestino = $conn->prepare("
+            SELECT
+                fq.id_usuario,
+                fq.fechaPropuesta
+            FROM formularioQuestion fq
+            INNER JOIN formulario f ON f.id = fq.id_formulario
+            WHERE fq.id_formulario = ?
+              AND fq.id_local = ?
+              AND f.id_empresa = ?
+              AND fq.id_usuario > 0
+              AND fq.fechaPropuesta IS NOT NULL
+              AND CAST(fq.fechaPropuesta AS CHAR) <> ''
+              AND CAST(fq.fechaPropuesta AS CHAR) NOT LIKE '0000-00-00%'
+            ORDER BY fq.fechaPropuesta DESC, fq.id DESC
+            LIMIT 1
+        ");
+        $stmtDestino->bind_param('iii', $idFormularioDestino, $idLocalDestino, $idEmpresaSesion);
+        $stmtDestino->execute();
+        $planDestino = $stmtDestino->get_result()->fetch_assoc();
+        $stmtDestino->close();
+
+        if (!$planDestino) {
+            throw new Exception('El local de destino no tiene una planificación válida.');
+        }
+
+        $idUsuarioDestino = (int)$planDestino['id_usuario'];
+        $fechaDestino = (string)$planDestino['fechaPropuesta'];
+
+        $stmt = $conn->prepare("
+            UPDATE formularioQuestion fq
+            INNER JOIN formulario f ON f.id = fq.id_formulario
+            SET
+                fq.id_usuario = ?,
+                fq.fechaPropuesta = ?,
+                fq.updated_at = NOW()
+            WHERE fq.id_formulario = ?
+              AND fq.id_local = ?
+              AND f.id_empresa = ?
+              AND {$condicionPendienteFq}
+        ");
+        foreach ($pares as $origen) {
+            $stmt->bind_param(
+                'isiii',
+                $idUsuarioDestino,
+                $fechaDestino,
+                $origen['id_formulario'],
+                $origen['id_local'],
+                $idEmpresaSesion
+            );
+            $stmt->execute();
+            $totalAfectados += $stmt->affected_rows;
+        }
+        $stmt->close();
+
+        if ($totalAfectados === 0) {
+            throw new Exception('Los locales ya pertenecen a esa planificación o no tienen registros pendientes.');
+        }
+    }
+
     if ($accion === 'eliminar') {
         $stmt = $conn->prepare("
             DELETE FROM formularioQuestion
@@ -242,6 +322,7 @@ try {
             'extra' => [
                 'id_usuario' => $data['id_usuario'] ?? null,
                 'fechaPropuesta' => $data['fechaPropuesta'] ?? null,
+                'destino' => $data['destino'] ?? null,
                 'empresa_id' => $idEmpresaSesion,
             ]
         ], JSON_UNESCAPED_UNICODE);

@@ -60,6 +60,29 @@ function normalizeDateOnly(?string $value): ?string
     return date('Y-m-d', $ts);
 }
 
+function valorPreguntaGestion(int $estado, string $modalidad): string
+{
+    if ($estado === 3) {
+        return '';
+    }
+
+    if ($estado === 1) {
+        if ($modalidad === 'implementacion_auditoria') {
+            return 'implementado_auditado';
+        }
+        if ($modalidad === 'solo_implementacion') {
+            return 'solo_implementado';
+        }
+        return 'implementado';
+    }
+
+    if ($estado === 2) {
+        return 'cancelado';
+    }
+
+    return 'en proceso';
+}
+
 $formulario_id = isset($_GET['formulario_id']) ? (int)$_GET['formulario_id'] : 0;
 $local_id      = isset($_GET['local_id']) ? (int)$_GET['local_id'] : 0;
 
@@ -73,7 +96,7 @@ if ($formulario_id <= 0 || $local_id <= 0) {
 // 0. Obtener datos del formulario
 // ----------------------------------------------------------------------
 $stmt_form = $conn->prepare("
-    SELECT id_division, id_empresa
+    SELECT id_division, id_empresa, modalidad
     FROM formulario
     WHERE id = ?
     LIMIT 1
@@ -92,6 +115,7 @@ if (!$formulario) {
 
 $id_division = (int)($formulario['id_division'] ?? 0);
 $id_empresa  = (int)($formulario['id_empresa'] ?? 0);
+$modalidad   = trim((string)($formulario['modalidad'] ?? ''));
 
 // ----------------------------------------------------------------------
 // Materiales de la división del formulario
@@ -251,8 +275,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     $fv          = normalizeDatetimeLocal($_POST['fechaVisita'] ?? null);
     $fp          = normalizeDateOnly($_POST['fechaPropuesta'] ?? null);
     $estado      = isset($_POST['estado']) ? (int)$_POST['estado'] : 0;
-    $motivo      = (isset($_POST['motivo']) && $_POST['motivo'] === '-') ? '-' : '';
-    $is_priority = isset($_POST['is_priority']) && (string)$_POST['is_priority'] === '1' ? 1 : 0;
+    $motivo       = (isset($_POST['motivo']) && $_POST['motivo'] === '-') ? '-' : '';
+    $count_visita_nuevo = ($estado === 3) ? 0 : (($motivo === '-') ? 1 : -1);
+    $is_priority  = isset($_POST['is_priority']) && (string)$_POST['is_priority'] === '1' ? 1 : 0;
     $lat         = trim((string)($_POST['latGestion'] ?? ''));
     $lng         = trim((string)($_POST['lngGestion'] ?? ''));
 
@@ -266,15 +291,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         exit;
     }
 
-    if ($estado === 3) {
-        $pregunta_val = '';
-    } elseif ($estado === 1) {
-        $pregunta_val = 'completado';
-    } elseif ($estado === 2) {
-        $pregunta_val = 'cancelado';
-    } else {
-        $pregunta_val = 'en proceso';
-    }
+    $pregunta_val = valorPreguntaGestion($estado, $modalidad);
 
     $sql_update = "
         UPDATE formularioQuestion
@@ -286,6 +303,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             estado          = ?,
             pregunta        = ?,
             motivo          = ?,
+            countVisita     = CASE ? WHEN 0 THEN 0 WHEN 1 THEN 1 ELSE countVisita END,
             is_priority     = ?,
             latGestion      = ?,
             lngGestion      = ?,
@@ -301,7 +319,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     $lng_db        = ($lng === '') ? null : $lng;
 
     $stmt_update->bind_param(
-        "sssssississii",
+        "sssssissiissii",
         $material,
         $valor_prop_db,
         $valor_impl_db,
@@ -310,6 +328,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         $estado,
         $pregunta_val,
         $motivo,
+        $count_visita_nuevo,
         $is_priority,
         $lat_db,
         $lng_db,
@@ -356,6 +375,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             estado          = ?,
             pregunta        = ?,
             motivo          = ?,
+            countVisita     = CASE ? WHEN 0 THEN 0 WHEN 1 THEN 1 ELSE countVisita END,
             is_priority     = ?,
             latGestion      = ?,
             lngGestion      = ?,
@@ -375,20 +395,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         $fv          = normalizeDatetimeLocal($data['fechaVisita'] ?? null);
         $fp          = normalizeDateOnly($data['fechaPropuesta'] ?? null);
         $estado      = (int)($data['estado'] ?? 0);
-        $motivo      = (isset($data['motivo']) && $data['motivo'] === '-') ? '-' : '';
-        $is_priority = isset($data['is_priority']) ? 1 : 0;
+        $motivo       = (isset($data['motivo']) && $data['motivo'] === '-') ? '-' : '';
+        $count_visita_nuevo = ($estado === 3) ? 0 : (($motivo === '-') ? 1 : -1);
+        $is_priority  = isset($data['is_priority']) ? 1 : 0;
         $lat         = trim((string)($data['latGestion'] ?? ''));
         $lng         = trim((string)($data['lngGestion'] ?? ''));
 
-        if ($estado === 3) {
-            $pregunta_val = '';
-        } elseif ($estado === 1) {
-            $pregunta_val = 'completado';
-        } elseif ($estado === 2) {
-            $pregunta_val = 'cancelado';
-        } else {
-            $pregunta_val = 'en proceso';
-        }
+        $pregunta_val = valorPreguntaGestion($estado, $modalidad);
 
         $valor_prop_db = ($valor_prop === '') ? null : $valor_prop;
         $valor_impl_db = ($valor_impl === '') ? null : $valor_impl;
@@ -396,7 +409,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         $lng_db        = ($lng === '') ? null : $lng;
 
         $stmt_update->bind_param(
-            "sssssississiii",
+            "sssssissiissiiii",
             $material,
             $valor_prop_db,
             $valor_impl_db,
@@ -405,6 +418,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             $estado,
             $pregunta_val,
             $motivo,
+            $count_visita_nuevo,
             $is_priority,
             $lat_db,
             $lng_db,

@@ -632,7 +632,7 @@ if ($sessionEmpresaId > 0) {
             <img src="/visibility2/portal/images/logo/etl_head.webp" alt="ETL Locales">
         </h2>
         <p>
-            Valida direcciones antiguas con Google, actualiza su propuesta y coordenadas dentro de la división seleccionada.
+            Actualiza direcciones, vendedor y jefe de venta de los locales dentro de la división seleccionada.
         </p>
     </div>
 
@@ -707,12 +707,12 @@ if ($sessionEmpresaId > 0) {
 
                         <div class="etl-chip-box">
                             <span class="etl-chip">
-                                Código Local;Nombre;Dirección;Comuna;Cadena;Cuenta
+                                Código Local;División;Nombre;Dirección;Comuna;Zona;Distrito;Cadena;Cuenta;Vendedor;Jefe de Venta
                             </span>
                         </div>
 
                         <div class="etl-help">
-                            Distrito, zona y región se obtienen automáticamente desde la comuna.
+                            Solo Código Local es obligatorio. Cada columna informada se actualiza de forma independiente. Google se utiliza únicamente cuando cambias Dirección o Comuna.
                         </div>
                     </div>
 
@@ -770,11 +770,15 @@ if ($sessionEmpresaId > 0) {
                     </li>
                     <li>
                         <span class="bullet"><i class="fa-solid fa-pen"></i></span>
-                        <span>Actualiza <strong>nombre, dirección y comuna</strong>.</span>
+                        <span>Actualiza <strong>nombre, dirección, comuna, vendedor y jefe de venta</strong>.</span>
+                    </li>
+                    <li>
+                        <span class="bullet"><i class="fa-solid fa-user-check"></i></span>
+                        <span>Detecta si zona, distrito, vendedor y jefe de venta <strong>ya existen</strong>; si son nuevos, los crea en mayúsculas al aplicar.</span>
                     </li>
                     <li>
                         <span class="bullet"><i class="fa-solid fa-sliders"></i></span>
-                        <span>Obtiene automáticamente <strong>distrito, zona y región</strong> desde la comuna.</span>
+                        <span>Permite actualizar <strong>zona y distrito</strong> sin volver a validar la dirección.</span>
                     </li>
                     <li>
                         <span class="bullet"><i class="fa-solid fa-crosshairs"></i></span>

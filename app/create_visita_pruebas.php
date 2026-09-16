@@ -36,6 +36,7 @@ if (!isset($conn) || !($conn instanceof mysqli)) {
 
 /* -------------------- Idempotencia -------------------- */
 require_once __DIR__ . '/lib/idempotency.php';
+require_once __DIR__ . '/lib/dominio/autorizacion.php';
 
 /* -------------------- Helpers -------------------- */
 function json_fail(int $code, string $message, array $extra = []): void {
@@ -226,27 +227,8 @@ if ($form_id <= 0 || $local_id <= 0) {
 }
 
 /* -------------------- Permisos -------------------- */
-$perm_ok = false;
-$st = $conn->prepare("
-    SELECT 1
-    FROM formularioQuestion
-    WHERE id_formulario = ?
-      AND id_local = ?
-      AND id_usuario = ?
-    LIMIT 1
-");
-if (!$st) {
-    json_fail(500, 'Error preparando validación de permisos.', ['db_error' => $conn->error]);
-}
-$st->bind_param('iii', $form_id, $local_id, $user_id);
-if (!$st->execute()) {
-    $err = $st->error;
-    $st->close();
-    json_fail(500, 'Error ejecutando validación de permisos.', ['db_error' => $err]);
-}
-$st->store_result();
-$perm_ok = ($st->num_rows > 0);
-$st->close();
+// La regla vive en lib/dominio/autorizacion.php.
+$perm_ok = puede_usuario_tocar($conn, $user_id, $form_id, $local_id);
 
 if (!$perm_ok) {
     json_fail(403, 'No tienes permisos para crear una visita en este local/campaña.', [

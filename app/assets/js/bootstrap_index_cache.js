@@ -208,7 +208,7 @@
     let hidden = false;
 
     rows.forEach(tr => {
-      // Si hay formId, verificar que la fila corresponde a esa campa�1�70�1�79a
+      // Si hay formId, verificar que la fila corresponde a esa campa�1�71�1�770�1�71�1�779a
       if (formId) {
         const camps = (tr.getAttribute('data-campanas') || '').split(',').filter(Boolean);
         const matchesCampaign = camps.length === 0 || camps.includes(String(formId));
@@ -264,7 +264,7 @@
     }
   });
 
-  // UX-01: Manejar errores de sincronización — marcar filas con indicador de error visible
+  // UX-01: Manejar errores de sincronizaci��n �� marcar filas con indicador de error visible
   window.addEventListener('queue:dispatch:error', function(ev) {
     try {
       const detail = ev.detail || {};
@@ -282,11 +282,11 @@
       rows.forEach(function(row) {
         if (String(row.dataset.localId) === String(localId) && String(row.dataset.campId) === String(campId)) {
           row.classList.add('sync-error');
-          // Añadir badge de error si no existe
+          // A�0�9adir badge de error si no existe
           if (!row.querySelector('.sync-error-badge')) {
             const badge = document.createElement('span');
             badge.className = 'sync-error-badge label label-danger';
-            badge.title = 'Error de sincronización: ' + (errorObj.message || errorObj.code || 'Error desconocido');
+            badge.title = 'Error de sincronizaci��n: ' + (errorObj.message || errorObj.code || 'Error desconocido');
             badge.innerHTML = '<i class="fa fa-exclamation-triangle"></i> Error sync';
             const firstCell = row.querySelector('td');
             if (firstCell) firstCell.appendChild(badge);
@@ -298,11 +298,49 @@
     }
   });
 
+  /**
+   * Pide al navegador que el almacenamiento de este origen sea PERSISTENTE.
+   *
+   * Sin esto el almacenamiento es "best-effort": iOS borra los datos de un sitio a los
+   * 7 días sin uso y Chrome los desaloja cuando el teléfono se queda sin espacio. O sea
+   * que las fotos y las gestiones que están esperando en la cola las puede borrar el
+   * sistema operativo, sin aviso y sin que quede registro de que existieron.
+   *
+   * Se pide una sola vez por dispositivo: el navegador recuerda la respuesta y las
+   * llamadas siguientes devuelven el mismo resultado sin volver a preguntar.
+   * El resultado queda en window.__V2_STORAGE_PERSISTIDO para el diagnóstico.
+   */
+  async function asegurarAlmacenamientoPersistente(){
+    if (!navigator.storage || typeof navigator.storage.persist !== 'function') {
+      window.__V2_STORAGE_PERSISTIDO = 'no_soportado';
+      return null;
+    }
+    try {
+      if (await navigator.storage.persisted()) {
+        window.__V2_STORAGE_PERSISTIDO = true;
+        return true;
+      }
+      const ok = await navigator.storage.persist();
+      window.__V2_STORAGE_PERSISTIDO = ok;
+      if (!ok && typeof window.mostrarToast === 'function') {
+        // No es un error: en varios navegadores depende del uso del sitio. Pero el
+        // ejecutor tiene que saber que su trabajo pendiente no está blindado.
+
+      }
+      return ok;
+    } catch (_) {
+      window.__V2_STORAGE_PERSISTIDO = 'error';
+      return null;
+    }
+  }
+  if (document.readyState === 'complete') asegurarAlmacenamientoPersistente();
+  else window.addEventListener('load', asegurarAlmacenamientoPersistente);
+
   // UX-01: Manejar alerta de almacenamiento lleno
   window.addEventListener('db:quota_exceeded', function(ev) {
     try {
       const msg = (ev.detail && ev.detail.message) || 'Almacenamiento local lleno. Sincroniza para liberar espacio.';
-      // Reutilizar el mecanismo de alerta existente si está disponible
+      // Reutilizar el mecanismo de alerta existente si est�� disponible
       if (typeof window.showAlert === 'function') {
         window.showAlert('warning', msg);
       } else {
@@ -318,19 +356,19 @@
     } catch(e) {}
   });
 
-  // UX-02: Manejar GPS denegado — mostrar mensaje amigable
+  // UX-02: Manejar GPS denegado �� mostrar mensaje amigable
   window.addEventListener('nav:gps_denied', function(ev) {
     try {
-      const msg = (ev.detail && ev.detail.message) || 'Activa la ubicación para usar la navegación.';
+      const msg = (ev.detail && ev.detail.message) || 'Activa la ubicaci��n para usar la navegaci��n.';
       console.warn('[Nav] GPS denegado:', msg);
-      // Solo mostrar una vez por sesión
+      // Solo mostrar una vez por sesi��n
       if (sessionStorage.getItem('v2_gps_denied_shown')) return;
       sessionStorage.setItem('v2_gps_denied_shown', '1');
       const container = document.querySelector('.alert-container, #alert-container, .container-fluid');
       if (container) {
         const alertEl = document.createElement('div');
         alertEl.className = 'alert alert-info alert-dismissible';
-        alertEl.innerHTML = '<strong><i class="fa fa-map-marker"></i> Ubicación desactivada</strong> ' + msg +
+        alertEl.innerHTML = '<strong><i class="fa fa-map-marker"></i> Ubicaci��n desactivada</strong> ' + msg +
           '<button type="button" class="close" data-dismiss="alert">&times;</button>';
         container.insertBefore(alertEl, container.firstChild);
       }
@@ -340,7 +378,7 @@
   // Re-ejecutar hideDoneRows cuando la pagina vuelve a ser visible (por si hubo cambios en background)
   document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'visible') {
-      // Peque�1�70�1�79o delay para dar tiempo a que se procesen otras actualizaciones
+      // Peque�1�71�1�770�1�71�1�779o delay para dar tiempo a que se procesen otras actualizaciones
       setTimeout(hideDoneRows, 500);
     }
   });

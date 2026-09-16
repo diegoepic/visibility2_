@@ -72,6 +72,119 @@ function editorReason(string $observation): string
     return editorUpper(str_replace('_', ' ', $first));
 }
 
+function editorFetchDashboard(mysqli $db, int $id): ?array
+{
+    $stmt = $db->prepare('SELECT * FROM studio_dashboard WHERE id = ? AND deleted_at IS NULL LIMIT 1');
+    if (!$stmt) return null;
+    $stmt->bind_param('i', $id);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $row ?: null;
+}
+
+function editorFetchHojas(mysqli $db, int $dashboardId): array
+{
+    $stmt = $db->prepare('SELECT orden, nombre, contenido_json FROM studio_dashboard_hoja WHERE id_dashboard = ? ORDER BY orden');
+    if (!$stmt) { error_log('[mod_create_dashboard] editorFetchHojas prepare: ' . $db->error); return []; }
+    $stmt->bind_param('i', $dashboardId);
+    $stmt->execute();
+    $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+    return $rows;
+}
+
+/**
+ * Reemplaza el juego completo de hojas de un dashboard. Se borra y se reinserta en
+ * vez de intentar un diff por hoja: el orden puede cambiar (reordenar, eliminar una
+ * del medio) y un UPDATE parcial dejaría filas huérfanas con el orden equivocado.
+ * Son pocas filas por dashboard, así que el costo es irrelevante.
+ */
+function editorReplaceHojas(mysqli $db, int $dashboardId, array $hojas): bool
+{
+    $del = $db->prepare('DELETE FROM studio_dashboard_hoja WHERE id_dashboard = ?');
+    if (!$del) { error_log('[mod_create_dashboard] editorReplaceHojas delete: ' . $db->error); return false; }
+    $del->bind_param('i', $dashboardId);
+    $del->execute();
+    $del->close();
+
+    $ins = $db->prepare('INSERT INTO studio_dashboard_hoja (id_dashboard, orden, nombre, contenido_json) VALUES (?, ?, ?, ?)');
+    if (!$ins) { error_log('[mod_create_dashboard] editorReplaceHojas insert: ' . $db->error); return false; }
+    $orden = 0;
+    foreach ($hojas as $hoja) {
+        $orden++;
+        $nombre = trim((string)($hoja['nombre'] ?? ''));
+        if ($nombre === '') $nombre = 'Hoja ' . $orden;
+        $nombre = mb_substr($nombre, 0, 100);
+        $contenido = (string)($hoja['contenido_json'] ?? '');
+        $ins->bind_param('iiss', $dashboardId, $orden, $nombre, $contenido);
+        if (!$ins->execute()) {
+            error_log('[mod_create_dashboard] editorReplaceHojas execute: ' . $ins->error);
+            $ins->close();
+            return false;
+        }
+    }
+    $ins->close();
+    return true;
+}
+
+/**
+ * Normaliza lo que manda el cliente en design_json a una lista de hojas.
+ * Acepta el formato multi-hoja nuevo ({sheets:[...]}) y el de una sola hoja que
+ * guardaron las versiones anteriores, para que los dashboards ya existentes sigan
+ * abriendo sin migración de datos.
+ */
+function editorNormalizeSheets(array $design): array
+{
+    $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+    if (isset($design['sheets']) && is_array($design['sheets']) && $design['sheets']) {
+        $hojas = [];
+        foreach (array_slice($design['sheets'], 0, 20) as $index => $sheet) {
+            if (!is_array($sheet)) continue;
+            $contenido = [
+                'version' => 2,
+                'template' => $design['template'] ?? null,
+                'scope' => $design['scope'] ?? null,
+                'canvas' => $sheet['canvas'] ?? ($design['canvas'] ?? null),
+                'elements' => $sheet['elements'] ?? [],
+            ];
+            $hojas[] = [
+                'nombre' => (string)($sheet['nombre'] ?? ('Hoja ' . ($index + 1))),
+                'contenido_json' => json_encode($contenido, $flags),
+            ];
+        }
+        if ($hojas) return $hojas;
+    }
+    return [[
+        'nombre' => 'Hoja 1',
+        'contenido_json' => json_encode($design, $flags),
+    ]];
+}
+
+/**
+ * Mismo patrón que cacheRemember() en mod_galeria/ajax_galeria_table.php: un archivo
+ * serializado por combinación de parámetros, con TTL corto. Divisiones de alto volumen
+ * (CCU tradicional) reabren el mismo alcance varias veces por sesión de armado de
+ * dashboard; esto evita recalcular sobre formularioQuestion cada vez.
+ */
+function editorCacheRemember(string $namespace, array $payload, int $ttl, callable $resolver)
+{
+    $dir = __DIR__ . '/cache_editor';
+    if (!is_dir($dir)) @mkdir($dir, 0775, true);
+    $hash = md5(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    $file = $dir . '/' . $namespace . '_' . $hash . '.cache';
+    if (is_file($file) && (time() - filemtime($file) < $ttl)) {
+        $raw = @file_get_contents($file);
+        if ($raw !== false) {
+            $data = @unserialize($raw);
+            if ($data !== false || $raw === serialize(false)) return $data;
+        }
+    }
+    $data = $resolver();
+    @file_put_contents($file, serialize($data), LOCK_EX);
+    return $data;
+}
+
 function editorAddState(array &$bucket, string $group, string $field, string $label, int $localId): void
 {
     $label = trim($label);
@@ -769,7 +882,16 @@ if ($action === 'calculate_chart') {
         if (!$definitions) {
             editorJson(['ok' => false, 'message' => 'Selecciona el estado que deseas graficar.'], 422);
         }
-        $rows = editorStateChartRows($db, $divisionId, $subdivisionId, $formId, $dateFrom, $dateTo);
+        // Las filas base no dependen de qué estados eligió comparar el usuario --
+        // se cachean por alcance+rango de fecha para que agregar varios gráficos
+        // sobre el mismo período no vuelva a barrer formularioQuestion cada vez.
+        $chartCacheKey = [
+            'action' => 'chart_state_rows', 'id_division' => $divisionId, 'id_subdivision' => $subdivisionId,
+            'id_formulario' => $formId, 'date_from' => $dateFrom, 'date_to' => $dateTo,
+        ];
+        $rows = editorCacheRemember('chart_state_rows', $chartCacheKey, 300, function () use ($db, $divisionId, $subdivisionId, $formId, $dateFrom, $dateTo) {
+            return editorStateChartRows($db, $divisionId, $subdivisionId, $formId, $dateFrom, $dateTo);
+        });
         $datasetBuckets = array_fill(0, count($definitions), []);
         foreach ($rows as $row) {
             foreach ($definitions as $index => $definition) {
@@ -852,145 +974,205 @@ if ($action === 'questions') {
     $scopeCondition = $hasFormSubdivision ? 'f.id_subdivision = ?' : 'scope_user.id_subdivision = ?';
     $stageColumn = $hasStage ? 'fq.etapa_material' : 'NULL';
 
-    // Consulta simple: los estados se calculan en PHP para evitar diferencias entre MySQL y MariaDB.
-    $rawSql = "SELECT fq.id_local, fq.id_usuario, info_local.id_comuna, info_comuna.id_region,
-                      fq.fechaVisita, fq.fechaPropuesta, fq.material, f.modalidad, {$stageColumn} AS etapa_material,
-                      fq.valor, fq.valor_propuesto, fq.pregunta, fq.observacion
-               FROM formularioQuestion fq
-               INNER JOIN formulario f ON f.id = fq.id_formulario
-               INNER JOIN local info_local ON info_local.id = fq.id_local
-               LEFT JOIN comuna info_comuna ON info_comuna.id = info_local.id_comuna
-               {$scopeJoin}
-               WHERE f.id_division = ?";
-    if ($formId > 0) $rawSql .= ' AND f.id = ?';
-    if (!$allSubdivisions) $rawSql .= " AND {$scopeCondition}";
-    $rawSql .= ' AND (fq.fechaVisita >= ? OR fq.fechaPropuesta >= ?)';
-    $stmt = $db->prepare($rawSql);
-    if (!$stmt) {
-        error_log('[perfect_store_editor][raw_states] ' . $db->error);
-        editorJson(['ok' => false, 'message' => 'No fue posible leer los datos base de estados. Código: EST-BASE'], 500);
-    }
-    $rawTypes = 'i';
-    $rawParams = [$divisionId];
-    if ($formId > 0) { $rawTypes .= 'i'; $rawParams[] = $formId; }
-    if (!$allSubdivisions) { $rawTypes .= 'i'; $rawParams[] = $subdivisionId; }
-    $rawTypes .= 'ss'; $rawParams[] = $dateFrom; $rawParams[] = $dateFrom;
-    $stmt->bind_param($rawTypes, ...$rawParams);
-    if (!$stmt->execute()) {
-        error_log('[perfect_store_editor][raw_states_execute] ' . $stmt->error);
+    // Los conteos de planificación/visita/materiales/información se calculan con
+    // agregación SQL (COUNT DISTINCT / SUM) en vez de traer cada fila cruda y sumar
+    // en PHP -- para divisiones de alto volumen (CCU tradicional) esto era el cuello
+    // de botella real. Sólo el estado de actividad y el motivo (que dependen de la
+    // combinación modalidad+etapa_material, más delicada de portar 1:1 a SQL) se
+    // siguen calculando en PHP, pero ahora sobre el subconjunto de filas VISITADAS
+    // (normalmente mucho más chico que el universo planificado completo).
+    $whereTail = '';
+    if ($formId > 0) $whereTail .= ' AND f.id = ?';
+    if (!$allSubdivisions) $whereTail .= " AND {$scopeCondition}";
+
+    $cacheKey = [
+        'action' => 'questions', 'id_division' => $divisionId, 'id_subdivision' => $subdivisionId,
+        'id_formulario' => $formId, 'date_from' => $dateFrom,
+    ];
+    $payload = editorCacheRemember('questions', $cacheKey, 300, function () use (
+        $db, $divisionId, $subdivisionId, $formId, $dateFrom, $allSubdivisions, $scopeJoin, $scopeCondition, $whereTail, $stageColumn
+    ) {
+        $aggSql = "SELECT
+                COUNT(DISTINCT CASE WHEN base.es_planificado THEN base.id_local END) AS planificados,
+                COUNT(DISTINCT CASE WHEN base.es_visitado THEN base.id_local END) AS visitados,
+                COUNT(DISTINCT CASE WHEN base.es_planificado AND NOT base.es_visitado THEN base.id_local END) AS no_visitados,
+                COUNT(DISTINCT CASE WHEN base.es_planificado AND base.id_comuna > 0 THEN base.id_comuna END) AS comunas,
+                COUNT(DISTINCT CASE WHEN base.es_planificado AND base.id_region > 0 THEN base.id_region END) AS regiones,
+                COUNT(DISTINCT CASE WHEN base.es_planificado AND base.id_usuario > 0 THEN base.id_usuario END) AS usuarios
+            FROM (
+                SELECT fq.id_local, fq.id_usuario, info_local.id_comuna, info_comuna.id_region,
+                       (DATE(fq.fechaVisita) >= ? OR fq.fechaPropuesta >= ?) AS es_planificado,
+                       (DATE(fq.fechaVisita) >= ?) AS es_visitado
+                FROM formularioQuestion fq
+                INNER JOIN formulario f ON f.id = fq.id_formulario
+                INNER JOIN local info_local ON info_local.id = fq.id_local
+                LEFT JOIN comuna info_comuna ON info_comuna.id = info_local.id_comuna
+                {$scopeJoin}
+                WHERE f.id_division = ?{$whereTail}
+            ) base";
+        $stmt = $db->prepare($aggSql);
+        if (!$stmt) {
+            error_log('[perfect_store_editor][agg_states] ' . $db->error);
+            editorJson(['ok' => false, 'message' => 'No fue posible calcular los estados. Código: EST-AGG'], 500);
+        }
+        $aggTypes = 'sssi';
+        $aggParams = [$dateFrom, $dateFrom, $dateFrom, $divisionId];
+        if ($formId > 0) { $aggTypes .= 'i'; $aggParams[] = $formId; }
+        if (!$allSubdivisions) { $aggTypes .= 'i'; $aggParams[] = $subdivisionId; }
+        $stmt->bind_param($aggTypes, ...$aggParams);
+        if (!$stmt->execute()) {
+            error_log('[perfect_store_editor][agg_states_execute] ' . $stmt->error);
+            $stmt->close();
+            editorJson(['ok' => false, 'message' => 'No fue posible calcular los estados.'], 500);
+        }
+        $aggRow = $stmt->get_result()->fetch_assoc() ?: [];
         $stmt->close();
-        editorJson(['ok' => false, 'message' => 'No fue posible consultar los datos base de estados.'], 500);
-    }
-    $rawRows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-    $stmt->close();
 
-    $bucket = [];
-    $materialBucket = [];
-    $informationSets = ['communes' => [], 'regions' => [], 'users' => []];
-    foreach ($rawRows as $row) {
-        $localId = (int)($row['id_local'] ?? 0);
-        $date = trim((string)($row['fechaVisita'] ?? ''));
-        $plannedDate = trim((string)($row['fechaPropuesta'] ?? ''));
-        $isVisited = $date !== '' && substr($date, 0, 10) !== '0000-00-00' && substr($date, 0, 10) >= $dateFrom;
-        $isPlannedByDate = $plannedDate !== '' && substr($plannedDate, 0, 10) !== '0000-00-00' && substr($plannedDate, 0, 10) >= $dateFrom;
-        // Todo local visitado pertenece al universo planificado, incluso si su fecha propuesta quedó vacía o anterior.
-        $isPlanned = $isPlannedByDate || $isVisited;
-        if ($isPlanned) editorAddState($bucket, 'Planificación', 'estado_planificacion', 'PLANIFICADO', $localId);
-        if ($isVisited || $isPlanned) editorAddState($bucket, 'Estado visita', 'estado_visita', $isVisited ? 'VISITADO' : 'NO VISITADO', $localId);
-        if ($isVisited || $isPlanned) {
-            $material = editorUpper(trim((string)($row['material'] ?? '')));
-            if ($material !== '') {
-                $materialKey = editorNormalizeAnswer($material);
-                if (!isset($materialBucket[$materialKey])) {
-                    $materialBucket[$materialKey] = [
-                        'group' => 'Materiales', 'field' => 'material', 'value' => $material,
-                        'label' => $material, 'registros' => 0, '_locales' => [],
-                        'implemented_value' => 0.0, 'planned_value' => 0.0,
-                    ];
-                }
-                $materialBucket[$materialKey]['registros']++;
-                if ($localId > 0) $materialBucket[$materialKey]['_locales'][$localId] = true;
-                $materialBucket[$materialKey]['implemented_value'] += (float)($row['valor'] ?? 0);
-                $materialBucket[$materialKey]['planned_value'] += (float)($row['valor_propuesto'] ?? 0);
+        $plannedLocales = (int)($aggRow['planificados'] ?? 0);
+        $visitedLocales = (int)($aggRow['visitados'] ?? 0);
+        $notVisitedLocales = (int)($aggRow['no_visitados'] ?? 0);
+
+        $materialSql = "SELECT UPPER(TRIM(fq.material)) AS material_name,
+                    COUNT(DISTINCT fq.id_local) AS locales,
+                    COUNT(*) AS registros,
+                    SUM(fq.valor + 0) AS implemented_value,
+                    SUM(fq.valor_propuesto + 0) AS planned_value
+                FROM formularioQuestion fq
+                INNER JOIN formulario f ON f.id = fq.id_formulario
+                INNER JOIN local info_local ON info_local.id = fq.id_local
+                {$scopeJoin}
+                WHERE f.id_division = ?{$whereTail}
+                  AND (DATE(fq.fechaVisita) >= ? OR fq.fechaPropuesta >= ?)
+                  AND fq.material IS NOT NULL AND TRIM(fq.material) <> ''
+                GROUP BY UPPER(TRIM(fq.material))";
+        $stmt = $db->prepare($materialSql);
+        if (!$stmt) {
+            error_log('[perfect_store_editor][agg_materials] ' . $db->error);
+            editorJson(['ok' => false, 'message' => 'No fue posible calcular los materiales. Código: MAT-AGG'], 500);
+        }
+        $materialTypes = 'i';
+        $materialParams = [$divisionId];
+        if ($formId > 0) { $materialTypes .= 'i'; $materialParams[] = $formId; }
+        if (!$allSubdivisions) { $materialTypes .= 'i'; $materialParams[] = $subdivisionId; }
+        $materialTypes .= 'ss'; $materialParams[] = $dateFrom; $materialParams[] = $dateFrom;
+        $stmt->bind_param($materialTypes, ...$materialParams);
+        if (!$stmt->execute()) {
+            error_log('[perfect_store_editor][agg_materials_execute] ' . $stmt->error);
+            $stmt->close();
+            editorJson(['ok' => false, 'message' => 'No fue posible calcular los materiales.'], 500);
+        }
+        $materialRows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt->close();
+
+        $visitedSql = "SELECT fq.id_local, f.modalidad, {$stageColumn} AS etapa_material,
+                    fq.valor, fq.pregunta, fq.observacion
+                FROM formularioQuestion fq
+                INNER JOIN formulario f ON f.id = fq.id_formulario
+                INNER JOIN local info_local ON info_local.id = fq.id_local
+                {$scopeJoin}
+                WHERE f.id_division = ?{$whereTail}
+                  AND DATE(fq.fechaVisita) >= ?";
+        $stmt = $db->prepare($visitedSql);
+        if (!$stmt) {
+            error_log('[perfect_store_editor][visited_rows] ' . $db->error);
+            editorJson(['ok' => false, 'message' => 'No fue posible leer las visitas. Código: VIS-BASE'], 500);
+        }
+        $visitedTypes = 'i';
+        $visitedParams = [$divisionId];
+        if ($formId > 0) { $visitedTypes .= 'i'; $visitedParams[] = $formId; }
+        if (!$allSubdivisions) { $visitedTypes .= 'i'; $visitedParams[] = $subdivisionId; }
+        $visitedTypes .= 's'; $visitedParams[] = $dateFrom;
+        $stmt->bind_param($visitedTypes, ...$visitedParams);
+        if (!$stmt->execute()) {
+            error_log('[perfect_store_editor][visited_rows_execute] ' . $stmt->error);
+            $stmt->close();
+            editorJson(['ok' => false, 'message' => 'No fue posible consultar las visitas.'], 500);
+        }
+        $visitedRows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt->close();
+
+        $bucket = [];
+        foreach ($visitedRows as $row) {
+            $localId = (int)($row['id_local'] ?? 0);
+            $mode = strtolower(trim((string)($row['modalidad'] ?? '')));
+            $stage = strtolower(trim((string)($row['etapa_material'] ?? '')));
+            $question = strtolower(trim((string)($row['pregunta'] ?? '')));
+            $value = (float)($row['valor'] ?? 0);
+
+            if ($mode === 'implementacion_por_etapas') {
+                $activityState = [
+                    'implementado' => 'IMPLEMENTADO', 'retirado' => 'RETIRADO',
+                    'entregado' => 'ENTREGADO', 'armado' => 'ARMADO',
+                ][$stage] ?? 'SIN INICIAR';
+            } elseif ($mode === 'retiro') {
+                $activityState = $value >= 1 ? 'RETIRADO' : 'NO RETIRADO';
+            } elseif ($mode === 'entrega') {
+                $activityState = $value >= 1 ? 'ENTREGADO' : 'NO ENTREGADO';
+            } else {
+                $activityState = $value >= 1 ? 'IMPLEMENTADO' : 'NO IMPLEMENTADO';
             }
-            $communeId = (int)($row['id_comuna'] ?? 0);
-            $regionId = (int)($row['id_region'] ?? 0);
-            $userId = (int)($row['id_usuario'] ?? 0);
-            if ($communeId > 0) $informationSets['communes'][$communeId] = true;
-            if ($regionId > 0) $informationSets['regions'][$regionId] = true;
-            if ($userId > 0) $informationSets['users'][$userId] = true;
+            editorAddState($bucket, 'Estado actividad', 'estado_actividad', $activityState, $localId);
+
+            if ($value == 0.0 || in_array($question, ['en proceso', 'cancelado'], true)) {
+                $reason = editorReason((string)($row['observacion'] ?? ''));
+                editorAddState($bucket, 'Motivo no implementación', 'motivo', $reason, $localId);
+            }
         }
-        if (!$isVisited) continue;
 
-        $mode = strtolower(trim((string)($row['modalidad'] ?? '')));
-        $stage = strtolower(trim((string)($row['etapa_material'] ?? '')));
-        $question = strtolower(trim((string)($row['pregunta'] ?? '')));
-        $value = (float)($row['valor'] ?? 0);
-
-        if ($mode === 'implementacion_por_etapas') {
-            $activityState = [
-                'implementado' => 'IMPLEMENTADO', 'retirado' => 'RETIRADO',
-                'entregado' => 'ENTREGADO', 'armado' => 'ARMADO',
-            ][$stage] ?? 'SIN INICIAR';
-        } elseif ($mode === 'retiro') {
-            $activityState = $value >= 1 ? 'RETIRADO' : 'NO RETIRADO';
-        } elseif ($mode === 'entrega') {
-            $activityState = $value >= 1 ? 'ENTREGADO' : 'NO ENTREGADO';
-        } else {
-            $activityState = $value >= 1 ? 'IMPLEMENTADO' : 'NO IMPLEMENTADO';
+        $states = [];
+        if ($plannedLocales > 0) $states[] = ['group' => 'Planificación', 'field' => 'estado_planificacion', 'value' => 'PLANIFICADO', 'label' => 'PLANIFICADO', 'registros' => $plannedLocales, 'locales' => $plannedLocales];
+        if ($visitedLocales > 0) $states[] = ['group' => 'Estado visita', 'field' => 'estado_visita', 'value' => 'VISITADO', 'label' => 'VISITADO', 'registros' => $visitedLocales, 'locales' => $visitedLocales];
+        if ($notVisitedLocales > 0) $states[] = ['group' => 'Estado visita', 'field' => 'estado_visita', 'value' => 'NO VISITADO', 'label' => 'NO VISITADO', 'registros' => $notVisitedLocales, 'locales' => $notVisitedLocales];
+        foreach ($bucket as $item) {
+            $item['locales'] = count($item['_locales']);
+            unset($item['_locales']);
+            $states[] = $item;
         }
-        editorAddState($bucket, 'Estado actividad', 'estado_actividad', $activityState, $localId);
-
-        if ($value == 0.0 || in_array($question, ['en proceso', 'cancelado'], true)) {
-            $reason = editorReason((string)($row['observacion'] ?? ''));
-            editorAddState($bucket, 'Motivo no implementación', 'motivo', $reason, $localId);
+        // El catálogo del constructor debe mostrar también KPI con valor cero para
+        // poder compararlos (por ejemplo, VISITADO vs NO VISITADO).
+        $standardStates = [
+            ['group' => 'Planificación', 'field' => 'estado_planificacion', 'value' => 'PLANIFICADO', 'label' => 'PLANIFICADO'],
+            ['group' => 'Estado visita', 'field' => 'estado_visita', 'value' => 'VISITADO', 'label' => 'VISITADO'],
+            ['group' => 'Estado visita', 'field' => 'estado_visita', 'value' => 'NO VISITADO', 'label' => 'NO VISITADO'],
+            ['group' => 'Estado actividad', 'field' => 'estado_actividad', 'value' => 'IMPLEMENTADO', 'label' => 'IMPLEMENTADO'],
+            ['group' => 'Estado actividad', 'field' => 'estado_actividad', 'value' => 'NO IMPLEMENTADO', 'label' => 'NO IMPLEMENTADO'],
+        ];
+        $availableStateKeys = [];
+        foreach ($states as $item) $availableStateKeys[$item['field'] . '|' . $item['value']] = true;
+        foreach ($standardStates as $standardState) {
+            $key = $standardState['field'] . '|' . $standardState['value'];
+            if (isset($availableStateKeys[$key])) continue;
+            $states[] = $standardState + ['registros' => 0, 'locales' => 0];
         }
-    }
+        usort($states, static fn(array $a, array $b): int => [$a['group'], $a['label']] <=> [$b['group'], $b['label']]);
 
-    $states = [];
-    $plannedLocales = 0;
-    foreach ($bucket as $item) {
-        $item['locales'] = count($item['_locales']);
-        if ($item['field'] === 'estado_planificacion' && $item['value'] === 'PLANIFICADO') $plannedLocales = $item['locales'];
-        unset($item['_locales']);
-        $states[] = $item;
-    }
-    // El catálogo del constructor debe mostrar también KPI con valor cero para
-    // poder compararlos (por ejemplo, VISITADO vs NO VISITADO).
-    $standardStates = [
-        ['group' => 'Planificación', 'field' => 'estado_planificacion', 'value' => 'PLANIFICADO', 'label' => 'PLANIFICADO'],
-        ['group' => 'Estado visita', 'field' => 'estado_visita', 'value' => 'VISITADO', 'label' => 'VISITADO'],
-        ['group' => 'Estado visita', 'field' => 'estado_visita', 'value' => 'NO VISITADO', 'label' => 'NO VISITADO'],
-        ['group' => 'Estado actividad', 'field' => 'estado_actividad', 'value' => 'IMPLEMENTADO', 'label' => 'IMPLEMENTADO'],
-        ['group' => 'Estado actividad', 'field' => 'estado_actividad', 'value' => 'NO IMPLEMENTADO', 'label' => 'NO IMPLEMENTADO'],
-    ];
-    $availableStateKeys = [];
-    foreach ($states as $item) $availableStateKeys[$item['field'] . '|' . $item['value']] = true;
-    foreach ($standardStates as $standardState) {
-        $key = $standardState['field'] . '|' . $standardState['value'];
-        if (isset($availableStateKeys[$key])) continue;
-        $states[] = $standardState + ['registros' => 0, 'locales' => 0];
-    }
-    usort($states, static fn(array $a, array $b): int => [$a['group'], $a['label']] <=> [$b['group'], $b['label']]);
+        $materials = array_map(static function (array $row): array {
+            $implemented = round((float)$row['implemented_value'], 2);
+            $planned = round((float)$row['planned_value'], 2);
+            return [
+                'group' => 'Materiales', 'field' => 'material', 'value' => (string)$row['material_name'],
+                'label' => (string)$row['material_name'], 'registros' => (int)$row['registros'],
+                'locales' => (int)$row['locales'], 'implemented_value' => $implemented, 'planned_value' => $planned,
+                'implementation_ratio' => $planned > 0 ? round(($implemented / $planned) * 100, 2) : 0,
+            ];
+        }, $materialRows);
+        usort($materials, static fn(array $a, array $b): int => $a['label'] <=> $b['label']);
 
-    $materials = [];
-    foreach ($materialBucket as $item) {
-        $item['locales'] = count($item['_locales']);
-        $item['implemented_value'] = round((float)$item['implemented_value'], 2);
-        $item['planned_value'] = round((float)$item['planned_value'], 2);
-        $item['implementation_ratio'] = $item['planned_value'] > 0
-            ? round(($item['implemented_value'] / $item['planned_value']) * 100, 2)
-            : 0;
-        unset($item['_locales']);
-        $materials[] = $item;
-    }
-    usort($materials, static fn(array $a, array $b): int => $a['label'] <=> $b['label']);
+        $information = [
+            ['id' => 'unique_communes', 'label' => 'Comunas únicas', 'value' => (int)($aggRow['comunas'] ?? 0), 'unit' => 'comunas', 'field' => 'local.id_comuna'],
+            ['id' => 'unique_regions', 'label' => 'Regiones únicas', 'value' => (int)($aggRow['regiones'] ?? 0), 'unit' => 'regiones', 'field' => 'comuna.id_region'],
+            ['id' => 'unique_users', 'label' => 'Usuarios únicos', 'value' => (int)($aggRow['usuarios'] ?? 0), 'unit' => 'usuarios', 'field' => 'formularioQuestion.id_usuario'],
+        ];
 
-    $information = [
-        ['id' => 'unique_communes', 'label' => 'Comunas únicas', 'value' => count($informationSets['communes']), 'unit' => 'comunas', 'field' => 'local.id_comuna'],
-        ['id' => 'unique_regions', 'label' => 'Regiones únicas', 'value' => count($informationSets['regions']), 'unit' => 'regiones', 'field' => 'comuna.id_region'],
-        ['id' => 'unique_users', 'label' => 'Usuarios únicos', 'value' => count($informationSets['users']), 'unit' => 'usuarios', 'field' => 'formularioQuestion.id_usuario'],
-    ];
+        return [
+            'states' => $states, 'materials' => $materials, 'information' => $information,
+            'planned_locales' => $plannedLocales,
+        ];
+    });
+    $states = $payload['states'];
+    $materials = $payload['materials'];
+    $information = $payload['information'];
+    $plannedLocales = $payload['planned_locales'];
 
     // Encuestas: misma fuente utilizada por descargar_encuesta_csv.php.
     $surveyUserJoin = ' INNER JOIN form_question_responses survey_response ON survey_response.id_form_question = fp.id ';
@@ -1070,6 +1252,207 @@ if ($action === 'upload') {
         editorJson(['ok' => false, 'message' => 'No fue posible guardar la imagen.'], 500);
     }
     editorJson(['ok' => true, 'url' => 'uploads/' . $filename, 'name' => basename((string)$file['name'])]);
+}
+
+if ($action === 'list_dashboards') {
+    $sql = 'SELECT d.id, d.nombre, d.descripcion, d.es_plantilla, d.id_division, d.id_subdivision,
+                   d.id_usuario_creador, d.updated_at, d.created_at,
+                   dv.nombre AS division_nombre,
+                   u.nombre AS creador_nombre, u.apellido AS creador_apellido
+            FROM studio_dashboard d
+            LEFT JOIN division_empresa dv ON dv.id = d.id_division
+            LEFT JOIN usuario u ON u.id = d.id_usuario_creador
+            WHERE d.deleted_at IS NULL AND d.id_empresa = ?';
+    $params = [$sessionCompanyId];
+    $types = 'i';
+    if (!$canManage && !editorIsMc($db, $sessionDivisionId)) {
+        $sql .= ' AND d.id_division = ?';
+        $params[] = $sessionDivisionId;
+        $types .= 'i';
+    }
+    $sql .= ' ORDER BY d.updated_at DESC';
+    $stmt = $db->prepare($sql);
+    if (!$stmt) editorJson(['ok' => false, 'message' => 'No fue posible consultar los dashboards: ' . $db->error], 500);
+    $stmt->bind_param($types, ...$params);
+    if (!$stmt->execute()) editorJson(['ok' => false, 'message' => 'No fue posible ejecutar la consulta: ' . $stmt->error], 500);
+    $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    $mine = [];
+    $plantillas = [];
+    foreach ($rows as $row) {
+        $esMio = (int)$row['id_usuario_creador'] === $sessionUserId;
+        $item = [
+            'id' => (int)$row['id'],
+            'nombre' => (string)$row['nombre'],
+            'descripcion' => (string)($row['descripcion'] ?? ''),
+            'es_plantilla' => (bool)$row['es_plantilla'],
+            'id_division' => (int)$row['id_division'],
+            'id_subdivision' => $row['id_subdivision'] !== null ? (int)$row['id_subdivision'] : null,
+            'division_nombre' => (string)($row['division_nombre'] ?? ''),
+            'creador' => trim((string)($row['creador_nombre'] ?? '') . ' ' . (string)($row['creador_apellido'] ?? '')),
+            'es_mio' => $esMio,
+            'updated_at' => (string)$row['updated_at'],
+        ];
+        if ($row['es_plantilla']) $plantillas[] = $item;
+        if ($esMio) $mine[] = $item;
+    }
+    editorJson(['ok' => true, 'mine' => $mine, 'templates' => $plantillas]);
+}
+
+if ($action === 'load_dashboard') {
+    $id = (int)($_GET['id'] ?? 0);
+    $dashboard = $id > 0 ? editorFetchDashboard($db, $id) : null;
+    if (!$dashboard || (int)$dashboard['id_empresa'] !== $sessionCompanyId
+        || !editorCanAccessDivision($db, (int)$dashboard['id_division'], $sessionDivisionId, $canManage)) {
+        editorJson(['ok' => false, 'message' => 'No se encontró el dashboard o no tienes acceso.'], 404);
+    }
+    $hojas = editorFetchHojas($db, $id);
+    if (!$hojas) editorJson(['ok' => false, 'message' => 'El dashboard no tiene contenido guardado.'], 500);
+
+    // El alcance y la plantilla viven repetidos en cada hoja; la primera manda.
+    $primero = json_decode((string)$hojas[0]['contenido_json'], true);
+    if (!is_array($primero)) editorJson(['ok' => false, 'message' => 'El contenido guardado está dañado.'], 500);
+
+    $sheets = [];
+    foreach ($hojas as $index => $hoja) {
+        $contenido = json_decode((string)$hoja['contenido_json'], true);
+        if (!is_array($contenido)) continue;
+        $sheets[] = [
+            'nombre' => (string)($hoja['nombre'] ?? ('Hoja ' . ($index + 1))),
+            'canvas' => $contenido['canvas'] ?? null,
+            'elements' => $contenido['elements'] ?? [],
+        ];
+    }
+    if (!$sheets) editorJson(['ok' => false, 'message' => 'El contenido guardado está dañado.'], 500);
+
+    editorJson([
+        'ok' => true,
+        'dashboard' => [
+            'id' => (int)$dashboard['id'],
+            'nombre' => (string)$dashboard['nombre'],
+            'descripcion' => (string)($dashboard['descripcion'] ?? ''),
+            'es_plantilla' => (bool)$dashboard['es_plantilla'],
+            'es_mio' => (int)$dashboard['id_usuario_creador'] === $sessionUserId,
+        ],
+        'design' => [
+            'template' => $primero['template'] ?? null,
+            'scope' => $primero['scope'] ?? null,
+            'canvas' => $primero['canvas'] ?? null,
+            'sheets' => $sheets,
+        ],
+    ]);
+}
+
+if ($action === 'save_dashboard') {
+    editorRequireCsrf();
+    $id = (int)($_POST['id'] ?? 0);
+    $nombre = trim((string)($_POST['nombre'] ?? ''));
+    $descripcion = trim((string)($_POST['descripcion'] ?? ''));
+    $esPlantilla = !empty($_POST['es_plantilla']) ? 1 : 0;
+    $designJson = (string)($_POST['design_json'] ?? '');
+
+    if ($nombre === '' || mb_strlen($nombre) > 150) {
+        editorJson(['ok' => false, 'message' => 'El dashboard necesita un nombre (máximo 150 caracteres).'], 422);
+    }
+    $design = json_decode($designJson, true);
+    if (!is_array($design) || !isset($design['scope']) || !is_array($design['scope'])) {
+        editorJson(['ok' => false, 'message' => 'No fue posible leer el contenido del dashboard.'], 422);
+    }
+    $divisionId = (int)($design['scope']['id_division'] ?? 0);
+    $subdivisionId = isset($design['scope']['id_subdivision']) ? (int)$design['scope']['id_subdivision'] : null;
+    $templateId = isset($design['template']['id']) ? (string)$design['template']['id'] : null;
+    if ($divisionId <= 0 || !editorCanAccessDivision($db, $divisionId, $sessionDivisionId, $canManage)) {
+        editorJson(['ok' => false, 'message' => 'El alcance del dashboard no está autorizado.'], 403);
+    }
+
+    if ($id > 0) {
+        $existing = editorFetchDashboard($db, $id);
+        if (!$existing) editorJson(['ok' => false, 'message' => 'El dashboard ya no existe.'], 404);
+        $isOwner = (int)$existing['id_usuario_creador'] === $sessionUserId;
+        if (!$isOwner && !$canManage) {
+            editorJson(['ok' => false, 'message' => 'Solo el creador puede modificar este dashboard. Usa "Guardar como copia".'], 403);
+        }
+        $stmt = $db->prepare('UPDATE studio_dashboard
+            SET nombre = ?, descripcion = ?, es_plantilla = ?, id_division = ?, id_subdivision = ?,
+                id_template_origen = ?, id_usuario_modifico = ?, updated_at = NOW()
+            WHERE id = ?');
+        if (!$stmt) editorJson(['ok' => false, 'message' => 'No fue posible actualizar el dashboard: ' . $db->error], 500);
+        $stmt->bind_param('ssiiisii', $nombre, $descripcion, $esPlantilla, $divisionId, $subdivisionId, $templateId, $sessionUserId, $id);
+        $stmt->execute();
+        $stmt->close();
+
+        if (!editorReplaceHojas($db, $id, editorNormalizeSheets($design))) {
+            editorJson(['ok' => false, 'message' => 'No fue posible guardar las hojas del dashboard.'], 500);
+        }
+        editorJson(['ok' => true, 'id' => $id, 'created' => false]);
+    }
+
+    $stmt = $db->prepare('INSERT INTO studio_dashboard
+        (id_empresa, id_division, id_subdivision, nombre, descripcion, id_template_origen, es_plantilla, id_usuario_creador)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    if (!$stmt) editorJson(['ok' => false, 'message' => 'No fue posible crear el dashboard: ' . $db->error], 500);
+    $stmt->bind_param('iiisssii', $sessionCompanyId, $divisionId, $subdivisionId, $nombre, $descripcion, $templateId, $esPlantilla, $sessionUserId);
+    $stmt->execute();
+    $newId = (int)$db->insert_id;
+    $stmt->close();
+
+    if (!editorReplaceHojas($db, $newId, editorNormalizeSheets($design))) {
+        editorJson(['ok' => false, 'message' => 'No fue posible guardar las hojas del dashboard.'], 500);
+    }
+    editorJson(['ok' => true, 'id' => $newId, 'created' => true]);
+}
+
+if ($action === 'duplicate_dashboard') {
+    editorRequireCsrf();
+    $sourceId = (int)($_POST['id'] ?? 0);
+    $source = $sourceId > 0 ? editorFetchDashboard($db, $sourceId) : null;
+    if (!$source || (int)$source['id_empresa'] !== $sessionCompanyId
+        || !editorCanAccessDivision($db, (int)$source['id_division'], $sessionDivisionId, $canManage)) {
+        editorJson(['ok' => false, 'message' => 'No se encontró el dashboard a copiar.'], 404);
+    }
+    $hojasOrigen = editorFetchHojas($db, $sourceId);
+    if (!$hojasOrigen) editorJson(['ok' => false, 'message' => 'El dashboard de origen no tiene contenido.'], 500);
+
+    $nombre = trim((string)($_POST['nombre'] ?? ''));
+    if ($nombre === '') $nombre = 'Copia de ' . (string)$source['nombre'];
+    $nombre = mb_substr($nombre, 0, 150);
+    $esPlantilla = !empty($_POST['es_plantilla']) ? 1 : 0;
+    $subdivisionId = $source['id_subdivision'] !== null ? (int)$source['id_subdivision'] : null;
+
+    $stmt = $db->prepare('INSERT INTO studio_dashboard
+        (id_empresa, id_division, id_subdivision, nombre, descripcion, id_template_origen, es_plantilla, id_usuario_creador)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    if (!$stmt) editorJson(['ok' => false, 'message' => 'No fue posible copiar el dashboard.'], 500);
+    $sourceEmpresaId = (int)$source['id_empresa'];
+    $sourceDivisionId = (int)$source['id_division'];
+    $stmt->bind_param('iiisssii', $sourceEmpresaId, $sourceDivisionId, $subdivisionId,
+        $nombre, $source['descripcion'], $source['id_template_origen'], $esPlantilla, $sessionUserId);
+    $stmt->execute();
+    $newId = (int)$db->insert_id;
+    $stmt->close();
+
+    if (!editorReplaceHojas($db, $newId, $hojasOrigen)) {
+        editorJson(['ok' => false, 'message' => 'No fue posible copiar las hojas del dashboard.'], 500);
+    }
+    editorJson(['ok' => true, 'id' => $newId]);
+}
+
+if ($action === 'delete_dashboard') {
+    editorRequireCsrf();
+    $id = (int)($_POST['id'] ?? 0);
+    $existing = $id > 0 ? editorFetchDashboard($db, $id) : null;
+    if (!$existing) editorJson(['ok' => false, 'message' => 'El dashboard ya no existe.'], 404);
+    $isOwner = (int)$existing['id_usuario_creador'] === $sessionUserId;
+    if (!$isOwner && !$canManage) {
+        editorJson(['ok' => false, 'message' => 'Solo el creador puede eliminar este dashboard.'], 403);
+    }
+    $stmt = $db->prepare('UPDATE studio_dashboard SET deleted_at = NOW() WHERE id = ?');
+    if (!$stmt) editorJson(['ok' => false, 'message' => 'No fue posible eliminar el dashboard.'], 500);
+    $stmt->bind_param('i', $id);
+    $stmt->execute();
+    $stmt->close();
+    editorJson(['ok' => true]);
 }
 
 editorJson(['ok' => false, 'message' => 'Acción no reconocida.'], 404);

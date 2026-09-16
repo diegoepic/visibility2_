@@ -218,8 +218,7 @@ if (count($decodedRows) > 2000) {
 }
 
 $targetSize = max(2, min(30, (int)($_POST['target_size'] ?? 10)));
-$minSize = max(1, (int)ceil($targetSize * 0.8));
-$maxSize = min(30, max($targetSize, (int)ceil($targetSize * 1.5)));
+$preferredMaxSize = $targetSize + 2;
 $isolationKm = max(2.0, min(150.0, (float)($_POST['isolation_km'] ?? 25)));
 
 $rows = [];
@@ -257,32 +256,19 @@ $eligibleGroups = [];
 $skipped = [];
 foreach ($byUser as $userKey => $userRows) {
     $components = routeConnectedComponents($userRows, $isolationKm);
-    $largeComponents = array_values(array_filter(
-        $components,
-        static fn(array $component): bool => count($component) >= $minSize
-    ));
-    // Route components are used to split planning only.  Do not drop a valid
-    // stop simply because it belongs to a small component.
-    $keptComponents = $components;
-    $keep = [];
-    foreach ($keptComponents as $component) {
+    // Los componentes sólo orientan la agrupación geográfica inicial. Incluso
+    // los grupos pequeños se envían a Google y luego el cliente los consolida
+    // con la ruta más cercana del mismo responsable.
+    foreach ($components as $componentIndex => $component) {
         $componentRows = [];
         foreach ($component as $index) {
-            $keep[$index] = true;
             $componentRows[] = $userRows[$index];
         }
-        $eligibleGroups[] = ['user_key' => $userKey, 'rows' => $componentRows];
-    }
-
-    foreach ($userRows as $index => $row) {
-        if (!isset($keep[$index])) {
-            $skipped[] = [
-                'row_id' => $row['row_id'],
-                'codigo_local' => $row['codigo_local'],
-                'reason' => "Local aislado: pertenece a un grupo menor a {$minSize} locales y separado más de {$isolationKm} km.",
-                'source' => 'ISOLATION_RULE',
-            ];
-        }
+        $eligibleGroups[] = [
+            'user_key' => $userKey,
+            'component_key' => $userKey . '|COMPONENTE|' . ($componentIndex + 1),
+            'rows' => $componentRows,
+        ];
     }
 }
 
@@ -294,14 +280,19 @@ $nextUserDay = [];
 
 foreach ($eligibleGroups as $eligibleGroup) {
     $userKey = (string)$eligibleGroup['user_key'];
+    $componentKey = (string)$eligibleGroup['component_key'];
     $userRows = $eligibleGroup['rows'];
     if (!$userRows) {
         continue;
     }
-    $minimumVehicles = max(1, (int)ceil(count($userRows) / $maxSize));
-    $maximumVehicles = max(1, (int)floor(count($userRows) / $minSize));
-    $idealVehicles = max(1, (int)round(count($userRows) / $targetSize));
-    $vehicleCount = max($minimumVehicles, min($idealVehicles, $maximumVehicles));
+    // La meta es un mínimo operativo, no un máximo. Se crean sólo las jornadas
+    // que pueden alcanzar la meta; cuando la división exacta no es posible, la
+    // carga máxima se amplía en lugar de generar una ruta pequeña.
+    $vehicleCount = max(1, (int)floor(count($userRows) / $targetSize));
+    $hardMaxSize = max(
+        $preferredMaxSize,
+        (int)ceil(count($userRows) / $vehicleCount)
+    );
     $allowedVehicleIndices = [];
     $firstDayIndex = (int)($nextUserDay[$userKey] ?? 0);
 
@@ -309,9 +300,9 @@ foreach ($eligibleGroups as $eligibleGroup) {
         $userDayIndex = $firstDayIndex + $day;
         $vehicleIndex = count($vehicles);
         $allowedVehicleIndices[] = $vehicleIndex;
-        $visitLoadLimit = ['maxLoad' => (string)$maxSize];
-        if ($targetSize < $maxSize) {
-            $visitLoadLimit['softMaxLoad'] = (string)$targetSize;
+        $visitLoadLimit = ['maxLoad' => (string)$hardMaxSize];
+        if ($preferredMaxSize < $hardMaxSize) {
+            $visitLoadLimit['softMaxLoad'] = (string)$preferredMaxSize;
             $visitLoadLimit['costPerUnitAboveSoftMax'] = 8;
         }
         $vehicles[] = [
@@ -325,6 +316,7 @@ foreach ($eligibleGroups as $eligibleGroup) {
         ];
         $vehicleMeta[$vehicleIndex] = [
             'user_key' => $userKey,
+            'component_key' => $componentKey,
             'user_day_index' => $userDayIndex,
         ];
     }
@@ -491,9 +483,10 @@ foreach (($response['routes'] ?? []) as $googleRoute) {
     if (!$rowIds) {
         continue;
     }
-    $meta = $vehicleMeta[$vehicleIndex] ?? ['user_key' => '', 'user_day_index' => 0];
+    $meta = $vehicleMeta[$vehicleIndex] ?? ['user_key' => '', 'component_key' => '', 'user_day_index' => 0];
     $routes[] = [
         'user_key' => $meta['user_key'],
+        'component_key' => $meta['component_key'],
         'user_day_index' => $meta['user_day_index'],
         'row_ids' => $rowIds,
         'encoded_polyline' => (string)($googleRoute['routePolyline']['points'] ?? ''),

@@ -15,7 +15,7 @@ include 'mapa_data.php';
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css">
   <link rel="stylesheet" type="text/css" href="../../css/mapa.css">  
   <link rel="stylesheet" type="text/css" href="../../assets/css/style.css">
-  <link rel="stylesheet" type="text/css" href="style.css">  
+  <link rel="stylesheet" type="text/css" href="style.css?v=<?= (int)filemtime(__DIR__ . '/style.css') ?>">  
   <link rel='stylesheet' href='https://cdn.datatables.net/v/dt/jq-3.3.1/jszip-2.5.0/dt-1.10.20/b-1.6.1/b-colvis-1.6.1/b-html5-1.6.1/r-2.2.3/datatables.min.css'>
   <style>
     html,
@@ -512,7 +512,7 @@ include 'mapa_data.php';
       <div>
         <h4 class="mb-1">Panel administrativo de locales</h4>
         <p class="mb-0">
-          Selecciona locales desde el mapa para reasignar usuario, cambiar fecha propuesta o eliminar planificación.
+          Selecciona uno o más locales pendientes, finaliza la selección y arrastra uno sobre la planificación de destino.
         </p>
       </div>
 
@@ -554,6 +554,25 @@ include 'mapa_data.php';
       <button type="button" class="btn admin-btn danger" id="btnEliminarLocales">
         <i class="fa fa-trash mr-2"></i> Eliminar de planificación
       </button>
+    </div>
+
+    <div class="planned-days-panel mt-3" id="plannedDaysPanel">
+      <div class="route-legend-title">Días planificados</div>
+      <div class="route-legend-help">
+        Selecciona un día para resaltar sus rutas sin ocultar el resto del mapa.
+      </div>
+      <div id="plannedDaysList" class="planned-days-list"></div>
+    </div>
+
+    <div class="route-legend mt-3" id="routeLegend">
+      <div class="route-legend-title">Rutas visibles</div>
+      <div class="route-legend-help">
+        El color exterior identifica la ruta. El centro indica estado:
+        <span class="route-status-dot pending"></span> pendiente,
+        <span class="route-status-dot managed"></span> gestionado,
+        <span class="route-status-dot visited"></span> visitado.
+      </div>
+      <div id="routeLegendItems" class="route-legend-items"></div>
     </div>
 
     <div class="selected-list mt-3">
@@ -620,7 +639,7 @@ const divisionUsuario = window.divisionUsuario;
     });  
   const idEjecutor = <?= (int)$id_ejecutor ?>;
 </script>
-<script src="admin_mapa_lotes.js"></script>
+<script src="admin_mapa_lotes.js?v=<?= (int)filemtime(__DIR__ . '/admin_mapa_lotes.js') ?>"></script>
 <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDO0zLDNeEdLcQgkl7dF0C0Lgr3Wl1m3cw&callback=initMap"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {

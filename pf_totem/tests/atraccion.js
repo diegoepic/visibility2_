@@ -76,8 +76,17 @@ async function muestrear(page, veces, esperaMs) {
   const distintosObj = new Set(objetivos).size;
   check(distintosObj >= 2, 'el objetivo del demo cambia de una vuelta a otra',
     objetivos);
-  check(objetivos.every((o) => o >= rangoDemo.min && o <= rangoDemo.max),
-    'siempre sortea dentro del mismo rango que la partida real', { objetivos, rangoDemo });
+  /* El demo tiene que enseñar una medida que el juego de verdad use: toma una
+     de las medidas de servicio reales (± el mismo jitter). Si mostrara un nivel
+     libre, la gente del pasillo aprendería una medida que no existe. */
+  const medidas = await page.evaluate(() => ({
+    valores: PF_CONFIG.variedades.filter(v => v.medida != null).map(v => v.medida),
+    jitter: PF_CONFIG.jitterMedida || 0,
+  }));
+  const cercaDeAlguna = (o) =>
+    medidas.valores.some((m) => Math.abs(o - m) <= medidas.jitter + 0.1);
+  check(objetivos.every(cercaDeAlguna),
+    'el demo sirve alguna de las medidas de servicio reales', { objetivos, medidas });
 
   console.log('\n--- La demo se detiene fuera del inicio ---');
   await page.click('#s-attract');

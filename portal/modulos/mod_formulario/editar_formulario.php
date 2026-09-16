@@ -812,6 +812,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $idx_marca           = (int)array_search('marca',           $header_norm, true);
     $idx_valor_propuesto = (int)array_search('valor_propuesto', $header_norm, true);
     $idx_fechaPropuesta  = (int)array_search('fechapropuesta',  $header_norm, true);
+    $idx_ot = false;
+    foreach (['codigoot', 'codigo_ot', 'ot'] as $columna_ot) {
+        $idx_ot = array_search($columna_ot, $header_norm, true);
+        if ($idx_ot !== false) {
+            break;
+        }
+    }
 
     $empresa_form     = (int)$formulario['id_empresa'];
     $id_division_form = (int)($formulario['id_division'] ?? 0);
@@ -834,8 +841,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
     $stmt_insert_fq = $conn->prepare("
         INSERT INTO formularioQuestion
-        (pregunta, motivo, material, categoria, marca, valor, valor_propuesto, fechaPropuesta, countVisita, observacion, id_formulario, id_local, id_usuario, estado)
-        VALUES ('', '', ?, ?, ?, '', ?, ?, 0, '', ?, ?, ?, 0)
+        (pregunta, motivo, material, ot, categoria, marca, valor, valor_propuesto, fechaPropuesta, countVisita, observacion, id_formulario, id_local, id_usuario, estado)
+        VALUES ('', '', ?, ?, ?, ?, '', ?, ?, 0, '', ?, ?, ?, 0)
     ");
 
     $stmt_check_mat = $conn->prepare(
@@ -872,6 +879,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $marca      = trim((string)($data[$idx_marca]           ?? ''));
             $val_prop_s = trim((string)($data[$idx_valor_propuesto] ?? ''));
             $fechaRaw   = trim((string)($data[$idx_fechaPropuesta]  ?? ''));
+            $ot         = $idx_ot !== false ? trim((string)($data[$idx_ot] ?? '')) : '';
+
+            if (mb_strlen($ot, 'UTF-8') > 200) {
+                agregarErrorCsv($errores_csv, $totalErrores, "Fila {$fila}: codigo ot no puede superar los 200 caracteres.");
+                continue;
+            }
+            $ot = $ot !== '' ? $ot : null;
 
             if ($cod_local === '' || $usr_name === '' || $material === '' || $categoria === '' || $marca === '' || $val_prop_s === '') {
                 agregarErrorCsv($errores_csv, $totalErrores, "Fila {$fila}: hay campos obligatorios vacíos.");
@@ -987,8 +1001,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             }
 
             $stmt_insert_fq->bind_param(
-                'sssisiii',
+                'ssssisiii',
                 $material,
+                $ot,
                 $categoria,
                 $marca,
                 $val_prop,
@@ -1045,74 +1060,108 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 // -----------------------------------------------------------------------------
 elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_fq') {
     $id_usuario         = (int)($_POST['id_usuario'] ?? 0);
-    $codigo_local       = trim($_POST['codigo_local'] ?? '');
+    $id_local           = (int)($_POST['id_local'] ?? 0);
     $material_ids       = $_POST['material_id'] ?? [];
+    $categorias         = $_POST['categoria'] ?? [];
+    $marcas             = $_POST['marca'] ?? [];
     $valores_propuestos = $_POST['valor_propuesto'] ?? [];
 
     $empresa_form = (int)$formulario['id_empresa'];
+    $id_division_form = (int)($formulario['id_division'] ?? 0);
 
-    $stmt_local = $conn->prepare("SELECT id FROM local WHERE codigo = ? AND id_empresa = ?");
-    $stmt_local->bind_param("si", $codigo_local, $empresa_form);
+    $sql_local = "SELECT id FROM local WHERE id = ? AND id_empresa = ? AND deleted_at IS NULL";
+    if ($id_division_form > 0) {
+        $sql_local .= " AND id_division = ?";
+    }
+    $sql_local .= " LIMIT 1";
+
+    $stmt_local = $conn->prepare($sql_local);
+    if ($id_division_form > 0) {
+        $stmt_local->bind_param("iii", $id_local, $empresa_form, $id_division_form);
+    } else {
+        $stmt_local->bind_param("ii", $id_local, $empresa_form);
+    }
     $stmt_local->execute();
-    $stmt_local->bind_result($id_local);
-    $found = $stmt_local->fetch();
+    $local_valido = $stmt_local->get_result()->fetch_assoc();
     $stmt_local->close();
 
-    if (!$found || !$id_local) {
-        $error = "No se encontró el local con código '{$codigo_local}' en esta empresa.";
-    } elseif ($id_usuario > 0 && !empty($material_ids) && is_array($material_ids)) {
-        foreach ($material_ids as $index => $material_id) {
-            $material_id = (int)$material_id;
-            $valor_propuesto = isset($valores_propuestos[$index]) ? trim((string)$valores_propuestos[$index]) : '';
-            $valor_propuesto = ($valor_propuesto === '') ? null : $valor_propuesto;
+    $stmt_usuario_valido = $conn->prepare("SELECT id FROM usuario WHERE id = ? AND id_empresa = ? LIMIT 1");
+    $stmt_usuario_valido->bind_param('ii', $id_usuario, $empresa_form);
+    $stmt_usuario_valido->execute();
+    $usuario_valido = $stmt_usuario_valido->get_result()->fetch_assoc();
+    $stmt_usuario_valido->close();
 
-            $stmt_mat = $conn->prepare("SELECT nombre FROM material WHERE id = ?");
-            $stmt_mat->bind_param("i", $material_id);
-            $stmt_mat->execute();
-            $stmt_mat->bind_result($material);
-            $stmt_mat->fetch();
-            $stmt_mat->close();
+    if (!$local_valido) {
+        $error = "El local seleccionado no pertenece a la empresa y división del formulario.";
+    } elseif (!$usuario_valido) {
+        $error = "El merch seleccionado no pertenece a la empresa del formulario.";
+    } elseif (!is_array($material_ids) || empty($material_ids)) {
+        $error = "Debes agregar al menos un material.";
+    } else {
+        $conn->begin_transaction();
 
-            if (empty($material)) {
-                $error = "Material no encontrado.";
-                break;
-            }
-
+        try {
+            $stmt_mat = $conn->prepare(
+                "SELECT nombre
+                 FROM material
+                 WHERE id = ? AND id_division = ? AND deleted_at IS NULL
+                 LIMIT 1"
+            );
             $stmt_insert_fq = $conn->prepare("
                 INSERT INTO formularioQuestion
-                    (id_formulario, id_usuario, id_local, material, valor_propuesto, observacion, estado)
-                VALUES (?, ?, ?, ?, ?, '', 0)
+                    (id_formulario, id_usuario, id_local, material, categoria, marca, valor_propuesto, observacion, estado)
+                VALUES (?, ?, ?, ?, ?, ?, ?, '', 0)
             ");
-            if ($stmt_insert_fq === false) {
-                $error = "Error en la preparación de la consulta: " . h($conn->error);
-                break;
+
+            foreach ($material_ids as $index => $material_id_raw) {
+                $material_id = (int)$material_id_raw;
+                $categoria = trim((string)($categorias[$index] ?? ''));
+                $marca = trim((string)($marcas[$index] ?? ''));
+                $cantidad_raw = trim((string)($valores_propuestos[$index] ?? ''));
+
+                if ($material_id <= 0 || $categoria === '' || $marca === '' || $cantidad_raw === '') {
+                    throw new RuntimeException('Completa material, categoría, marca y cantidad en todas las filas.');
+                }
+                if (filter_var($cantidad_raw, FILTER_VALIDATE_INT) === false || (int)$cantidad_raw < 0) {
+                    throw new RuntimeException('La cantidad debe ser un número entero mayor o igual a cero.');
+                }
+
+                $stmt_mat->bind_param("ii", $material_id, $id_division_form);
+                $stmt_mat->execute();
+                $material_row = $stmt_mat->get_result()->fetch_assoc();
+                $stmt_mat->reset();
+
+                if (!$material_row) {
+                    throw new RuntimeException('Uno de los materiales no pertenece a la división del formulario.');
+                }
+
+                $material = (string)$material_row['nombre'];
+                $cantidad = (int)$cantidad_raw;
+
+                $stmt_insert_fq->bind_param(
+                    "iiisssi",
+                    $formulario_id,
+                    $id_usuario,
+                    $id_local,
+                    $material,
+                    $categoria,
+                    $marca,
+                    $cantidad
+                );
+                $stmt_insert_fq->execute();
             }
 
-            $stmt_insert_fq->bind_param(
-                "iiiss",
-                $formulario_id,
-                $id_usuario,
-                $id_local,
-                $material,
-                $valor_propuesto
-            );
-
-            if (!$stmt_insert_fq->execute()) {
-                $error = "Error al agregar la entrada: " . h($stmt_insert_fq->error);
-                $stmt_insert_fq->close();
-                break;
-            }
-
+            $stmt_mat->close();
             $stmt_insert_fq->close();
-        }
+            $conn->commit();
 
-        if (!isset($error)) {
-            $success = "Entradas agregadas correctamente.";
+            $_SESSION['success_formulario'] = "Entradas agregadas correctamente.";
             header("Location: editar_formulario.php?id=$formulario_id&active_tab=agregar-entradas");
             exit();
+        } catch (Throwable $e) {
+            $conn->rollback();
+            $error = "No se pudieron agregar las entradas: " . h($e->getMessage());
         }
-    } else {
-        $error = "Por favor, complete todos los campos obligatorios para agregar nuevas entradas.";
     }
 }
 
@@ -1141,9 +1190,17 @@ if (isset($_POST['update_fq'])) {
         if ($estado === 0) {
             $pregunta_value = 'en proceso';
         } elseif ($estado === 1) {
-            $pregunta_value = 'completado';
+            if (($formulario['modalidad'] ?? '') === 'implementacion_auditoria') {
+                $pregunta_value = 'implementado_auditado';
+            } elseif (($formulario['modalidad'] ?? '') === 'solo_implementacion') {
+                $pregunta_value = 'solo_implementado';
+            } else {
+                $pregunta_value = 'implementado';
+            }
         } elseif ($estado === 2) {
             $pregunta_value = 'cancelado';
+        } elseif ($estado === 3) {
+            $pregunta_value = '';
         }
 
         $stmt_update_fq = $conn->prepare("
@@ -1155,7 +1212,8 @@ if (isset($_POST['update_fq'])) {
                 fechaVisita = ?,
                 observacion = ?,
                 estado = ?,
-                pregunta = ?
+                pregunta = ?,
+                countVisita = CASE WHEN ? = 3 THEN 0 ELSE countVisita END
             WHERE id = ?
         ");
         if ($stmt_update_fq === false) {
@@ -1163,7 +1221,7 @@ if (isset($_POST['update_fq'])) {
         }
 
         $stmt_update_fq->bind_param(
-            "isssssisi",
+            "isssssisii",
             $id_usuario,
             $material,
             $valor,
@@ -1172,6 +1230,7 @@ if (isset($_POST['update_fq'])) {
             $observacion,
             $estado,
             $pregunta_value,
+            $estado,
             $fq_id
         );
 
@@ -1528,6 +1587,51 @@ if ($fqTieneCadena && $esCampanaConLocales) {
     }
     $stmtResp->close();
 }
+
+// Catálogos para la carga manual, siempre acotados a la empresa y división
+// del formulario que se está editando.
+$stmt_usuarios_entrada = $conn->prepare(
+    "SELECT id, usuario FROM usuario WHERE id_empresa = ? ORDER BY usuario ASC"
+);
+$stmt_usuarios_entrada->bind_param('i', $form_empresa_id);
+$stmt_usuarios_entrada->execute();
+$usuarios_entrada = $stmt_usuarios_entrada->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt_usuarios_entrada->close();
+
+$stmt_materiales_entrada = $conn->prepare(
+    "SELECT id, nombre
+     FROM material
+     WHERE id_division = ? AND deleted_at IS NULL
+     ORDER BY nombre ASC"
+);
+$stmt_materiales_entrada->bind_param('i', $id_div_actual);
+$stmt_materiales_entrada->execute();
+$materiales = $stmt_materiales_entrada->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt_materiales_entrada->close();
+
+// Las sugerencias no impiden escribir categorías o marcas nuevas.
+$categorias_entrada = [];
+$marcas_entrada = [];
+$stmt_sugerencias_entrada = $conn->prepare(
+    "SELECT DISTINCT categoria, marca
+     FROM formularioQuestion
+     WHERE id_formulario = ?
+       AND (TRIM(COALESCE(categoria, '')) <> '' OR TRIM(COALESCE(marca, '')) <> '')"
+);
+$stmt_sugerencias_entrada->bind_param('i', $formulario_id);
+$stmt_sugerencias_entrada->execute();
+$res_sugerencias_entrada = $stmt_sugerencias_entrada->get_result();
+while ($sugerencia = $res_sugerencias_entrada->fetch_assoc()) {
+    $categoria_sugerida = trim((string)($sugerencia['categoria'] ?? ''));
+    $marca_sugerida = trim((string)($sugerencia['marca'] ?? ''));
+    if ($categoria_sugerida !== '') $categorias_entrada[$categoria_sugerida] = true;
+    if ($marca_sugerida !== '') $marcas_entrada[$marca_sugerida] = true;
+}
+$stmt_sugerencias_entrada->close();
+$categorias_entrada = array_keys($categorias_entrada);
+$marcas_entrada = array_keys($marcas_entrada);
+natcasesort($categorias_entrada);
+natcasesort($marcas_entrada);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -1537,10 +1641,39 @@ if ($fqTieneCadena && $esCampanaConLocales) {
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.10.12/css/dataTables.bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/buttons/1.2.2/css/buttons.bootstrap.min.css">    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/css/select2.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap4-theme@1.5.2/dist/select2-bootstrap4.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"> 
     <style>
-        .material-row { margin-bottom: 10px; }
-        .remove-material-btn { margin-top: 32px; }
+        .material-row { margin-bottom: 10px; padding: 1rem; border: 1px solid #dee2e6; border-radius: .5rem; background: #f8f9fa; }
+        .select2-container { width: 100% !important; }
+        .select2-container--bootstrap4 .select2-selection--single { height: calc(1.5em + .75rem + 2px); }
+        .select2-container--open .select2-dropdown {
+            z-index: 1060;
+        }
+        .select2-results > .select2-results__options,
+        .select2-container--bootstrap4 .select2-results__options {
+            max-height: 260px !important;
+            overflow-y: auto !important;
+            overscroll-behavior: contain;
+            scrollbar-width: auto;
+            scrollbar-color: #7b8794 #eef1f4;
+        }
+        .select2-results__options::-webkit-scrollbar {
+            width: 12px;
+        }
+        .select2-results__options::-webkit-scrollbar-track {
+            background: #eef1f4;
+        }
+        .select2-results__options::-webkit-scrollbar-thumb {
+            background: #7b8794;
+            border: 3px solid #eef1f4;
+            border-radius: 8px;
+        }
+        .select2-results__options::-webkit-scrollbar-thumb:hover {
+            background: #5f6b76;
+        }
+        .local-search-help { display: block; margin-top: .35rem; }
         thead input {width: 100%;padding: 3px;box-sizing: border-box;}
         .pagination>li>a, .pagination>li>span {
         position: relative;
@@ -1586,6 +1719,16 @@ if ($fqTieneCadena && $esCampanaConLocales) {
     <?php } ?>
     <?php if (isset($error)) { ?>
         <div class="alert alert-danger"><?php echo $error; ?></div>
+    <?php } ?>
+    <?php if (isset($_SESSION['success_formulario'])) { ?>
+        <div class="alert alert-success">
+            <?php echo h($_SESSION['success_formulario']); unset($_SESSION['success_formulario']); ?>
+        </div>
+    <?php } ?>
+    <?php if (isset($_SESSION['error_formulario'])) { ?>
+        <div class="alert alert-danger">
+            <?php echo strip_tags((string)$_SESSION['error_formulario'], '<br>'); unset($_SESSION['error_formulario']); ?>
+        </div>
     <?php } ?>
 
     <!-- Barra de navegación con pestañas -->
@@ -1776,25 +1919,10 @@ if ($fqTieneCadena && $esCampanaConLocales) {
                 <input type="hidden" name="action" value="add_fq">
                 <input type="hidden" name="active_tab" value="agregar-entradas">
                 <div class="form-group">
-                    <label for="id_usuario">Usuario:</label>
-                    <select id="id_usuario" name="id_usuario" class="form-control" required>
-                        <option value="">Seleccione un usuario</option>
-                        <?php
-                        if ($es_mentecreativa) {
-                            $stmt_usuarios = $conn->prepare("SELECT id, usuario FROM usuario ORDER BY usuario ASC");
-                            $stmt_usuarios->execute();
-                            $result_usuarios = $stmt_usuarios->get_result();
-                            $usuarios = $result_usuarios->fetch_all(MYSQLI_ASSOC);
-                            $stmt_usuarios->close();
-                        } else {
-                            $stmt_usuarios = $conn->prepare("SELECT id, usuario FROM usuario WHERE id_empresa = ? ORDER BY usuario ASC");
-                            $stmt_usuarios->bind_param("i", $empresa_id);
-                            $stmt_usuarios->execute();
-                            $result_usuarios = $stmt_usuarios->get_result();
-                            $usuarios = $result_usuarios->fetch_all(MYSQLI_ASSOC);
-                            $stmt_usuarios->close();
-                        }
-                        foreach ($usuarios as $usuario): ?>
+                    <label for="id_usuario">Merch:</label>
+                    <select id="id_usuario" name="id_usuario" class="form-control js-searchable-user" required>
+                        <option value="">Buscar o seleccionar merch</option>
+                        <?php foreach ($usuarios_entrada as $usuario): ?>
                             <option value="<?php echo htmlspecialchars($usuario['id'], ENT_QUOTES, 'UTF-8'); ?>">
                                 <?php echo htmlspecialchars($usuario['usuario'], ENT_QUOTES, 'UTF-8'); ?>
                             </option>
@@ -1802,49 +1930,57 @@ if ($fqTieneCadena && $esCampanaConLocales) {
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="codigo_local">Código Local:</label>
-                    <input type="text" id="codigo_local" name="codigo_local" class="form-control" required>
+                    <label for="id_local">Local:</label>
+                    <select id="id_local" name="id_local" class="form-control input-sm js-local-search" required>
+                        <option value=""></option>
+                    </select>
+                    <small class="form-text text-muted local-search-help">
+                        Escribe código, nombre o dirección. Solo aparecen locales de la división del formulario.
+                    </small>
                 </div>
-                <!-- Contenedor para materiales y valores propuestos -->
+                <!-- Cada fila crea una entrada independiente para el mismo merch y local. -->
                 <div id="materiales-container">
                     <div class="material-row">
                         <div class="form-row">
-                            <div class="col">
+                            <div class="col-md-6">
                                 <label>Material:</label>
-                                <div class="input-group">
-                                    <select name="material_id[]" class="form-control" required>
-                                        <option value="">Seleccione un material</option>
-                                        <?php
-                                        $stmt_materiales = $conn->prepare("SELECT id, nombre FROM material ORDER BY nombre ASC");
-                                        $stmt_materiales->execute();
-                                        $result_materiales = $stmt_materiales->get_result();
-                                        $materiales = $result_materiales->fetch_all(MYSQLI_ASSOC);
-                                        $stmt_materiales->close();
-                                        foreach ($materiales as $material): ?>
-                                            <option value="<?php echo htmlspecialchars($material['id'], ENT_QUOTES, 'UTF-8'); ?>">
-                                                <?php echo htmlspecialchars($material['nombre'], ENT_QUOTES, 'UTF-8'); ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                    <div class="input-group-append" hidden>
-                                        <button type="button" class="btn btn-secondary" data-toggle="modal" data-target="#agregarMaterialModal">
-                                            Crear Material
-                                        </button>
-                                    </div>
-                                </div>
+                                <select name="material_id[]" class="form-control js-material-select" required>
+                                    <option value="">Buscar o seleccionar material</option>
+                                    <?php foreach ($materiales as $material): ?>
+                                        <option value="<?php echo h($material['id']); ?>"><?php echo h($material['nombre']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
                             </div>
-                            <div class="col">
-                                <label>Valor Propuesto:</label>
-                                <input type="text" name="valor_propuesto[]" class="form-control">
+                            <div class="col-md-6">
+                                <label>Categoría:</label>
+                                <input type="text" name="categoria[]" class="form-control" list="categorias-entrada-list" maxlength="255" required>
                             </div>
-                            <div class="col-auto">
+                            <div class="col-md-6 mt-2">
+                                <label>Marca:</label>
+                                <input type="text" name="marca[]" class="form-control" list="marcas-entrada-list" maxlength="255" required>
+                            </div>
+                            <div class="col-md-4 mt-2">
+                                <label>Cantidad:</label>
+                                <input type="number" name="valor_propuesto[]" class="form-control" min="0" step="1" required>
+                            </div>
+                            <div class="col-md-2 mt-2 d-flex align-items-end">
                                 <button type="button" class="btn btn-danger remove-material-btn" onclick="removeMaterialRow(this)">
-                                    Eliminar
+                                    <i class="fas fa-trash-alt mr-1"></i> Eliminar
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
+                <datalist id="categorias-entrada-list">
+                    <?php foreach ($categorias_entrada as $categoria_entrada): ?>
+                        <option value="<?php echo h($categoria_entrada); ?>">
+                    <?php endforeach; ?>
+                </datalist>
+                <datalist id="marcas-entrada-list">
+                    <?php foreach ($marcas_entrada as $marca_entrada): ?>
+                        <option value="<?php echo h($marca_entrada); ?>">
+                    <?php endforeach; ?>
+                </datalist>
                 <button type="button" class="btn btn-info mt-3" onclick="addMaterialRow()">Agregar Otro Material</button>
                 <button type="submit" class="btn btn-success mt-3">Agregar Entradas</button>
             </form>
@@ -1858,15 +1994,23 @@ if ($fqTieneCadena && $esCampanaConLocales) {
                     <label for="csvFile">Archivo CSV:</label>
                     <input type="file" id="csvFile" name="csvFile" class="form-control-file" accept=".csv" required>
 <small class="form-text text-muted">
-    Debe contener las columnas:
+    Columnas del archivo:
     <strong>codigo</strong>,
     <strong>usuario</strong>,
+    <strong>OT</strong> (opcional),
     <strong>material</strong>,
     <strong>categoria</strong>,
     <strong>marca</strong>,
     <strong>valor_propuesto</strong>,
     <strong>fechaPropuesta</strong>.
 </small>
+<small class="form-text text-muted">
+    Ingresa la OT de cada material, por ejemplo <strong>OT-123456</strong> (máximo 200 caracteres).
+    Puedes dejarla vacía o cargar un CSV sin la columna <strong>OT</strong>.
+</small>
+                    <a href="../mod_formulario.php?descargar_plantilla_csv=1" class="btn btn-sm btn-outline-success mt-2" download="plantilla_formulario_con_OT.csv">
+                        <i class="fas fa-download mr-1"></i> Descargar plantilla CSV
+                    </a>
                 </div>
                 <button type="submit" class="btn btn-primary">Subir CSV Masivo</button>
             </form>
@@ -1933,16 +2077,6 @@ if ($fqTieneCadena && $esCampanaConLocales) {
                             class="btn btn-sm btn-info ver-gestiones"
                             data-local-id="<?= htmlspecialchars((string)($g['id_local'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                           >Ver Detalles</button>
-                            <button
-                            class="btn btn-sm btn-primary ver-visitas"
-                            data-formulario-id="<?= $formulario_id ?>"
-                            data-local-id="<?= htmlspecialchars($g['id_local'], ENT_QUOTES, 'UTF-8') ?>"
-                          >Ver Visitas</button>
-                          
-                          <button
-                            class="btn btn-sm btn-warning editar-gestion"
-                            data-local-id="<?= htmlspecialchars((string)($g['id_local'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                          >Editar Gestión</button>
                         </td>
                       </tr>
                     <?php endforeach; ?>
@@ -2170,6 +2304,7 @@ if ($fqTieneCadena && $esCampanaConLocales) {
 <!-- Incluir jQuery y Bootstrap JS -->
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/js/select2.min.js"></script>
 
 <script src="/visibility2/portal/dist/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/1.2.2/js/dataTables.buttons.min.js"></script>
@@ -2184,6 +2319,73 @@ if ($fqTieneCadena && $esCampanaConLocales) {
 
 <script>
 const formularioId = <?= json_encode((int)$formulario_id) ?>;
+const materialesDisponibles = <?= json_encode(array_values($materiales), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+
+function inicializarSelectorMaterial(contexto) {
+    $(contexto).find('.js-material-select').each(function () {
+        const $select = $(this);
+        if ($select.hasClass('select2-hidden-accessible')) return;
+
+        $select.select2({
+            theme: 'bootstrap4',
+            width: '100%',
+            placeholder: 'Buscar o seleccionar material',
+            allowClear: true,
+            language: {
+                noResults: function () { return 'No se encontraron materiales'; },
+                searching: function () { return 'Buscando…'; }
+            }
+        });
+        $select.next('.select2-container').find('span.select2-selection').addClass('form-control');
+    });
+}
+
+$(function () {
+    const $merchSelect = $('.js-searchable-user');
+    $merchSelect.select2({
+        theme: 'bootstrap4',
+        width: '100%',
+        placeholder: 'Buscar o seleccionar merch',
+        allowClear: true,
+        language: {
+            noResults: function () { return 'No se encontraron merch'; }
+        }
+    });
+    $merchSelect.next('.select2-container').find('span.select2-selection').addClass('form-control');
+
+    const $localSelect = $('.js-local-search');
+    $localSelect.select2({
+        theme: 'bootstrap4',
+        width: '100%',
+        placeholder: 'Buscar por código, nombre o dirección',
+        allowClear: true,
+        minimumInputLength: 1,
+        ajax: {
+            url: 'buscar_locales_formulario.php',
+            dataType: 'json',
+            delay: 300,
+            cache: true,
+            data: function (params) {
+                return {
+                    formulario_id: formularioId,
+                    q: params.term || ''
+                };
+            },
+            processResults: function (data) {
+                return { results: Array.isArray(data.results) ? data.results : [] };
+            }
+        },
+        language: {
+            inputTooShort: function () { return 'Escribe al menos un carácter'; },
+            noResults: function () { return 'No hay locales coincidentes en esta división'; },
+            searching: function () { return 'Buscando locales…'; },
+            errorLoading: function () { return 'No fue posible cargar los locales'; }
+        }
+    });
+    $localSelect.next('.select2-container').find('span.select2-selection').addClass('form-control input-sm');
+
+    inicializarSelectorMaterial(document);
+});
 
 // Tipo 2 (IW/complementaria): ajustar campos según tipo seleccionado
 (function() {
@@ -2368,22 +2570,41 @@ $(document).ready(function () {
     });
 
     // ---------------------------------------------------------
-    // Editar gestión agrupada
+    // Editar gestión dentro del modal de detalle
     // ---------------------------------------------------------
-    $(document).on('click', '.editar-gestion', function () {
-        const localId = $(this).data('local-id');
+    function cargarEdicionGestionEnDetalle(localId, forzarRecarga) {
+        const $pane = $('#tab_editar_gestion');
+        if (!$pane.length || (!forzarRecarga && $pane.data('loaded'))) return;
+
+        $pane.data('loaded', true).html(
+            '<div class="text-center text-muted py-5">' +
+                '<span class="spinner-border spinner-border-sm mr-2"></span>Cargando edición…' +
+            '</div>'
+        );
 
         $.get('ajax_editar_gestion.php', {
             formulario_id: formularioId,
             local_id: localId
         })
         .done(function (html) {
-            $('#editarGestionModalContent').html(html);
-            $('#editarGestionModal').modal('show');
+            const $response = $('<div>').html(html);
+            const $body = $response.find('.modal-body').first();
+
+            if ($body.length) {
+                $pane.empty().append($body.contents());
+            } else {
+                $pane.html(html);
+            }
         })
         .fail(function () {
-            alert('Error al cargar el formulario de edición de gestión.');
+            $pane.removeData('loaded').html(
+                '<div class="alert alert-danger">No fue posible cargar la edición de la gestión.</div>'
+            );
         });
+    }
+
+    $(document).on('shown.bs.tab', 'a[href="#tab_editar_gestion"]', function () {
+        cargarEdicionGestionEnDetalle($(this).data('local-id'), false);
     });
 
     // ---------------------------------------------------------
@@ -2438,7 +2659,12 @@ $(document).ready(function () {
             method: 'POST',
             data: $form.serialize(),
             success: function (response) {
-                $('#editarGestionModalContent').html(response);
+                const $tabEdicion = $form.closest('#tab_editar_gestion');
+                if ($tabEdicion.length) {
+                    $tabEdicion.html(response);
+                } else {
+                    $('#editarGestionModalContent').html(response);
+                }
 
                 if (response.indexOf('alert-success') !== -1) {
                     setTimeout(function () {
@@ -2454,25 +2680,6 @@ $(document).ready(function () {
         });
     });
 
-    // ---------------------------------------------------------
-    // Ver historial de visitas
-    // ---------------------------------------------------------
-    $(document).on('click', '.ver-visitas', function () {
-        const localId = $(this).data('local-id');
-
-        $.get('ajax_ver_visitas.php', {
-            formulario_id: formularioId,
-            local_id: localId
-        })
-        .done(function (html) {
-            $('#visitasModalContent').html(html);
-            $('#visitasModal').modal('show');
-        })
-        .fail(function (xhr, status, err) {
-            console.error('AJAX Error:', status, err);
-            alert('Error al cargar el histórico de visitas.');
-        });
-    });
 });
 
 // ---------------------------------------------------------
@@ -2558,35 +2765,45 @@ function addMaterialRow() {
 
     materialRow.innerHTML =
         '<div class="form-row">' +
-            '<div class="col">' +
+            '<div class="col-md-6">' +
                 '<label>Material:</label>' +
-                '<div class="input-group">' +
-                    '<select name="material_id[]" class="form-control" required>' +
-                        '<option value="">Seleccione un material</option>' +
-                        '<?php foreach ($materiales as $material): ?>' +
-                            '<option value="<?= htmlspecialchars($material["id"], ENT_QUOTES, "UTF-8") ?>"><?= htmlspecialchars($material["nombre"], ENT_QUOTES, "UTF-8") ?></option>' +
-                        '<?php endforeach; ?>' +
-                    '</select>' +
-                    '<div class="input-group-append">' +
-                        '<button type="button" class="btn btn-secondary" data-toggle="modal" data-target="#agregarMaterialModal">Agregar Material</button>' +
-                    '</div>' +
-                '</div>' +
+                '<select name="material_id[]" class="form-control js-material-select" required>' +
+                    '<option value="">Buscar o seleccionar material</option>' +
+                '</select>' +
             '</div>' +
-            '<div class="col">' +
-                '<label>Valor Propuesto:</label>' +
-                '<input type="text" name="valor_propuesto[]" class="form-control">' +
+            '<div class="col-md-6">' +
+                '<label>Categoría:</label>' +
+                '<input type="text" name="categoria[]" class="form-control" list="categorias-entrada-list" maxlength="255" required>' +
             '</div>' +
-            '<div class="col-auto">' +
-                '<button type="button" class="btn btn-danger remove-material-btn" onclick="removeMaterialRow(this)">Eliminar</button>' +
+            '<div class="col-md-6 mt-2">' +
+                '<label>Marca:</label>' +
+                '<input type="text" name="marca[]" class="form-control" list="marcas-entrada-list" maxlength="255" required>' +
+            '</div>' +
+            '<div class="col-md-4 mt-2">' +
+                '<label>Cantidad:</label>' +
+                '<input type="number" name="valor_propuesto[]" class="form-control" min="0" step="1" required>' +
+            '</div>' +
+            '<div class="col-md-2 mt-2 d-flex align-items-end">' +
+                '<button type="button" class="btn btn-danger remove-material-btn" onclick="removeMaterialRow(this)"><i class="fas fa-trash-alt mr-1"></i> Eliminar</button>' +
             '</div>' +
         '</div>';
 
     materialesContainer.appendChild(materialRow);
+
+    const select = materialRow.querySelector('.js-material-select');
+    materialesDisponibles.forEach(function (material) {
+        select.add(new Option(material.nombre, material.id, false, false));
+    });
+    inicializarSelectorMaterial(materialRow);
 }
 
 function removeMaterialRow(button) {
     const materialRow = button.closest('.material-row');
     if (materialRow) {
+        const $select = $(materialRow).find('.js-material-select');
+        if ($select.hasClass('select2-hidden-accessible')) {
+            $select.select2('destroy');
+        }
         materialRow.remove();
     }
 }

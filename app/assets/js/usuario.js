@@ -232,55 +232,19 @@ function enviarArchivoUsuarios(){
 	});
 }
 
-function desactivarUsuario(id)
-{
-			//console.log(fechaFin);
-			swal({
-				  title: 'Desactivar',
-				  text: "¿Realmente deseas desactivar a este usuario? ",
-				  type: 'warning',
-				  showCancelButton: true,
-				  confirmButtonColor: '#3085d6',
-				  cancelButtonColor: '#d33',
-				  confirmButtonText: 'Aceptar'
-				}).then((result) => {
-					$.ajax({
-						 url: 		"ws.php",
-						 method: 	"GET",
-						 data:		"ws=desactivarUsuario&idUsuario="+id,
-						 //dataType:  "json",
-				         success: function (data) {
-					         //console.log(data);
-					         location.reload();
-					     }
-					});
-			});
-}
-
-function activarUsuario(id)
-{
-	//console.log(fechaFin);
-	swal({
-			title: 'Activar',
-			text: "¿Realmente deseas activar a este usuario? ",
-			type: 'success',
-			showCancelButton: true,
-			confirmButtonColor: '#3085d6',
-			cancelButtonColor: '#d33',
-			confirmButtonText: 'Aceptar'
-		}).then((result) => {
-			$.ajax({
-					url: 		"ws.php",
-					method: 	"GET",
-					data:		"ws=activarUsuario&idUsuario="+id,
-					//dataType:  "json",
-					success: function (data) {
-						//console.log(data);
-						location.reload();
-					}
-			});
-	});
-}
+/*
+ * activarUsuario() / desactivarUsuario() — ELIMINADAS el 03-09-2026.
+ *
+ * Eran las dos únicas llamadas a app/ws.php, un servicio legacy de 118 KB con 65
+ * consultas construidas por concatenación de $_REQUEST y cero sentencias preparadas
+ * (inyección SQL sobre usuario, local, visita y formulario). Ese archivo se retiró.
+ *
+ * No hacía falta reemplazarlas: ninguna página las invocaba —usuario.js sólo se carga
+ * desde login.php— y el portal ya activa y desactiva usuarios por su propia vía, con
+ * sentencias preparadas, en portal/modulos/mod_user/eliminar_usuario.php y
+ * reactivar_usuario.php. Si alguna vez se necesita hacerlo desde la app, ese es el
+ * patrón a seguir: POST + CSRF + prepare() + alcance por empresa.
+ */
 
 function crearUsuario()
 {

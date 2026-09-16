@@ -98,6 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 /* ===== Idempotencia - cargar librería pero NO reclamar aún ===== */
 // CRÍTICO: NO llamar idempo_claim_or_fail() aquí porque si la visita no existe,
 // retornamos 503 VISITA_PENDING y el reintento fallaría con 409 REQUEST_IN_PROGRESS
+require_once __DIR__ . '/lib/api_helpers.php';  // visita_es_del_usuario()
 require_once __DIR__ . '/lib/idempotency.php';
 require_once __DIR__ . '/lib/foto_hash.php'; // detección de fotos duplicadas (sha256 + dHash perceptual)
 sanitize_idempotency_key();
@@ -157,6 +158,13 @@ if (!$stmt->fetch()) {
   json_out(403, ['status'=>'error','message'=>'No tienes permiso para esta pregunta/local']);
 }
 $stmt->close();
+
+/* ===== validar propiedad del visita_id recibido ===== */
+// El id que manda el cliente se verifica contra (usuario, campaña, local) antes de colgarle
+// una respuesta con foto. Si no calza queda en 0 y se resuelve por client_guid más abajo.
+if ($visita_id > 0) {
+  $visita_id = visita_es_del_usuario($conn, $visita_id, $usuario_id, $id_formulario, $id_local);
+}
 
 /* ===== resolver/crear visita si no llega visita_id (fallback offline por client_guid) ===== */
 if ($visita_id <= 0) {
@@ -328,15 +336,35 @@ foreach ([$dirBase,$dirFecha,$dirQ] as $d) {
     json_out(500, ['status'=>'error','message'=>'No se pudo preparar el directorio de subida']);
   }
 }
-$filename = 'qfoto_'.uniqid('',true).'.webp';
+$baseName = 'qfoto_'.uniqid('',true);
+$filename = $baseName.'.webp';
 $destAbs  = $dirQ.$filename;
 
 if (!convertToWebP($tmp, $destAbs, 1280, 80)) {
-  $isHeic = preg_match('/\.(heic|heif)$/i', $origName) || preg_match('/heic|heif/i', (string)$mime);
-  $msg = $isHeic
-    ? 'No se pudo convertir HEIC/HEIF a WebP (faltan dependencias en el server).'
-    : 'No se pudo convertir la imagen a WebP.';
-  json_out(500, ['status'=>'error','message'=>$msg]);
+  // RESPALDO: guardar el ORIGINAL en vez de perder la foto.
+  //
+  // Antes esto respondía 500 y la evidencia se perdía. Las fotos de MATERIAL nunca se
+  // perdían porque upload_material_foto_pruebas.php sí tiene este respaldo desde siempre:
+  // esa asimetría entre los dos endpoints era la mitad del bug de las fotos HEIC sin
+  // conexión (la otra mitad estaba en el cliente, ver compressFile en gestionarPruebas.php).
+  //
+  // Consecuencia asumida: de un HEIC crudo v2_dhash() no saca el hash perceptual, así que
+  // esa foto queda fuera de la detección de duplicados PARECIDOS. El bloqueo por duplicado
+  // EXACTO sigue funcionando (v2_sha256_file son bytes, no píxeles). En el portal se verá
+  // el enlace sin miniatura. Todo eso es mucho mejor que perder la evidencia.
+  $extFallback = strtolower(pathinfo($origName, PATHINFO_EXTENSION) ?: '');
+  if (!in_array($extFallback, ['jpg','jpeg','png','gif','webp','bmp','tiff','heic','heif'], true)) {
+    $extFallback = 'jpg';
+  }
+  if (is_file($destAbs)) @unlink($destAbs);   // pudo quedar un .webp a medio escribir
+
+  $filename = $baseName.'.'.$extFallback;
+  $destAbs  = $dirQ.$filename;
+
+  if (!@move_uploaded_file($tmp, $destAbs) && !@copy($tmp, $destAbs)) {
+    json_out(500, ['status'=>'error','message'=>'No se pudo guardar la imagen.']);
+  }
+  error_log(sprintf('[foto_encuesta] conversión falló, se guardó el original: %s (mime=%s)', $filename, (string)$mime));
 }
 @chmod($destAbs, 0644);
 

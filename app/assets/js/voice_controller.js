@@ -179,6 +179,28 @@
   // ==================== HABLA ====================
 
   /**
+   * Puente de voz nativo del APK Android (MainActivity → AndroidVoice).
+   *
+   * Dentro del WebView, window.speechSynthesis EXISTE pero no está conectado al motor de texto a
+   * voz del sistema: getVoices() vuelve vacío y speak() no emite sonido. O sea, la voz de la
+   * navegación funcionaba en Chrome y quedaba muda en la app instalada, sin ningún error visible.
+   * Cuando el puente está disponible se usa él y se saltea toda la maquinaria de utterances.
+   *
+   * Devuelve null en el navegador, así que el camino web sigue intacto.
+   */
+  function nativeVoice() {
+    try {
+      const bridge = window.AndroidVoice;
+      if (bridge && typeof bridge.speak === 'function' && bridge.isAvailable()) {
+        return bridge;
+      }
+    } catch (e) {
+      // El puente existe pero falló: seguir por el camino web.
+    }
+    return null;
+  }
+
+  /**
    * Habla un texto
    * @param {string} text - Texto a hablar
    * @param {string} priority - 'normal' | 'high' | 'interrupt'
@@ -195,6 +217,21 @@
     const dedupeKey = trimmedText + '|' + priority;
     if (dedupeKey === lastSpokenInstruction && Date.now() - lastSpokenTime < 2500) {
       return false;
+    }
+
+    // Camino nativo (APK): Android tiene su propia cola de TTS, así que se le entrega la frase
+    // directamente y no se arma utterance ni se usa la cola de acá. 'interrupt' se traduce en
+    // QUEUE_FLUSH del lado Android.
+    const native = nativeVoice();
+    if (native) {
+      try {
+        native.speak(trimmedText, priority === 'interrupt');
+        lastSpokenInstruction = dedupeKey;
+        lastSpokenTime = Date.now();
+        return true;
+      } catch (e) {
+        console.warn('[VoiceController] Puente nativo falló, se usa speechSynthesis:', e);
+      }
     }
 
     const utterance = createUtterance(trimmedText);
@@ -286,6 +323,15 @@
       speechSynthesis.cancel();
     } catch (e) {
       // Ignorar errores de cancel
+    }
+    // El APK tiene su propia cola de TTS: cancelarla también, o la instrucción vieja se sigue
+    // escuchando después de salir de la navegación.
+    try {
+      if (window.AndroidVoice && typeof window.AndroidVoice.stop === 'function') {
+        window.AndroidVoice.stop();
+      }
+    } catch (e) {
+      // Ignorar
     }
     queue = [];
     speaking = false;
@@ -474,6 +520,8 @@
    * Verifica si el navegador soporta síntesis de voz
    */
   function isSupported() {
+    // Dentro del APK el soporte lo da el puente nativo, no el navegador.
+    if (nativeVoice()) return true;
     return 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
   }
 

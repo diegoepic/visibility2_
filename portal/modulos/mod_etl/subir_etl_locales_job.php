@@ -97,11 +97,15 @@ if (count($headers) > 0) {
 
 $indexes = resolveColumnIndexes($headers);
 if ($indexes === false) {
+    $detectedHeaders = array_values(array_filter(array_map(static function ($header): string {
+        return normalizeCsvText($header);
+    }, $headers), static fn(string $header): bool => $header !== ''));
     fclose($handle);
     @unlink($filePath);
     jsonResponse([
         'success' => false,
-        'message' => 'Los encabezados no son válidos. Deben incluir: Código Local, Nombre, Dirección y Comuna. Cuenta y Cadena son opcionales.'
+        'message' => 'Los encabezados no son válidos. Código Local es obligatorio. División, Nombre, Dirección, Comuna, Zona, Distrito, Vendedor, Jefe de Venta, Cuenta y Cadena son opcionales. Encabezados detectados: ' . implode(' | ', $detectedHeaders),
+        'delimiter' => $delimiter,
     ], 400);
 }
 
@@ -116,7 +120,7 @@ while (($row = fgetcsv($handle, 200000, $delimiter)) !== false) {
 
     $totalRows++;
 
-    $codigo = trim((string)($row[$indexes['codigo']] ?? ''));
+    $codigo = etlUpper($row[$indexes['codigo']] ?? '');
     if ($codigo !== '') {
         if (isset($seenCodes[$codigo])) {
             $duplicateCodes[$codigo] = true;
@@ -149,9 +153,11 @@ if (!$fp) {
     jsonResponse(['success' => false, 'message' => 'No se pudo crear el reporte de errores.'], 500);
 }
 fputcsv($fp, [
-    'linea','codigo','nombre local','division id','estado address validation',
+    'linea','codigo','nombre local','division id','division archivo','estado address validation',
     'direccion original','direccion limpia','direccion google','comuna','distrito',
-    'zona','region','motivo de fallo','response id'
+    'zona','region','zona archivo','estado zona','distrito archivo','estado distrito',
+    'vendedor archivo','estado vendedor','jefe de venta archivo',
+    'estado jefe de venta','motivo de fallo','response id'
 ], ';');
 fclose($fp);
 
@@ -163,9 +169,12 @@ if (!$previewFp) {
 }
 fwrite($previewFp, "\xEF\xBB\xBF");
 fputcsv($previewFp, [
-    'linea','codigo','division id','nombre local','direccion actual en base',
+    'linea','codigo','division id','division archivo','tipo actualizacion','nombre local','direccion actual en base',
     'direccion original archivo','direccion limpia','direccion propuesta','direccion completa google',
-    'comuna','distrito','zona','region','cuenta','cadena','estado address validation',
+    'comuna','distrito','zona','region','cuenta','cadena',
+    'zona actual','zona archivo','estado zona','distrito actual','distrito archivo','estado distrito',
+    'vendedor actual','vendedor archivo','estado vendedor','jefe de venta actual',
+    'jefe de venta archivo','estado jefe de venta','estado address validation',
     'motivo','lat','lng','response id'
 ], ';');
 fclose($previewFp);

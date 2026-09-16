@@ -88,24 +88,35 @@ function detectDelimiter(string $filePath): string
 function resolveColumnIndexes(array $headers): array|false
 {
     $requiredAliases = [
-        'codigo'       => ['codigo', 'codigo local', 'cod local', 'cod_local'],
-        'nombre_local' => ['nombre local', 'nombre', 'nombre_local', 'local'],
-        'direccion'    => ['direccion', 'dirección'],
-        'comuna'       => ['comuna'],
+        'codigo' => ['codigo', 'codigo local', 'cod local', 'cod_local'],
     ];
 
     $optionalAliases = [
-        'cuenta'   => ['cuenta'],
-        'cadena'   => ['cadena']
+        'division'        => ['division', 'division local', 'division empresa', 'nombre division', 'id division'],
+        'nombre_local'    => ['nombre local', 'nombre', 'nombre_local', 'local'],
+        'direccion'       => ['direccion', 'dirección'],
+        'comuna'          => ['comuna'],
+        'cuenta'          => ['cuenta'],
+        'cadena'          => ['cadena'],
+        'zona'            => ['zona', 'nombre zona'],
+        'distrito'        => ['distrito', 'nombre distrito'],
+        'nombre_vendedor' => ['nombre vendedor', 'vendedor', 'vendedor nombre'],
+        'jefe_venta'      => ['jefe de venta', 'jefe de ventas', 'jefe venta', 'jefe ventas', 'nombre jefe de venta', 'jefeventa'],
     ];
 
-    $normalizedHeaders = array_map('normalizeHeader', $headers);
+    // etlLookupKey elimina BOM, tildes, espacios, guiones y diferencias de
+    // mayúsculas. Esto evita que Excel/Windows haga irreconocible una cabecera
+    // visualmente correcta como "Código Local".
+    $normalizedHeaders = array_map(static function ($header): string {
+        return etlLookupKey(normalizeCsvText($header));
+    }, $headers);
     $indexes = [];
 
     foreach ($requiredAliases as $logical => $possibles) {
         $found = false;
+        $possibleKeys = array_map('etlLookupKey', $possibles);
         foreach ($normalizedHeaders as $idx => $header) {
-            if (in_array($header, $possibles, true)) {
+            if (in_array($header, $possibleKeys, true)) {
                 $indexes[$logical] = $idx;
                 $found = true;
                 break;
@@ -118,8 +129,9 @@ function resolveColumnIndexes(array $headers): array|false
 
     foreach ($optionalAliases as $logical => $possibles) {
         $indexes[$logical] = null;
+        $possibleKeys = array_map('etlLookupKey', $possibles);
         foreach ($normalizedHeaders as $idx => $header) {
-            if (in_array($header, $possibles, true)) {
+            if (in_array($header, $possibleKeys, true)) {
                 $indexes[$logical] = $idx;
                 break;
             }
@@ -163,6 +175,7 @@ function appendFailureToReport(string $reportPath, array $failure): void
         $failure['codigo'] ?? '',
         $failure['nombre'] ?? '',
         $failure['division_id'] ?? '',
+        $failure['division_archivo'] ?? '',
         $failure['estado_validacion'] ?? 'ERROR_IMPORTACION',
         $failure['direccion_original'] ?? '',
         $failure['direccion_limpia'] ?? '',
@@ -171,6 +184,14 @@ function appendFailureToReport(string $reportPath, array $failure): void
         $failure['distrito'] ?? '',
         $failure['zona'] ?? '',
         $failure['region'] ?? '',
+        $failure['zona_archivo'] ?? '',
+        $failure['estado_zona'] ?? '',
+        $failure['distrito_archivo'] ?? '',
+        $failure['estado_distrito'] ?? '',
+        $failure['vendedor_archivo'] ?? '',
+        $failure['estado_vendedor'] ?? '',
+        $failure['jefe_venta_archivo'] ?? '',
+        $failure['estado_jefe_venta'] ?? '',
         $failure['reason'] ?? '',
         $failure['response_id'] ?? ''
     ], ';');
@@ -201,6 +222,8 @@ function appendPreviewRecord(string $previewPath, array $record): bool
         $record['line'] ?? '',
         $record['codigo'] ?? '',
         $record['division_id'] ?? '',
+        $record['division_archivo'] ?? '',
+        $record['tipo_actualizacion'] ?? '',
         $record['nombre'] ?? '',
         $record['direccion_actual'] ?? '',
         $record['direccion_original'] ?? '',
@@ -213,6 +236,18 @@ function appendPreviewRecord(string $previewPath, array $record): bool
         $record['region'] ?? '',
         $record['cuenta'] ?? '',
         $record['cadena'] ?? '',
+        $record['zona_actual'] ?? '',
+        $record['zona_archivo'] ?? '',
+        $record['estado_zona'] ?? '',
+        $record['distrito_actual'] ?? '',
+        $record['distrito_archivo'] ?? '',
+        $record['estado_distrito'] ?? '',
+        $record['vendedor_actual'] ?? '',
+        $record['vendedor_archivo'] ?? '',
+        $record['estado_vendedor'] ?? '',
+        $record['jefe_venta_actual'] ?? '',
+        $record['jefe_venta_archivo'] ?? '',
+        $record['estado_jefe_venta'] ?? '',
         $record['estado_validacion'] ?? '',
         $record['reason'] ?? '',
         $record['lat'] ?? '',
@@ -222,6 +257,228 @@ function appendPreviewRecord(string $previewPath, array $record): bool
 
     fclose($fp);
     return $written !== false;
+}
+
+function etlInspectAssignmentPerson(mysqli $conn, string $type, string $name): array
+{
+    $definitions = [
+        'vendedor' => ['table' => 'vendedor', 'column' => 'nombre_vendedor'],
+        'jefe_venta' => ['table' => 'jefe_venta', 'column' => 'nombre'],
+    ];
+    $name = normalizeCsvText($name);
+    if ($name === '') {
+        return ['id' => null, 'matches' => 0, 'status' => 'SIN_CAMBIO', 'name' => ''];
+    }
+    if (!isset($definitions[$type])) {
+        return ['id' => null, 'matches' => 0, 'status' => 'ERROR_CONSULTA', 'name' => ''];
+    }
+
+    $name = etlNormalizeOptionalPerson($name);
+    $definition = $definitions[$type];
+    $sql = "SELECT id FROM {$definition['table']} WHERE LOWER(TRIM({$definition['column']})) = LOWER(TRIM(?)) ORDER BY id";
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        return ['id' => null, 'matches' => 0, 'status' => 'ERROR_CONSULTA', 'name' => $name];
+    }
+    $stmt->bind_param('s', $name);
+    $stmt->execute();
+    $stmt->bind_result($id);
+    $ids = [];
+    while ($stmt->fetch()) {
+        $ids[] = (int)$id;
+    }
+    $stmt->close();
+
+    $matches = count($ids);
+    return [
+        'id' => $ids[0] ?? null,
+        'matches' => $matches,
+        'status' => $matches > 1 ? 'DUPLICADO_EN_BASE' : ($matches === 1 ? 'EXISTENTE' : 'NUEVO'),
+        'name' => $name,
+    ];
+}
+
+function etlGetOrCreateAssignmentPerson(mysqli $conn, string $type, string $name, array &$errors, int $lineNumber)
+{
+    $inspection = etlInspectAssignmentPerson($conn, $type, $name);
+    if ($inspection['status'] === 'SIN_CAMBIO') {
+        return null;
+    }
+    if ($inspection['status'] === 'ERROR_CONSULTA') {
+        $errors[] = "No se pudo consultar el catálogo '$type' en la línea $lineNumber: " . $conn->error;
+        return false;
+    }
+    if ($inspection['status'] === 'DUPLICADO_EN_BASE') {
+        $errors[] = "El nombre '{$inspection['name']}' aparece más de una vez en el catálogo '$type'.";
+        return false;
+    }
+
+    $canonicalName = (string)$inspection['name'];
+    if ($inspection['id'] !== null) {
+        $id = (int)$inspection['id'];
+        if ($type === 'vendedor') {
+            $stmt = $conn->prepare('UPDATE vendedor SET nombre_vendedor=? WHERE id=?');
+        } else {
+            $stmt = $conn->prepare('UPDATE jefe_venta SET nombre=? WHERE id=?');
+        }
+        if (!$stmt) {
+            $errors[] = "No se pudo normalizar '$canonicalName' en la línea $lineNumber: " . $conn->error;
+            return false;
+        }
+        $stmt->bind_param('si', $canonicalName, $id);
+        if (!$stmt->execute()) {
+            $errors[] = "No se pudo normalizar '$canonicalName' en la línea $lineNumber: " . $stmt->error;
+            $stmt->close();
+            return false;
+        }
+        $stmt->close();
+        return $id;
+    }
+
+    if ($type === 'vendedor') {
+        $externalId = 0;
+        $stmt = $conn->prepare('INSERT INTO vendedor (id_vendedor, nombre_vendedor) VALUES (?, ?)');
+        if ($stmt) {
+            $stmt->bind_param('is', $externalId, $canonicalName);
+        }
+    } else {
+        $stmt = $conn->prepare('INSERT INTO jefe_venta (nombre) VALUES (?)');
+        if ($stmt) {
+            $stmt->bind_param('s', $canonicalName);
+        }
+    }
+    if (!$stmt || !$stmt->execute()) {
+        $errors[] = "No se pudo crear '$canonicalName' en el catálogo '$type' (línea $lineNumber): " . ($stmt ? $stmt->error : $conn->error);
+        if ($stmt) {
+            $stmt->close();
+        }
+        return false;
+    }
+    $id = (int)$stmt->insert_id;
+    $stmt->close();
+    return $id;
+}
+
+function etlInspectTerritoryAssignment(mysqli $conn, string $type, string $name, ?int $zoneId = null): array
+{
+    $name = etlUpper($name);
+    if ($name === '') {
+        return ['id' => null, 'zone_id' => $zoneId, 'matches' => 0, 'status' => 'SIN_CAMBIO', 'name' => ''];
+    }
+
+    if ($type === 'zona') {
+        $stmt = $conn->prepare('SELECT id FROM zona WHERE LOWER(TRIM(nombre_zona))=LOWER(TRIM(?)) ORDER BY id');
+        if ($stmt) {
+            $stmt->bind_param('s', $name);
+        }
+    } elseif ($type === 'distrito' && $zoneId !== null && $zoneId > 0) {
+        $stmt = $conn->prepare('SELECT id, id_zona FROM distrito WHERE LOWER(TRIM(nombre_distrito))=LOWER(TRIM(?)) AND id_zona=? ORDER BY id');
+        if ($stmt) {
+            $stmt->bind_param('si', $name, $zoneId);
+        }
+    } elseif ($type === 'distrito') {
+        $stmt = $conn->prepare('SELECT id, id_zona FROM distrito WHERE LOWER(TRIM(nombre_distrito))=LOWER(TRIM(?)) ORDER BY id');
+        if ($stmt) {
+            $stmt->bind_param('s', $name);
+        }
+    } else {
+        return ['id' => null, 'zone_id' => $zoneId, 'matches' => 0, 'status' => 'ERROR_CONSULTA', 'name' => $name];
+    }
+
+    if (!$stmt || !$stmt->execute()) {
+        if ($stmt) {
+            $stmt->close();
+        }
+        return ['id' => null, 'zone_id' => $zoneId, 'matches' => 0, 'status' => 'ERROR_CONSULTA', 'name' => $name];
+    }
+
+    $ids = [];
+    $zoneIds = [];
+    if ($type === 'zona') {
+        $stmt->bind_result($id);
+        while ($stmt->fetch()) {
+            $ids[] = (int)$id;
+        }
+    } else {
+        $stmt->bind_result($id, $districtZoneId);
+        while ($stmt->fetch()) {
+            $ids[] = (int)$id;
+            $zoneIds[] = (int)$districtZoneId;
+        }
+    }
+    $stmt->close();
+
+    $matches = count($ids);
+    return [
+        'id' => $ids[0] ?? null,
+        'zone_id' => $type === 'zona' ? ($ids[0] ?? null) : ($zoneIds[0] ?? $zoneId),
+        'matches' => $matches,
+        'status' => $matches > 1 ? 'DUPLICADO_EN_BASE' : ($matches === 1 ? 'EXISTENTE' : 'NUEVO'),
+        'name' => $name,
+    ];
+}
+
+function updateLocalFieldsByCodigo(
+    mysqli $conn,
+    string $codigo,
+    int $divisionId,
+    array $updates,
+    array &$errors,
+    int $lineNumber
+): bool {
+    $definitions = [
+        'nombre' => ['column' => 'nombre', 'type' => 's'],
+        'direccion_original' => ['column' => 'direccion_original', 'type' => 's'],
+        'direccion' => ['column' => 'direccion', 'type' => 's'],
+        'direccion_google' => ['column' => 'direccion_google', 'type' => 's'],
+        'estado_address_validation' => ['column' => 'estado_address_validation', 'type' => 's'],
+        'google_response_id' => ['column' => 'google_response_id', 'type' => 's'],
+        'id_comuna' => ['column' => 'id_comuna', 'type' => 'i'],
+        'lat' => ['column' => 'lat', 'type' => 'd'],
+        'lng' => ['column' => 'lng', 'type' => 'd'],
+        'id_cuenta' => ['column' => 'id_cuenta', 'type' => 'i'],
+        'id_cadena' => ['column' => 'id_cadena', 'type' => 'i'],
+        'id_zona' => ['column' => 'id_zona', 'type' => 'i'],
+        'id_distrito' => ['column' => 'id_distrito', 'type' => 'i'],
+        'id_jefe_venta' => ['column' => 'id_jefe_venta', 'type' => 'i'],
+        'id_vendedor' => ['column' => 'id_vendedor', 'type' => 'i'],
+    ];
+    $sets = [];
+    $types = '';
+    $params = [];
+    foreach ($definitions as $key => $definition) {
+        if (!array_key_exists($key, $updates)) {
+            continue;
+        }
+        $sets[] = $definition['column'] . '=?';
+        $types .= $definition['type'];
+        $params[] = $updates[$key];
+    }
+    if (!$sets) {
+        $errors[] = "No hay campos para actualizar en el local '$codigo' (línea $lineNumber).";
+        return false;
+    }
+    if (!empty($updates['direccion_validada'])) {
+        $sets[] = 'direccion_validada_at=NOW()';
+    }
+    $sets[] = 'updated_at=NOW()';
+    $sql = 'UPDATE local SET ' . implode(', ', $sets) . ' WHERE codigo=? AND id_division=? AND deleted_at IS NULL';
+    $types .= 'si';
+    $params[] = $codigo;
+    $params[] = $divisionId;
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        $errors[] = "No se pudo preparar la actualización del local '$codigo' en la línea $lineNumber: " . $conn->error;
+        return false;
+    }
+    $stmt->bind_param($types, ...$params);
+    if (!$stmt->execute()) {
+        $errors[] = "No se pudo actualizar el local '$codigo' en la línea $lineNumber: " . $stmt->error;
+        $stmt->close();
+        return false;
+    }
+    $stmt->close();
+    return true;
 }
 
 function getRegionId(mysqli $conn, string $regionName, array &$errors, int $lineNumber): int|false
@@ -337,6 +594,7 @@ function getCuentaId(mysqli $conn, string $cuentaName, array &$errors, int $line
 
 function getZonaId(mysqli $conn, string $zonaName, array &$errors, int $lineNumber): int|false
 {
+    $zonaName = etlUpper($zonaName);
     $stmt = $conn->prepare("SELECT id FROM zona WHERE LOWER(nombre_zona) = LOWER(?) LIMIT 1");
     if (!$stmt) {
         $errors[] = "Error preparando SELECT zona en línea $lineNumber: " . $conn->error;
@@ -350,6 +608,18 @@ function getZonaId(mysqli $conn, string $zonaName, array &$errors, int $lineNumb
     $stmt->close();
 
     if ($exists) {
+        $stmtUpdate = $conn->prepare('UPDATE zona SET nombre_zona=? WHERE id=?');
+        if (!$stmtUpdate) {
+            $errors[] = "Error normalizando zona '$zonaName' en línea $lineNumber: " . $conn->error;
+            return false;
+        }
+        $stmtUpdate->bind_param('si', $zonaName, $zonaId);
+        if (!$stmtUpdate->execute()) {
+            $errors[] = "Error normalizando zona '$zonaName' en línea $lineNumber: " . $stmtUpdate->error;
+            $stmtUpdate->close();
+            return false;
+        }
+        $stmtUpdate->close();
         return (int)$zonaId;
     }
 
@@ -444,6 +714,7 @@ function getCadenaData(mysqli $conn, string $cadenaName, ?int $cuentaId, array &
 
 function getDistritoData(mysqli $conn, string $distritoName, ?int $zonaId, array &$errors, int $lineNumber): array|false
 {
+    $distritoName = etlUpper($distritoName);
     if ($zonaId !== null) {
         $stmt = $conn->prepare("
             SELECT id, id_zona
@@ -479,8 +750,21 @@ function getDistritoData(mysqli $conn, string $distritoName, ?int $zonaId, array
     $stmt->close();
 
     if ($row) {
+        $districtId = (int)$row['id'];
+        $stmtUpdate = $conn->prepare('UPDATE distrito SET nombre_distrito=? WHERE id=?');
+        if (!$stmtUpdate) {
+            $errors[] = "Error normalizando distrito '$distritoName' en línea $lineNumber: " . $conn->error;
+            return false;
+        }
+        $stmtUpdate->bind_param('si', $distritoName, $districtId);
+        if (!$stmtUpdate->execute()) {
+            $errors[] = "Error normalizando distrito '$distritoName' en línea $lineNumber: " . $stmtUpdate->error;
+            $stmtUpdate->close();
+            return false;
+        }
+        $stmtUpdate->close();
         return [
-            'id'      => (int)$row['id'],
+            'id'      => $districtId,
             'id_zona' => isset($row['id_zona']) ? (int)$row['id_zona'] : null
         ];
     }
@@ -521,6 +805,10 @@ function getExistingLocalByCode(mysqli $conn, string $codigo, int $divisionId, a
             l.id_division,
             l.nombre,
             l.direccion,
+            l.direccion_original,
+            l.direccion_google,
+            l.estado_address_validation,
+            l.google_response_id,
             l.lat,
             l.lng,
             l.id_comuna,
@@ -528,6 +816,8 @@ function getExistingLocalByCode(mysqli $conn, string $codigo, int $divisionId, a
             l.id_cadena,
             l.id_zona,
             l.id_distrito,
+            l.id_vendedor,
+            l.id_jefe_venta,
             c.comuna,
             r.region,
             cu.nombre AS cuenta,
@@ -535,7 +825,9 @@ function getExistingLocalByCode(mysqli $conn, string $codigo, int $divisionId, a
             ca.id_cuenta AS cadena_id_cuenta,
             z.nombre_zona AS zona,
             d.nombre_distrito AS distrito,
-            d.id_zona AS distrito_id_zona
+            d.id_zona AS distrito_id_zona,
+            v.nombre_vendedor,
+            jv.nombre AS jefe_venta
         FROM local l
         LEFT JOIN comuna c   ON c.id = l.id_comuna
         LEFT JOIN region r   ON r.id = c.id_region
@@ -543,6 +835,8 @@ function getExistingLocalByCode(mysqli $conn, string $codigo, int $divisionId, a
         LEFT JOIN cadena ca  ON ca.id = l.id_cadena
         LEFT JOIN zona z     ON z.id = l.id_zona
         LEFT JOIN distrito d ON d.id = l.id_distrito
+        LEFT JOIN vendedor v ON v.id = l.id_vendedor
+        LEFT JOIN jefe_venta jv ON jv.id = l.id_jefe_venta
         WHERE l.codigo = ?
           AND l.id_division = ?
           AND l.deleted_at IS NULL
@@ -643,6 +937,8 @@ function updateLocalByCodigo(
     ?int $cadenaId,
     ?int $zonaId,
     ?int $distritoId,
+    ?int $jefeVentaId,
+    ?int $vendedorId,
     array &$errors,
     int $lineNumber
 ): bool {
@@ -663,6 +959,8 @@ function updateLocalByCodigo(
             id_cadena = ?,
             id_zona = ?,
             id_distrito = ?,
+            id_jefe_venta = ?,
+            id_vendedor = ?,
             updated_at = NOW()
         WHERE codigo = ?
           AND id_division = ?
@@ -676,7 +974,7 @@ function updateLocalByCodigo(
     }
 
     $stmt->bind_param(
-        'ssssssiddiiiisi',
+        'ssssssiddiiiiiisi',
         $nombre,
         $direccionOriginal,
         $direccion,
@@ -690,6 +988,8 @@ function updateLocalByCodigo(
         $cadenaId,
         $zonaId,
         $distritoId,
+        $jefeVentaId,
+        $vendedorId,
         $codigo,
         $divisionId
     );
@@ -700,13 +1000,37 @@ function updateLocalByCodigo(
         return false;
     }
 
-    $affectedRows = $stmt->affected_rows;
     $stmt->close();
 
-    if ($affectedRows < 1) {
-        $errors[] = "El local '$codigo' de la división $divisionId no fue modificado en la línea $lineNumber.";
+    return true;
+}
+
+function updateLocalAssignmentsByCodigo(
+    mysqli $conn,
+    string $codigo,
+    int $divisionId,
+    ?int $jefeVentaId,
+    ?int $vendedorId,
+    array &$errors,
+    int $lineNumber
+): bool {
+    $stmt = $conn->prepare("
+        UPDATE local
+        SET id_jefe_venta=?, id_vendedor=?, updated_at=NOW()
+        WHERE codigo=?
+          AND id_division=?
+          AND deleted_at IS NULL
+    ");
+    if (!$stmt) {
+        $errors[] = "Error preparando responsables del local '$codigo' en la línea $lineNumber: " . $conn->error;
         return false;
     }
-
+    $stmt->bind_param('iisi', $jefeVentaId, $vendedorId, $codigo, $divisionId);
+    if (!$stmt->execute()) {
+        $errors[] = "Error actualizando responsables del local '$codigo' en la línea $lineNumber: " . $stmt->error;
+        $stmt->close();
+        return false;
+    }
+    $stmt->close();
     return true;
 }

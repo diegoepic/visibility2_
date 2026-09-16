@@ -527,6 +527,17 @@ $stmt_div->close();
                         </div>
 
                         <div class="col-md-12">
+                            <label for="coordinateMode" class="form-label">Origen de las coordenadas</label>
+                            <select class="form-control" id="coordinateMode" name="coordinate_mode">
+                                <option value="google">Validar direcci&oacute;n y obtener coordenadas mediante Google</option>
+                                <option value="cliente">Usar latitud y longitud proporcionadas por el cliente</option>
+                            </select>
+                            <small id="coordinateModeHelp" class="form-text text-muted">
+                                Google validar&aacute; la direcci&oacute;n y calcular&aacute; las coordenadas del local.
+                            </small>
+                        </div>
+
+                        <div class="col-md-12">
                             <label for="csvFile" class="form-label">Archivo CSV para limpiar y validar</label>
                             <div class="input-group">
                                 <div class="custom-file">
@@ -536,13 +547,14 @@ $stmt_div->close();
                             </div>
                             <small class="form-text text-muted">
                                 Primero usa <strong>Validar y descargar prueba</strong>. Este paso no crea locales y entrega
-                                un CSV con la direcciÃ³n original, la direcciÃ³n limpia y la propuesta por
-                                <strong>Google Address Validation API</strong>. La creaciÃ³n se habilita despuÃ©s de la prueba.
+                                un CSV de revisi&oacute;n. En modalidad Google se valida la direcci&oacute;n y se calculan las coordenadas;
+                                en modalidad cliente se validan e inyectan las columnas <strong>latitud</strong> y <strong>longitud</strong>
+                                sin consultar la API. La creaci&oacute;n se habilita despu&eacute;s de la prueba.
                                 Distrito, zona y regiÃ³n se completan automÃ¡ticamente desde la comuna usando el catÃ¡logo
                                 de la hoja <strong>datos</strong>; los valores recibidos en esas tres columnas se reemplazan.
                                 Relevancia se asigna como <strong>0</strong>. Nombre vendedor y jefe de venta pueden quedar
                                 vacÃ­os, llevar un guion o decir "no aplica"; en esos casos se normalizan como
-                                <strong>NO APLICA</strong>. Usa <strong>;</strong> como delimitador y los 10 encabezados de la plantilla.
+                                <strong>NO APLICA</strong>. Usa <strong>;</strong> como delimitador y los encabezados de la plantilla elegida.
                             </small>
                             <small class="form-text text-muted">
                                                         <strong>
@@ -580,8 +592,8 @@ $stmt_div->close();
                                                             <br>
                                                         </strong>
                                                     </small>
-                            <a href="mod_local/descargar_plantilla_locales.php" class="mt-2 d-inline-block">
-                                Descargar planilla de ejemplo
+                            <a href="mod_local/descargar_plantilla_locales.php" id="downloadLocalTemplate" class="mt-2 d-inline-block">
+                                Descargar plantilla est&aacute;ndar
                             </a>
                         </div>
                     </div>
@@ -2114,7 +2126,7 @@ $(function () {
     function bloquearCargaMasiva(blocked) {
         etlBatchRunning = blocked;
         $('#spinnerCargaMasiva').toggle(blocked);
-        $('#btnProbarDirecciones, #empresaCarga, #divisionCarga, #csvFile').prop('disabled', blocked);
+        $('#btnProbarDirecciones, #empresaCarga, #divisionCarga, #coordinateMode, #csvFile').prop('disabled', blocked);
         if (!blocked) {
             $('#csvFile').prop('disabled', !($('#divisionCarga').val() || '').trim());
         }
@@ -2156,10 +2168,12 @@ $(function () {
     }
 
     function validarSiguienteLote() {
+        const clientCoordinates = $('#coordinateMode').val() === 'cliente';
+        const progressLabel = clientCoordinates ? 'Validando coordenadas y datos' : 'Validando direcciones';
         ejecutarPeticionLote('/visibility2/portal/modulos/mod_local/validar_locales_lote.php', {
             csrf_token: $('#formCargaMasiva input[name="csrf_token"]').val(), job_id: etlImportJobId, limit: 1000
         }, function (response) {
-            actualizarProgresoCarga(response.progress, response.processed_rows, response.total_rows, 'Validando direcciones', 'Aprobados: ' + response.accepted_rows + ' | En revision: ' + response.review_rows + ' | Rechazados: ' + response.rejected_rows);
+            actualizarProgresoCarga(response.progress, response.processed_rows, response.total_rows, progressLabel, 'Aprobados: ' + response.accepted_rows + ' | En revision: ' + response.review_rows + ' | Rechazados: ' + response.rejected_rows);
             if (!response.done) {
                 setTimeout(validarSiguienteLote, 50);
                 return;
@@ -2216,6 +2230,18 @@ $(function () {
         resetEtlPreview();
         const selected = !!($(this).val() || '').trim();
         $('#csvFile').prop('disabled', !selected);
+    });
+    $('#coordinateMode').on('change', function () {
+        resetEtlPreview();
+        $('#csvFile').val('');
+        $('.custom-file-label').text('Selecciona un archivo CSV');
+        const useClientCoordinates = $(this).val() === 'cliente';
+        $('#downloadLocalTemplate')
+            .attr('href', 'mod_local/descargar_plantilla_locales.php' + (useClientCoordinates ? '?modo_coordenadas=cliente' : ''))
+            .text(useClientCoordinates ? 'Descargar plantilla con latitud y longitud' : 'Descargar plantilla estandar');
+        $('#coordinateModeHelp').text(useClientCoordinates
+            ? 'Se usaran directamente las coordenadas del CSV; no se consultara Google. Latitud y longitud son obligatorias y se validan por rango.'
+            : 'Google validara la direccion y calculara las coordenadas del local.');
     });
     $('#csvFile').on('change', function () {
         resetEtlPreview();

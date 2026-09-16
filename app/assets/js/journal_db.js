@@ -517,6 +517,22 @@
       last_updated_at: allRows.length ? Math.max(...allRows.map(r => r.updated || r.created || 0)) : null
     };
 
+    /* Versión del APK cuando la app corre dentro del wrapper Android.
+       Sin esto no había forma de saber qué build tiene cada ejecutor cuando reporta un problema:
+       los APK se reparten a mano y no se actualizan solos. El wrapper agrega
+       "VisibilityWrapper/<versionName>" al User-Agent, y además expone AndroidNav.appVersion()
+       con el versionCode. En el navegador queda en null. */
+    let apkInfo = null;
+    try {
+      const m = /VisibilityWrapper\/([\w.\-]+)/.exec(ua || '');
+      if (m) {
+        apkInfo = { version_name: m[1], version_full: null };
+        if (window.AndroidNav && typeof window.AndroidNav.appVersion === 'function') {
+          apkInfo.version_full = window.AndroidNav.appVersion();
+        }
+      }
+    } catch(_) {}
+
     // MEJORA: Información adicional de diagnóstico
     let storageEstimate = null;
     let connectionInfo = null;
@@ -591,6 +607,7 @@
       navigator_onLine: online,
       user_agent  : ua,
       sw_version  : swVer,
+      apk         : apkInfo,   // null = corriendo en navegador, no en el APK
       stats: {
         today: Object.assign({ ymd: todayYmd }, todayStats),
         overall: totalStats
@@ -599,6 +616,12 @@
       recent_events: events,
       // MEJORA: Campos adicionales
       storage_estimate: storageEstimate,
+      // true = el navegador concedió almacenamiento persistente y no va a desalojar las
+      // fotos en cola por su cuenta. false = este teléfono puede perderlas; es lo primero
+      // que hay que mirar cuando alguien reporta "se me borraron las gestiones".
+      storage_persistido: (typeof window !== 'undefined' && '__V2_STORAGE_PERSISTIDO' in window)
+        ? window.__V2_STORAGE_PERSISTIDO
+        : 'sin_datos',
       connection_info: connectionInfo,
       service_worker: serviceWorkerStatus,
       idb_databases: idbDatabases,

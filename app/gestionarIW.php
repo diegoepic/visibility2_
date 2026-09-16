@@ -482,7 +482,8 @@ if ($esEncuestaVehiculo) {
 
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
+<!-- exifr local (assets/vendor/, v7.1.3). Ver assets/vendor/README.md. -->
+<script src="/visibility2/app/assets/vendor/exifr.umd.js"></script>
 
 <script>
   let uploadsInProgress = 0;
@@ -847,6 +848,19 @@ function verImagenGrande(url){
           const wrap  = document.getElementById(`previewFoto_${qid}`);
           const objUrl = URL.createObjectURL(blob);
 
+          /* La miniatura provisional vive de este blob. Al terminar la subida se reemplaza por
+             buildPreviewItem() con la URL del servidor, así que hay que soltarlo a mano: antes
+             no se revocaba nunca y cada foto del formulario quedaba retenida en memoria hasta
+             recargar la página. Quitar el <img> del DOM no libera nada.
+             Se llama en las CINCO salidas: éxito, fallo de compresión, error de red, timeout
+             y el catch. Es idempotente, así que llamarla de más no molesta. */
+          let objUrlVivo = true;
+          const soltarObjUrl = () => {
+            if (!objUrlVivo) return;
+            objUrlVivo = false;
+            try { URL.revokeObjectURL(objUrl); } catch (_) {}
+          };
+
           const temp = document.createElement('div');
           temp.className = 'iw-card iw-uploading';
           temp.innerHTML = `
@@ -865,6 +879,7 @@ function verImagenGrande(url){
           compressImage(blob, 1024, 1024, compressedBlob => {
             if (!compressedBlob) {
               if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
+                soltarObjUrl();
               resetFileInputs(qid);
               showToast('No se pudo procesar la imagen. Intenta con otra foto.', 'Error');
               finishUpload();
@@ -913,6 +928,7 @@ function verImagenGrande(url){
                 let res;
                 try { res = JSON.parse(xhr.responseText); } catch { res = {status:'error'}; }
                 if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
+                soltarObjUrl();
                 resetFileInputs(qid);
                 if (res.status==='success'){
                   const wrap2 = document.getElementById(`previewFoto_${qid}`);
@@ -931,6 +947,7 @@ function verImagenGrande(url){
 
               xhr.onerror = () => {
                 if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
+                soltarObjUrl();
                 resetFileInputs(qid);
                 showToast('Error de red al subir la foto','Error');
                 finishUpload();
@@ -938,6 +955,7 @@ function verImagenGrande(url){
 
               xhr.ontimeout = () => {
                 if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
+                soltarObjUrl();
                 resetFileInputs(qid);
                 showToast('Tiempo de espera agotado al subir la foto','Error');
                 finishUpload();
@@ -946,6 +964,7 @@ function verImagenGrande(url){
               xhr.send(fd);
             } catch(err) {
               if (temp && temp.parentNode) temp.parentNode.removeChild(temp);
+                soltarObjUrl();
               resetFileInputs(qid);
               showToast('Error inesperado al subir la foto','Error');
               finishUpload();

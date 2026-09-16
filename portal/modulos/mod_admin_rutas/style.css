@@ -1027,6 +1027,132 @@ table.dataTable.display tbody tr.even {
   filter: drop-shadow(0 0 8px #16d7ff);
 }
 
+.route-legend {
+  padding: 12px;
+  border: 1px solid rgba(112, 153, 210, 0.22);
+  border-radius: 8px;
+  background: rgba(12, 29, 57, 0.72);
+}
+
+.planned-days-panel {
+  padding: 12px;
+  border: 1px solid rgba(112, 153, 210, 0.22);
+  border-radius: 8px;
+  background: rgba(12, 29, 57, 0.72);
+}
+
+.planned-days-list {
+  display: flex;
+  gap: 7px;
+  margin-top: 10px;
+  padding-bottom: 3px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(22, 215, 255, .5) rgba(10, 25, 49, .7);
+}
+
+.planned-day-btn {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  min-width: 68px;
+  padding: 7px 9px;
+  color: #a9bad4;
+  background: #111f39;
+  border: 1px solid rgba(127, 151, 198, .28);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, color .16s ease, transform .16s ease;
+}
+
+.planned-day-btn:hover {
+  color: #ffffff;
+  border-color: rgba(22, 215, 255, .65);
+  transform: translateY(-1px);
+}
+
+.planned-day-btn.active {
+  color: #ffffff;
+  background: rgba(22, 215, 255, .16);
+  border-color: #16d7ff;
+  box-shadow: 0 0 0 1px rgba(22, 215, 255, .14), 0 6px 16px rgba(0, 0, 0, .2);
+}
+
+.planned-day-btn .day-label {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.planned-day-btn .day-count {
+  margin-top: 3px;
+  color: #7f97c6;
+  font-size: 9px;
+}
+
+.planned-day-btn.active .day-count {
+  color: #9eefff;
+}
+
+.route-legend-title {
+  color: #dceaff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .45px;
+  text-transform: uppercase;
+}
+
+.route-legend-help {
+  margin-top: 5px;
+  color: #94a9c9;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.route-legend-items {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.route-legend-item {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  color: #dceaff;
+  font-size: 11px;
+}
+
+.route-legend-swatch {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, .8);
+  border-radius: 50%;
+  box-shadow: 0 0 7px rgba(0, 0, 0, .35);
+}
+
+.route-legend-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 0 2px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.route-status-dot.pending { background: #041225; border: 1px solid #7f97c6; }
+.route-status-dot.managed { background: #ffcf4d; }
+.route-status-dot.visited { background: #37e7b2; }
+
 @media (max-width: 991px) {
   .admin-actions-grid {
     grid-template-columns: repeat(2, minmax(160px, 1fr));

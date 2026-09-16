@@ -541,6 +541,15 @@ try {
         $idx_valor_propuesto = obtenerIndiceColumna($header_norm, 'valor_propuesto');
         $idx_fechapropuesta  = obtenerIndiceColumna($header_norm, 'fechapropuesta');
 
+        // OT opcional: los CSV anteriores no incluyen esta columna.
+        $idx_ot = array_search('codigoot', $header_norm, true);
+        if ($idx_ot === false) {
+            $idx_ot = array_search('codigo_ot', $header_norm, true);
+        }
+        if ($idx_ot === false) {
+            $idx_ot = array_search('ot', $header_norm, true);
+        }
+
         $tiene_divisiones = (contarDivisionesPorEmpresa($empresa_form) > 0);
 
         if ($tiene_divisiones) {
@@ -560,8 +569,8 @@ try {
 
         $stmt_insert_fq = $conn->prepare("
             INSERT INTO formularioQuestion
-            (pregunta, motivo, material, categoria, marca, valor, valor_propuesto, fechaPropuesta, countVisita, observacion, id_formulario, id_local, id_usuario, estado)
-            VALUES ('', '', ?, ?, ?, '', ?, ?, 0, '', ?, ?, ?, 0)
+            (pregunta, motivo, material, ot, categoria, marca, valor, valor_propuesto, fechaPropuesta, countVisita, observacion, id_formulario, id_local, id_usuario, estado)
+            VALUES ('', '', ?, ?, ?, ?, '', ?, ?, 0, '', ?, ?, ?, 0)
         ");
 
         $stmt_check_mat = $conn->prepare(
@@ -596,6 +605,13 @@ try {
             $marca       = trim((string)($data[$idx_marca] ?? ''));
             $val_prop_s  = trim((string)($data[$idx_valor_propuesto] ?? ''));
             $fechaRaw    = trim((string)($data[$idx_fechapropuesta] ?? ''));
+            $ot         = $idx_ot === false ? '' : trim((string)($data[$idx_ot] ?? ''));
+
+            if (mb_strlen($ot, 'UTF-8') > 200) {
+                agregarErrorCsv($errores, $totalErrores, "Fila {$fila}: codigo ot no puede superar los 200 caracteres.");
+                continue;
+            }
+            $ot = $ot === '' ? null : $ot;
 
             $fechaProp = normalizarFechaPropuesta($fechaRaw);
 
@@ -717,8 +733,9 @@ try {
             }
 
             $stmt_insert_fq->bind_param(
-                'sssisiii',
+                'ssssisiii',
                 $material,
+                $ot,
                 $categoria,
                 $marca,
                 $val_prop,

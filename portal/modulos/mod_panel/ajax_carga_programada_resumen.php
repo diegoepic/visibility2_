@@ -21,10 +21,20 @@ $id_ejecutor = isset($_GET['id_ejecutor'])
     ? (int)$_GET['id_ejecutor']
     : 0;
 
+$division_usuario = isset($_GET['division_usuario']) ? (int)$_GET['division_usuario'] : 0;
+$subdivision_usuario = isset($_GET['subdivision_usuario']) ? (int)$_GET['subdivision_usuario'] : 0;
+$clasificacion_usuario = strtolower(trim((string)($_GET['clasificacion_usuario'] ?? 'todos')));
+
 $formulario_estado = $_GET['formulario_estado'] ?? 'activos';
 $estado_gestion = $_GET['estado_gestion'] ?? 'todos';
 $fecha_desde = $_GET['fecha_desde'] ?? '';
 $fecha_hasta = $_GET['fecha_hasta'] ?? '';
+// Mismo alcance del panel: en curso/todos es global; sólo finalizados admite fechas.
+$permitirFiltroFecha = $formulario_estado === 'inactivos' && $estado_gestion !== 'activa';
+if (!$permitirFiltroFecha) {
+    $fecha_desde = '';
+    $fecha_hasta = '';
+}
 $usarFechaVisita = !empty($fecha_desde) || !empty($fecha_hasta);
 $fechaMedicionSql = $usarFechaVisita ? 'fq.fechaVisita' : 'fq.fechaPropuesta';
 
@@ -45,10 +55,18 @@ $fechaValida = "
     AND CAST(fq.fechaPropuesta AS CHAR(10)) <> '0000-00-00'
 ";
 
+$fechaVisitaValida = "
+    fq.fechaVisita IS NOT NULL
+    AND CAST(fq.fechaVisita AS CHAR(19)) <> '0000-00-00 00:00:00'
+    AND CAST(fq.fechaVisita AS CHAR(10)) <> '0000-00-00'
+";
+
+$fechaMedicionValida = $usarFechaVisita ? $fechaVisitaValida : $fechaValida;
+
 $gestionFinalizada = "
     (
         COALESCE(fq.countVisita, 0) > 0
-        OR fq.pregunta IN (
+        OR COALESCE(fq.pregunta, '') IN (
             'solo_auditoria',
             'solo_implementado',
             'implementado_auditado',
@@ -74,24 +92,39 @@ $sql = "
         COALESCE(df.nombre, 'SIN DIVISION') AS division_formulario,
         COALESCE(sf.nombre, '') AS subdivision_formulario,
 
-        COUNT(DISTINCT CONCAT(fq.id_local, '-', fq.id_formulario)) AS total_pendiente,
+        COUNT(DISTINCT CONCAT(fq.id_local, '-', fq.id_formulario)) AS total_asignado,
 
         COUNT(DISTINCT CASE
-            WHEN DATE($fechaMedicionSql) < CURDATE()
+            WHEN $fechaVisitaValida
+            THEN CONCAT(fq.id_local, '-', fq.id_formulario)
+        END) AS total_visitado,
+
+        COUNT(DISTINCT CASE
+            WHEN $gestionFinalizada
+            THEN CONCAT(fq.id_local, '-', fq.id_formulario)
+        END) AS total_gestionado,
+
+        COUNT(DISTINCT CASE
+            WHEN $gestionActiva
+            THEN CONCAT(fq.id_local, '-', fq.id_formulario)
+        END) AS total_pendiente,
+
+        COUNT(DISTINCT CASE
+            WHEN $gestionActiva AND DATE(fq.fechaPropuesta) < CURDATE()
             THEN CONCAT(fq.id_local, '-', fq.id_formulario)
         END) AS total_vencido,
 
         COUNT(DISTINCT CASE
-            WHEN DATE($fechaMedicionSql) = CURDATE()
+            WHEN $gestionActiva AND DATE(fq.fechaPropuesta) = CURDATE()
             THEN CONCAT(fq.id_local, '-', fq.id_formulario)
         END) AS total_hoy,
 
         COUNT(DISTINCT CASE
-            WHEN DATE($fechaMedicionSql) > CURDATE()
+            WHEN $gestionActiva AND DATE(fq.fechaPropuesta) > CURDATE()
             THEN CONCAT(fq.id_local, '-', fq.id_formulario)
         END) AS total_futuro,
 
-        MIN(DATE($fechaMedicionSql)) AS primera_pendiente,
+        MIN(CASE WHEN $gestionActiva THEN DATE(fq.fechaPropuesta) END) AS primera_pendiente,
         MAX(DATE($fechaMedicionSql)) AS ultima_planificacion
 
     FROM formularioQuestion fq
@@ -111,11 +144,29 @@ $sql = "
         ON sf.id = f.id_subdivision
 
     WHERE fq.id_usuario = ?
-      AND $fechaValida
+      AND $fechaMedicionValida
 ";
 
 $types = "ii";
 $params = [$id_empresa, $id_ejecutor];
+
+if ($division_usuario > 0) {
+    $sql .= " AND u.id_division = ? ";
+    $types .= "i";
+    $params[] = $division_usuario;
+}
+
+if ($subdivision_usuario > 0) {
+    $sql .= " AND u.id_subdivision = ? ";
+    $types .= "i";
+    $params[] = $subdivision_usuario;
+}
+
+if ($clasificacion_usuario === 'interno' || $clasificacion_usuario === 'externo') {
+    $sql .= " AND u.clasificacion_usuario = ? ";
+    $types .= "s";
+    $params[] = $clasificacion_usuario;
+}
 
 if (!empty($fecha_desde)) {
     $sql .= " AND DATE(fq.fechaVisita) >= ? ";
@@ -170,6 +221,12 @@ $totales = [
 
 while ($row = $res->fetch_assoc()) {
     $row['id_formulario'] = (int)$row['id_formulario'];
+    $row['total_asignado'] = (int)$row['total_asignado'];
+    $row['total_visitado'] = (int)$row['total_visitado'];
+    $row['total_gestionado'] = (int)$row['total_gestionado'];
+    $row['ratio_avance'] = $row['total_asignado'] > 0
+        ? round(($row['total_gestionado'] / $row['total_asignado']) * 100)
+        : 0;
     $row['total_pendiente'] = (int)$row['total_pendiente'];
     $row['total_vencido'] = (int)$row['total_vencido'];
     $row['total_hoy'] = (int)$row['total_hoy'];
@@ -206,34 +263,29 @@ if ($estado_gestion !== 'activa') {
             COUNT(DISTINCT CONCAT(
                 f.id,
                 '|',
-                COALESCE(r.id_local, v.id_local, 0),
+                COALESCE(r.id_local, v.id_local, 0)
+            )) AS total_asignado,
+
+            COUNT(DISTINCT CONCAT(
+                f.id,
                 '|',
-                COALESCE(r.visita_id, 0),
+                COALESCE(r.id_local, v.id_local, 0)
+            )) AS total_visitado,
+
+            COUNT(DISTINCT CONCAT(
+                f.id,
                 '|',
-                DATE(r.created_at),
-                '|',
-                TIME(r.created_at)
-            )) AS total_pendiente,
+                COALESCE(r.id_local, v.id_local, 0)
+            )) AS total_gestionado,
+
+            0 AS total_pendiente,
 
             0 AS total_vencido,
 
-            COUNT(DISTINCT CASE
-                WHEN DATE(r.created_at) = CURDATE()
-                THEN CONCAT(
-                    f.id,
-                    '|',
-                    COALESCE(r.id_local, v.id_local, 0),
-                    '|',
-                    COALESCE(r.visita_id, 0),
-                    '|',
-                    DATE(r.created_at),
-                    '|',
-                    TIME(r.created_at)
-                )
-            END) AS total_hoy,
+            0 AS total_hoy,
 
             0 AS total_futuro,
-            MIN(DATE(r.created_at)) AS primera_pendiente,
+            NULL AS primera_pendiente,
             MAX(DATE(r.created_at)) AS ultima_planificacion
 
         FROM form_question_responses r
@@ -267,6 +319,24 @@ if ($estado_gestion !== 'activa') {
     $typesIw = "ii";
     $paramsIw = [$id_empresa, $id_ejecutor];
 
+    if ($division_usuario > 0) {
+        $sqlIw .= " AND u.id_division = ? ";
+        $typesIw .= "i";
+        $paramsIw[] = $division_usuario;
+    }
+
+    if ($subdivision_usuario > 0) {
+        $sqlIw .= " AND u.id_subdivision = ? ";
+        $typesIw .= "i";
+        $paramsIw[] = $subdivision_usuario;
+    }
+
+    if ($clasificacion_usuario === 'interno' || $clasificacion_usuario === 'externo') {
+        $sqlIw .= " AND u.clasificacion_usuario = ? ";
+        $typesIw .= "s";
+        $paramsIw[] = $clasificacion_usuario;
+    }
+
     if (!empty($fecha_desde)) {
         $sqlIw .= " AND DATE(r.created_at) >= ? ";
         $typesIw .= "s";
@@ -292,7 +362,7 @@ if ($estado_gestion !== 'activa') {
             df.nombre,
             sf.nombre
 
-        HAVING total_pendiente > 0
+        HAVING total_asignado > 0
 
         ORDER BY
             primera_pendiente ASC,
@@ -307,6 +377,10 @@ if ($estado_gestion !== 'activa') {
 
     while ($rowIw = $resIw->fetch_assoc()) {
         $rowIw['id_formulario'] = (int)$rowIw['id_formulario'];
+        $rowIw['total_asignado'] = (int)$rowIw['total_asignado'];
+        $rowIw['total_visitado'] = (int)$rowIw['total_visitado'];
+        $rowIw['total_gestionado'] = (int)$rowIw['total_gestionado'];
+        $rowIw['ratio_avance'] = 100;
         $rowIw['total_pendiente'] = (int)$rowIw['total_pendiente'];
         $rowIw['total_vencido'] = (int)$rowIw['total_vencido'];
         $rowIw['total_hoy'] = (int)$rowIw['total_hoy'];
@@ -343,10 +417,79 @@ usort($data, function ($a, $b) {
 
     return strcmp($fechaA, $fechaB);
 });
+
+$departamentosMap = [];
+$campanasUnicas = [];
+$totalAsignado = 0;
+$totalVisitado = 0;
+$totalGestionado = 0;
+
+foreach ($data as $item) {
+    $departamento = trim((string)($item['division_formulario'] ?? ''));
+    if ($departamento === '') {
+        $departamento = 'SIN DEPARTAMENTO';
+    }
+    if (!isset($departamentosMap[$departamento])) {
+        $departamentosMap[$departamento] = [
+            'departamento' => $departamento,
+            'total_asignado' => 0,
+            'total_visitado' => 0,
+            'total_gestionado' => 0,
+            'ratio_avance' => 0,
+            'campanas' => [],
+        ];
+    }
+
+    $asignado = (int)($item['total_asignado'] ?? 0);
+    $visitado = (int)($item['total_visitado'] ?? 0);
+    $gestionado = (int)($item['total_gestionado'] ?? 0);
+    $campaignKey = (string)($item['id_formulario'] ?? '') . '|' . (string)($item['formulario'] ?? '');
+    $campanasUnicas[$departamento . '|' . $campaignKey] = true;
+
+    $departamentosMap[$departamento]['total_asignado'] += $asignado;
+    $departamentosMap[$departamento]['total_visitado'] += $visitado;
+    $departamentosMap[$departamento]['total_gestionado'] += $gestionado;
+    $departamentosMap[$departamento]['campanas'][] = [
+        'id_formulario' => $item['id_formulario'],
+        'formulario' => $item['formulario'],
+        'total_asignado' => $asignado,
+        'total_visitado' => $visitado,
+        'total_gestionado' => $gestionado,
+        'ratio_avance' => (int)($item['ratio_avance'] ?? 0),
+    ];
+
+    $totalAsignado += $asignado;
+    $totalVisitado += $visitado;
+    $totalGestionado += $gestionado;
+}
+
+$departamentos = array_values($departamentosMap);
+foreach ($departamentos as &$departamento) {
+    $departamento['ratio_avance'] = $departamento['total_asignado'] > 0
+        ? round(($departamento['total_gestionado'] / $departamento['total_asignado']) * 100)
+        : 0;
+    usort($departamento['campanas'], static function (array $left, array $right): int {
+        return strcasecmp((string)$left['formulario'], (string)$right['formulario']);
+    });
+}
+unset($departamento);
+usort($departamentos, static function (array $left, array $right): int {
+    return strcasecmp((string)$left['departamento'], (string)$right['departamento']);
+});
+
+$totales['total_departamentos'] = count($departamentos);
+$totales['total_campanas'] = count($campanasUnicas);
+$totales['total_asignado'] = $totalAsignado;
+$totales['total_visitado'] = $totalVisitado;
+$totales['total_gestionado'] = $totalGestionado;
+$totales['ratio_avance'] = $totalAsignado > 0
+    ? round(($totalGestionado / $totalAsignado) * 100)
+    : 0;
 $conn->close();
 
 echo json_encode([
     'ok' => true,
     'totales' => $totales,
+    'departamentos' => $departamentos,
     'data' => $data
 ], JSON_UNESCAPED_UNICODE);

@@ -123,27 +123,76 @@ while ($batchProcessed < $limit && ($line = fgets($handle)) !== false) {
         continue;
     }
 
-    $regionId = getRegionId($conn, (string)$record['region'], $errors, $lineNumber);
-    $comunaId = $regionId !== false
-        ? getComunaId($conn, (string)$record['comuna'], $regionId, $errors, $lineNumber)
-        : false;
-    $zonaId = getZonaId($conn, (string)$record['zona'], $errors, $lineNumber);
-    $distritoData = $zonaId !== false
-        ? getDistritoData($conn, (string)$record['distrito'], $zonaId, $errors, $lineNumber)
-        : false;
+    $updates = [];
+    $vendedorArchivo = trim((string)($record['vendedor_archivo'] ?? ''));
+    $jefeVentaArchivo = trim((string)($record['jefe_venta_archivo'] ?? ''));
 
-    if ($regionId === false || $comunaId === false || $zonaId === false || $distritoData === false) {
-        $record['reason'] = array_pop($errors) ?: 'No se pudo resolver el territorio.';
-        appendFailureToReport($reportPath, $record);
-        $batchFailed++;
-        continue;
+    if ($vendedorArchivo !== '') {
+        $resolvedVendedorId = etlGetOrCreateAssignmentPerson($conn, 'vendedor', $vendedorArchivo, $errors, $lineNumber);
+        if ($resolvedVendedorId === false) {
+            $record['reason'] = array_pop($errors) ?: 'No se pudo resolver el vendedor.';
+            appendFailureToReport($reportPath, $record);
+            $batchFailed++;
+            continue;
+        }
+        $updates['id_vendedor'] = $resolvedVendedorId;
     }
-    $distritoId = (int)$distritoData['id'];
+    if ($jefeVentaArchivo !== '') {
+        $resolvedJefeId = etlGetOrCreateAssignmentPerson($conn, 'jefe_venta', $jefeVentaArchivo, $errors, $lineNumber);
+        if ($resolvedJefeId === false) {
+            $record['reason'] = array_pop($errors) ?: 'No se pudo resolver el jefe de venta.';
+            appendFailureToReport($reportPath, $record);
+            $batchFailed++;
+            continue;
+        }
+        $updates['id_jefe_venta'] = $resolvedJefeId;
+    }
+
+    $applyAddress = !empty($record['apply_address']);
+    if (!empty($record['update_nombre'])) {
+        $updates['nombre'] = etlUpper((string)$record['nombre']);
+    }
+
+    $resolvedZoneId = null;
+    if ($applyAddress) {
+        $regionId = getRegionId($conn, (string)$record['region'], $errors, $lineNumber);
+        $comunaId = $regionId !== false
+            ? getComunaId($conn, (string)$record['comuna'], $regionId, $errors, $lineNumber)
+            : false;
+        $resolvedZoneId = getZonaId($conn, (string)$record['zona'], $errors, $lineNumber);
+        $distritoData = $resolvedZoneId !== false
+            ? getDistritoData($conn, (string)$record['distrito'], $resolvedZoneId, $errors, $lineNumber)
+            : false;
+
+        if ($regionId === false || $comunaId === false || $resolvedZoneId === false || $distritoData === false) {
+            $record['reason'] = array_pop($errors) ?: 'No se pudo resolver el territorio de la dirección.';
+            appendFailureToReport($reportPath, $record);
+            $batchFailed++;
+            continue;
+        }
+        if ($record['lat'] === null || $record['lng'] === null) {
+            $record['reason'] = 'La validación guardada no contiene coordenadas.';
+            appendFailureToReport($reportPath, $record);
+            $batchFailed++;
+            continue;
+        }
+        $updates['direccion_original'] = (string)$record['direccion_original'];
+        $updates['direccion'] = (string)$record['direccion_nueva'];
+        $updates['direccion_google'] = (string)$record['direccion_google'];
+        $updates['estado_address_validation'] = $status;
+        $updates['google_response_id'] = (string)$record['response_id'];
+        $updates['id_comuna'] = (int)$comunaId;
+        $updates['lat'] = (float)$record['lat'];
+        $updates['lng'] = (float)$record['lng'];
+        $updates['id_zona'] = (int)$resolvedZoneId;
+        $updates['id_distrito'] = (int)$distritoData['id'];
+        $updates['direccion_validada'] = true;
+    }
 
     $cuentaId = !empty($localActual['id_cuenta']) ? (int)$localActual['id_cuenta'] : null;
-    $cadenaId = !empty($localActual['id_cadena']) ? (int)$localActual['id_cadena'] : null;
-    if (!empty($record['cuenta'])) {
-        $cuentaId = getCuentaId($conn, (string)$record['cuenta'], $errors, $lineNumber);
+    $cuentaArchivo = trim((string)($record['cuenta_archivo'] ?? ''));
+    if (!empty($record['update_cuenta']) && $cuentaArchivo !== '') {
+        $cuentaId = getCuentaId($conn, $cuentaArchivo, $errors, $lineNumber);
     }
     if ($cuentaId === false) {
         $record['reason'] = array_pop($errors) ?: 'No se pudo resolver la cuenta.';
@@ -151,44 +200,70 @@ while ($batchProcessed < $limit && ($line = fgets($handle)) !== false) {
         $batchFailed++;
         continue;
     }
-    if (!empty($record['cadena'])) {
-        $cadenaData = getCadenaData($conn, (string)$record['cadena'], $cuentaId, $errors, $lineNumber);
+    if (!empty($record['update_cuenta']) && $cuentaArchivo !== '') {
+        $updates['id_cuenta'] = $cuentaId;
+    }
+
+    $cadenaArchivo = trim((string)($record['cadena_archivo'] ?? ''));
+    if (!empty($record['update_cadena']) && $cadenaArchivo !== '') {
+        $cadenaData = getCadenaData($conn, $cadenaArchivo, $cuentaId, $errors, $lineNumber);
         if ($cadenaData === false) {
             $record['reason'] = array_pop($errors) ?: 'No se pudo resolver la cadena.';
             appendFailureToReport($reportPath, $record);
             $batchFailed++;
             continue;
         }
-        $cadenaId = (int)$cadenaData['id'];
+        $updates['id_cadena'] = (int)$cadenaData['id'];
         if ($cuentaId === null && isset($cadenaData['id_cuenta'])) {
             $cuentaId = (int)$cadenaData['id_cuenta'];
+            $updates['id_cuenta'] = $cuentaId;
         }
     }
 
-    if ($record['lat'] === null || $record['lng'] === null) {
-        $record['reason'] = 'La validación guardada no contiene coordenadas.';
-        appendFailureToReport($reportPath, $record);
-        $batchFailed++;
-        continue;
+    $zonaArchivo = trim((string)($record['zona_archivo'] ?? ''));
+    if ($zonaArchivo !== '') {
+        $resolvedZoneId = getZonaId($conn, $zonaArchivo, $errors, $lineNumber);
+        if ($resolvedZoneId === false) {
+            $record['reason'] = array_pop($errors) ?: 'No se pudo resolver la zona.';
+            appendFailureToReport($reportPath, $record);
+            $batchFailed++;
+            continue;
+        }
+        $updates['id_zona'] = (int)$resolvedZoneId;
     }
 
-    $ok = updateLocalByCodigo(
+    $distritoArchivo = trim((string)($record['distrito_archivo'] ?? ''));
+    if ($distritoArchivo !== '') {
+        if ($resolvedZoneId === null || $resolvedZoneId === false) {
+            $resolvedZoneId = !empty($localActual['id_zona'])
+                ? (int)$localActual['id_zona']
+                : (int)($record['distrito_zona_sugerida_id'] ?? 0);
+        }
+        if ($resolvedZoneId <= 0) {
+            $record['reason'] = 'Para asignar un distrito nuevo debes indicar también la zona.';
+            appendFailureToReport($reportPath, $record);
+            $batchFailed++;
+            continue;
+        }
+        $distritoData = getDistritoData($conn, $distritoArchivo, (int)$resolvedZoneId, $errors, $lineNumber);
+        if ($distritoData === false) {
+            $record['reason'] = array_pop($errors) ?: 'No se pudo resolver el distrito.';
+            appendFailureToReport($reportPath, $record);
+            $batchFailed++;
+            continue;
+        }
+        $updates['id_zona'] = (int)$resolvedZoneId;
+        $updates['id_distrito'] = (int)$distritoData['id'];
+    } elseif ($zonaArchivo !== '' && !empty($localActual['id_distrito'])
+        && (int)($localActual['distrito_id_zona'] ?? 0) !== (int)$resolvedZoneId) {
+        $updates['id_distrito'] = null;
+    }
+
+    $ok = updateLocalFieldsByCodigo(
         $conn,
         $codigo,
         $divisionId,
-        (string)$record['nombre'],
-        (string)$record['direccion_original'],
-        (string)$record['direccion_nueva'],
-        (string)$record['direccion_google'],
-        $status,
-        (string)$record['response_id'],
-        (int)$comunaId,
-        (float)$record['lat'],
-        (float)$record['lng'],
-        $cuentaId,
-        $cadenaId,
-        (int)$zonaId,
-        $distritoId,
+        $updates,
         $errors,
         $lineNumber
     );

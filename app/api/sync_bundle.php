@@ -33,6 +33,16 @@ try {
     $empresa_id  = (int)($_SESSION['empresa_id']  ?? 0);
     $division_id = (int)($_SESSION['division_id'] ?? 0);
 
+    /* Misma regla de visibilidad que usa app/index_pruebas.php. Si las dos no
+       coinciden, la cache offline y la pagina muestran rutas distintas. */
+    require_once __DIR__ . '/../lib/dominio/ruta_visibilidad.php';
+    require_once __DIR__ . '/../lib/dominio/preguntas_cadena.php';
+    /* Misma regla horaria que index_pruebas.php: sale de cuenta.hora_apertura, no del
+       nombre de la cuenta. Ver lib/dominio/ventana_horaria.php. */
+    require_once __DIR__ . '/../lib/dominio/ventana_horaria.php';
+    $colHoraApertura = ventana_horaria_col($conn, 'cu');
+    $rutaPendiente = ruta_visibilidad_sql();
+
     // -------- Par 1 71 1 77 1 71 1 77metros de rango de fechas
     $tz  = new DateTimeZone('America/Santiago');
     $now = new DateTime('now', $tz);
@@ -129,7 +139,8 @@ try {
             fq.estado, fq.countVisita,
             l.codigo, l.nombre AS local_nombre, l.direccion, l.lat, l.lng,
             c.nombre AS cadena, co.comuna AS comuna,
-            cu.nombre AS tipo_cuenta
+            cu.nombre AS tipo_cuenta,
+            {$colHoraApertura} AS hora_apertura
         FROM formularioQuestion fq
         INNER JOIN formulario f ON f.id = fq.id_formulario
         INNER JOIN local l       ON l.id = fq.id_local
@@ -141,9 +152,7 @@ try {
           AND (f.id_division = ? OR ? = 0)
           AND f.tipo IN (3,1)
           AND (
-                (f.modalidad <> 'implementacion_por_etapas' AND (fq.countVisita IS NULL OR fq.countVisita = 0))
-                OR
-                (f.modalidad = 'implementacion_por_etapas' AND (fq.etapa_material IS NULL OR fq.etapa_material NOT IN ('implementado','retirado') OR (fq.etapa_material = 'implementado' AND CAST(COALESCE(NULLIF(fq.valor,''),'0') AS UNSIGNED) < CAST(COALESCE(NULLIF(fq.valor_propuesto,''),'0') AS UNSIGNED))))
+                {$rutaPendiente}
               )
           AND DATE(fq.fechaPropuesta) BETWEEN ? AND ?
         ORDER BY fq.fechaPropuesta ASC, c.nombre, l.direccion
@@ -164,6 +173,7 @@ try {
             l.codigo, l.nombre AS local_nombre, l.direccion, l.lat, l.lng,
             c.nombre AS cadena, co.comuna AS comuna,
             cu.nombre AS tipo_cuenta,
+            {$colHoraApertura} AS hora_apertura,
             (CASE WHEN fq.pregunta = 'en proceso' THEN 1 ELSE 0 END) AS flag_en_proceso
         FROM formularioQuestion fq
         INNER JOIN formulario f ON f.id = fq.id_formulario
@@ -176,9 +186,7 @@ try {
           AND (f.id_division = ? OR ? = 0)
           AND f.tipo IN (3,1)
           AND (
-                (f.modalidad <> 'implementacion_por_etapas' AND (fq.countVisita IS NULL OR fq.countVisita = 0))
-                OR
-                (f.modalidad = 'implementacion_por_etapas' AND (fq.etapa_material IS NULL OR fq.etapa_material NOT IN ('implementado','retirado') OR (fq.etapa_material = 'implementado' AND CAST(COALESCE(NULLIF(fq.valor,''),'0') AS UNSIGNED) < CAST(COALESCE(NULLIF(fq.valor_propuesto,''),'0') AS UNSIGNED))))
+                {$rutaPendiente}
               )
           AND DATE(fq.fechaPropuesta) < ?
           AND DATE(fq.fechaPropuesta) >= DATE_SUB(?, INTERVAL ? DAY)
@@ -221,7 +229,8 @@ try {
                 'direccion'     => (string)($row['direccion'] ?? ''),
                 'comuna'        => (string)($row['comuna'] ?? ''),
                 'cadena'        => (string)($row['cadena'] ?? ''),
-                'is_botilleria' => (stripos($row['tipo_cuenta'] ?? '', 'botiller') !== false),
+                'is_botilleria' => ventana_horaria_abre_tarde($row),
+                'horaApertura'  => ventana_horaria_de_fila($row),
             ],
             'camp'  => [
                 'id_formulario' => (int)$row['id_formulario'],
@@ -433,13 +442,8 @@ try {
     if (!empty($routeFormIds)) {
         // Sets por cadena (scripts/17): incluir id_cadena en cada pregunta para que
         // el cliente pueda filtrar por la cadena del local (viene en las filas de ruta).
-        // Guard de columna para no romper el bundle si falta la migración.
-        $fqTieneCadena = false;
-        $resColCad = @$conn->query("SHOW COLUMNS FROM form_questions LIKE 'id_cadena'");
-        if ($resColCad) {
-            $fqTieneCadena = ($resColCad->num_rows > 0);
-            $resColCad->close();
-        }
+        // La guarda de migración vive en lib/dominio/preguntas_cadena.php.
+        $fqTieneCadena = preguntas_cadena_activa($conn);
         $colCadena = $fqTieneCadena ? ', id_cadena' : '';
 
         $inForms = $inClause($routeFormIds);

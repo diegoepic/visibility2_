@@ -40,6 +40,51 @@ $categoria_filtro = isset($_GET['categoria'])
     ? intval($_GET['categoria'])
     : 0;
 
+$estado_filtro = isset($_GET['estado'])
+    ? intval($_GET['estado'])
+    : 1;
+
+if (!in_array($estado_filtro, [0, 1, 3], true)) {
+    $estado_filtro = 1;
+}
+
+$anio_filtro = isset($_GET['anio'])
+    ? intval($_GET['anio'])
+    : 0;
+
+if ($anio_filtro !== 0 && ($anio_filtro < 2000 || $anio_filtro > 2100)) {
+    $anio_filtro = 0;
+}
+
+$estadoTextoFiltro = $estado_filtro === 1
+    ? 'activas'
+    : ($estado_filtro === 3 ? 'finalizadas' : 'activas y finalizadas');
+
+function agregarFiltrosEstadoAnio(
+    string &$sql,
+    string &$types,
+    array &$params,
+    int $estado,
+    int $anio
+): void {
+    if ($estado === 0) {
+        $sql .= " AND f.estado IN (1, 3) ";
+    } else {
+        $sql .= " AND f.estado = ? ";
+        $types .= 'i';
+        $params[] = $estado;
+    }
+
+    if ($anio > 0) {
+        $inicioAnio = sprintf('%04d-01-01 00:00:00', $anio);
+        $finAnio = sprintf('%04d-01-01 00:00:00', $anio + 1);
+        $sql .= " AND f.fechaInicio >= ? AND f.fechaInicio < ? ";
+        $types .= 'ss';
+        $params[] = $inicioAnio;
+        $params[] = $finAnio;
+    }
+}
+
 
 /* ======================================================
    CARGAR DIVISIONES DESDE FORMULARIO
@@ -49,7 +94,7 @@ $sqlDiv = "
     SELECT DISTINCT d.id, d.nombre
     FROM formulario f
     INNER JOIN division_empresa d ON d.id = f.id_division
-    WHERE f.estado = 1
+    WHERE f.estado IN (1, 3)
       AND f.id_empresa = ?
       AND d.estado = 1
     ORDER BY d.nombre
@@ -74,6 +119,40 @@ if (!$esUsuarioMC) {
 }
 
 /* ======================================================
+   CARGAR AÑOS DISPONIBLES PARA LA DIVISION
+====================================================== */
+
+$sqlAnios = "
+    SELECT DISTINCT YEAR(f.fechaInicio) AS anio
+    FROM formulario f
+    INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
+    WHERE f.estado IN (1, 3)
+      AND f.id_empresa = ?
+      AND f.id_division = ?
+      AND f.fechaInicio >= '2000-01-01 00:00:00'
+    ORDER BY anio DESC
+";
+
+$stmtAnios = $conn->prepare($sqlAnios);
+$stmtAnios->bind_param('ii', $id_empresa, $division_filtro);
+$stmtAnios->execute();
+$resAnios = $stmtAnios->get_result();
+
+$aniosDisponibles = [];
+while ($row = $resAnios->fetch_assoc()) {
+    $anioDisponible = (int)($row['anio'] ?? 0);
+    if ($anioDisponible > 0) {
+        $aniosDisponibles[] = $anioDisponible;
+    }
+}
+$stmtAnios->close();
+
+if ($anio_filtro > 0 && !in_array($anio_filtro, $aniosDisponibles, true)) {
+    $aniosDisponibles[] = $anio_filtro;
+    rsort($aniosDisponibles, SORT_NUMERIC);
+}
+
+/* ======================================================
    CARGAR TRADES Y CATEGORIAS PARA FILTROS
 ====================================================== */
 
@@ -84,14 +163,21 @@ $sqlTrades = "
     FROM formulario f
     LEFT JOIN trade t ON t.id = f.id_trade
     INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
-    WHERE f.estado = 1
-      AND f.id_empresa = ?
+    WHERE f.id_empresa = ?
       AND f.id_division = ?
       AND f.id_trade IS NOT NULL
       AND f.id_trade > 0
 ";
 $typesTrades = "ii";
 $paramsTrades = [$id_empresa, $division_filtro];
+
+agregarFiltrosEstadoAnio(
+    $sqlTrades,
+    $typesTrades,
+    $paramsTrades,
+    $estado_filtro,
+    $anio_filtro
+);
 
 if ($subdivision_filtro > 0) {
     $sqlTrades .= " AND f.id_subdivision = ? ";
@@ -119,14 +205,21 @@ $sqlCategorias = "
     FROM formulario f
     LEFT JOIN categoria_formulario cf ON cf.id = f.id_categoria_formulario
     INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
-    WHERE f.estado = 1
-      AND f.id_empresa = ?
+    WHERE f.id_empresa = ?
       AND f.id_division = ?
       AND f.id_categoria_formulario IS NOT NULL
       AND f.id_categoria_formulario > 0
 ";
 $typesCategorias = "ii";
 $paramsCategorias = [$id_empresa, $division_filtro];
+
+agregarFiltrosEstadoAnio(
+    $sqlCategorias,
+    $typesCategorias,
+    $paramsCategorias,
+    $estado_filtro,
+    $anio_filtro
+);
 
 if ($subdivision_filtro > 0) {
     $sqlCategorias .= " AND f.id_subdivision = ? ";
@@ -149,7 +242,7 @@ $stmtCategorias->close();
 
 
 /* ======================================================
-   UNIVERSO CAMPAÑAS ACTIVAS
+   UNIVERSO CAMPAÑAS FILTRADAS
 ====================================================== */
 
 $sqlCampanas = "
@@ -175,13 +268,20 @@ $sqlCampanas = "
     FROM formulario f
     INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
 
-    WHERE f.estado = 1
-      AND f.id_empresa = ?
+    WHERE f.id_empresa = ?
       AND f.id_division = ?
 ";
 
 $paramsC = [$id_empresa, $division_filtro];
 $typesC  = "ii";
+
+agregarFiltrosEstadoAnio(
+    $sqlCampanas,
+    $typesC,
+    $paramsC,
+    $estado_filtro,
+    $anio_filtro
+);
 
 if ($subdivision_filtro > 0) {
     $sqlCampanas .= " AND f.id_subdivision = ? ";
@@ -221,13 +321,15 @@ while ($row = $resC->fetch_assoc()) {
 }
 $stmtC->close();
 
-$idsCampanasActivas = array_map('intval', array_column($campanas, 'id'));
-$urlDescargaMasivaActivas = '/visibility2/portal/informes/descarga_excel_masivo_gantt.php?activas=1'
+$idsCampanasFiltradas = array_map('intval', array_column($campanas, 'id'));
+$urlDescargaMasivaFiltradas = '/visibility2/portal/informes/descarga_excel_masivo_gantt.php?filtradas=1'
     . '&id_empresa=' . urlencode((string)$id_empresa)
     . '&id_division=' . urlencode((string)$division_filtro)
     . '&id_subdivision=' . urlencode((string)$subdivision_filtro)
     . '&id_trade=' . urlencode((string)$trade_filtro)
     . '&id_categoria_formulario=' . urlencode((string)$categoria_filtro)
+    . '&estado=' . urlencode((string)$estado_filtro)
+    . '&anio=' . urlencode((string)$anio_filtro)
     . '&fotos=0&fotos_encuesta=0';
 
 
@@ -2218,7 +2320,7 @@ $conn->close();
         <h1 class="modern-page-title">Panel de Control - Campañas</h1>
         <p class="modern-page-subtitle">
           Bienvenido, <?= htmlspecialchars($nombreU . ' ' . $apellido); ?>.
-          Revisa desempeño, visitas y ejecución de campañas activas.
+          Revisa desempeño, visitas y ejecución de campañas <?= htmlspecialchars($estadoTextoFiltro, ENT_QUOTES, 'UTF-8') ?>.
         </p>
       </div>
     </div>
@@ -2230,11 +2332,32 @@ $conn->close();
       <div class="section-title-row">
         <div>
           <h3 class="section-title">Filtros de análisis</h3>
-          <p class="section-subtitle">Selecciona división y subdivisión para actualizar la vista.</p>
+          <p class="section-subtitle">Selecciona periodo, estado y segmentación para actualizar la vista y el descargable.</p>
         </div>
       </div>
 
       <form method="GET" class="row align-items-end">
+        <div class="col-lg-2 col-md-4 mb-3">
+          <label class="modern-label"><strong>Año</strong></label>
+          <select name="anio" id="anio" class="form-control modern-control">
+            <option value="0" <?= ($anio_filtro === 0 ? 'selected' : '') ?>>Todos los años</option>
+            <?php foreach ($aniosDisponibles as $anioDisponible): ?>
+              <option value="<?= (int)$anioDisponible ?>" <?= ($anioDisponible === $anio_filtro ? 'selected' : '') ?>>
+                <?= (int)$anioDisponible ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+
+        <div class="col-lg-2 col-md-4 mb-3">
+          <label class="modern-label"><strong>Estado</strong></label>
+          <select name="estado" id="estado" class="form-control modern-control">
+            <option value="1" <?= ($estado_filtro === 1 ? 'selected' : '') ?>>Activas</option>
+            <option value="3" <?= ($estado_filtro === 3 ? 'selected' : '') ?>>Finalizadas</option>
+            <option value="0" <?= ($estado_filtro === 0 ? 'selected' : '') ?>>Todas</option>
+          </select>
+        </div>
+
         <div class="col-lg-2 col-md-4 mb-3">
           <label class="modern-label"><strong>División</strong></label>
           <?php if (!$esUsuarioMC): ?>
@@ -2290,9 +2413,9 @@ $conn->close();
 
         <div class="col-lg-2 col-md-4 mb-3">
           <a
-            href="<?= htmlspecialchars($urlDescargaMasivaActivas, ENT_QUOTES, 'UTF-8') ?>"
-            class="btn modern-btn modern-btn-success w-100 <?= empty($idsCampanasActivas) ? 'disabled' : '' ?>"
-            <?= empty($idsCampanasActivas) ? 'aria-disabled="true" tabindex="-1"' : '' ?>
+            href="<?= htmlspecialchars($urlDescargaMasivaFiltradas, ENT_QUOTES, 'UTF-8') ?>"
+            class="btn modern-btn modern-btn-success w-100 <?= empty($idsCampanasFiltradas) ? 'disabled' : '' ?>"
+            <?= empty($idsCampanasFiltradas) ? 'aria-disabled="true" tabindex="-1"' : '' ?>
           >
             <i class="fas fa-file-excel mr-2"></i> Descargar gantt
           </a>
@@ -2309,7 +2432,7 @@ $conn->close();
           <i class="fas fa-bullhorn"></i>
         </div>
         <div>
-          <div class="modern-kpi-label">Campañas activas</div>
+          <div class="modern-kpi-label">Campañas <?= htmlspecialchars($estadoTextoFiltro, ENT_QUOTES, 'UTF-8') ?></div>
           <div class="modern-kpi-value"><?= $totalCampanas ?></div>
         </div>
       </div>
@@ -2358,7 +2481,7 @@ $conn->close();
 
     <div class="section-title-row mb-3">
       <div>
-        <h3 class="section-title">Campañas activas</h3>
+        <h3 class="section-title">Campañas <?= htmlspecialchars($estadoTextoFiltro, ENT_QUOTES, 'UTF-8') ?></h3>
         <p class="section-subtitle">Resumen ejecutivo por campaña, con avance de visita y ejecución.</p>
       </div>
     </div>
@@ -2480,7 +2603,7 @@ $conn->close();
       <div class="modern-empty-state">
         <i class="fas fa-info-circle"></i>
         <div>
-          <strong>No se encontraron campañas activas</strong>
+          <strong>No se encontraron campañas <?= htmlspecialchars($estadoTextoFiltro, ENT_QUOTES, 'UTF-8') ?></strong>
           <span>Prueba cambiando la división o subdivisión seleccionada.</span>
         </div>
       </div>

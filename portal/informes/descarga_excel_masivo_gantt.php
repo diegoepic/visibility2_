@@ -62,71 +62,111 @@ $incluirFotosEncuesta = !isset($_GET['fotos_encuesta'])
     || $_GET['fotos_encuesta'] === '1'
     || strtolower((string)$_GET['fotos_encuesta']) === 'true';
 
-if (isset($_GET['activas']) && (string)$_GET['activas'] === '1') {
-    $idEmpresaActiva = isset($_GET['id_empresa']) ? (int)$_GET['id_empresa'] : 0;
-    $idDivisionActiva = isset($_GET['id_division']) ? (int)$_GET['id_division'] : 0;
-    $idSubdivisionActiva = isset($_GET['id_subdivision']) ? (int)$_GET['id_subdivision'] : 0;
-    $idTradeActiva = isset($_GET['id_trade']) ? (int)$_GET['id_trade'] : 0;
-    $idCategoriaFormularioActiva = isset($_GET['id_categoria_formulario']) ? (int)$_GET['id_categoria_formulario'] : 0;
+$tituloContexto = 'Campañas Seleccionadas';
+$sufijoArchivo = 'Seleccionadas';
+$modoFiltrado = (isset($_GET['filtradas']) && (string)$_GET['filtradas'] === '1')
+    || (isset($_GET['activas']) && (string)$_GET['activas'] === '1');
 
-    if ($idEmpresaActiva <= 0 || $idDivisionActiva <= 0) {
-        die('Para descargar campaÃ±as activas debes enviar id_empresa e id_division.');
+if ($modoFiltrado) {
+    $idEmpresaFiltro = isset($_GET['id_empresa']) ? (int)$_GET['id_empresa'] : 0;
+    $idDivisionFiltro = isset($_GET['id_division']) ? (int)$_GET['id_division'] : 0;
+    $idSubdivisionFiltro = isset($_GET['id_subdivision']) ? (int)$_GET['id_subdivision'] : 0;
+    $idTradeFiltro = isset($_GET['id_trade']) ? (int)$_GET['id_trade'] : 0;
+    $idCategoriaFormularioFiltro = isset($_GET['id_categoria_formulario']) ? (int)$_GET['id_categoria_formulario'] : 0;
+    $estadoFiltro = isset($_GET['estado']) ? (int)$_GET['estado'] : 1;
+    $anioFiltro = isset($_GET['anio']) ? (int)$_GET['anio'] : 0;
+
+    if (!in_array($estadoFiltro, [0, 1, 3], true)) {
+        $estadoFiltro = 1;
     }
 
-    $sqlIdsActivas = "
+    if ($anioFiltro !== 0 && ($anioFiltro < 2000 || $anioFiltro > 2100)) {
+        $anioFiltro = 0;
+    }
+
+    if ($idEmpresaFiltro <= 0 || $idDivisionFiltro <= 0) {
+        die('Para descargar campañas debes enviar id_empresa e id_division.');
+    }
+
+    $estadoTitulo = $estadoFiltro === 1
+        ? 'Activas'
+        : ($estadoFiltro === 3 ? 'Finalizadas' : 'Activas y Finalizadas');
+    $estadoSufijo = $estadoFiltro === 1
+        ? 'Activas'
+        : ($estadoFiltro === 3 ? 'Finalizadas' : 'Activas_y_Finalizadas');
+    $tituloContexto = 'Campañas ' . $estadoTitulo . ($anioFiltro > 0 ? ' - ' . $anioFiltro : '');
+    $sufijoArchivo = $estadoSufijo . ($anioFiltro > 0 ? '_' . $anioFiltro : '');
+
+    $sqlIdsFiltradas = "
         SELECT f.id
         FROM formulario f
         INNER JOIN formularioQuestion fq ON fq.id_formulario = f.id
-        WHERE f.estado = 1
-          AND f.id_empresa = ?
+        WHERE f.id_empresa = ?
           AND f.id_division = ?
     ";
-    $typesIdsActivas = 'ii';
-    $paramsIdsActivas = [$idEmpresaActiva, $idDivisionActiva];
+    $typesIdsFiltradas = 'ii';
+    $paramsIdsFiltradas = [$idEmpresaFiltro, $idDivisionFiltro];
 
-    if ($idSubdivisionActiva > 0) {
-        $sqlIdsActivas .= " AND f.id_subdivision = ? ";
-        $typesIdsActivas .= 'i';
-        $paramsIdsActivas[] = $idSubdivisionActiva;
+    if ($estadoFiltro === 0) {
+        $sqlIdsFiltradas .= " AND f.estado IN (1, 3) ";
+    } else {
+        $sqlIdsFiltradas .= " AND f.estado = ? ";
+        $typesIdsFiltradas .= 'i';
+        $paramsIdsFiltradas[] = $estadoFiltro;
     }
 
-    if ($idTradeActiva > 0) {
-        $sqlIdsActivas .= " AND f.id_trade = ? ";
-        $typesIdsActivas .= 'i';
-        $paramsIdsActivas[] = $idTradeActiva;
-    } elseif ($idTradeActiva === -1) {
-        $sqlIdsActivas .= " AND (f.id_trade IS NULL OR f.id_trade <= 0) ";
+    if ($anioFiltro > 0) {
+        $inicioAnio = sprintf('%04d-01-01 00:00:00', $anioFiltro);
+        $finAnio = sprintf('%04d-01-01 00:00:00', $anioFiltro + 1);
+        $sqlIdsFiltradas .= " AND f.fechaInicio >= ? AND f.fechaInicio < ? ";
+        $typesIdsFiltradas .= 'ss';
+        $paramsIdsFiltradas[] = $inicioAnio;
+        $paramsIdsFiltradas[] = $finAnio;
     }
 
-    if ($idCategoriaFormularioActiva > 0) {
-        $sqlIdsActivas .= " AND f.id_categoria_formulario = ? ";
-        $typesIdsActivas .= 'i';
-        $paramsIdsActivas[] = $idCategoriaFormularioActiva;
-    } elseif ($idCategoriaFormularioActiva === -1) {
-        $sqlIdsActivas .= " AND (f.id_categoria_formulario IS NULL OR f.id_categoria_formulario <= 0) ";
+    if ($idSubdivisionFiltro > 0) {
+        $sqlIdsFiltradas .= " AND f.id_subdivision = ? ";
+        $typesIdsFiltradas .= 'i';
+        $paramsIdsFiltradas[] = $idSubdivisionFiltro;
     }
 
-    $sqlIdsActivas .= "
+    if ($idTradeFiltro > 0) {
+        $sqlIdsFiltradas .= " AND f.id_trade = ? ";
+        $typesIdsFiltradas .= 'i';
+        $paramsIdsFiltradas[] = $idTradeFiltro;
+    } elseif ($idTradeFiltro === -1) {
+        $sqlIdsFiltradas .= " AND (f.id_trade IS NULL OR f.id_trade <= 0) ";
+    }
+
+    if ($idCategoriaFormularioFiltro > 0) {
+        $sqlIdsFiltradas .= " AND f.id_categoria_formulario = ? ";
+        $typesIdsFiltradas .= 'i';
+        $paramsIdsFiltradas[] = $idCategoriaFormularioFiltro;
+    } elseif ($idCategoriaFormularioFiltro === -1) {
+        $sqlIdsFiltradas .= " AND (f.id_categoria_formulario IS NULL OR f.id_categoria_formulario <= 0) ";
+    }
+
+    $sqlIdsFiltradas .= "
         GROUP BY f.id
         ORDER BY MAX(f.fechaInicio) DESC
     ";
 
-    $stmtIdsActivas = $conn->prepare($sqlIdsActivas);
-    if (!$stmtIdsActivas) {
-        fail('Error preparando campaÃ±as activas: ' . $conn->error);
+    $stmtIdsFiltradas = $conn->prepare($sqlIdsFiltradas);
+    if (!$stmtIdsFiltradas) {
+        fail('Error preparando campañas filtradas: ' . $conn->error);
     }
 
-    $stmtIdsActivas->bind_param($typesIdsActivas, ...$paramsIdsActivas);
-    $stmtIdsActivas->execute();
-    $resIdsActivas = $stmtIdsActivas->get_result();
+    $stmtIdsFiltradas->bind_param($typesIdsFiltradas, ...$paramsIdsFiltradas);
+    $stmtIdsFiltradas->execute();
+    $resIdsFiltradas = $stmtIdsFiltradas->get_result();
 
-    $idsActivas = [];
-    while ($rowIdsActivas = $resIdsActivas->fetch_assoc()) {
-        $idsActivas[] = (int)$rowIdsActivas['id'];
+    $idsFiltradas = [];
+    while ($rowIdsFiltradas = $resIdsFiltradas->fetch_assoc()) {
+        $idsFiltradas[] = (int)$rowIdsFiltradas['id'];
     }
-    $stmtIdsActivas->close();
+    $stmtIdsFiltradas->close();
 
-    $_GET['ids'] = implode(',', array_unique(array_filter($idsActivas)));
+    $_GET['ids'] = implode(',', array_unique(array_filter($idsFiltradas)));
 }
 
 if (!isset($_GET['ids'])) {
@@ -394,6 +434,8 @@ function getLocalesDetails(int $idForm): array {
             UPPER(COALESCE(jv.nombre, '')) AS jefeVenta,
             COALESCE(fq.valor_propuesto, 0) AS valor_propuesto,
             COALESCE(fq.valor, 0) AS valor,
+            COALESCE(fq.countVisita, 0) AS countVisita,
+            LOWER(COALESCE(fq.pregunta, '')) AS pregunta,
             UPPER(COALESCE(fq.observacion, '')) AS observacion,
 
             CASE
@@ -1047,6 +1089,7 @@ function promedioFechas(array $fechas): string {
 function construirMetricaGantt(array $filas, string $region = ''): array {
     $localesProgramados = [];
     $localesVisitados = [];
+    $localesGestionados = [];
     $fechasRecepcion = [];
     $visitasPorFecha = [];
     $fechaInicio = '';
@@ -1088,13 +1131,27 @@ function construirMetricaGantt(array $filas, string $region = ''): array {
                 $ultimaFechaVisita = $fechaVisita;
             }
         }
+
+        if (
+            $localKey !== ''
+            && (int)($fila['countVisita'] ?? 0) > 0
+            && in_array(
+                strtolower(trim((string)($fila['pregunta'] ?? ''))),
+                ['solo_auditoria', 'solo_implementado', 'implementado_auditado', 'completado'],
+                true
+            )
+        ) {
+            $localesGestionados[$localKey] = true;
+        }
     }
 
     ksort($visitasPorFecha);
     $fechaRecepcionPromedio = promedioFechas($fechasRecepcion);
     $programados = count($localesProgramados);
     $visitados = count($localesVisitados);
+    $gestionados = count($localesGestionados);
     $avance = $programados > 0 ? round(($visitados / $programados) * 100, 2) : 0;
+    $ejecucion = $programados > 0 ? round(($gestionados / $programados) * 100, 2) : 0;
 
     return [
         'campana' => $nombreCampana,
@@ -1108,6 +1165,8 @@ function construirMetricaGantt(array $filas, string $region = ''): array {
         'dias_recepcion_ultima_visita' => diferenciaDias($fechaRecepcionPromedio, $ultimaFechaVisita),
         'locales_programados' => $programados,
         'locales_visitados' => $visitados,
+        'locales_gestionados' => $gestionados,
+        'ejecucion' => $ejecucion,
         'avance' => $avance,
         'visitas_por_fecha' => $visitasPorFecha,
     ];
@@ -1163,6 +1222,8 @@ function renderResumenYGantt(array $locales): string {
               . '<td>' . e($m['dias_recepcion_ultima_visita']) . '</td>'
               . '<td>' . e($m['locales_programados']) . '</td>'
               . '<td>' . e($m['locales_visitados']) . '</td>'
+              . '<td>' . e($m['locales_gestionados']) . '</td>'
+              . '<td>' . e(number_format((float)$m['ejecucion'], 2, ',', '.')) . '%</td>'
               . '<td>' . e(number_format((float)$m['avance'], 2, ',', '.')) . '%</td>';
 
         foreach ($fechasVisita as $fecha) {
@@ -1180,7 +1241,8 @@ function renderResumenYGantt(array $locales): string {
           . "<th>CAMPAÑA</th><th>FECHA INICIO</th><th>FECHA TERMINO</th>"
           . "<th>FECHA RECEPCION PROMEDIO</th><th>ULTIMA FECHA VISITA</th>"
           . "<th>DIAS INICIO A ULTIMA VISITA</th><th>DIAS RECEPCION A ULTIMA VISITA</th>"
-          . "<th>LOCALES PROGRAMADOS</th><th>LOCALES VISITADOS</th><th>AVANCE VISITA</th>"
+          . "<th>LOCALES PROGRAMADOS</th><th>LOCALES VISITADOS</th><th>LOCALES GESTIONADOS</th>"
+          . "<th>KPI IMPLEMENTACION (% EJECUCION TOTAL)</th><th>AVANCE VISITA</th>"
           . "<th>AVANCES POR VISITA</th></tr>";
 
     foreach ($metricasCampana as $m) {
@@ -1198,6 +1260,8 @@ function renderResumenYGantt(array $locales): string {
               . '<td>' . e($m['dias_recepcion_ultima_visita']) . '</td>'
               . '<td>' . e($m['locales_programados']) . '</td>'
               . '<td>' . e($m['locales_visitados']) . '</td>'
+              . '<td>' . e($m['locales_gestionados']) . '</td>'
+              . '<td>' . e(number_format((float)$m['ejecucion'], 2, ',', '.')) . '%</td>'
               . '<td>' . e(number_format((float)$m['avance'], 2, ',', '.')) . '%</td>'
               . '<td>' . e(implode(' | ', $avancesPorVisita)) . '</td>'
               . '</tr>';
@@ -1209,7 +1273,8 @@ function renderResumenYGantt(array $locales): string {
           . "<th>CAMPAÑA</th><th>FECHA INICIO</th><th>FECHA TERMINO</th>"
           . "<th>FECHA RECEPCION PROMEDIO</th><th>ULTIMA FECHA VISITA</th>"
           . "<th>DIAS INICIO A ULTIMA VISITA</th><th>DIAS RECEPCION A ULTIMA VISITA</th>"
-          . "<th>LOCALES PROGRAMADOS</th><th>LOCALES VISITADOS</th><th>AVANCE VISITA</th>";
+          . "<th>LOCALES PROGRAMADOS</th><th>LOCALES VISITADOS</th><th>LOCALES GESTIONADOS</th>"
+          . "<th>KPI IMPLEMENTACION (% EJECUCION TOTAL)</th><th>AVANCE VISITA</th>";
     foreach ($fechasVisita as $fecha) {
         $html .= '<th>' . e($fecha) . '</th>';
     }
@@ -1224,7 +1289,8 @@ function renderResumenYGantt(array $locales): string {
           . "<th>CAMPAÑA</th><th>REGION</th><th>FECHA INICIO</th><th>FECHA TERMINO</th>"
           . "<th>FECHA RECEPCION PROMEDIO</th><th>ULTIMA FECHA VISITA</th>"
           . "<th>DIAS INICIO A ULTIMA VISITA</th><th>DIAS RECEPCION A ULTIMA VISITA</th>"
-          . "<th>LOCALES PROGRAMADOS</th><th>LOCALES VISITADOS</th><th>AVANCE VISITA</th>";
+          . "<th>LOCALES PROGRAMADOS</th><th>LOCALES VISITADOS</th><th>LOCALES GESTIONADOS</th>"
+          . "<th>KPI IMPLEMENTACION (% EJECUCION TOTAL)</th><th>AVANCE VISITA</th>";
     foreach ($fechasVisita as $fecha) {
         $html .= '<th>' . e($fecha) . '</th>';
     }
@@ -1350,6 +1416,7 @@ $crearMetricas = function (array $filas, bool $porRegion = false): array {
                 'fecha_termino' => fechaValida($fila['fechaTermino'] ?? null) ? (string)$fila['fechaTermino'] : '',
                 'programados' => [],
                 'visitados' => [],
+                'gestionados' => [],
                 'recepciones' => [],
                 'visitas' => [],
                 'primera_visita' => '',
@@ -1386,6 +1453,18 @@ $crearMetricas = function (array $filas, bool $porRegion = false): array {
                 $grupos[$key]['primera_visita'] = $fechaVisita;
             }
         }
+
+        if (
+            $localId !== ''
+            && (int)($fila['countVisita'] ?? 0) > 0
+            && in_array(
+                strtolower(trim((string)($fila['pregunta'] ?? ''))),
+                ['solo_auditoria', 'solo_implementado', 'implementado_auditado', 'completado'],
+                true
+            )
+        ) {
+            $grupos[$key]['gestionados'][$localId] = true;
+        }
     }
 
     $metricas = [];
@@ -1411,6 +1490,7 @@ $crearMetricas = function (array $filas, bool $porRegion = false): array {
             'dias_habiles_recepcion_primera_visita' => diferenciaDiasHabiles($fechaRecepcion, $grupo['primera_visita']),
             'programados' => count($grupo['programados']),
             'visitados' => count($grupo['visitados']),
+            'gestionados' => count($grupo['gestionados']),
             'visitas' => $visitas,
         ];
     }
@@ -1507,8 +1587,8 @@ sort($fechasGantt);
 $spreadsheet = new Spreadsheet();
 $spreadsheet->getProperties()
     ->setCreator('Visibility')
-    ->setTitle('Carta Gantt de Campañas Activas')
-    ->setSubject('Recepción de materiales y avance de visitas');
+    ->setTitle('Carta Gantt - ' . $tituloContexto)
+    ->setSubject('Recepción de materiales, avance de visitas y KPI de implementación');
 
 // Hoja 1: Resumen ejecutivo
 $resumen = $spreadsheet->getActiveSheet();
@@ -1518,7 +1598,8 @@ $headersResumen = [
     'CAMPAÑA', 'FECHA INICIO', 'FECHA TERMINO', 'FECHA RECEPCION PROMEDIO',
     'ULTIMA FECHA VISITA', 'DIAS INICIO A ULTIMA VISITA',
     'DIAS RECEPCION A ULTIMA VISITA', 'LOCALES PROGRAMADOS',
-    'LOCALES VISITADOS', 'AVANCE VISITA', 'AVANCES POR VISITA',
+    'LOCALES VISITADOS', 'LOCALES GESTIONADOS',
+    'KPI IMPLEMENTACIÓN (% EJECUCIÓN TOTAL)', 'AVANCE VISITA', 'AVANCES POR VISITA',
 ];
 array_splice($headersResumen, 1, 0, ['PRIORIDAD']);
 array_unshift($headersResumen, 'TRADE');
@@ -1528,7 +1609,7 @@ array_splice($headersResumen, 9, 0, [
 ]);
 $estiloTitulo(
     $resumen,
-    'Resumen Ejecutivo de Campañas Activas',
+    'Resumen Ejecutivo - ' . $tituloContexto,
     'Consolidado de recepción y visitas. Generado el ' . date('Y-m-d H:i'),
     count($headersResumen)
 );
@@ -1552,20 +1633,22 @@ foreach ($datosCampana['metricas'] as $metrica) {
     $resumen->setCellValue("K{$fila}", $metrica['dias_habiles_recepcion_primera_visita']);
     $resumen->setCellValue("L{$fila}", $metrica['programados']);
     $resumen->setCellValue("M{$fila}", $metrica['visitados']);
-    $resumen->setCellValue("N{$fila}", "=IF(L{$fila}=0,0,M{$fila}/L{$fila})");
+    $resumen->setCellValue("N{$fila}", $metrica['gestionados']);
+    $resumen->setCellValue("O{$fila}", "=IF(L{$fila}=0,0,N{$fila}/L{$fila})");
+    $resumen->setCellValue("P{$fila}", "=IF(L{$fila}=0,0,M{$fila}/L{$fila})");
     $avances = [];
     foreach ($metrica['visitas'] as $fecha => $cantidad) {
         $avances[] = $fecha . ': ' . $cantidad . ' local(es)';
     }
-    $resumen->setCellValueExplicit("O{$fila}", implode(' | ', $avances), DataType::TYPE_STRING);
+    $resumen->setCellValueExplicit("Q{$fila}", implode(' | ', $avances), DataType::TYPE_STRING);
     $fila++;
 }
 $ultimaFilaResumen = max(5, $fila - 1);
 $finalizarHoja($resumen, 4, $ultimaFilaResumen, count($headersResumen));
-$resumen->getStyle("N5:N{$ultimaFilaResumen}")->getNumberFormat()->setFormatCode('0.0%');
-$resumen->getStyle("H5:M{$ultimaFilaResumen}")->getNumberFormat()->setFormatCode('#,##0');
-$resumen->getStyle("O5:O{$ultimaFilaResumen}")->getAlignment()->setWrapText(true);
-$anchosResumen = [24, 38, 14, 14, 14, 22, 18, 22, 24, 24, 28, 18, 17, 14, 58];
+$resumen->getStyle("O5:P{$ultimaFilaResumen}")->getNumberFormat()->setFormatCode('0.0%');
+$resumen->getStyle("H5:N{$ultimaFilaResumen}")->getNumberFormat()->setFormatCode('#,##0');
+$resumen->getStyle("Q5:Q{$ultimaFilaResumen}")->getAlignment()->setWrapText(true);
+$anchosResumen = [24, 38, 14, 14, 14, 22, 18, 22, 24, 24, 28, 18, 17, 19, 25, 14, 58];
 foreach ($anchosResumen as $index => $ancho) {
     $resumen->getColumnDimension(Coordinate::stringFromColumnIndex($index + 1))->setWidth($ancho);
 }
@@ -1597,7 +1680,8 @@ $crearHojaGantt = function (
         'FECHA INICIO', 'FECHA TERMINO', 'FECHA RECEPCION PROMEDIO',
         'ULTIMA FECHA VISITA', 'DIAS INICIO A ULTIMA VISITA',
         'DIAS RECEPCION A ULTIMA VISITA', 'LOCALES PROGRAMADOS',
-        'LOCALES VISITADOS', 'AVANCE VISITA',
+        'LOCALES VISITADOS', 'LOCALES GESTIONADOS',
+        'KPI IMPLEMENTACIÓN (% EJECUCIÓN TOTAL)', 'AVANCE VISITA',
     ]);
     $posLocalesProgramados = array_search('LOCALES PROGRAMADOS', $headers, true);
     if ($posLocalesProgramados !== false) {
@@ -1678,6 +1762,12 @@ $crearHojaGantt = function (
         $sheet->setCellValue(Coordinate::stringFromColumnIndex($columna++) . $fila, $metrica['programados']);
         $colVisitados = Coordinate::stringFromColumnIndex($columna);
         $sheet->setCellValue(Coordinate::stringFromColumnIndex($columna++) . $fila, $metrica['visitados']);
+        $colGestionados = Coordinate::stringFromColumnIndex($columna);
+        $sheet->setCellValue(Coordinate::stringFromColumnIndex($columna++) . $fila, $metrica['gestionados']);
+        $sheet->setCellValue(
+            Coordinate::stringFromColumnIndex($columna++) . $fila,
+            "=IF({$colProgramados}{$fila}=0,0,{$colGestionados}{$fila}/{$colProgramados}{$fila})"
+        );
         $sheet->setCellValue(
             Coordinate::stringFromColumnIndex($columna++) . $fila,
             "=IF({$colProgramados}{$fila}=0,0,{$colVisitados}{$fila}/{$colProgramados}{$fila})"
@@ -1703,10 +1793,12 @@ $crearHojaGantt = function (
 
     $ultimaFila = max(5, $fila - 1);
     $finalizarHoja($sheet, 4, $ultimaFila, max(1, $ultimaColumna));
+    $colKpiImplementacion = Coordinate::stringFromColumnIndex($inicioGantt - 2);
     $colAvance = Coordinate::stringFromColumnIndex($inicioGantt - 1);
-    $sheet->getStyle("{$colAvance}5:{$colAvance}{$ultimaFila}")->getNumberFormat()->setFormatCode('0.0%');
+    $sheet->getStyle("{$colKpiImplementacion}5:{$colAvance}{$ultimaFila}")
+        ->getNumberFormat()->setFormatCode('0.0%');
     $primeraMetrica = Coordinate::stringFromColumnIndex($incluyeRegion ? 9 : 8);
-    $ultimaMetrica = Coordinate::stringFromColumnIndex($inicioGantt - 2);
+    $ultimaMetrica = Coordinate::stringFromColumnIndex($inicioGantt - 3);
     $sheet->getStyle("{$primeraMetrica}5:{$ultimaMetrica}{$ultimaFila}")
         ->getNumberFormat()->setFormatCode('#,##0');
     $sheet->getColumnDimension('A')->setWidth(24);
@@ -1739,7 +1831,7 @@ while (ob_get_level() > 0) {
     ob_end_clean();
 }
 
-$filename = 'Carta_Gantt_Campanas_Activas_' . date('Ymd_His') . '.xlsx';
+$filename = 'Carta_Gantt_Campanas_' . $sufijoArchivo . '_' . date('Ymd_His') . '.xlsx';
 header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 header('Content-Disposition: attachment; filename="' . $filename . '"');
 header('Cache-Control: max-age=0, must-revalidate');

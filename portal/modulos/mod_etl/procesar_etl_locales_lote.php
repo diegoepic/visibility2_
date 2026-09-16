@@ -86,10 +86,20 @@ if (!is_file($filePath) || $previewPath === '' || $validationPath === '') {
     jsonResponse(['success' => false, 'message' => 'Faltan archivos requeridos para validar el job.'], 500);
 }
 
-$apiKey = etlLoadGoogleMapsApiKey();
-if ($apiKey === '') {
-    jsonResponse(['success' => false, 'message' => 'Falta configurar GOOGLE_MAPS_API_KEY para Address Validation API.'], 500);
+$stmtDivision = $conn->prepare('SELECT nombre FROM division_empresa WHERE id=? LIMIT 1');
+if (!$stmtDivision) {
+    jsonResponse(['success' => false, 'message' => 'No se pudo consultar la división del job.'], 500);
 }
+$stmtDivision->bind_param('i', $divisionId);
+$stmtDivision->execute();
+$stmtDivision->bind_result($divisionName);
+$divisionFound = $stmtDivision->fetch();
+$stmtDivision->close();
+if (!$divisionFound) {
+    jsonResponse(['success' => false, 'message' => 'La división del job ya no existe.'], 409);
+}
+$divisionName = etlUpper((string)$divisionName);
+$apiKey = etlLoadGoogleMapsApiKey();
 
 $stmt = $conn->prepare("UPDATE etl_locales_jobs SET status='processing_preview', updated_at=NOW() WHERE id=? LIMIT 1");
 if ($stmt) {
@@ -139,17 +149,38 @@ while ($batchProcessed < $limit && ($dataLine = fgetcsv($handle, 200000, $delimi
     }
     $batchProcessed++;
 
-    $codigo = etlUpper($dataLine[$indexes['codigo']] ?? '');
-    $nombreOriginal = normalizeCsvText($dataLine[$indexes['nombre_local']] ?? '');
-    $direccionOriginal = normalizeCsvText($dataLine[$indexes['direccion']] ?? '');
-    $comunaOriginal = normalizeCsvText($dataLine[$indexes['comuna']] ?? '');
-    $cuentaName = ($indexes['cuenta'] !== null) ? etlUpper($dataLine[$indexes['cuenta']] ?? '') : '';
-    $cadenaName = ($indexes['cadena'] !== null) ? etlUpper($dataLine[$indexes['cadena']] ?? '') : '';
+    $valueFor = static function (string $field) use ($indexes, $dataLine): string {
+        $index = $indexes[$field] ?? null;
+        return $index === null ? '' : normalizeCsvText($dataLine[$index] ?? '');
+    };
+    $codigo = etlUpper($valueFor('codigo'));
+    $divisionInput = etlUpper($valueFor('division'));
+    $nombreOriginal = $valueFor('nombre_local');
+    $direccionOriginal = $valueFor('direccion');
+    $comunaOriginal = $valueFor('comuna');
+    $cuentaName = etlUpper($valueFor('cuenta'));
+    $cadenaName = etlUpper($valueFor('cadena'));
+    $zonaInput = etlUpper($valueFor('zona'));
+    $distritoInput = etlUpper($valueFor('distrito'));
+    $vendedorRaw = $valueFor('nombre_vendedor');
+    $jefeVentaRaw = $valueFor('jefe_venta');
+    $vendedorName = $vendedorRaw === '' ? '' : etlNormalizeOptionalPerson($vendedorRaw);
+    $jefeVentaName = $jefeVentaRaw === '' ? '' : etlNormalizeOptionalPerson($jefeVentaRaw);
+    $hasAssignmentPayload = $vendedorName !== '' || $jefeVentaName !== '';
+    $hasAddressPayload = $direccionOriginal !== '' || $comunaOriginal !== '';
+    $hasPartialPayload = $nombreOriginal !== '' || $cuentaName !== '' || $cadenaName !== ''
+        || $zonaInput !== '' || $distritoInput !== '' || $hasAssignmentPayload;
 
     $record = [
         'line' => $physicalLineNumber,
         'codigo' => $codigo,
         'division_id' => $divisionId,
+        'division_archivo' => $divisionInput,
+        'tipo_actualizacion' => $hasAddressPayload ? 'DIRECCION Y CAMPOS INFORMADOS' : 'CAMPOS PARCIALES SIN GOOGLE',
+        'apply_address' => $hasAddressPayload,
+        'update_nombre' => $nombreOriginal !== '',
+        'update_cuenta' => $cuentaName !== '',
+        'update_cadena' => $cadenaName !== '',
         'nombre' => $nombreOriginal,
         'direccion_actual' => '',
         'direccion_original' => $direccionOriginal,
@@ -162,6 +193,25 @@ while ($batchProcessed < $limit && ($dataLine = fgetcsv($handle, 200000, $delimi
         'region' => '',
         'cuenta' => $cuentaName,
         'cadena' => $cadenaName,
+        'cuenta_archivo' => $cuentaName,
+        'cadena_archivo' => $cadenaName,
+        'zona_actual_id' => null,
+        'zona_actual' => '',
+        'zona_archivo' => $zonaInput,
+        'estado_zona' => $zonaInput === '' ? 'SIN_CAMBIO' : 'PENDIENTE',
+        'distrito_actual_id' => null,
+        'distrito_actual' => '',
+        'distrito_archivo' => $distritoInput,
+        'distrito_zona_sugerida_id' => null,
+        'estado_distrito' => $distritoInput === '' ? 'SIN_CAMBIO' : 'PENDIENTE',
+        'vendedor_actual_id' => null,
+        'vendedor_actual' => '',
+        'vendedor_archivo' => $vendedorName,
+        'estado_vendedor' => $vendedorName === '' ? 'SIN_CAMBIO' : 'PENDIENTE',
+        'jefe_venta_actual_id' => null,
+        'jefe_venta_actual' => '',
+        'jefe_venta_archivo' => $jefeVentaName,
+        'estado_jefe_venta' => $jefeVentaName === '' ? 'SIN_CAMBIO' : 'PENDIENTE',
         'estado_validacion' => 'ERROR_ENTRADA',
         'reason' => '',
         'lat' => null,
@@ -169,40 +219,124 @@ while ($batchProcessed < $limit && ($dataLine = fgetcsv($handle, 200000, $delimi
         'response_id' => ''
     ];
 
-    if ($codigo === '' || $nombreOriginal === '' || $direccionOriginal === '' || $comunaOriginal === '') {
-        $record['reason'] = 'Faltan campos requeridos.';
-    } else {
-        $territory = etlLookupTerritoryByComuna($comunaOriginal);
-        if ($territory === null) {
-            $record['estado_validacion'] = 'COMUNA_SIN_MAPEO';
-            $record['reason'] = "La comuna '$comunaOriginal' no existe en el catálogo territorial.";
-        } else {
-            $record['comuna'] = $territory['comuna'];
-            $record['distrito'] = $territory['distrito'];
-            $record['zona'] = $territory['zona'];
-            $record['region'] = $territory['region'];
-            $record['nombre'] = etlBuildLocalName($codigo, $nombreOriginal, $record['comuna']);
-            $record['direccion_limpia'] = etlCleanAddress($direccionOriginal, $record['comuna']);
+    $divisionMatches = $divisionInput === ''
+        || (ctype_digit($divisionInput) && (int)$divisionInput === $divisionId)
+        || etlLookupKey($divisionInput) === etlLookupKey($divisionName);
 
-            $localActual = getExistingLocalByCode($conn, $codigo, $divisionId, $errors, $physicalLineNumber);
-            if ($localActual === false) {
-                $record['estado_validacion'] = 'LOCAL_NO_ENCONTRADO';
-                $record['reason'] = array_pop($errors) ?: 'No se encontró el local.';
+    if ($codigo === '') {
+        $record['reason'] = 'Código Local vacío.';
+    } elseif (!$divisionMatches) {
+        $record['estado_validacion'] = 'DIVISION_NO_COINCIDE';
+        $record['reason'] = "La división '$divisionInput' del archivo no coincide con '$divisionName' (ID $divisionId).";
+    } elseif (!$hasAddressPayload && !$hasPartialPayload) {
+        $record['reason'] = 'No se indicó ningún dato para actualizar.';
+    } else {
+        $localActual = getExistingLocalByCode($conn, $codigo, $divisionId, $errors, $physicalLineNumber);
+        if ($localActual === false) {
+            $record['estado_validacion'] = 'LOCAL_NO_ENCONTRADO';
+            $record['reason'] = array_pop($errors) ?: 'No se encontró el local.';
+        } else {
+            $record['direccion_actual'] = normalizeCsvText($localActual['direccion'] ?? '');
+            $record['vendedor_actual_id'] = isset($localActual['id_vendedor']) ? (int)$localActual['id_vendedor'] : null;
+            $record['vendedor_actual'] = etlUpper($localActual['nombre_vendedor'] ?? '');
+            $record['jefe_venta_actual_id'] = isset($localActual['id_jefe_venta']) ? (int)$localActual['id_jefe_venta'] : null;
+            $record['jefe_venta_actual'] = etlUpper($localActual['jefe_venta'] ?? '');
+            $record['zona_actual_id'] = isset($localActual['id_zona']) ? (int)$localActual['id_zona'] : null;
+            $record['zona_actual'] = etlUpper($localActual['zona'] ?? '');
+            $record['distrito_actual_id'] = isset($localActual['id_distrito']) ? (int)$localActual['id_distrito'] : null;
+            $record['distrito_actual'] = etlUpper($localActual['distrito'] ?? '');
+
+            $vendedorInspection = etlInspectAssignmentPerson($conn, 'vendedor', $vendedorName);
+            $jefeInspection = etlInspectAssignmentPerson($conn, 'jefe_venta', $jefeVentaName);
+            $record['estado_vendedor'] = $vendedorInspection['status'];
+            $record['estado_jefe_venta'] = $jefeInspection['status'];
+
+            $zonaInspection = etlInspectTerritoryAssignment($conn, 'zona', $zonaInput);
+            $record['estado_zona'] = $zonaInspection['status'];
+            $targetZoneId = $zonaInput !== ''
+                ? ($zonaInspection['id'] !== null ? (int)$zonaInspection['id'] : null)
+                : ($record['zona_actual_id'] ?: null);
+            if ($distritoInput !== '' && $zonaInput !== '' && $zonaInspection['status'] === 'NUEVO') {
+                $distritoInspection = ['id' => null, 'zone_id' => null, 'matches' => 0, 'status' => 'NUEVO', 'name' => $distritoInput];
             } else {
-                $record['direccion_actual'] = normalizeCsvText($localActual['direccion'] ?? '');
-                $validation = etlValidateAddress(
-                    $record['direccion_limpia'],
-                    $record['comuna'],
-                    $apiKey,
-                    $physicalLineNumber
-                );
-                $record['estado_validacion'] = $validation['status'];
-                $record['reason'] = $validation['reason'];
-                $record['direccion_nueva'] = etlPreferredAddress($validation, $record['direccion_limpia']);
-                $record['direccion_google'] = $validation['formatted_address'];
-                $record['lat'] = $validation['lat'];
-                $record['lng'] = $validation['lng'];
-                $record['response_id'] = $validation['response_id'];
+                $distritoInspection = etlInspectTerritoryAssignment($conn, 'distrito', $distritoInput, $targetZoneId);
+            }
+            if ($distritoInput !== '' && $zonaInput === '' && !$targetZoneId
+                && $distritoInspection['status'] === 'NUEVO') {
+                $distritoInspection['status'] = 'ZONA_REQUERIDA';
+            }
+            $record['estado_distrito'] = $distritoInspection['status'];
+            $record['distrito_zona_sugerida_id'] = $distritoInspection['zone_id'] ?? $targetZoneId;
+
+            $catalogStatuses = [
+                $record['estado_vendedor'], $record['estado_jefe_venta'],
+                $record['estado_zona'], $record['estado_distrito'],
+            ];
+            if (in_array('ERROR_CONSULTA', $catalogStatuses, true)) {
+                $record['estado_validacion'] = 'ERROR_CATALOGO';
+                $record['reason'] = 'No se pudo consultar alguno de los catálogos informados.';
+            } elseif (in_array('ZONA_REQUERIDA', $catalogStatuses, true)) {
+                $record['estado_validacion'] = 'ZONA_REQUERIDA';
+                $record['reason'] = 'El distrito no existe y el local no tiene una zona actual; debes informar también la Zona.';
+            } elseif (in_array('DUPLICADO_EN_BASE', $catalogStatuses, true)) {
+                $record['estado_validacion'] = 'DUPLICADO_EN_BASE';
+                $record['reason'] = 'Uno de los valores informados aparece duplicado en su catálogo; debe regularizarse antes de asignarlo.';
+            } elseif (!$hasAddressPayload) {
+                $record['nombre'] = $nombreOriginal !== '' ? etlUpper($nombreOriginal) : etlUpper($localActual['nombre'] ?? '');
+                $record['direccion_original'] = normalizeCsvText($localActual['direccion_original'] ?? $localActual['direccion'] ?? '');
+                $record['direccion_limpia'] = normalizeCsvText($localActual['direccion'] ?? '');
+                $record['direccion_nueva'] = normalizeCsvText($localActual['direccion'] ?? '');
+                $record['direccion_google'] = normalizeCsvText($localActual['direccion_google'] ?? '');
+                $record['comuna'] = etlUpper($localActual['comuna'] ?? '');
+                $record['distrito'] = etlUpper($localActual['distrito'] ?? '');
+                $record['zona'] = etlUpper($localActual['zona'] ?? '');
+                $record['region'] = etlUpper($localActual['region'] ?? '');
+                $record['cuenta'] = etlUpper($localActual['cuenta'] ?? '');
+                $record['cadena'] = etlUpper($localActual['cadena'] ?? '');
+                $record['lat'] = isset($localActual['lat']) && $localActual['lat'] !== '' ? (float)$localActual['lat'] : null;
+                $record['lng'] = isset($localActual['lng']) && $localActual['lng'] !== '' ? (float)$localActual['lng'] : null;
+                $record['response_id'] = normalizeCsvText($localActual['google_response_id'] ?? '');
+                $record['estado_validacion'] = 'ACEPTADA';
+                $record['reason'] = 'Se actualizarán únicamente las columnas informadas; la dirección y coordenadas se conservarán.';
+            } elseif ($apiKey === '') {
+                $record['estado_validacion'] = 'ERROR_CONFIGURACION';
+                $record['reason'] = 'Falta configurar GOOGLE_MAPS_API_KEY para validar la dirección.';
+            } else {
+                $effectiveComuna = $comunaOriginal !== '' ? $comunaOriginal : normalizeCsvText($localActual['comuna'] ?? '');
+                $effectiveAddress = $direccionOriginal !== ''
+                    ? $direccionOriginal
+                    : normalizeCsvText($localActual['direccion_original'] ?? $localActual['direccion'] ?? '');
+                $territory = etlLookupTerritoryByComuna($effectiveComuna);
+                if ($territory === null) {
+                    $record['estado_validacion'] = 'COMUNA_SIN_MAPEO';
+                    $record['reason'] = "La comuna '$effectiveComuna' no existe en el catálogo territorial.";
+                } elseif ($effectiveAddress === '') {
+                    $record['estado_validacion'] = 'DIRECCION_VACIA';
+                    $record['reason'] = 'No existe una dirección actual y tampoco se informó una nueva.';
+                } else {
+                    $record['comuna'] = $territory['comuna'];
+                    $record['distrito'] = $territory['distrito'];
+                    $record['zona'] = $territory['zona'];
+                    $record['region'] = $territory['region'];
+                    $record['nombre'] = $nombreOriginal !== ''
+                        ? etlBuildLocalName($codigo, $nombreOriginal, $record['comuna'])
+                        : etlUpper($localActual['nombre'] ?? '');
+                    $record['direccion_original'] = $effectiveAddress;
+                    $record['direccion_limpia'] = etlCleanAddress($effectiveAddress, $record['comuna']);
+                    $validation = etlValidateAddress(
+                        $record['direccion_limpia'],
+                        $record['comuna'],
+                        $apiKey,
+                        $physicalLineNumber
+                    );
+                    $record['estado_validacion'] = $validation['status'];
+                    $record['reason'] = $validation['reason'];
+                    $record['direccion_nueva'] = etlPreferredAddress($validation, $record['direccion_limpia']);
+                    $record['direccion_google'] = $validation['formatted_address'];
+                    $record['lat'] = $validation['lat'];
+                    $record['lng'] = $validation['lng'];
+                    $record['response_id'] = $validation['response_id'];
+                }
             }
         }
     }

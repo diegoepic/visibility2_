@@ -9,6 +9,7 @@ set_time_limit(0);
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/vendor/autoload.php';
 
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
@@ -38,19 +39,74 @@ function styleHeader($sheet, string $range): void
     ]);
 }
 
+function uniqueSheetTitle(Spreadsheet $spreadsheet, string $baseTitle): string
+{
+    $baseTitle = substr($baseTitle, 0, 31);
+    $candidate = $baseTitle;
+    $suffixNumber = 2;
+
+    while ($spreadsheet->getSheetByName($candidate) !== null) {
+        $suffix = ' (' . $suffixNumber . ')';
+        $candidate = substr($baseTitle, 0, 31 - strlen($suffix)) . $suffix;
+        $suffixNumber++;
+    }
+
+    return $candidate;
+}
+
 $raw = $_POST['rows'] ?? '';
 $rows = json_decode((string)$raw, true);
 if (!is_array($rows) || empty($rows)) {
     failDownload('No se recibieron datos para descargar.');
 }
 
-$spreadsheet = new Spreadsheet();
-$spreadsheet->getProperties()
-    ->setCreator('Visibility')
-    ->setTitle('Planificación de rutas editada');
+$routeBaseRows = [];
+$rawRouteBaseRows = trim((string)($_POST['route_base_rows'] ?? ''));
+if ($rawRouteBaseRows !== '') {
+    $routeBaseRows = json_decode($rawRouteBaseRows, true);
+    if (!is_array($routeBaseRows)) {
+        failDownload('El rutero base seleccionado no tiene un formato válido.');
+    }
+}
 
-$summary = $spreadsheet->getActiveSheet();
-$summary->setTitle('Resumen');
+$baseWorkbookIncluded = false;
+$baseWorkbookName = '';
+$originalSheetNames = [];
+$baseUpload = $_FILES['archivoRutasBaseOriginal'] ?? null;
+
+if (is_array($baseUpload) && (int)($baseUpload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+    if ((int)($baseUpload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        failDownload('No se pudo recibir el archivo original de rutas base.');
+    }
+
+    $baseWorkbookName = basename((string)($baseUpload['name'] ?? 'rutas_base.xlsx'));
+    $extension = strtolower((string)pathinfo($baseWorkbookName, PATHINFO_EXTENSION));
+    $temporaryPath = (string)($baseUpload['tmp_name'] ?? '');
+    if (!in_array($extension, ['xlsx', 'xls'], true) || $temporaryPath === '' || !is_uploaded_file($temporaryPath)) {
+        failDownload('El archivo original de rutas base debe ser un Excel válido (.xlsx o .xls).');
+    }
+
+    try {
+        $spreadsheet = IOFactory::load($temporaryPath);
+    } catch (Throwable $error) {
+        failDownload('No se pudo abrir el archivo original de rutas base. Verifica que no esté dañado.');
+    }
+
+    $baseWorkbookIncluded = true;
+    $originalSheetNames = $spreadsheet->getSheetNames();
+} else {
+    $spreadsheet = new Spreadsheet();
+    $spreadsheet->getProperties()
+        ->setCreator('Visibility')
+        ->setTitle('Planificación de rutas editada');
+}
+
+if ($baseWorkbookIncluded) {
+    $summary = $spreadsheet->createSheet();
+} else {
+    $summary = $spreadsheet->getActiveSheet();
+}
+$summary->setTitle(uniqueSheetTitle($spreadsheet, 'Resumen'));
 
 $planned = array_values(array_filter($rows, fn(array $row): bool => empty($row['sin_ruta'])));
 $unplanned = array_values(array_filter($rows, fn(array $row): bool => !empty($row['sin_ruta'])));
@@ -58,7 +114,10 @@ $groups = [];
 $dates = [];
 foreach ($planned as $row) {
     if (!empty($row['grupo_ruta'])) {
-        $groups[(string)$row['grupo_ruta']] = true;
+        $routeUser = trim((string)($row['usuario_id'] ?? ''));
+        if ($routeUser === '') $routeUser = trim((string)($row['usuario_login'] ?? ''));
+        if ($routeUser === '') $routeUser = trim((string)($row['usuario_nombre'] ?? 'SIN_USUARIO'));
+        $groups[$routeUser . '|' . (string)$row['grupo_ruta']] = true;
     }
     if (!empty($row['fecha_ruta_sql'])) {
         $dates[(string)$row['fecha_ruta_sql']] = true;
@@ -73,6 +132,11 @@ $summaryRows = [
     ['Locales sin ruta', count($unplanned)],
     ['Grupos de ruta', count($groups)],
     ['Fechas planificadas', count($dates)],
+    ['Rutero base incluido', ($baseWorkbookIncluded || $routeBaseRows) ? 'Sí' : 'No'],
+    ['Locales únicos en rutero base', count($routeBaseRows)],
+    ['Formato base conservado', $baseWorkbookIncluded ? 'Sí' : 'No'],
+    ['Archivo base', $baseWorkbookIncluded ? $baseWorkbookName : 'No aplica'],
+    ['Hojas originales conservadas', $baseWorkbookIncluded ? implode(', ', $originalSheetNames) : 'No aplica'],
 ];
 $summary->fromArray($summaryRows, null, 'A1');
 styleHeader($summary, 'A1:B1');
@@ -90,7 +154,7 @@ $headers = [
 ];
 
 $planSheet = $spreadsheet->createSheet();
-$planSheet->setTitle('Planificacion');
+$planSheet->setTitle(uniqueSheetTitle($spreadsheet, 'Planificacion'));
 $planSheet->fromArray([$headers], null, 'A1');
 styleHeader($planSheet, 'A1:W1');
 
@@ -136,8 +200,62 @@ foreach ($widths as $index => $width) {
     $planSheet->getColumnDimensionByColumn($index + 1)->setWidth($width);
 }
 
+if ($routeBaseRows) {
+    $baseHeaders = [
+        'Usuario Login', 'Usuario Nombre', 'Grupo Ruta', 'Identificador Ruta', 'Código Local',
+        'Nombre', 'Dirección', 'Comuna', 'Lat', 'Lng', 'Orden Visita', 'Tamaño Ruta',
+        'Cantidad Objetivo Día', 'Distancia Total Ruta (KM)', 'Primera Fecha Original',
+        'Última Fecha Original', 'Observación',
+    ];
+    $baseSheet = $spreadsheet->createSheet();
+    $baseSheet->setTitle(uniqueSheetTitle($spreadsheet, 'Rutas Base'));
+    $baseSheet->fromArray([$baseHeaders], null, 'A1');
+    styleHeader($baseSheet, 'A1:Q1');
+
+    $baseRowNumber = 2;
+    foreach ($routeBaseRows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $userLogin = (string)($row['usuario_login'] ?? '');
+        $routeGroup = (string)($row['grupo_ruta'] ?? '');
+        $routeIdentifier = $routeGroup !== '' ? trim($userLogin . ' | ' . $routeGroup) : '';
+        $baseSheet->fromArray([[
+            $userLogin,
+            $row['usuario_nombre'] ?? '',
+            $routeGroup,
+            $routeIdentifier,
+            $row['codigo_local'] ?? '',
+            $row['nombre'] ?? '',
+            $row['direccion'] ?? '',
+            $row['comuna'] ?? '',
+            $row['lat'] ?? '',
+            $row['lng'] ?? '',
+            $row['orden_visita'] ?? '',
+            $row['tamano_ruta'] ?? '',
+            $row['cantidad_objetivo_dia'] ?? '',
+            $row['distancia_total_ruta_km'] ?? '',
+            $row['primera_fecha_original'] ?? '',
+            $row['ultima_fecha_original'] ?? '',
+            $row['observacion'] ?? '',
+        ]], null, 'A' . $baseRowNumber);
+        $baseSheet->setCellValueExplicit('A' . $baseRowNumber, $userLogin, DataType::TYPE_STRING);
+        $baseSheet->setCellValueExplicit('E' . $baseRowNumber, (string)($row['codigo_local'] ?? ''), DataType::TYPE_STRING);
+        $baseRowNumber++;
+    }
+
+    $lastBaseRow = max(2, $baseRowNumber - 1);
+    $baseSheet->freezePane('A2');
+    $baseSheet->setAutoFilter("A1:Q{$lastBaseRow}");
+    $baseSheet->getStyle("A2:Q{$lastBaseRow}")->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+    $baseWidths = [20, 26, 20, 30, 18, 28, 36, 20, 14, 14, 14, 14, 22, 25, 21, 21, 55];
+    foreach ($baseWidths as $index => $width) {
+        $baseSheet->getColumnDimensionByColumn($index + 1)->setWidth($width);
+    }
+}
+
 $sinRutaSheet = $spreadsheet->createSheet();
-$sinRutaSheet->setTitle('Sin Ruta');
+$sinRutaSheet->setTitle(uniqueSheetTitle($spreadsheet, 'Sin Ruta'));
 $sinRutaHeaders = ['Código Local', 'Nombre', 'Dirección', 'Comuna', 'Lat', 'Lng', 'Motivo'];
 $sinRutaSheet->fromArray([$sinRutaHeaders], null, 'A1');
 styleHeader($sinRutaSheet, 'A1:G1');
@@ -164,13 +282,16 @@ foreach ([18, 28, 36, 20, 14, 14, 40] as $index => $width) {
     $sinRutaSheet->getColumnDimensionByColumn($index + 1)->setWidth($width);
 }
 
-$spreadsheet->setActiveSheetIndex(1);
+$spreadsheet->setActiveSheetIndexByName($planSheet->getTitle());
 
 while (ob_get_level() > 0) {
     ob_end_clean();
 }
 
-$filename = 'planificacion_rutas_editada_' . date('Ymd_His') . '.xlsx';
+$filenamePrefix = ($baseWorkbookIncluded || $routeBaseRows)
+    ? 'rutero_periodo_con_rutas_base_'
+    : 'planificacion_rutas_editada_';
+$filename = $filenamePrefix . date('Ymd_His') . '.xlsx';
 header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 header('Content-Disposition: attachment; filename="' . $filename . '"');
 header('Cache-Control: max-age=0');

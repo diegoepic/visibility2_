@@ -37,6 +37,12 @@ if (!empty($_SESSION['usuario_id'])) {
 $login_error = $_SESSION['error_login'] ?? '';
 unset($_SESSION['error_login']);
 $session_expired = (isset($_GET['session_expired']) && $_GET['session_expired'] == '1');
+
+// Aviso del cambio de acceso a RUT: visible para todos, con cuenta regresiva.
+require_once __DIR__ . '/../lib_login_rut.php';
+$rutSoloYa   = login_solo_rut_activo();
+$rutDias     = login_dias_para_corte();
+$rutFecha    = date('d/m/Y', strtotime(login_fecha_corte()));
 ?>
 <!DOCTYPE html>
 <html lang="es" class="no-js">
@@ -91,6 +97,24 @@ $session_expired = (isset($_GET['session_expired']) && $_GET['session_expired'] 
       <div class="box-login">
 
         <!-- Avisos -->
+        <?php /* Cambio de acceso a RUT: se muestra a todos porque el que entra
+                 con nombre de usuario no tiene forma de saberlo si no. Al pasar
+                 la fecha el texto cambia de "va a ser" a "es". */ ?>
+        <div class="alert <?php echo $rutSoloYa ? 'alert-info' : 'alert-warning'; ?>" role="alert" style="margin-top:10px;">
+          <i class="fa fa-id-card-o"></i>
+          <?php if ($rutSoloYa): ?>
+            El ingreso es <b>solo con tu RUT</b>, sin puntos ni guion. Tu contraseña no cambió.
+          <?php elseif ($rutDias === 0): ?>
+            Desde <b>hoy</b> el ingreso es <b>solo con tu RUT</b>, sin puntos ni guion.
+          <?php elseif ($rutDias === 1): ?>
+            Desde <b>mañana</b> el ingreso será <b>solo con tu RUT</b>, sin puntos ni guion.
+          <?php else: ?>
+            A partir del <b><?php echo htmlspecialchars($rutFecha, ENT_QUOTES, 'UTF-8'); ?></b>
+            el ingreso será <b>solo con tu RUT</b>, sin puntos ni guion
+            (faltan <?php echo (int)$rutDias; ?> días). Tu contraseña no cambia.
+          <?php endif; ?>
+        </div>
+
         <?php if ($session_expired): ?>
           <div class="alert alert-warning" role="alert" style="margin-top:10px;">
             <i class="fa fa-info-circle"></i>
@@ -228,6 +252,8 @@ $session_expired = (isset($_GET['session_expired']) && $_GET['session_expired'] 
 
       <div class="copyright">
         2025 &copy; Visibility 2
+        &middot;
+        <a href="/visibility2/portal/legal/politica-privacidad.html" style="color:inherit;text-decoration:underline;">Política de Privacidad</a>
       </div>
     </div>
 
@@ -237,7 +263,9 @@ $session_expired = (isset($_GET['session_expired']) && $_GET['session_expired'] 
     <script src="assets/plugins/jquery-validation/dist/jquery.validate.min.js"></script>
     <script src="assets/js/login.js"></script>
     <script src="assets/js/usuario.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- sweetalert2 local (assets/vendor/, v11.26.25). Antes venia de cdn.jsdelivr.net; se bajo
+         al servidor para poder cerrar cdn.jsdelivr.net en el CSP de lib/security_headers.php. -->
+    <script src="/visibility2/app/assets/vendor/sweetalert2.all.min.js"></script>
 
     <script>
     document.getElementById('formLogin').addEventListener('submit', function () {

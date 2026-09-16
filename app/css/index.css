@@ -59,18 +59,26 @@
     .priority-row { background-color: #fff3cd !important; }
     .priority-icon { color: #ff9800; margin-right: 5px; }
     .nav-hud{ pointer-events:none; position:absolute; inset:0; z-index:1003; }
+    /* Banner + chips + "Después" apilados. Una sola caja posicionada; lo de adentro va en
+       flujo normal, así ninguno depende de la altura del otro. NO volver a poner `top` fijo
+       en los hijos: el banner crece con instrucciones de dos líneas. */
+    .nav-hud .nav-top{
+      position:absolute; top:10px; left:10px; right:10px;
+      display:flex; flex-direction:column; gap:6px; align-items:stretch;
+    }
     .nav-hud .nav-banner{
-      pointer-events:auto; position:absolute; top:10px; left:10px; right:10px;
+      pointer-events:auto;
       background:#ffffff; border:1px solid #d9dee6; border-radius:12px;
       box-shadow:0 6px 24px rgba(0,0,0,.12); padding:10px 12px;
       display:flex; align-items:center; gap:10px;
     }
-    .nav-banner .nav-ic{ width:28px; height:28px; display:inline-grid; place-items:center;
+    .nav-banner .nav-ic{ width:28px; height:28px; flex:0 0 28px; display:inline-grid; place-items:center;
       border-radius:999px; background:#eef3f8; color:#2563eb; font-size:16px; }
-    .nav-banner .nav-main{ font-weight:700; color:#0f172a; }
+    .nav-banner .nav-main{ font-weight:700; color:#0f172a; overflow-wrap:anywhere; }
     .nav-banner .nav-sub{ color:#64748b; font-size:12px; margin-top:2px; }
     .nav-hud .nav-nextnext{
-      position:absolute; top:64px; left:12px; background:rgba(0,0,0,.6); color:#fff;
+      align-self:flex-start; max-width:100%;
+      background:rgba(0,0,0,.6); color:#fff;
       padding:4px 8px; border-radius:8px; font-size:12px;
     }
     .nav-hud .nav-bottom{
@@ -119,19 +127,31 @@
       .nav-banner .nav-main{ color:#e2e8f0; } .nav-banner .nav-sub{ color:#94a3b8; }
     }
 
+    /* OJO: main.css le pone `height:36px` a TODA .panel-heading. Acá adentro hay
+       5 badges + 3 botones que en pantallas angostas (o con la fuente del sistema
+       más grande) se van a 3, 4 o 5 filas: todo lo que pasa de esos 36px se sale
+       de la caja y, como la cabecera es `position:relative`, se dibuja ENCIMA del
+       calendario. Con altura automática la cabecera crece sola y empuja al body.
+       No poner `overflow:hidden` acá: recortaría los botones en vez de mostrarlos. */
     #journalPanel .panel-heading{
+      height:auto;
+      min-height:36px;
       align-items:flex-start;
       flex-wrap:wrap;
       row-gap:6px;
       padding-bottom:8px;
+      /* Los 40px de la izquierda que pone el tema son para el icono absoluto de la
+         cabecera; esta cabecera no tiene icono (el de "Gestiones" va afuera del
+         panel), así que ese espacio sólo empuja los botones a filas de más. */
+      padding-left:15px;
     }
-  
+
     #journalPanel .panel-heading .label{
       display:inline-block;
-      white-space:nowrap;     
+      white-space:nowrap;
       margin:0 6px 3px 0;
     }
-    
+
 
     #journalPanel .panel-heading > div:last-child{
       margin-left:auto;
@@ -142,10 +162,11 @@
       justify-content:flex-end;
     }
 
-    #journalPanel .panel-heading + .panel-body{
-      padding-top:85px;
-    }
-    
+    /* Antes acá había un `padding-top:85px` para tapar el desborde de la cabecera.
+       Era un número mágico: calzaba sólo cuando los botones ocupaban 2 filas, y en
+       los teléfonos donde caían en 3 el journal aparecía superpuesto. Ya no hace
+       falta ahora que la cabecera tiene altura real. */
+
     #journalPanel .nav { position: static !important; }
     
     #journalPanel .nav-tabs{
@@ -226,6 +247,9 @@
 .net-badge.is-online{background:#e8f7ee;color:#198754;}
 .net-badge.is-offline{background:#fdecea;color:#b02a37;}
 .queue-muted{color:#888;}
+/* Hay gestiones que no llegaron al servidor. Tiene que verse sin leer el número:
+   es el aviso de que la jornada NO está sincronizada. */
+.queue-muted.queue-has-error{color:#b02a37;font-weight:700;}
 
 .btn-info {
     color: #fff;
@@ -432,10 +456,10 @@
 
 /* ===== Pase 2: HUD (chips/voz/saltar), toasts y bottom sheet ===== */
 
-/* Chips de estado del HUD (GPS / tráfico-cache / próximo local) */
-.nav-hud .nav-nextnext{ top:96px; }            /* deja espacio bajo los chips */
+/* Chips de estado del HUD (GPS / tráfico-cache / próximo local).
+   Sin `position` ni `top`: van apilados dentro de .nav-top (ver arriba). Con flex-wrap
+   pueden ocupar dos filas en pantallas angostas y el "Después:" baja solo. */
 .nav-chips{
-    position:absolute; top:64px; left:10px; right:10px;
     display:flex; gap:6px; flex-wrap:wrap; pointer-events:none;
 }
 .nav-chip{
@@ -521,3 +545,11 @@ body.nav-fullscreen #map{
     border-radius: 10px;
     min-width: 90px;
 }
+/* Enlace al centro de recuperacion. Aparece pegado al contador solo cuando hay algo
+   atascado: un numero rojo sin salida es peor que no mostrarlo. */
+.queue-fix{
+  display:inline-block;margin-left:8px;padding:1px 8px;border-radius:10px;
+  background:#b02a37;color:#fff !important;font-size:11px;font-weight:700;
+  text-decoration:none !important;line-height:16px;white-space:nowrap;
+}
+.queue-fix:hover,.queue-fix:focus{background:#8f2029;color:#fff !important;}

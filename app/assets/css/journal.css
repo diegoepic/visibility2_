@@ -207,42 +207,314 @@
   color:#fff;
 }
 
-/* Detalle en modal */
-.jr-detail-section{
-  margin-bottom:18px;
+
+/* ==========================================================================
+   Detalle de una gestión en el modal ("Ver detalle") — prefijo .jr-vd-*
+   Pensado para el teléfono: todo apila solo, sin tablas y sin anchos fijos.
+   Ojo: .jr-d-left / .jr-d-kind / .jr-d-actions de más arriba son de la cola
+   local, no de acá.
+   ========================================================================== */
+.jr-vd{
+  color:#243447;
+  font-size:14px;
+  line-height:1.45;
 }
-.jr-detail-section h4{
-  margin-top:0;
-  margin-bottom:8px;
-  font-size:16px;
+.jr-vd-sec{
+  margin-bottom:20px;
 }
-.jr-detail-material .panel-body,
-.jr-detail-question .panel-body{
-  font-size:.92em;
+.jr-vd-sec:last-child{
+  margin-bottom:0;
 }
-.jr-detail-photos{
-  margin-top:6px;
+.jr-vd-h{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:0 0 10px;
+  font-size:14px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  color:#5b6b80;
 }
-.jr-detail-photo-inline img{
-  display:block;
+.jr-vd-h::after{           /* línea que rellena hasta el borde derecho */
+  content:"";
+  flex:1;
+  height:1px;
+  background:#e5e9f0;
+}
+.jr-vd-count{
+  background:#eef2f8;
+  color:#5b6b80;
+  border-radius:999px;
+  padding:1px 8px;
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:0;
+}
+.jr-vd-offline{
+  margin:0 0 10px;
+  padding:8px 10px;
+  border-radius:8px;
+  background:#fff6e5;
+  color:#8a5a00;
+  font-size:13px;
 }
 
-/* Encabezado de cada pregunta */
-.jr-q-heading{
+/* ---- Cifras de la visita ---- */
+.jr-vd-kpis{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(78px, 1fr));
+  gap:8px;
+  margin-bottom:12px;
+}
+.jr-vd-kpi{
   display:flex;
   flex-direction:column;
-  gap:4px;
+  align-items:center;
+  justify-content:center;
+  gap:2px;
+  padding:10px 6px;
+  border:1px solid #e5e9f0;
+  border-radius:10px;
+  background:#f8fafc;
+  text-align:center;
 }
-.jr-q-title{
-  font-weight:600;
+.jr-vd-kpi-n{
+  font-size:18px;
+  font-weight:700;
+  color:#1f2d3d;
+  line-height:1.1;
+  word-break:break-word;
 }
-.jr-q-tags{
+.jr-vd-kpi-l{
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  color:#7b8a9e;
+}
+
+/* ---- Datos del local / campaña ---- */
+.jr-vd-facts{
+  border:1px solid #e5e9f0;
+  border-radius:10px;
+  overflow:hidden;
+}
+.jr-vd-fact{
   display:flex;
   flex-wrap:wrap;
-  gap:4px;
+  gap:2px 10px;
+  padding:8px 12px;
+  border-bottom:1px solid #eef2f8;
 }
-.jr-q-tags .label{
-  font-size:.75em;
+.jr-vd-fact:last-child{
+  border-bottom:none;
+}
+.jr-vd-fact-k{
+  flex:0 0 108px;
+  color:#7b8a9e;
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+}
+.jr-vd-fact-v{
+  flex:1 1 160px;         /* si no caben 160px se va solo a la línea de abajo */
+  min-width:0;
+  overflow-wrap:anywhere;
+  font-weight:600;
+}
+
+/* ---- Tarjetas (material / pregunta) ---- */
+.jr-vd-card{
+  border:1px solid #e5e9f0;
+  border-radius:10px;
+  background:#fff;
+  margin-bottom:10px;
+  overflow:hidden;
+}
+.jr-vd-card-h{
+  display:flex;
+  align-items:flex-start;  /* con títulos de 2-3 líneas el badge se queda arriba */
+  flex-wrap:wrap;
+  gap:6px 8px;
+  padding:9px 12px;
+  background:#f8fafc;
+  border-bottom:1px solid #eef2f8;
+}
+.jr-vd-card-t{
+  flex:1 1 160px;
+  min-width:0;
+  font-weight:700;
+  overflow-wrap:anywhere;  /* nombres de material y preguntas largas sin cortar la caja */
+}
+.jr-vd-card-b{
+  padding:10px 12px;
+}
+
+/* ---- Badges de estado ---- */
+.jr-vd-badge{
+  display:inline-block;
+  padding:2px 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:700;
+  line-height:1.6;
+  white-space:nowrap;
+  background:#eef2f8;
+  color:#5b6b80;
+}
+.jr-vd-badge.is-ok  { background:#e4f5ea; color:#1e7a3c; }
+.jr-vd-badge.is-info{ background:#e6f0fb; color:#1b5fa8; }
+.jr-vd-badge.is-warn{ background:#fdf1dc; color:#9a6400; }
+.jr-vd-badge.is-err { background:#fdeaea; color:#a92c2c; }
+.jr-vd-badge.is-mute{ background:#eef2f8; color:#6b7a8d; }
+.jr-vd-badge.is-type{ background:#f0ecfb; color:#5b46a8; }
+
+/* ---- Movimientos de un material ---- */
+.jr-vd-evs{
+  list-style:none;
+  margin:0;
+  padding:0;
+}
+.jr-vd-ev{
+  padding:8px 0;
+  border-bottom:1px dashed #eef2f8;
+}
+.jr-vd-ev:first-child{ padding-top:0; }
+.jr-vd-ev:last-child { padding-bottom:0; border-bottom:none; }
+.jr-vd-ev-top{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:6px 8px;
+}
+.jr-vd-ev-date{
+  font-weight:600;
+  color:#3d4d63;
+  font-size:13px;
+}
+.jr-vd-ev-meta{
+  margin-top:3px;
+  font-size:13px;
+  color:#5b6b80;
+}
+.jr-vd-ev-obs{
+  margin:4px 0 0;
+  font-size:13px;
+  color:#5b6b80;
+  overflow-wrap:anywhere;
+}
+.jr-vd-empty{
+  margin:0;
+  color:#8b98a8;
+  font-style:italic;
+}
+
+/* ---- Respuestas de encuesta ---- */
+.jr-vd-q-n{
+  flex:0 0 auto;
+  min-width:22px;
+  height:22px;
+  padding:0 6px;
+  border-radius:11px;
+  background:#dfe6ef;
+  color:#3d4d63;
+  font-size:12px;
+  font-weight:700;
+  line-height:22px;
+  text-align:center;
+}
+.jr-vd-ans{
+  list-style:none;
+  margin:0;
+  padding:0;
+}
+.jr-vd-ans-i{
+  display:flex;
+  align-items:baseline;
+  flex-wrap:wrap;
+  gap:4px 8px;
+  padding:5px 0 5px 16px;
+  position:relative;
+  overflow-wrap:anywhere;
+}
+.jr-vd-ans-i::before{      /* viñeta propia: las <ul> del tema traen margen raro */
+  content:"";
+  position:absolute;
+  left:2px;
+  top:11px;
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:#9fb0c4;
+}
+.jr-vd-ans-i + .jr-vd-ans-i{
+  border-top:1px solid #f2f5f9;
+}
+.jr-vd-ans-v{
+  flex:1 1 auto;
+  min-width:0;
+  font-weight:600;
+}
+.jr-vd-ans-val{
+  background:#e4f5ea;
+  color:#1e7a3c;
+  border-radius:999px;
+  padding:1px 7px;
+  font-size:11px;
+  font-weight:700;
+  white-space:nowrap;
+}
+.jr-vd-ans-t{
+  color:#8b98a8;
+  font-size:11px;
+  white-space:nowrap;
+}
+.jr-vd-when{
+  margin-top:8px;
+  color:#8b98a8;
+  font-size:11px;
+}
+
+/* ---- Fotos ---- */
+.jr-vd-photos{
+  margin-top:10px;
+}
+.jr-vd-photos-t{
+  display:block;
+  margin-bottom:6px;
+  font-size:12px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+  color:#7b8a9e;
+}
+/* Cuadrícula de cuadrados: una foto vertical y una horizontal ocupan lo mismo,
+   que es lo que antes descuadraba la fila (cada img iba con su tamaño real
+   limitado a 80px por el lado más largo). */
+.jr-vd-thumbs{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(84px, 1fr));
+  gap:6px;
+  margin-top:8px;
+}
+.jr-vd-thumb{
+  display:block;
+  position:relative;
+  border-radius:8px;
+  overflow:hidden;
+  border:1px solid #e5e9f0;
+  background:#f2f5f9;
+  aspect-ratio:1 / 1;
+}
+.jr-vd-thumb img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+/* Navegadores sin aspect-ratio (WebView viejo): se cae a una altura fija. */
+@supports not (aspect-ratio: 1 / 1){
+  .jr-vd-thumb{ height:84px; }
 }
 
 /* Modal responsive */
@@ -254,6 +526,13 @@
 #jr-detail-modal .modal-body{
   max-height:calc(100vh - 180px);
   overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
+#jr-detail-modal .modal-title{
+  font-size:15px;
+  line-height:1.35;
+  overflow-wrap:anywhere;  /* títulos como "758886 - JUMBO … 03-08 AL 07-08" */
+  padding-right:20px;      /* no queda debajo de la X de cerrar */
 }
 
 /* Responsive */
@@ -292,6 +571,24 @@
   #jr-detail-modal .modal-dialog{
     max-width:none;
     margin:10px;
+  }
+  #jr-detail-modal .modal-body{
+    padding:12px;
+  }
+}
+
+@media (max-width: 480px){
+  /* En pantalla angosta la etiqueta va arriba y el dato abajo: con las dos en la
+     misma línea, direcciones y nombres de campaña quedaban en una columna de
+     dos palabras de ancho. */
+  .jr-vd-fact-k{
+    flex:1 1 100%;
+  }
+  .jr-vd-fact-v{
+    flex:1 1 100%;
+  }
+  .jr-vd-thumbs{
+    grid-template-columns:repeat(auto-fill, minmax(72px, 1fr));
   }
 }
 

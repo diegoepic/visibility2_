@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 session_start();
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
 
@@ -37,6 +37,13 @@ $formulario_estado = $_GET['formulario_estado'] ?? 'activos';
 
 $fecha_desde = $_GET['fecha_desde'] ?? '';
 $fecha_hasta = $_GET['fecha_hasta'] ?? '';
+// La carga en curso conserva toda su programación, aunque la URL traiga fechas antiguas.
+// Sólo los formularios finalizados admiten un rango por fecha real de visita.
+$permitirFiltroFecha = $formulario_estado === 'inactivos' && $estado_gestion !== 'activa';
+if (!$permitirFiltroFecha) {
+    $fecha_desde = '';
+    $fecha_hasta = '';
+}
 $usarFechaVisita = !empty($fecha_desde) || !empty($fecha_hasta);
 $fechaMedicionSql = $usarFechaVisita ? 'fq.fechaVisita' : 'fq.fechaPropuesta';
 
@@ -164,10 +171,12 @@ $fechaVisitaValida = "
     AND CAST(fq.fechaVisita AS CHAR(10)) <> '0000-00-00'
 ";
 
+$fechaMedicionValida = $usarFechaVisita ? $fechaVisitaValida : $fechaValida;
+
 $gestionFinalizada = "
     (
         COALESCE(fq.countVisita, 0) > 0
-        OR fq.pregunta IN (
+        OR COALESCE(fq.pregunta, '') IN (
             'solo_auditoria',
             'solo_implementado',
             'implementado_auditado',
@@ -285,7 +294,7 @@ $sql = "
 
     LEFT JOIN formularioQuestion fq
         ON fq.id_usuario = u.id
-       AND $fechaValida
+       AND $fechaMedicionValida
 ";
 
 /* filtros que deben afectar la carga, pero sin sacar al usuario del universo */
@@ -410,7 +419,7 @@ $sqlDept = "
 
     LEFT JOIN formularioQuestion fq
         ON fq.id_usuario = u.id
-       AND $fechaValida
+       AND $fechaMedicionValida
 ";
 
 $typesDept = "";
@@ -696,7 +705,7 @@ $sqlEstadoVisita = "
 
     INNER JOIN formularioQuestion fq
         ON fq.id_usuario = u.id
-       AND $fechaValida
+       AND $fechaMedicionValida
 
     INNER JOIN formulario f
         ON f.id = fq.id_formulario
@@ -1596,6 +1605,18 @@ $conn->close();
     font-weight: 900;
     color: #0f2748;
     margin: 0;
+}
+
+.programada-filters-form [hidden] {
+    display: none !important;
+}
+
+.programada-scope-note {
+    flex: 1 1 100%;
+    margin: 0;
+    color: #5d6b81;
+    font-size: 13px;
+    line-height: 1.5;
 }
 
 .estado-visita-subtitle {
@@ -2565,24 +2586,24 @@ $conn->close();
             </div>
 
             <div class="programada-field field-sm">
-                <label>Estado formulario</label>
-                <select name="formulario_estado" class="form-control">
+                <label for="formulario_estado">Estado formulario</label>
+                <select name="formulario_estado" id="formulario_estado" class="form-control">
                     <option value="todos" <?= $formulario_estado === 'todos' ? 'selected' : '' ?>>Todos</option>
-                    <option value="activos" <?= $formulario_estado === 'activos' ? 'selected' : '' ?>>Activos</option>
-                    <option value="inactivos" <?= $formulario_estado === 'inactivos' ? 'selected' : '' ?>>Inactivos</option>
+                    <option value="activos" <?= $formulario_estado === 'activos' ? 'selected' : '' ?>>En curso</option>
+                    <option value="inactivos" <?= $formulario_estado === 'inactivos' ? 'selected' : '' ?>>Finalizados</option>
                 </select>
             </div>
 
-            <div class="programada-field field-date">
-                <label>Visita desde</label>
-                <input type="date" name="fecha_desde" class="form-control" value="<?= h($fecha_desde) ?>">
+            <div class="programada-field field-date js-fecha-finalizados" <?= !$permitirFiltroFecha ? 'hidden' : '' ?>>
+                <label for="fecha_desde">Visita desde</label>
+                <input type="date" name="fecha_desde" id="fecha_desde" class="form-control" value="<?= h($fecha_desde) ?>" <?= !$permitirFiltroFecha ? 'disabled' : '' ?>>
             </div>
 
-            <div class="programada-separator">-</div>
+            <div class="programada-separator js-fecha-finalizados" <?= !$permitirFiltroFecha ? 'hidden' : '' ?>>-</div>
 
-            <div class="programada-field field-date">
-                <label>Visita hasta</label>
-                <input type="date" name="fecha_hasta" class="form-control" value="<?= h($fecha_hasta) ?>">
+            <div class="programada-field field-date js-fecha-finalizados" <?= !$permitirFiltroFecha ? 'hidden' : '' ?>>
+                <label for="fecha_hasta">Visita hasta</label>
+                <input type="date" name="fecha_hasta" id="fecha_hasta" class="form-control" value="<?= h($fecha_hasta) ?>" <?= !$permitirFiltroFecha ? 'disabled' : '' ?>>
             </div>
 
             <div class="programada-field field-btn">
@@ -2592,6 +2613,11 @@ $conn->close();
                 </button>
             </div>
 
+            <p id="alcanceCargaNota" class="programada-scope-note" aria-live="polite">
+                <?= $permitirFiltroFecha
+                    ? 'Finalizados: puedes filtrar por la fecha real de visita.'
+                    : 'Vista global sin filtro de fechas. Incluye toda la programación y los pendientes de meses anteriores.' ?>
+            </p>
         </form>
     </div>
 </div>
@@ -2647,7 +2673,7 @@ $conn->close();
         <!-- KPI 3 -->
         <div class="kpi-mini-box">
             <div class="kpi-mini-label warning">
-                <i class="far fa-clock mr-1"></i> ACTIVAS
+                <i class="far fa-clock mr-1"></i> PENDIENTES
             </div>
             <div class="kpi-mini-value"><?= $totalPendientes ?></div>
         </div>
@@ -2656,7 +2682,7 @@ $conn->close();
         <div class="kpi-progress-box">
             <div class="kpi-progress-top">
                 <span class="progress-left-label"><?= $porcCompletadas ?>% Finalizadas</span>
-                <span class="progress-right-label"><?= $porcPendientes ?>% Activas</span>
+                <span class="progress-right-label"><?= $porcPendientes ?>% Pendientes</span>
             </div>
 
             <div class="kpi-progress-bar">
@@ -2680,7 +2706,7 @@ $conn->close();
                     <div class="text-small-muted">
                         <?= $usarFechaVisita
                             ? 'Las métricas se calculan desde las visitas realizadas en el rango seleccionado.'
-                            : 'La carga se calcula desde las planificaciones asignadas y su avance operativo.' ?>
+                            : 'Avance global sobre toda la programación de los formularios seleccionados, incluidos los pendientes de meses anteriores.' ?>
                     </div>
                 </div>
             </div>
@@ -2693,7 +2719,7 @@ $conn->close();
                             <th class="text-center">Avance</th>
                             <th>Departamentos</th>
                             <th class="text-center"><?= $usarFechaVisita ? 'Visitas' : 'Planificado' ?></th>
-                            <th class="text-center">Activos</th>
+                            <th class="text-center">Pendientes</th>
                             <th class="text-center">Finalizadas</th>
                             <th class="text-center">Ratio avance</th>
                             <th class="text-center">Ultima visita</th>
@@ -2990,28 +3016,12 @@ $conn->close();
         <td class="text-center">
             <div class="action-wrap justify-content-center">
                 <button type="button"
-                        class="btn-grid-action secondary btn-ver-resumen"
+                        class="btn-grid-action primary btn-ver-resumen"
                         data-id-ejecutor="<?= (int)$t['id_ejecutor'] ?>"
                         data-nombre="<?= h($t['nombre'] . ' ' . $t['apellido']) ?>"
                         data-usuario="<?= h($t['usuario']) ?>">
-                    Resumen
+                    <i class="fas fa-chart-pie mr-1"></i> Ver resumen
                 </button>
-
-                <button type="button"
-                        class="btn-grid-action primary btn-ver-detalle"
-                        data-id-ejecutor="<?= (int)$t['id_ejecutor'] ?>"
-                        data-nombre="<?= h($t['nombre'] . ' ' . $t['apellido']) ?>"
-                        data-usuario="<?= h($t['usuario']) ?>">
-                    Detalle
-                </button>
-
-                <button type="button"
-                        class="btn-grid-action secondary btn-ver-planificado"
-                        data-nombre="<?= h($t['nombre'] . ' ' . $t['apellido']) ?>"
-                        data-usuario="<?= h($t['usuario']) ?>">
-                    <?= $usarFechaVisita ? 'Visitas' : 'Planificado' ?>
-                </button>
-                 
             </div>
         </td>
 
@@ -3145,8 +3155,8 @@ $conn->close();
             <div class="modal-header">
                 <div>
                     <h5 class="modal-title" id="modalResumenCargaLabel">
-                        <i class="fas fa-list-alt mr-2"></i>
-                        Resumen de carga
+                        <i class="fas fa-chart-pie mr-2"></i>
+                        Resumen integral del trabajador
                     </h5>
                     <div class="modal-subtitle" id="modalResumenTrabajador">
                         -
@@ -3173,41 +3183,76 @@ $conn->close();
 
                     <div class="resumen-kpi-row mb-3">
                         <div class="resumen-kpi">
-                            <span>Total formularios</span>
-                            <strong id="resumenTotalFormularios">0</strong>
+                            <span>Departamentos</span>
+                            <strong id="resumenTotalDepartamentos">0</strong>
                         </div>
 
                         <div class="resumen-kpi">
-                            <span>Total pendiente</span>
-                            <strong id="resumenTotalPendiente">0</strong>
+                            <span>Campañas</span>
+                            <strong id="resumenTotalCampanas">0</strong>
                         </div>
 
                         <div class="resumen-kpi">
-                            <span><?= $usarFechaVisita ? 'Primera visita' : 'Primera pendiente' ?></span>
-                            <strong id="resumenPrimeraPendiente">-</strong>
+                            <span>Locales asignados</span>
+                            <strong id="resumenTotalAsignado">0</strong>
                         </div>
 
                         <div class="resumen-kpi">
-                            <span><?= $usarFechaVisita ? 'Ultima visita' : 'Ultima planificacion' ?></span>
-                            <strong id="resumenUltimaPlanificacion">-</strong>
+                            <span>Ratio de avance</span>
+                            <strong id="resumenRatioAvance">0%</strong>
                         </div>
                     </div>
+
+                    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+                        <div class="text-small-muted mb-2 mb-md-0">
+                            Descarga la carga activa completa o la actividad del período, incluyendo campañas finalizadas.
+                        </div>
+                        <div class="d-flex flex-wrap">
+                            <a id="descargarFechasTrabajador" href="#" class="btn btn-success btn-sm mr-2 mb-1">
+                                <i class="fas fa-file-excel mr-1"></i> Descargar todo lo activo
+                            </a>
+                            <button id="mostrarEjecucionesTrabajador" type="button" class="btn btn-primary btn-sm mb-1" aria-expanded="false" aria-controls="filtroEjecucionesTrabajador">
+                                <i class="fas fa-calendar-alt mr-1"></i> Ejecuciones por día
+                            </button>
+                        </div>
+                    </div>
+
+                    <form id="filtroEjecucionesTrabajador" class="border rounded p-3 mb-3 d-none" action="exportar_carga_trabajador.php" method="GET">
+                        <input type="hidden" name="id_ejecutor" id="ejecucionesIdTrabajador">
+                        <input type="hidden" name="alcance" value="ejecuciones">
+                        <input type="hidden" name="formato" value="fechas">
+                        <input type="hidden" name="division_usuario" value="<?= (int)$division_usuario ?>">
+                        <input type="hidden" name="subdivision_usuario" value="<?= (int)$subdivision_usuario ?>">
+                        <input type="hidden" name="clasificacion_usuario" value="<?= h($clasificacion_usuario) ?>">
+                        <p class="text-small-muted mb-2">Fecha real de visita, sin importar si la campaña sigue activa o está finalizada. IW usa la fecha de registro. El Excel muestra una fila por día, local y campaña.</p>
+                        <div class="form-row align-items-end">
+                            <div class="form-group col-md-4 mb-2">
+                                <label for="ejecucionesDesde">Desde</label>
+                                <input type="date" class="form-control" id="ejecucionesDesde" name="fecha_desde" required>
+                            </div>
+                            <div class="form-group col-md-4 mb-2">
+                                <label for="ejecucionesHasta">Hasta</label>
+                                <input type="date" class="form-control" id="ejecucionesHasta" name="fecha_hasta" required>
+                            </div>
+                            <div class="form-group col-md-4 mb-2">
+                                <button type="submit" class="btn btn-success btn-block">Descargar ejecuciones</button>
+                            </div>
+                        </div>
+                    </form>
 
                     <div class="table-responsive">
                         <table class="table table-sm table-resumen-formularios mb-0">
                             <thead>
                                 <tr>
-                                    <th>Formulario</th>
-                                    <th>Division</th>
-                                    <th class="text-center"><?= $usarFechaVisita ? 'Gestiones' : 'Pendientes' ?></th>
-                                    <th class="text-center"><?= $usarFechaVisita ? 'Anteriores' : 'Vencidas' ?></th>
-                                    <th class="text-center">Hoy</th>
-                                    <th class="text-center"><?= $usarFechaVisita ? 'Posteriores' : 'Futuras' ?></th>
-                                    <th><?= $usarFechaVisita ? 'Primera visita' : 'Primera pendiente' ?></th>
-                                    <th><?= $usarFechaVisita ? 'Ultima visita' : 'Ultima planificacion' ?></th>
+                                    <th>Departamento</th>
+                                    <th class="text-center">Cantidad de campañas</th>
+                                    <th class="text-center">Locales</th>
+                                    <th class="text-center">Visitados</th>
+                                    <th class="text-center">Gestionados</th>
+                                    <th class="text-center">Ratio avance</th>
                                 </tr>
                             </thead>
-                            <tbody id="tbodyResumenFormularios">
+                            <tbody id="tbodyResumenDepartamentos">
                             </tbody>
                         </table>
                     </div>
@@ -3303,6 +3348,30 @@ $conn->close();
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
 
 <script>
+// El alcance del formulario no depende de que carguen las librerías de la tabla.
+(function () {
+    const estadoFormulario = document.getElementById('formulario_estado');
+    const camposFecha = document.querySelectorAll('.js-fecha-finalizados');
+    const nota = document.getElementById('alcanceCargaNota');
+
+    function actualizarFiltroFecha() {
+        const permitirFecha = estadoFormulario.value === 'inactivos'
+            && <?= json_encode($estado_gestion !== 'activa') ?>;
+        camposFecha.forEach(function (campo) {
+            campo.hidden = !permitirFecha;
+            campo.querySelectorAll('input').forEach(function (input) {
+                input.disabled = !permitirFecha;
+            });
+        });
+        nota.textContent = permitirFecha
+            ? 'Finalizados: puedes filtrar por la fecha real de visita.'
+            : 'Vista global sin filtro de fechas. Incluye toda la programación y los pendientes de meses anteriores.';
+    }
+
+    estadoFormulario.addEventListener('change', actualizarFiltroFecha);
+    actualizarFiltroFecha();
+})();
+
 $(document).ready(function() {
 
     function cargarSubdivisionesUsuario(idDivision, selected = 0) {
@@ -3537,26 +3606,28 @@ $(document).ready(function () {
         $('#modalResumenError').addClass('d-none');
         $('#modalResumenContenido').addClass('d-none');
 
-        $('#tbodyResumenFormularios').html('');
-        $('#resumenTotalFormularios').text('0');
-        $('#resumenTotalPendiente').text('0');
-        $('#resumenPrimeraPendiente').text('-');
-        $('#resumenUltimaPlanificacion').text('-');
+        $('#tbodyResumenDepartamentos').html('');
+        $('#resumenTotalDepartamentos').text('0');
+        $('#resumenTotalCampanas').text('0');
+        $('#resumenTotalAsignado').text('0');
+        $('#resumenRatioAvance').text('0%');
+        $('#descargarFechasTrabajador').attr('href', '#');
     }
 
     function renderResumen(response) {
-        const rows = response.data || [];
+        const rows = response.departamentos || [];
+        const totals = response.totales || {};
 
-        $('#resumenTotalFormularios').text(response.totales.total_formularios || 0);
-        $('#resumenTotalPendiente').text(response.totales.total_pendiente || 0);
-        $('#resumenPrimeraPendiente').text(formatFecha(response.totales.primera_pendiente));
-        $('#resumenUltimaPlanificacion').text(formatFecha(response.totales.ultima_planificacion));
+        $('#resumenTotalDepartamentos').text(totals.total_departamentos || 0);
+        $('#resumenTotalCampanas').text(totals.total_campanas || 0);
+        $('#resumenTotalAsignado').text(totals.total_asignado || 0);
+        $('#resumenRatioAvance').text((totals.ratio_avance || 0) + '%');
 
         if (!rows.length) {
-            $('#tbodyResumenFormularios').html(`
+            $('#tbodyResumenDepartamentos').html(`
                 <tr>
-                    <td colspan="8" class="text-center text-muted py-4">
-                        No se encontraron formularios para este trabajador con los filtros seleccionados.
+                    <td colspan="6" class="text-center text-muted py-4">
+                        No se encontraron departamentos o campañas para este trabajador con los filtros seleccionados.
                     </td>
                 </tr>
             `);
@@ -3566,50 +3637,64 @@ $(document).ready(function () {
         let html = '';
 
         rows.forEach(function (item) {
+            const campaignsCount = new Set((item.campanas || []).map(function (campaign) {
+                return String(campaign.id_formulario || '') + '|' + String(campaign.formulario || '');
+            })).size;
+
             html += `
                 <tr>
                     <td>
                         <div class="resumen-form-title">
-                            ${escapeHtml(item.formulario)}
-                        </div>
-                        <div class="resumen-form-sub">
-                            ID formulario: ${escapeHtml(item.id_formulario)}
+                            ${escapeHtml(item.departamento || 'Sin departamento')}
                         </div>
                     </td>
 
-                    <td>
-                        ${escapeHtml(item.division_formulario || '-')}
-                        ${item.subdivision_formulario ? `<div class="resumen-form-sub">${escapeHtml(item.subdivision_formulario)}</div>` : ''}
+                    <td class="text-center">
+                        <span class="resumen-pill">${escapeHtml(campaignsCount)}</span>
                     </td>
 
                     <td class="text-center">
-                        <span class="resumen-pill warning">${escapeHtml(item.total_pendiente)}</span>
+                        <span class="resumen-pill">${escapeHtml(item.total_asignado || 0)}</span>
                     </td>
 
                     <td class="text-center">
-                        <span class="resumen-pill danger">${escapeHtml(item.total_vencido)}</span>
+                        <span class="resumen-pill warning">${escapeHtml(item.total_visitado || 0)}</span>
                     </td>
 
                     <td class="text-center">
-                        <span class="resumen-pill">${escapeHtml(item.total_hoy)}</span>
+                        <span class="resumen-pill success">${escapeHtml(item.total_gestionado || 0)}</span>
                     </td>
 
                     <td class="text-center">
-                        <span class="resumen-pill success">${escapeHtml(item.total_futuro)}</span>
-                    </td>
-
-                    <td>
-                        <strong>${formatFecha(item.primera_pendiente)}</strong>
-                    </td>
-
-                    <td>
-                        <strong>${formatFecha(item.ultima_planificacion)}</strong>
+                        <strong>${escapeHtml(item.ratio_avance || 0)}%</strong>
                     </td>
                 </tr>
             `;
         });
 
-        $('#tbodyResumenFormularios').html(html);
+        $('#tbodyResumenDepartamentos').html(html);
+    }
+
+    $('#mostrarEjecucionesTrabajador').on('click', function () {
+        const abrir = $('#filtroEjecucionesTrabajador').hasClass('d-none');
+        $('#filtroEjecucionesTrabajador').toggleClass('d-none', !abrir);
+        $(this).attr('aria-expanded', abrir ? 'true' : 'false');
+        if (abrir) document.getElementById('ejecucionesDesde').focus();
+    });
+    $('#ejecucionesDesde').on('change', function () {
+        document.getElementById('ejecucionesHasta').min = this.value;
+    });
+
+    function exportUrl(idEjecutor, formato) {
+        const params = new URLSearchParams({
+            id_ejecutor: idEjecutor,
+            formato: formato,
+            alcance: 'activos',
+            division_usuario: '<?= (int)$division_usuario ?>',
+            subdivision_usuario: '<?= (int)$subdivision_usuario ?>',
+            clasificacion_usuario: '<?= h($clasificacion_usuario) ?>'
+        });
+        return 'exportar_carga_trabajador.php?' + params.toString();
     }
 
     $(document).on('click', '.btn-ver-resumen', function () {
@@ -3618,8 +3703,14 @@ $(document).ready(function () {
         const usuario = $(this).data('usuario') || '';
 
         resetModalResumen();
+        document.getElementById('filtroEjecucionesTrabajador').reset();
+        $('#filtroEjecucionesTrabajador').addClass('d-none');
+        $('#mostrarEjecucionesTrabajador').attr('aria-expanded', 'false');
+        $('#ejecucionesIdTrabajador').val(idEjecutor);
+        document.getElementById('ejecucionesHasta').min = '';
 
         $('#modalResumenTrabajador').text(nombre + ' / ' + usuario);
+        $('#descargarFechasTrabajador').attr('href', exportUrl(idEjecutor, 'fechas'));
         $('#modalResumenCarga').modal('show');
 
         $.ajax({

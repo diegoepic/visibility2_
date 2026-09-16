@@ -33,11 +33,6 @@ if ($job['status'] === 'validation_completed' || $job['status'] === 'applying' |
 if (!in_array($job['status'], ['pending_validation','validating'], true)) jsonResponse(['success'=>false,'message'=>'El job no esta disponible para validar.'], 409);
 if (!localImportAcquireLock($conn, $jobId)) jsonResponse(['success'=>false,'message'=>'Este lote ya se esta procesando.'], 409);
 
-$apiKey = etlLoadGoogleMapsApiKey();
-if ($apiKey === '') {
-    localImportReleaseLock($conn, $jobId);
-    jsonResponse(['success'=>false,'message'=>'Falta configurar GOOGLE_MAPS_API_KEY.'], 500);
-}
 $handle = fopen($job['file_path'], 'r');
 if (!$handle) {
     localImportReleaseLock($conn, $jobId);
@@ -48,6 +43,19 @@ $indexes = $headers !== false ? resolveLocalImportIndexes($headers) : false;
 if ($indexes === false) {
     fclose($handle); localImportReleaseLock($conn, $jobId);
     jsonResponse(['success'=>false,'message'=>'Los encabezados guardados ya no son validos.'], 500);
+}
+$usesClientCoordinates = localImportUsesClientCoordinates($indexes);
+if (localImportHasIncompleteCoordinateColumns($indexes)) {
+    fclose($handle); localImportReleaseLock($conn, $jobId);
+    jsonResponse(['success'=>false,'message'=>'El archivo debe contener juntas las columnas latitud y longitud.'], 500);
+}
+$apiKey = '';
+if (!$usesClientCoordinates) {
+    $apiKey = etlLoadGoogleMapsApiKey();
+    if ($apiKey === '') {
+        fclose($handle); localImportReleaseLock($conn, $jobId);
+        jsonResponse(['success'=>false,'message'=>'Falta configurar GOOGLE_MAPS_API_KEY.'], 500);
+    }
 }
 $start = (int)$job['validation_processed_rows'];
 $skipped = 0; $physicalLine = 1;
@@ -101,12 +109,25 @@ while ($batch < $limit && microtime(true) < $deadline && ($row = fgetcsv($handle
                 $boss = localImportInspectPerson($conn, 'jefe_venta', 'nombre', $record['jefe_venta']);
                 $record['vendedor_id']=$seller['id']; $record['vendedor_status']=$seller['status'];
                 $record['jefe_id']=$boss['id']; $record['jefe_status']=$boss['status'];
-                $validation = etlValidateAddress($record['direccion_limpia'], $record['comuna'], $apiKey, $physicalLine);
-                $record['estado']=$validation['status']; $record['motivo']=$validation['reason'];
-                $record['direccion_google']=$validation['formatted_address'];
-                $record['direccion_nueva']=etlPreferredAddress($validation, $record['direccion_limpia']);
-                $record['comuna_google']=$validation['suggested_locality'];
-                $record['lat']=$validation['lat']; $record['lng']=$validation['lng']; $record['response_id']=$validation['response_id'];
+                if ($usesClientCoordinates) {
+                    $record['lat'] = localImportParseCoordinate($row[$indexes['latitud']] ?? '', -90, 90);
+                    $record['lng'] = localImportParseCoordinate($row[$indexes['longitud']] ?? '', -180, 180);
+                    if ($record['lat'] === null || $record['lng'] === null) {
+                        $record['estado'] = 'ERROR_COORDENADAS';
+                        $record['motivo'] = 'Latitud o longitud vacia, no numerica, ambigua o fuera de rango.';
+                    } else {
+                        $record['estado'] = 'ACEPTADA';
+                        $record['motivo'] = 'Coordenadas proporcionadas por el cliente; no se consulto Google.';
+                        $record['direccion_nueva'] = $record['direccion_limpia'];
+                    }
+                } else {
+                    $validation = etlValidateAddress($record['direccion_limpia'], $record['comuna'], $apiKey, $physicalLine);
+                    $record['estado']=$validation['status']; $record['motivo']=$validation['reason'];
+                    $record['direccion_google']=$validation['formatted_address'];
+                    $record['direccion_nueva']=etlPreferredAddress($validation, $record['direccion_limpia']);
+                    $record['comuna_google']=$validation['suggested_locality'];
+                    $record['lat']=$validation['lat']; $record['lng']=$validation['lng']; $record['response_id']=$validation['response_id'];
+                }
             }
         }
     }

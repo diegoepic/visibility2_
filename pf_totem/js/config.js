@@ -15,9 +15,13 @@ window.PF_CONFIG = {
   // (la partida en curso queda registrada como "abandono")
   inactividadSeg: 45,
 
-  // Pedir pantalla completa al primer toque (activar para el evento;
-  // en desarrollo es molesto)
-  pantallaCompleta: false,
+  /* Pedir pantalla completa en el primer toque del attract.
+     Ningún navegador permite entrar sin un gesto del usuario, así que esto es
+     lo más automático que se puede: el primer visitante que toca la pantalla
+     la deja en modo kiosko. Para que arranque en pantalla completa SIN ningún
+     toque hay que abrir el navegador en modo kiosko (ver README).
+     En desarrollo conviene dejarlo en false: es molesto. */
+  pantallaCompleta: true,
 
   sonido: { activado: true, volumen: 0.6 },
 
@@ -85,9 +89,20 @@ window.PF_CONFIG = {
   /* La línea NO puede estar siempre a la misma altura. En un stand la gente
      ve jugar a los de adelante, y con una línea fija basta con memorizar
      "aguanto 2,5 segundos" para ganar sin siquiera mirar la pantalla.
-     Sorteándola en cada partida el único camino es mirar y calcular. */
+     Sorteándola en cada partida el único camino es mirar y calcular.
+
+     ⚠ Desde el evento Walmart la línea ya NO se sortea libre: cada variedad
+     tiene su MEDIDA DE SERVICIO real (ver `variedades[].medida`), que es lo
+     que la marca quiere enseñar. El sorteo quedó reducido a un jitter chico
+     alrededor de esa medida — suficiente para que no se memorice el tiempo,
+     sin dejar de ser la medida correcta. Estos dos campos sólo se usan si
+     la variedad no trae `medida` (respaldo). */
   lineaObjetivo: 62,   // usado solo si lineaAleatoria.activo = false
   lineaAleatoria: { activo: true, min: 45, max: 78 },
+
+  /* Cuánto se mueve la línea alrededor de la medida de servicio, en % de copa
+     (± este valor). En 0 la línea queda fija y se vuelve memorizable. */
+  jitterMedida: 4,
 
   nivelMinimoValido: 8, // una servida menor a esto cuenta como toque accidental
                         // y se permite reintentar (no como derrota)
@@ -99,11 +114,25 @@ window.PF_CONFIG = {
      se agota, cae automáticamente al código genérico. */
   premio: {
     modo: 'generico',
-    codigoGenerico: 'BRINDEMOSLOREAL20', // [PLACEHOLDER] cupón real de la tienda
-    urlTienda: 'https://tienda.puntiferrer.cl',
-    // [PLACEHOLDER] formato del link del QR. {CODE} se reemplaza por el cupón.
-    // El formato /discount/ es el de Shopify; confirmar plataforma de la tienda.
-    qrTemplate: 'https://tienda.puntiferrer.cl/discount/{CODE}',
+    /* El premio se RETIRA EN EL STAND (correo Javiera Cerda, 18-08-2026:
+       «En vez de "Gana 20% off en tiendapuntiferrer.cl" poner "¡Gana un premio
+       y retíralo aquí!"»). No hay cupón, no hay tienda online y no hay nada que
+       canjear después, así que:
+         - el QR se apagó (mostrarQR: false): llevaba a una landing de una sola
+           página que no sirve para retirar nada;
+         - en vez del código se muestra un FOLIO correlativo del día, que es lo
+           único que el promotor necesita para validar y para cuadrar después
+           contra la lista de ganadores.
+       Los datos del ganador se siguen capturando igual. */
+    codigoGenerico: 'RETIRO-EN-STAND',
+    mostrarQR: false,
+    /* Prefijo del folio que ve el ganador: PF-018, PF-019... El número es
+       correlativo por día y se guarda junto a la partida. */
+    folioPrefijo: 'PF-',
+    /* Se conservan por si la marca habilita una promo online más adelante;
+       hoy no se usan porque mostrarQR está en false. */
+    urlTienda: 'https://puntiferrer.com',
+    qrTemplate: 'https://puntiferrer.com/?utm_source=totem',
     archivoPool: 'assets/codigos.json',
   },
 
@@ -136,13 +165,24 @@ window.PF_CONFIG = {
      el negro del stand se ven como bloques que encandilan. El campo queda para
      cuando lleguen fotos de las botellas reales con fondo transparente.
      `copa` elige la forma dibujada y `colorVino` el degradado del líquido. */
+  /* `medida` = altura de la línea de llenado, en % de copa. Son las medidas de
+     servicio REALES que entregó Puntí Ferrer (correo Javiera Cerda, 28-07-2026,
+     "Medidas de servicio – Tótem Interactivo Walmart"):
+
+        Tinto      150 ml → ~1/3 de la copa
+        Blanco     120 ml → ~1/3 de una copa más angosta
+        Espumante   90 ml → ~2/3 de una copa flauta
+
+     `medidaMl` es sólo informativo (se muestra al jugador al final); quien
+     manda para el juego es `medida`. Cambiarla mueve la zona ganadora, así que
+     no se toca sin volver a correr tests/dificultad.js. */
   variedades: [
     { id: 'tinto',     nombre: 'Tinto',     img: 'assets/img/copa-tinto.jpeg',
-      copa: 'copa',   colorVino: ['#8a2438', '#4e0f1e'] },
+      copa: 'copa',   colorVino: ['#8a2438', '#4e0f1e'], medida: 33, medidaMl: 150 },
     { id: 'blanco',    nombre: 'Blanco',    img: 'assets/img/copa-blanco.jpeg',
-      copa: 'copa',   colorVino: ['#f2e4a8', '#dcc272'] },
+      copa: 'copa',   colorVino: ['#f2e4a8', '#dcc272'], medida: 33, medidaMl: 120 },
     { id: 'espumante', nombre: 'Espumante', img: 'assets/img/copa-espumante.jpeg',
-      copa: 'flauta', colorVino: ['#f7edc4', '#e3cc86'] },
+      copa: 'flauta', colorVino: ['#f7edc4', '#e3cc86'], medida: 66, medidaMl: 90 },
   ],
 
   /* Matriz momento × variedad → POOL de 2 vinos recomendados (antes era 1 fijo
@@ -218,8 +258,10 @@ window.PF_CONFIG = {
   textos: {
     claim: 'Brindemos lo real',
     tocaParaComenzar: 'Toca la pantalla para comenzar',
-    premioTitulo: '20% OFF',
-    premioBajada: 'en tu próxima compra en tienda.puntiferrer.cl',
-    consentimiento: 'Acepto que Puntí Ferrer utilice mis datos para gestionar mi descuento y enviarme comunicaciones de la marca.', // [PLACEHOLDER] validar texto legal
+    // ⚠ premioTitulo NO está cableado: el título vive fijo en el <h2
+    // class="premio-titulo"> de index.html. Se deja acá sólo para que ambos
+    // digan lo mismo; para cambiarlo hay que editar el HTML.
+    premioTitulo: '¡RETÍRALO AQUÍ!',
+    consentimiento: 'Acepto que Puntí Ferrer utilice mis datos para gestionar la entrega de mi premio y enviarme comunicaciones de la marca.', // [PLACEHOLDER] validar texto legal
   },
 };

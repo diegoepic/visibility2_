@@ -894,8 +894,18 @@
         if (errorCode === 'IDEMPOTENCY_PAYLOAD_MISMATCH') {
           return { code: 'IDEMPOTENCY_MISMATCH', retryable: false };
         }
-        // Otros 409 (duplicado real) - tratar como éxito lógico
-        return { code: 'DUPLICATE', retryable: false, success: true, retryConfig: RETRY_CONFIG['DUPLICATE'] };
+        // Un 409 sólo cuenta como éxito si el servidor lo dice explícitamente.
+        // Antes, CUALQUIER 409 sin código se daba por bueno y el trabajo se borraba de la
+        // cola: si el servidor respondía 409 por otra razón (la campaña se cerró, el local
+        // se reasignó, la clave de idempotencia se usó con otro payload), la gestión
+        // desaparecía del teléfono sin haberse guardado en ningún lado.
+        if (errorCode === 'DUPLICATE' || errorCode === 'ALREADY_EXISTS') {
+          return { code: 'DUPLICATE', retryable: false, success: true, retryConfig: RETRY_CONFIG['DUPLICATE'] };
+        }
+        // 409 sin código conocido: no se sabe si quedó guardado. No se reintenta (daría lo
+        // mismo) pero tampoco se borra: va a la bandeja de conflictos para que una persona
+        // decida.
+        return { code: errorCode || 'CONFLICT', retryable: false, conflict: true };
       }
 
       if (status === 419) {
@@ -1250,6 +1260,31 @@
           const nextTryAt = t.nextTryAt || t.nextTry || 0;
           if (nextTryAt && nextTryAt > now) continue;
 
+          // Trabajo encolado por OTRO usuario en este mismo teléfono: no se envía con la
+          // sesión actual. Enviarlo sería peor que no enviarlo — el servidor lo rechaza
+          // por permisos y quema la clave de idempotencia, dejando el trabajo original
+          // irrecuperable. Se marca terminal para que quede visible en el diario en vez
+          // de reintentarse eternamente.
+          // Los trabajos encolados antes de v7.4.0 no tienen owner_id (vale 0): esos
+          // pasan, porque no hay forma de adivinar de quién son.
+          const yo = currentUserId();
+          if (esDeOtroUsuario(t, yo)) {
+            console.warn('[Queue] Job', t.id, 'es del usuario', t.owner_id, 'y la sesión es de', yo);
+            await AppDB.update(t.id, {
+              status: 'failed_permanent',
+              finishedAt: now,
+              updatedAt: now,
+              lastError: buildLastError({
+                code: 'OWNER_MISMATCH',
+                message: 'Esta gestión la creó otro usuario en este dispositivo.',
+                url: t.url
+              })
+            });
+            QueueEvents.emit('queue:dispatch:error', { job: t, error: 'OWNER_MISMATCH' });
+            jr('onError', t, 'OWNER_MISMATCH');
+            continue;
+          }
+
           // MEJORA: Validación mejorada de dependencias
           if (t.dependsOn && !CompletedDeps.has(t.dependsOn)) {
             const guid = t.fields?.client_guid;
@@ -1367,7 +1402,14 @@
             const maxAttempts = getMaxAttemptsForError(failure.code, t.maxAttempts || 8);
             const exhausted = attempts >= maxAttempts;
             const finalRetryable = failure.retryable && !exhausted;
-            const status = failure.blocked === 'auth' ? 'blocked_auth' : failure.blocked === 'csrf' ? 'blocked_csrf' : finalRetryable ? 'queued' : 'error';
+            // 'conflict' es su propio estado: no es un fallo de infraestructura que se
+            // reintente, es una decisión que alguien tiene que tomar en el centro de
+            // recuperación. Mezclarlo con 'error' lo escondía entre los reintentos.
+            const status = failure.blocked === 'auth' ? 'blocked_auth'
+                         : failure.blocked === 'csrf' ? 'blocked_csrf'
+                         : finalRetryable ? 'queued'
+                         : failure.conflict ? 'conflict'
+                         : 'error';
             const wait = finalRetryable ? computeBackoff(attempts, failure.code) : 0;
             const lastError = buildLastError({
               code: failure.code,
@@ -1417,6 +1459,35 @@
   // --------------------------------------------------------------------------------
   // API pública de la cola
   // --------------------------------------------------------------------------------
+  // --- Dueño del trabajo -------------------------------------------------------
+  // Un mismo teléfono lo usan varios ejecutores (turnos, reemplazos, equipos que se
+  // pasan el equipo). Hasta v7.3.0 la cola era anónima: al entrar el siguiente usuario,
+  // los trabajos del anterior se drenaban con SU sesión. El servidor los rechazaba por
+  // permisos, la clave de idempotencia quedaba quemada y el trabajo del primero se
+  // perdía sin que nadie se enterara. Desde v7.4.0 cada trabajo se sella al encolarse.
+  function currentUserId(){
+    const v = (typeof window.__USUARIO_ID !== 'undefined' && window.__USUARIO_ID !== null)
+      ? window.__USUARIO_ID
+      : window.__GESTIONAR_PRECACHE_USER;
+    const n = Number(v);
+    return (Number.isFinite(n) && n > 0) ? n : 0;
+  }
+
+  /**
+   * ¿Este trabajo lo encoló otro usuario de este mismo teléfono?
+   *
+   * Devuelve false cuando falta cualquiera de los dos ids, y eso es deliberado:
+   *  - job.owner_id = 0  -> encolado antes de v7.4.0. No se puede adivinar de quién es,
+   *                         así que se deja pasar (comportamiento de siempre).
+   *  - yo = 0            -> la página no expone el id de sesión. Bloquear aquí dejaría
+   *                         la cola congelada sin que nadie entienda por qué.
+   */
+  function esDeOtroUsuario(job, yo){
+    const dueno = Number((job && job.owner_id) || 0);
+    const mio   = Number(yo || 0);
+    return !!(dueno && mio && dueno !== mio);
+  }
+
   const Queue = {
     /**
      * Encola una tarea genérica.
@@ -1427,6 +1498,10 @@
       task.url      = task.url || '';
       task.type     = task.type || 'generic';
       task.sendCSRF = (task.sendCSRF !== false);
+
+      // Sello de dueño (ver currentUserId). Si la página no expone el id queda 0 y el
+      // trabajo se comporta como siempre: se drena sin comprobar dueño.
+      if (!task.owner_id) task.owner_id = currentUserId();
 
       if (!task.id) task.id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
 
@@ -1719,7 +1794,170 @@
      */
     async flushNow(){
       await drain();
+      enviarResumenDiario('drenaje');   // sin await: es telemetría, no bloquea al usuario
       return true;
+    },
+
+    /** Manda el resumen del día al servidor. Expuesto para poder forzarlo a mano. */
+    enviarResumenDiario,
+
+    /**
+     * Descarga un archivo JSON con todo lo que quedó sin enviar.
+     *
+     * NO lleva las fotos: pesarían decenas de MB y el navegador no las descargaría en un
+     * teléfono. Lleva qué local, qué campaña, qué tipo de envío y cuándo se creó, que es
+     * lo que hace falta para saber qué visitas hay que rehacer.
+     *
+     * Es la red de seguridad de la purga de logout: sin esto, "Cerrar igual" borraría
+     * trabajo sin dejar rastro de qué era. Funciona sin red (Blob + <a download>).
+     */
+    /**
+     * Respaldo de lo que quedo atascado en la cola.
+     *
+     * POR QUE SUBE AL SERVIDOR Y NO SOLO DESCARGA
+     * ------------------------------------------
+     * Este boton existe para que SOPORTE vea que paso, y la descarga local no servia para
+     * eso dentro de la APK. El envoltorio Android solo acepta descargas http/https y esto
+     * es un blob:, asi que la rechazaba con "Tipo de descarga no soportada" mientras la
+     * app anunciaba "Copia descargada" — dos avisos contradictorios seguidos, y ningun
+     * archivo. El ejecutor se quedaba sin la via de escape que la propia pantalla le
+     * ofrecia. Arreglarlo del lado Android obliga a recompilar y repartir la APK; subirlo
+     * al servidor se despliega hoy y ademas le ahorra a soporte tener que pedir el archivo.
+     *
+     * Reutiliza api/export_diagnostico.php, que ya recibe payloads del cliente y los guarda
+     * en app/exports/<usuario>/<fecha>/ con un .htaccess que niega el acceso directo.
+     *
+     * @param {{subir?:boolean, descargar?:boolean, portapapeles?:boolean}} [opciones]
+     * @returns {Promise<{archivo:string,total:number,subido:boolean,ruta:?string,copiado:boolean}>}
+     */
+    async exportarRespaldoLocal(opciones){
+      const op = Object.assign({ subir: true, descargar: true, portapapeles: false }, opciones || {});
+      const ESTADOS = ['queued','running','error','failed_permanent','conflict','blocked_auth','blocked_csrf'];
+      // Los campos del formulario van al archivo tal cual, así que hay que sacar lo que
+      // no debe quedar escrito en la carpeta de descargas del teléfono.
+      const SENSIBLE = /csrf|token|password|contrase/i;
+      const trabajos = [];
+
+      for (const st of ESTADOS) {
+        let lote = [];
+        try { lote = (await AppDB.listByStatus(st)) || []; } catch(_) { lote = []; }
+        for (const raw of lote) {
+          const t = (AppDB.normalizeJob ? AppDB.normalizeJob(raw) : raw) || {};
+          const campos = {};
+          for (const [k, v] of Object.entries(t.fields || {})) {
+            if (!SENSIBLE.test(k)) campos[k] = v;
+          }
+          trabajos.push({
+            id:           t.id,
+            estado:       st,
+            tipo:         t.type,
+            url:          t.url,
+            creado:       t.createdAt ? new Date(t.createdAt).toISOString() : null,
+            intentos:     t.attempts || 0,
+            dueno:        t.owner_id || null,
+            fotos:        Array.isArray(t.files) ? t.files.length : 0,
+            campos,
+            ultimo_error: t.lastError || null
+          });
+        }
+      }
+
+      // Constancia de lo que se descartó a mano desde el centro de recuperación: si alguien
+      // pregunta "¿y esta visita?", la respuesta está en el mismo archivo.
+      let descartes = [];
+      try { descartes = JSON.parse(localStorage.getItem('v2_descartes') || '[]'); } catch(_) {}
+
+      const doc = {
+        generado: new Date().toISOString(),
+        usuario:  currentUserId() || null,
+        descartados: descartes,
+        version:  (typeof window.SW_VERSION === 'string' ? window.SW_VERSION : null),
+        aviso:    'Respaldo de referencia. NO incluye las fotos: sirve para saber qué visitas hay que rehacer.',
+        total:    trabajos.length,
+        trabajos
+      };
+
+      const nombre = 'visibility-pendientes-'
+        + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.json';
+      const texto = JSON.stringify(doc, null, 2);
+
+      // ── 1. Al servidor. Es el camino que de verdad le sirve a soporte.
+      let subido = false, ruta = null;
+      if (op.subir) {
+        try {
+          // Tope defensivo: si el respaldo se dispara, se manda sin los campos del
+          // formulario. Lo que soporte necesita es QUE envios hay, no su contenido.
+          const payload = texto.length > 1048576
+            ? Object.assign({}, doc, {
+                recortado: true,
+                trabajos: trabajos.map(t => {
+                  const copia = Object.assign({}, t);
+                  delete copia.campos;
+                  return copia;
+                })
+              })
+            : doc;
+
+          const enviar = async (tok) => {
+            const cab = { 'Content-Type': 'application/json' };
+            if (tok) cab['X-CSRF-Token'] = tok;
+            const cuerpo = tok ? Object.assign({}, payload, { csrf_token: tok }) : payload;
+            return fetch(BASE + '/api/export_diagnostico.php', {
+              method: 'POST', credentials: 'same-origin', headers: cab,
+              body: JSON.stringify(cuerpo)
+            });
+          };
+
+          let r = await enviar(window.CSRF_TOKEN || null);
+          // Un solo reintento si el token estaba vencido: es exactamente el caso del
+          // ejecutor que lleva horas con la pagina abierta, que es cuando mas se usa esto.
+          if (r.status === 419 || r.status === 403) {
+            const nuevo = await refreshCSRF();
+            if (nuevo && nuevo.ok && nuevo.token) r = await enviar(nuevo.token);
+          }
+          const js = await r.json().catch(() => null);
+          if (r.ok && js && js.ok) { subido = true; ruta = js.saved_path || null; }
+        } catch (_) { /* sin red: quedan el portapapeles y la descarga local */ }
+      }
+
+      // ── 2. Portapapeles. Es la salida que SI funciona dentro de la APK: el ejecutor lo
+      //      pega en WhatsApp y soporte lo lee igual. Vale sin red.
+      let copiado = false;
+      if (op.portapapeles) {
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(texto);
+            copiado = true;
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = texto;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            copiado = document.execCommand('copy');
+            ta.remove();
+          }
+        } catch (_) {}
+      }
+
+      // ── 3. Descarga local. Se sigue intentando porque en un navegador funciona y es
+      //      comoda; dentro de la APK la rechaza el envoltorio, pero ya no importa.
+      if (op.descargar) {
+        try {
+          const blob = new Blob([texto], { type: 'application/json' });
+          const url  = URL.createObjectURL(blob);
+          const a    = document.createElement('a');
+          a.href = url;
+          a.download = nombre;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => { try { URL.revokeObjectURL(url); } catch(_){} }, 4000);
+        } catch (_) {}
+      }
+
+      return { archivo: nombre, total: trabajos.length, subido, ruta, copiado };
     },
 
     /**
@@ -1731,13 +1969,15 @@
       const running = await AppDB.listByStatus('running');
       const errors = await AppDB.listByStatus('error');
       const failedPermanent = await AppDB.listByStatus('failed_permanent');
+      const conflicts = await AppDB.listByStatus('conflict');
       const blockedAuth = await AppDB.listByStatus('blocked_auth');
       const blockedCsrf = await AppDB.listByStatus('blocked_csrf');
 
       return {
         pending: pending.length,
         running: running.length,
-        error: errors.length + failedPermanent.length,
+        error: errors.length + failedPermanent.length + conflicts.length,
+        conflict: conflicts.length,
         blocked: queueState.blocked,
         blockedAuth: blockedAuth.length,
         blockedCsrf: blockedCsrf.length,
@@ -1767,6 +2007,7 @@
         ...(await AppDB.listByStatus('running')),
         ...(await AppDB.listByStatus('error')),
         ...(await AppDB.listByStatus('failed_permanent')),
+        ...(await AppDB.listByStatus('conflict')),
         ...(await AppDB.listByStatus('blocked_auth')),
         ...(await AppDB.listByStatus('blocked_csrf'))
       ];
@@ -1918,16 +2159,147 @@
   window.addEventListener('online', () => {
     resetQueuedBackoff('online').finally(() => {
       if (queueState.blocked === 'auth') attemptAuthRecovery();
-      else drain();
+      else drain().finally(() => enviarResumenDiario('reconexion'));
     });
   });
   window.addEventListener('focus', () => { resumeFromBackground(); });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') resumeFromBackground();
   });
+  // --- Eco de la cola en el servidor ---------------------------------------------
+  // El estado de la cola vive sólo en el teléfono. Si un ejecutor termina la jornada con
+  // seis gestiones en error, nadie en la oficina se entera hasta que alguien echa de menos
+  // las fotos, días después. Esto manda CONTADORES (no la bitácora, no el contenido) para
+  // que la pregunta "¿quién tiene trabajo sin subir?" se pueda responder el mismo día.
+  const RESUMEN_ENDPOINT   = '/visibility2/app/api/journal_resumen.php';
+  const RESUMEN_MIN_MS     = 60000;   // no más de una vez por minuto
+  let   _resumenUltimoMs   = 0;
+  let   _resumenUltimaHuella = '';
+
+  async function enviarResumenDiario(motivo){
+    try {
+      if (!navigator.onLine) return false;
+      const ahora = Date.now();
+      if (ahora - _resumenUltimoMs < RESUMEN_MIN_MS) return false;
+
+      const st = await Queue.getStatus();
+      const pendientes = (st.pending || 0) + (st.running || 0);
+      const errores    = st.error || 0;
+      const bloqueados = (st.blockedAuth || 0) + (st.blockedCsrf || 0);
+
+      // Subidas del día: las cuenta la bitácora, no la cola (la cola borra lo que ya envió).
+      let subidas = 0;
+      try {
+        if (window.JournalDB && JournalDB.ymdLocal && JournalDB.listByYMD && JournalDB.statsFor) {
+          const filas = await JournalDB.listByYMD(JournalDB.ymdLocal(new Date()));
+          const stats = await JournalDB.statsFor(filas || []);
+          subidas = stats.success || 0;
+        }
+      } catch(_) {}
+
+      // Si nada cambió desde el último envío, no se gasta red del ejecutor.
+      const huella = [pendientes, errores, subidas, bloqueados].join('|');
+      if (huella === _resumenUltimaHuella && huella === '0|0|0|0') return false;
+
+      let ultimoCode = '';
+      try {
+        const conError = (await AppDB.listByStatus('error'))
+          .concat(await AppDB.listByStatus('failed_permanent'))
+          .concat(await AppDB.listByStatus('conflict'))
+          .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        if (conError.length && conError[0].lastError) ultimoCode = conError[0].lastError.code || '';
+      } catch(_) {}
+
+      const fd = new FormData();
+      fd.append('ymd',         (window.JournalDB && JournalDB.ymdLocal)
+                                 ? JournalDB.ymdLocal(new Date())
+                                 : new Date().toISOString().slice(0, 10));
+      fd.append('pendientes',  String(pendientes));
+      fd.append('errores',     String(errores));
+      fd.append('subidas',     String(subidas));
+      fd.append('bloqueados',  String(bloqueados));
+      fd.append('online',      '1');
+      if (ultimoCode) fd.append('ultimo_error_code', ultimoCode);
+      if (typeof window.SW_VERSION === 'string') fd.append('app_version', window.SW_VERSION);
+      if (window.CSRF_TOKEN) fd.append('csrf_token', window.CSRF_TOKEN);
+
+      const r = await fetch(RESUMEN_ENDPOINT, {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: window.CSRF_TOKEN ? { 'X-CSRF-Token': window.CSRF_TOKEN } : {},
+        body: fd
+      });
+
+      // Silencioso a propósito: esto es telemetría, no trabajo del ejecutor. Que falle no
+      // debe ensuciar la pantalla ni bloquear nada.
+      if (r && r.ok) {
+        _resumenUltimoMs = ahora;
+        _resumenUltimaHuella = huella;
+        return true;
+      }
+      return false;
+    } catch(_) {
+      return false;
+    }
+  }
+
+  // --- Aviso antes de cerrar sesión ---------------------------------------------
+  // logout.php borra las bases IndexedDB del teléfono (cola, fotos, borradores, agenda)
+  // para que el siguiente usuario no herede los datos del anterior. Eso obliga a avisar
+  // antes: salir con trabajo sin enviar ahora significa perderlo de verdad.
+  //
+  // El aviso da el número exacto — "tienes pendientes" no mueve a nadie a buscar señal —
+  // y ofrece dos salidas antes de rendirse: reintentar el envío, o bajarse la lista de lo
+  // que quedó pendiente. Si el usuario ignora el aviso NO se cierra la sesión.
+  function instalarAvisoDeSalida(){
+    document.addEventListener('click', (ev) => {
+      const a = ev.target && ev.target.closest && ev.target.closest('a[href*="logout.php"]');
+      if (!a || a.dataset.v2Confirmado === '1') return;
+
+      // preventDefault tiene que ser síncrono: si se espera al await de getStatus(), el
+      // navegador ya arrancó la navegación y el aviso llega cuando la sesión está cerrada.
+      ev.preventDefault();
+
+      (async () => {
+        const salir = () => { a.dataset.v2Confirmado = '1'; window.location.href = a.href; };
+
+        let sinEnviar = 0;
+        try {
+          const st = await Queue.getStatus();
+          sinEnviar = (st.pending || 0) + (st.running || 0) + (st.error || 0)
+                    + (st.blockedAuth || 0) + (st.blockedCsrf || 0);
+        } catch(_) {
+          // Si ni siquiera se puede leer la cola, no se secuestra el logout.
+          salir();
+          return;
+        }
+
+        if (sinEnviar === 0) { salir(); return; }
+
+        const msg = 'Tienes ' + sinEnviar + ' envío(s) sin completar. Si cierras sesión ahora '
+                  + 'se borran de este teléfono y habrá que rehacer esas visitas.';
+
+        if (typeof window.mostrarToast === 'function') {
+          window.mostrarToast(msg, 'warn', 30000, [
+            { label: 'Intentar enviar',  cls: 'btn-info',    fn: () => { Queue.flushNow().catch(()=>{}); } },
+            { label: 'Enviar copia',     cls: 'btn-default', fn: () => { Queue.exportarRespaldoLocal().catch(()=>{}); } },
+            { label: 'Cerrar igual',     cls: 'btn-danger',  fn: salir }
+          ]);
+          return;
+        }
+
+        // Páginas sin mostrarToast (gestionarPruebas.php): confirm es feo, pero bloquea,
+        // que es justo lo que hace falta aquí.
+        if (window.confirm(msg + '\n\n¿Cerrar sesión de todas formas?')) salir();
+      })();
+    }, true);
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     ensureHeartbeat();
     ensureCSRFRefresh();
+    instalarAvisoDeSalida();
     setTimeout(drain, 600);
   });
 
@@ -1935,6 +2307,9 @@
   window.Queue = Queue;
   window.Queue._test = {
     classifyFailure,
+    currentUserId,      // id del usuario de la sesión (0 si la página no lo expone)
+    esDeOtroUsuario,    // guarda que impide drenar trabajo de otro usuario del teléfono
+    isLogicalSuccess,   // decide si una respuesta 200 confirma de verdad el guardado
     buildLastError,
     computeBackoff,
     parseResponseSafe,

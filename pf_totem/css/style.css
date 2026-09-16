@@ -131,6 +131,10 @@ button { font-family: inherit; color: inherit; background: none; border: none; c
 /* Zona oculta para abrir el panel del tótem. Va en la esquina y sin ninguna
    marca visible: sobre el logo dejaría una zona muerta justo donde la gente
    toca primero para empezar a jugar. */
+/* El botón de pantalla completa vive dentro del panel admin y reusa
+   .btn-linea.chico; sólo se le da aire respecto de los checkboxes de arriba. */
+#btn-fullscreen { margin-top: 12px; }
+
 #admin-trigger {
   position: absolute;
   top: 0; left: 0;
@@ -472,7 +476,42 @@ label.consent input { width: 22px; height: 22px; accent-color: var(--dorado); fl
   letter-spacing: .04em; line-height: 1;
   text-shadow: 0 0 40px rgba(232,207,148,.25);
 }
-.premio-bajada { font-size: clamp(14px, 2.7vw, 21px); color: var(--gris); margin: 1vh 0 2.6vh; text-align: center; }
+
+/* ---- Brindis ----
+   Ocupa el lugar del QR + código. Va centrado con aire alrededor a propósito:
+   el vacío es lo que lo hace ver como una ilustración y no como un bloque de
+   relleno. Se dimensiona con vh además de vw porque en esta pantalla lo que
+   escasea es el alto, no el ancho. */
+.brindis {
+  position: relative;
+  width: min(72vw, 420px);
+  margin: 1vh 0;
+  display: flex; justify-content: center;
+}
+/* Halo cálido: despega las copas del negro sin recurrir a un marco */
+.brindis::before {
+  content: ''; position: absolute; inset: -18% -12%;
+  background: radial-gradient(ellipse, rgba(201,164,92,.14) 0%, transparent 66%);
+  pointer-events: none;
+}
+.brindis svg {
+  position: relative;
+  width: 100%; height: auto;
+  max-height: 34vh;
+  filter: drop-shadow(0 0 26px rgba(201,164,92,.22));
+}
+/* El destello del choque respira: da vida a una pantalla que está quieta
+   30 segundos esperando que la persona se vaya al mesón. */
+.brindis-chispa { animation: brindis-late 2.6s ease-in-out infinite; transform-origin: 200px 62px; }
+@keyframes brindis-late {
+  0%, 100% { opacity: .45; transform: scale(.92); }
+  50%      { opacity: 1;   transform: scale(1.06); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brindis-chispa { animation: none; opacity: .85; }
+}
+
+/* Se conservan por si vuelve a habilitarse el QR (premio.mostrarQR) */
 .premio-qr-marco {
   background: #fdfaf4;
   padding: 14px;
@@ -485,16 +524,6 @@ label.consent input { width: 22px; height: 22px; accent-color: var(--dorado); fl
   align-items: center; justify-content: center; text-align: center;
   color: #333; font-size: 15px; padding: 10px;
 }
-.premio-codigo {
-  font-family: var(--f-display);
-  font-size: clamp(23px, 4.6vw, 38px);
-  letter-spacing: .18em;
-  color: var(--crema);
-  border: 1px dashed rgba(201,164,92,.6);
-  padding: 1.2vh 5vw;
-  margin: 2.6vh 0 1.4vh;
-}
-.premio-nota { text-align: center; font-size: clamp(13px, 2.4vw, 17px); color: var(--gris); line-height: 1.55; margin-bottom: 2.4vh; }
 
 /* ============================================================
    INDICADOR DE PASO

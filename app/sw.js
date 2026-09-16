@@ -1,5 +1,5 @@
 //version del service  worker (subir en 0.0.1 para refrescar cache de los archivos estaticos, tambien subir a la misma version el sw en assets/js/v2_cache.js)
-const VERSION        = 'v7.1.7';
+const VERSION        = 'v7.6.5';
 const APP_SCOPE      = '/visibility2/app';
 const STATIC_CACHE   = `static-${VERSION}`;
 const RUNTIME_CACHE  = `runtime-${VERSION}`;
@@ -8,6 +8,9 @@ const RUNTIME_MAX_ITEMS = 80;
 //achivos guardados en la cache
 const STATIC_ASSETS = [
   `${APP_SCOPE}/index_pruebas.php`,
+  // El centro de recuperación se consulta justamente cuando algo falló, que suele ser sin
+  // red. Va precacheado y networkFirst lo busca también en STATIC_CACHE (ver más abajo).
+  `${APP_SCOPE}/recuperacion.php`,
   `${APP_SCOPE}/assets/plugins/bootstrap/css/bootstrap.min.css`,
   `${APP_SCOPE}/assets/plugins/jquery/jquery-3.6.0.min.js`,
   `${APP_SCOPE}/assets/plugins/font-awesome/css/font-awesome.min.css`,
@@ -21,6 +24,27 @@ const STATIC_ASSETS = [
   `${APP_SCOPE}/assets/js/bootstrap_index_cache.js`,
   `${APP_SCOPE}/assets/js/journal_db.js`,
   `${APP_SCOPE}/assets/js/journal_ui.js`,
+  // Modales de la ruta extraidos del inline de index_pruebas.php (T6-6). Van aca y se
+  // piden SIN ?v= porque cacheFirst hace match sin ignoreSearch: con query string no
+  // encontrarian esta entrada y, sin red, los botones del modal no harian nada.
+  // El nucleo de la ruta (mapa, filtros, planificador). Es el bloque mas pesado que salio
+  // del inline: 66 KB que antes viajaban en cada carga de index_pruebas.php.
+  `${APP_SCOPE}/assets/js/ruta_mapa.js`,
+  // La pagina de gestion, que es donde el ejecutor pasa la jornada. Salieron del inline
+  // de gestionarPruebas.php: 121 KB que antes viajaban en CADA gestion que abria.
+  `${APP_SCOPE}/assets/js/gestion_geo.js`,
+  `${APP_SCOPE}/assets/js/gestion_offline.js`,
+  `${APP_SCOPE}/assets/js/gestion_form.js`,
+  `${APP_SCOPE}/assets/js/modal_reportar_direccion.js`,
+  `${APP_SCOPE}/assets/js/modal_cambiar_vendedor.js`,
+  // Librerias de terceros servidas desde el propio servidor. Sin esto, en modo
+  // avion no existen imageCompression/heic2any/exifr y las fotos se encolan sin comprimir
+  // y sin EXIF. Se piden SIN ?v=: la clave de cache incluye el query string, y el
+  // cache-busting ya lo da el nombre del cache (static-${VERSION}).
+  // heic2any pesa ~1,3 MB (lleva libheif dentro); es el precio de convertir HEIC offline.
+  `${APP_SCOPE}/assets/vendor/browser-image-compression.js`,
+  `${APP_SCOPE}/assets/vendor/heic2any.min.js`,
+  `${APP_SCOPE}/assets/vendor/exifr.umd.js`,
 ];
 
 self.addEventListener('install', (event) => {
@@ -138,8 +162,11 @@ async function networkFirst(request, navFallback = `${APP_SCOPE}/index_pruebas.p
     const hit = await cache.match(request);
     if (hit) return hit;
     if (request.mode === 'navigate') {
-      // Intento fallback de navegación a HTML conocido
       const staticCache = await caches.open(STATIC_CACHE);
+      // Primero la propia página, si está precacheada: antes se caía directo al fallback y
+      // recuperacion.php acababa mostrando el index sin que nadie entendiera por qué.
+      const propia = await staticCache.match(request, { ignoreSearch: true });
+      if (propia) return propia;
       const fallback = await staticCache.match(navFallback);
       if (fallback) return fallback;
     }

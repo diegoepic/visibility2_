@@ -22,6 +22,10 @@ if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $po
 
 $empresaId = (int)($_POST['empresa_id'] ?? 0);
 $divisionId = (int)($_POST['division_id'] ?? 0);
+$coordinateMode = strtolower(trim((string)($_POST['coordinate_mode'] ?? 'google')));
+if (!in_array($coordinateMode, ['google', 'cliente'], true)) {
+    jsonResponse(['success' => false, 'message' => 'La modalidad de coordenadas no es valida.'], 400);
+}
 if ($empresaId <= 0 || $divisionId <= 0) {
     jsonResponse(['success' => false, 'message' => 'Debes seleccionar empresa y division.'], 400);
 }
@@ -65,12 +69,26 @@ if (!$handle) {
     jsonResponse(['success' => false, 'message' => 'No se pudo abrir el CSV.'], 400);
 }
 $headers = fgetcsv($handle, 200000, $delimiter);
-if ($headers === false || resolveLocalImportIndexes($headers) === false) {
+$indexes = $headers !== false ? resolveLocalImportIndexes($headers) : false;
+if ($indexes === false) {
     fclose($handle);
     @unlink($filePath);
-    jsonResponse(['success' => false, 'message' => 'Encabezados invalidos. Usa las 10 columnas exactas de la plantilla.'], 400);
+    jsonResponse(['success' => false, 'message' => 'Encabezados invalidos. Descarga y usa la plantilla correspondiente a la modalidad seleccionada.'], 400);
 }
-$indexes = resolveLocalImportIndexes($headers);
+if (localImportHasIncompleteCoordinateColumns($indexes)) {
+    fclose($handle);
+    @unlink($filePath);
+    jsonResponse(['success' => false, 'message' => 'El CSV debe incluir juntas las columnas latitud y longitud.'], 400);
+}
+$usesClientCoordinates = localImportUsesClientCoordinates($indexes);
+if (($coordinateMode === 'cliente') !== $usesClientCoordinates) {
+    fclose($handle);
+    @unlink($filePath);
+    $message = $coordinateMode === 'cliente'
+        ? 'La modalidad con coordenadas del cliente requiere las columnas latitud y longitud.'
+        : 'La plantilla con latitud y longitud debe cargarse usando la modalidad Coordenadas proporcionadas por el cliente.';
+    jsonResponse(['success' => false, 'message' => $message], 400);
+}
 $totalRows = 0;
 $seen = [];
 $duplicates = [];

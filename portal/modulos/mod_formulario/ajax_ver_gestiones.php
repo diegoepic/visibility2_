@@ -797,6 +797,11 @@ $uploadBaseUrl = '/visibility2/app/';
         <span class="badge badge-light"><?= (int)$total_resp ?></span>
       </a>
     </li>
+    <li class="nav-item">
+      <a class="nav-link" data-toggle="tab" href="#tab_editar_gestion" data-local-id="<?= (int)$local_id ?>">
+        <i class="fas fa-edit"></i> Editar gestión
+      </a>
+    </li>
   </ul>
 
   <div class="tab-content mt-3">
@@ -983,6 +988,12 @@ $uploadBaseUrl = '/visibility2/app/';
       <?php else: ?>
         <p class="text-center text-muted">No hay respuestas de encuesta para este ejecutor.</p>
       <?php endif; ?>
+    </div>
+
+    <div id="tab_editar_gestion" class="tab-pane fade" data-local-id="<?= (int)$local_id ?>">
+      <div class="text-center text-muted py-5">
+        Selecciona esta pestaña para cargar la edición de la gestión.
+      </div>
     </div>
   </div>
 </div>

@@ -45,6 +45,25 @@ if (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === '') {
     rc_fail(400, 'Solicitud inválida', 'bad_request');
 }
 
+/* ---- Tope de llamadas por usuario -------------------------------------------------
+ * Cada llamada que pasa de acá es una llamada FACTURABLE a Google Routes. Hasta la T6-4
+ * este endpoint no tenía ningún tope: un bucle de recálculo, o una pestaña abierta con GPS
+ * inestable, gastaba sin techo (hallazgo V-15).
+ *
+ * Va con $conn = null a propósito: el limitador usa APCu y este archivo no abre conexión a
+ * la base — abrirla sólo para contar sería pagar una conexión por llamada a Maps.
+ *
+ * Y falla ABIERTO: si APCu no está, se registra en el log y se deja pasar. Bloquear el
+ * cálculo de ruta dejaría a los ejecutores sin navegación, que es peor que una factura
+ * alta. El log es lo que hace visible que el control no se está aplicando.
+ *
+ * 60 llamadas por minuto es holgado: el planner hace una por bloque de 23 paradas.
+ */
+require_once __DIR__ . '/../lib/rate_limiter.php';
+if (!rate_limit_check(null, 'route_compute', $usuario_id, 60, 60)) {
+    rc_fail(429, 'Demasiados cálculos de ruta seguidos. Espera un momento.', 'rate_limited');
+}
+
 $raw = file_get_contents('php://input') ?: '';
 $body = json_decode($raw, true);
 if (!is_array($body)) {
@@ -118,8 +137,20 @@ if ($fieldMask === '' || !preg_match('/^[A-Za-z0-9_.,]+$/', $fieldMask) || strpo
         if ($key !== '' && getenv($key) === false) { putenv("$key=$val"); $_ENV[$key] = $val; }
     }
 })();
-$apiKey = getenv('GOOGLE_ROUTES_API_KEY') ?: getenv('GOOGLE_MAPS_API_KEY') ?: '';
-$apiKey = is_string($apiKey) ? trim($apiKey) : '';
+// OJO con el respaldo a GOOGLE_MAPS_API_KEY: esa es la clave del Maps JS del navegador y
+// lo normal es que esté restringida por REFERENTE HTTP. Una clave así, usada desde el
+// servidor con cURL (sin referente), la rechaza Google con 403 PERMISSION_DENIED. O sea:
+// el respaldo evita el "no configurado" pero suele terminar en 403. Si esto pasa, la clave
+// correcta es una GOOGLE_ROUTES_API_KEY aparte, restringida por IP o sin restricción, y con
+// la Routes API habilitada en el proyecto.
+$claveRoutes = getenv('GOOGLE_ROUTES_API_KEY');
+$claveRoutes = is_string($claveRoutes) ? trim($claveRoutes) : '';
+$usandoRespaldo = ($claveRoutes === '');
+$apiKey = $claveRoutes;
+if ($apiKey === '') {
+    $apiKey = getenv('GOOGLE_MAPS_API_KEY');
+    $apiKey = is_string($apiKey) ? trim($apiKey) : '';
+}
 if ($apiKey === '') {
     error_log("route_compute uid=$usuario_id status=no_key");
     rc_fail(500, 'Servicio de rutas no configurado', 'no_key');
@@ -157,9 +188,26 @@ if ($response === false || $curlErr !== '') {
     rc_fail(502, 'No se pudo contactar el servicio de rutas', 'upstream_unreachable');
 }
 
-// Log de cuota/errores por usuario (sin tabla DB; queda como follow-up).
-error_log("route_compute uid=$usuario_id status=ok http=$httpCode pts=$nPts mode=$mode ms=$ms");
+// Log por usuario. ANTES esta línea decía siempre "status=ok" aunque Google hubiera
+// devuelto 403: el código HTTP quedaba en el mismo renglón, pero la palabra "ok" hacía
+// que nadie mirara. Un 403 acá es de GOOGLE, no de esta app, y su cuerpo trae el motivo.
+if ($httpCode < 200 || $httpCode >= 300) {
+    $motivo = '';
+    $ej = json_decode((string)$response, true);
+    if (is_array($ej) && isset($ej['error'])) {
+        $motivo = trim(((string)($ej['error']['status'] ?? '')) . ' ' . ((string)($ej['error']['message'] ?? '')));
+    }
+    if ($motivo === '') { $motivo = substr((string)$response, 0, 300); }
+    error_log(
+        "route_compute uid=$usuario_id status=upstream_error http=$httpCode pts=$nPts mode=$mode ms=$ms"
+        . ' clave=' . ($usandoRespaldo ? 'GOOGLE_MAPS_API_KEY(respaldo)' : 'GOOGLE_ROUTES_API_KEY')
+        . ' motivo=' . str_replace(["\r", "\n"], ' ', $motivo)
+    );
+} else {
+    error_log("route_compute uid=$usuario_id status=ok http=$httpCode pts=$nPts mode=$mode ms=$ms");
+}
 
-// Reenviar el JSON CRUDO de Google con su status HTTP (el cliente lo normaliza).
+// Reenviar el JSON CRUDO de Google con su status HTTP (el cliente lo normaliza y cae al
+// fallback de DirectionsService ante cualquier respuesta que no sea 2xx).
 http_response_code($httpCode > 0 ? $httpCode : 502);
 echo $response;

@@ -72,6 +72,21 @@ button { color: inherit; }
 .template-option.is-disabled:hover { background: transparent; border-color: transparent; transform: none; }
 .coming-badge { padding: 5px 7px; border-radius: 99px; background: #eceff2; color: #7c8592; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
 
+.saved-dashboards { margin-bottom: 22px; padding: 14px; border: 1px solid #e3dfd3; border-radius: 13px; background: #fff; }
+.saved-dashboards-heading { margin-bottom: 10px; color: #8a94a5; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .12em; }
+.saved-dashboards-list { display: grid; gap: 14px; max-height: 260px; overflow-y: auto; }
+.saved-dashboard-group { display: grid; gap: 7px; }
+.saved-dashboard-group-title { color: #a0a8b6; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
+.saved-dashboard-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border: 1px solid #ecebe5; border-radius: 9px; background: #faf9f6; }
+.saved-dashboard-info { min-width: 0; }
+.saved-dashboard-info strong { display: flex; align-items: center; gap: 6px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.saved-dashboard-info small { display: block; margin-top: 2px; color: #9aa2af; font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.template-badge { flex: 0 0 auto; padding: 2px 6px; border-radius: 99px; background: #e8f2ef; color: #3f6f68; font-size: 7px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
+.saved-dashboard-actions { flex: 0 0 auto; display: flex; gap: 5px; }
+.saved-dashboard-actions button { padding: 5px 8px; border: 1px solid #d7dce4; border-radius: 6px; background: #fff; color: #59667a; font-size: 8px; font-weight: 800; cursor: pointer; }
+.saved-dashboard-actions button:hover { border-color: #aeb7c4; }
+.saved-dashboard-actions button.danger-link { color: #c54949; border-color: #ecd6d6; }
+
 .preview-section { position: relative; overflow: hidden; padding: 55px clamp(28px, 5vw, 76px) 45px; background: #f0eee8; }
 .preview-section::before { content: ""; position: absolute; width: 520px; height: 520px; right: -210px; top: -250px; border-radius: 50%; background: rgba(185,223,63,.16); }
 .preview-heading { position: relative; display: flex; justify-content: space-between; align-items: flex-end; gap: 28px; margin-bottom: 23px; }
@@ -149,6 +164,9 @@ button { color: inherit; }
 .editor-title small, .editor-title strong { display: block; }
 .editor-title small { color: #9aa3b0; font-size: 8px; font-weight: 800; letter-spacing: .14em; }
 .editor-title strong { margin-top: 3px; font-size: 16px; }
+.server-save-status { padding: 5px 10px; border-radius: 99px; background: #f0eee8; color: #8a8272; font-size: 9px; font-weight: 800; }
+.server-save-status.is-saved { background: #e3efd8; color: #56851d; }
+.server-save-status.is-saving { background: #eef0ec; color: #637083; }
 .back-button { width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 9px; background: #fff; cursor: pointer; }
 .toolbar-actions { display: flex; align-items: center; gap: 8px; }
 .shape-picker { position: relative; }
@@ -228,6 +246,15 @@ button { color: inherit; }
 .save-state { margin-left: auto; display: flex; align-items: center; gap: 6px; color: #798493; font-size: 8px; font-weight: 800; }
 .save-state i { width: 6px; height: 6px; border-radius: 50%; background: #75b947; }
 .canvas-scroll { flex: 1; overflow: auto; padding: 38px; background-color: #deddd8; background-image: radial-gradient(#bdbfbd 0.7px, transparent .7px); background-size: 14px 14px; }
+
+.sheet-tabs { flex: 0 0 auto; min-height: 40px; display: flex; align-items: center; gap: 4px; padding: 5px 12px; overflow-x: auto; background: #f4f4f1; border-top: 1px solid #ced2d7; }
+.sheet-tab { position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; max-width: 190px; padding: 7px 11px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: #7d8795; font-size: 10px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.sheet-tab:hover { background: #e9e9e5; color: var(--ink); }
+.sheet-tab.is-active { border-color: #ced5df; background: #fff; color: var(--ink); box-shadow: 0 2px 8px rgba(35,45,61,.08); }
+.sheet-tab-close { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; color: #97a0ad; font-size: 12px; line-height: 1; }
+.sheet-tab-close:hover { background: #e2d5d5; color: #c54949; }
+.sheet-tab-add { flex: 0 0 auto; padding: 7px 11px; border: 1px dashed #c3c8cf; border-radius: 7px; background: transparent; color: #7d8795; font-size: 10px; font-weight: 800; cursor: pointer; }
+.sheet-tab-add:hover { border-color: #9aa3b0; color: var(--ink); }
 .dashboard-canvas { position: relative; transform-origin: top left; overflow: hidden; background: #fff; box-shadow: 0 18px 55px rgba(32,41,54,.18); transition: width .2s, height .2s; }
 .dashboard-canvas::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 9999; box-shadow: inset 0 0 0 1px rgba(29,39,55,.08); }
 .canvas-element { position: absolute; touch-action: none; cursor: move; user-select: none; }
@@ -270,6 +297,9 @@ button { color: inherit; }
 .modal-feedback { min-height: 30px; padding-top: 10px; color: #b64c4c; font-size: 9px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 5px; }
 .secondary-button { padding: 12px 16px; border: 1px solid #d6dae0; border-radius: 9px; background: #fff; color: #647083; font-size: 10px; font-weight: 800; cursor: pointer; }
+.save-fields { grid-template-columns: 1fr; }
+.save-template-toggle { display: flex; align-items: center; gap: 8px; color: #4d5768; font-size: 10px; font-weight: 700; }
+.save-template-toggle input { accent-color: var(--navy); }
 .primary-button:disabled { opacity: .45; cursor: default; transform: none; }
 .kpi-modal { width: min(680px, 100%); max-height: calc(100vh - 40px); overflow: auto; }
 .kpi-modal-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }

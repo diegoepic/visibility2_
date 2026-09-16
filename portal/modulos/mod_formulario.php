@@ -4,6 +4,29 @@ ini_set('display_startup_errors', 0);
 ini_set('log_errors', 1);
 error_reporting(E_ALL);
 
+// Generar la plantilla desde este módulo para no depender de un CSV estático desactualizado.
+if (($_GET['descargar_plantilla_csv'] ?? '') === '1') {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="plantilla_formulario_con_OT.csv"');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+
+    $plantillaCsv = fopen('php://output', 'w');
+    fwrite($plantillaCsv, "\xEF\xBB\xBF");
+    $filasPlantillaCsv = [
+        ['codigo', 'usuario', 'OT', 'material', 'categoria', 'marca', 'valor_propuesto', 'fechapropuesta'],
+        ['5018190', 'USUARIO_1', 'OT-123456', 'MUEBLE EXHIBIDOR', 'REFRIGERADOS', 'COCA COLA', '1', '25-02-2026'],
+        ['3096108', 'USUARIO_2', '', 'CABECERA', 'SNACK', 'NESTLE', '2', '01-04-2026'],
+        ['3096083', 'USUARIO_3', 'OT-123457', 'ISLA PROMOCIONAL', 'BEBIDAS', 'RED BULL', '1', '05-04-2026'],
+    ];
+    foreach ($filasPlantillaCsv as $filaPlantillaCsv) {
+        fputcsv($plantillaCsv, $filaPlantillaCsv, ',', '"', '', "\r\n");
+    }
+    fclose($plantillaCsv);
+    exit();
+}
+
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/db.php';
 include_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/modulos/session_data.php';
 
@@ -893,6 +916,17 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                         </div>
         
                         <div class="modal-body">
+                            <div class="mb-3 p-3 border rounded bg-light">
+                                <a href="mod_formulario.php?descargar_plantilla_csv=1"
+                                   class="btn btn-sm btn-outline-success"
+                                   download="plantilla_formulario_con_OT.csv">
+                                    <i class="fas fa-download mr-1"></i> Descargar plantilla CSV
+                                </a>
+                                <small class="d-block mt-2 text-muted">
+                                    Formato de carga con la columna <strong>OT</strong> opcional por material.
+                                </small>
+                            </div>
+
                             <div class="form-row">
                                 <div class="form-group col-md-6">
                                     <label for="nombre">Nombre del Formulario</label>
@@ -961,14 +995,22 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
         
                                 <div class="mt-2 p-3 border rounded bg-light">
                                     <small class="d-block mb-2 text-muted">
-                                        El archivo debe contener estas columnas:
+                                        La plantilla CSV separada por comas contiene estas columnas:
                                         <strong>codigo</strong>,
                                         <strong>usuario</strong>,
+                                        <strong>OT</strong> (opcional),
                                         <strong>material</strong>,
                                         <strong>categoria</strong>,
                                         <strong>marca</strong>,
                                         <strong>valor_propuesto</strong>,
                                         <strong>fechapropuesta</strong>.
+                                    </small>
+
+                                    <small class="d-block mb-2 text-muted">
+                                        Indica la OT de cada material en <strong>OT</strong>,
+                                        por ejemplo <strong>OT-123456</strong> (máximo 200 caracteres).
+                                        Puedes dejar la celda vacía. También se aceptan archivos anteriores sin esta columna.
+                                        Reemplaza las filas de ejemplo de la plantilla con tus datos.
                                     </small>
         
                                     <small class="d-block mb-2 text-muted">
@@ -980,11 +1022,6 @@ if ($es_mentecreativa && $empresa_seleccionada > 0) {
                                         <strong>2026/03/31</strong>.
                                     </small>
         
-                                    <a href="mod_formulario/templates/template_formulario.csv"
-                                       class="btn btn-sm btn-outline-success"
-                                       download>
-                                        <i class="fas fa-download mr-1"></i> Descargar plantilla CSV
-                                    </a>
                                 </div>
                             </div>
         

@@ -56,6 +56,7 @@ if ($size > 5 * 1024 * 1024) {
    3) DB y permisos
    ========================= */
 require_once __DIR__ . '/con_.php';
+require_once __DIR__ . '/lib/dominio/autorizacion.php';
 
 define('IW_UPLOAD_DIR', __DIR__ . '/uploads/fotos_IW');             //  ruta física
 define('IW_UPLOAD_URL', '/visibility2/app/uploads/fotos_IW');       // ruta públca
@@ -87,20 +88,13 @@ if ((int)$metaQ['tipo'] !== 2 || (int)$metaQ['id_empresa'] !== $empresaId) {
 }
 $idCampana = (int)$metaQ['id_formulario'];
 
-// Aprovechamos para conocer id_local de la visita (si aplica; si no, quedará 0)
-$idLocalVisita = 0;
-$sqlV = "SELECT id_local FROM visita WHERE id=? AND id_usuario=? AND id_formulario=? LIMIT 1";
-$stmt = $conn->prepare($sqlV);
-$stmt->bind_param("iii", $visita_id, $usuario, $idCampana);
-$stmt->execute();
-$stmt->bind_result($idLocalVisita);
-$okV = $stmt->fetch();
-$stmt->close();
-if (!$okV) {
+// Valida la visita y de paso deja su id_local (si no aplica, queda 0).
+$visitaIW = auth_visita($conn, $visita_id, $usuario, $idCampana);
+if ($visitaIW === null) {
   http_response_code(403);
   echo json_encode(['status'=>'error','message'=>'Visita no válida para esta campaña']); exit;
 }
-$idLocalVisita = (int)$idLocalVisita;
+$idLocalVisita = $visitaIW['id_local'];
 
 /* =========================
    4) Utilidades imagen

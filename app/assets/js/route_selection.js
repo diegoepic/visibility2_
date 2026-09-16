@@ -48,14 +48,24 @@
       if (!marcado || estaExcl) return;
 
       const isBotilleria = $tr.data('isbotilleria') === 'true' || $tr.data('isbotilleria') === true;
-      pts.push({ idLocal, lat, lng, isBotilleria, fecha, modo });
+      // Hora real de apertura de la cuenta (cuenta.hora_apertura, scripts/37). Vacía = sin
+      // ventana horaria. Quien la usa para avisar es index_pruebas.php; acá sólo viaja.
+      const horaApertura = String($tr.data('horaapertura') || '') || null;
+      pts.push({ idLocal, lat, lng, isBotilleria, horaApertura, fecha, modo });
     });
 
-    // Botillerías al final si es antes de las 13:00
+    // Los locales con ventana horaria van al final mientras no hayan abierto. La hora sale
+    // de cada punto (cuenta.hora_apertura); el 13:00 sólo queda como respaldo para cuando la
+    // migración scripts/37 todavía no se aplicó y el servidor no manda la hora.
     const horaMin = new Date().getHours() * 60 + new Date().getMinutes();
-    if (horaMin < 13 * 60) {
-      const norm = pts.filter(p => !p.isBotilleria);
-      const bots = pts.filter(p =>  p.isBotilleria);
+    const aMin = (hhmm) => {
+      const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || ''));
+      return m ? (Number(m[1]) * 60 + Number(m[2])) : 13 * 60;
+    };
+    const cerrado = (p) => p.isBotilleria && horaMin < aMin(p.horaApertura);
+    if (pts.some(cerrado)) {
+      const norm = pts.filter(p => !cerrado(p));
+      const bots = pts.filter(p =>  cerrado(p));
       pts.length = 0;
       pts.push(...norm, ...bots);
     }

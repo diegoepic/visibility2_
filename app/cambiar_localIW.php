@@ -22,6 +22,7 @@ if (empty($_POST['csrf_token']) || ($_POST['csrf_token'] !== ($_SESSION['csrf_to
 }
 
 require_once __DIR__ . '/con_.php';
+require_once __DIR__ . '/lib/dominio/autorizacion.php';
 
 $usuario_id = (int)$_SESSION['usuario_id'];
 $empresa_id = (int)$_SESSION['empresa_id'];
@@ -57,19 +58,10 @@ if (!$okCamp || (int)$formEmp !== $empresa_id || (int)$reqLocal !== 1) {
 }
 
 /* 2) Validar visita del usuario/campaña y leer old_local (debe estar abierta) */
-$stmt = $conn->prepare("
-  SELECT id_local
-  FROM visita
-  WHERE id=? AND id_usuario=? AND id_formulario=? AND fecha_fin IS NULL
-  LIMIT 1
-");
-$stmt->bind_param("iii", $visita_id, $usuario_id, $idCampana);
-$stmt->execute();
-$stmt->bind_result($old_local);
-$okVis = $stmt->fetch();
-$stmt->close();
+$visitaAbierta = auth_visita($conn, $visita_id, $usuario_id, $idCampana, null, true);
+$old_local = $visitaAbierta === null ? 0 : $visitaAbierta['id_local'];
 
-if (!$okVis) {
+if ($visitaAbierta === null) {
   http_response_code(403);
   echo json_encode(['status'=>'error','message'=>'Visita inválida']);
   exit;

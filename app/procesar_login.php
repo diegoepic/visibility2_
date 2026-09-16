@@ -2,6 +2,8 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../portal/bootstrap.php';
 require_once __DIR__ . '/lib/remember.php';
+// Regla de ingreso por RUT (se activa sola en la fecha de corte)
+require_once __DIR__ . '/../lib_login_rut.php';
 
 $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
 session_set_cookie_params([
@@ -103,26 +105,55 @@ if ((int)($rl['n'] ?? 0) >= 10) {
   fail_and_back();
 }
 
-// Buscar usuario activo por RUT o usuario
-$sql = "
-  SELECT 
+/* ===================== Buscar usuario =====================
+   Hasta la fecha de corte se acepta RUT o nombre de usuario; desde ahí, sólo
+   RUT (ver lib_login_rut.php — no hay que subir nada ese día, lo decide la
+   fecha). El RUT tecleado se normaliza igual que al crearlo en el portal, así
+   que da lo mismo si lo escriben 12.345.678-9 o 123456789. */
+$soloRut = login_solo_rut_activo();
+$rutIn   = login_normalizar_rut($usuario);
+
+$sqlBase = "
+  SELECT
       u.id, u.rut, u.nombre, u.apellido, u.email, u.usuario, u.fotoPerfil, u.clave,
       u.id_perfil, u.id_empresa, u.id_division, u.login_count,
       p.nombre AS perfil_nombre, e.nombre AS empresa_nombre
   FROM usuario AS u
   INNER JOIN perfil  AS p ON p.id = u.id_perfil
   INNER JOIN empresa AS e ON e.id = u.id_empresa
-  WHERE (u.rut = ? OR u.usuario = ?) AND u.activo = 1
+  WHERE %s AND u.activo = 1
   LIMIT 1
 ";
+$sql = sprintf($sqlBase, $soloRut ? 'u.rut = ?' : '(u.rut = ? OR u.usuario = ?)');
+
 $stmt = $conn->prepare($sql);
 if (!$stmt) { error_log("Prepare user: ".$conn->error); fail_and_back(); }
-$stmt->bind_param("ss", $usuario, $usuario);
+if ($soloRut) { $stmt->bind_param("s", $rutIn); }
+else          { $stmt->bind_param("ss", $rutIn, $usuario); }
 if (!$stmt->execute()) { error_log("Execute user: ".$stmt->error); fail_and_back(); }
 $res = $stmt->get_result();
 if ($res->num_rows !== 1) {
   $ins = $conn->prepare("INSERT INTO login_attempts (usuario, ip, intento_at) VALUES (?, INET6_ATON(?), NOW())");
   if ($ins) { $ins->bind_param("ss", $usuario, $ip); $ins->execute(); $ins->close(); }
+  /* Ya rige el RUT y lo tecleado es un nombre de usuario que EXISTE: sin este
+     aviso la persona lee "credenciales incorrectas", cree que le bloquearon la
+     cuenta y llama a soporte. Se comprueba el usuario pero NO la clave, así que
+     no revela nada que no se supiera al escribirlo. */
+  if ($soloRut) {
+    $q = $conn->prepare("SELECT 1 FROM usuario WHERE usuario = ? AND activo = 1 LIMIT 1");
+    if ($q) {
+      $q->bind_param("s", $usuario);
+      $q->execute();
+      $existe = $q->get_result()->num_rows === 1;
+      $q->close();
+      if ($existe) {
+        $_SESSION['error_login'] = 'Desde el ' . date('d/m/Y', strtotime(login_fecha_corte()))
+          . ' se ingresa con el RUT, sin puntos ni guion. Usa tu RUT en vez del nombre de usuario.';
+        header("Location: login.php");
+        exit();
+      }
+    }
+  }
   fail_and_back();
 }
 $u = $res->fetch_assoc();
@@ -136,6 +167,19 @@ if (!password_verify($clave, $u['clave'] ?? '')) {
 
 $dl = $conn->prepare("DELETE FROM login_attempts WHERE usuario = ? AND ip = INET6_ATON(?)");
 if ($dl) { $dl->bind_param("ss", $usuario, $ip); $dl->execute(); $dl->close(); }
+
+/* Aviso del cambio a RUT: sólo a quien entró con el nombre de usuario, que es
+   el único que va a quedar afuera. Quien ya usa su RUT no ve nada.
+   No se lleva registro de "ya lo vio" a propósito: el aviso desaparece solo
+   cuando la persona cambia de hábito, que es justamente lo que se busca. */
+$rutGuardado = login_normalizar_rut((string)($u['rut'] ?? ''));
+if (!$soloRut && $rutGuardado !== '' && $rutIn !== $rutGuardado) {
+  $_SESSION['aviso_login_rut'] = [
+    'rut'   => $rutGuardado,
+    'dias'  => login_dias_para_corte(),
+    'corte' => date('d/m/Y', strtotime(login_fecha_corte())),
+  ];
+}
 
 // Rehash si procede
 $needsRehash = defined('PASSWORD_ARGON2ID')

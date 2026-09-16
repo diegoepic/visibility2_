@@ -980,6 +980,28 @@ $imagenesPorLocal = array_values($imagenesPorLocal);
     margin-top:18px;
 }
 
+/* La galería sigue los filtros de DETALLE DE LOCALES: las tarjetas que no
+   entran se esconden con esta clase (no se borran, para no rehacer la grilla). */
+.imagen-card-oculta{
+    display:none !important;
+}
+
+.imagenes-contador{
+    margin-top:14px;
+    padding:8px 14px;
+    border-radius:12px;
+    background:#eef4ff;
+    color:#1f3d78;
+    font-size:13px;
+    font-weight:700;
+    display:inline-block;
+}
+/* El display:inline-block de arriba le gana al [hidden] del navegador (que es
+   sólo display:none del user agent), así que hay que apagarlo a mano. */
+.imagenes-contador[hidden]{
+    display:none;
+}
+
 .imagen-card{
     background:#fff;
     border:1px solid #edf0f4;
@@ -1544,6 +1566,9 @@ $imagenesPorLocal = array_values($imagenesPorLocal);
     </div>
 
     <?php if (!empty($imagenesPorLocal)): ?>
+        <!-- Lo llena sincronizarGaleria() cuando hay algún filtro puesto arriba. -->
+        <div class="imagenes-contador" id="imagenesContador" hidden></div>
+
         <div class="imagenes-grid">
             <?php foreach ($imagenesPorLocal as $index => $local): ?>
                 <?php
@@ -1551,8 +1576,15 @@ $imagenesPorLocal = array_values($imagenesPorLocal);
                     $fotosJson = htmlspecialchars(json_encode($local['fotos'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), ENT_QUOTES, 'UTF-8');
                     $fechaVisitaTxt = !empty($local['fecha_visita']) ? date('d/m/Y H:i', strtotime($local['fecha_visita'])) : '-';
                     $totalFotos = count($local['fotos']);
+                    // El código es la llave con la que los filtros de DETALLE DE LOCALES
+                    // esconden tarjetas; se recorta igual que en la consulta de la matriz
+                    // (TRIM(l.codigo)) para que las dos cadenas sean comparables.
+                    $codigoCard = trim((string)($local['local_codigo'] ?? ''));
+                    // La matriz pinta '-' cuando el local no tiene código; se usa el
+                    // mismo relleno o la tarjeta no calzaría nunca.
+                    if ($codigoCard === '') { $codigoCard = '-'; }
                 ?>
-                <div class="imagen-card">
+                <div class="imagen-card" data-codigo="<?php echo htmlspecialchars($codigoCard, ENT_QUOTES, 'UTF-8'); ?>">
                     <div class="imagen-card-header">
                         <div class="imagen-card-codigo"><?php echo htmlspecialchars($local['local_codigo']); ?></div>
                         <div class="imagen-card-total"><?php echo $totalFotos; ?> foto(s)</div>
@@ -1624,6 +1656,11 @@ $imagenesPorLocal = array_values($imagenesPorLocal);
                     </div>
                 </div>
             <?php endforeach; ?>
+        </div>
+
+        <!-- Cuando el filtro de arriba deja fuera a todos los locales con fotos. -->
+        <div class="imagenes-vacio" id="imagenesSinResultados" hidden>
+            Ningún local con imágenes coincide con el filtro aplicado en <strong>Detalle de locales</strong>.
         </div>
     <?php else: ?>
         <div class="imagenes-vacio">
@@ -2594,6 +2631,67 @@ $(document).ready(function () {
         .forEach(function (region) {
             $('#filtroRegion').append(`<option value="${region}">${region}</option>`);
         });
+
+    /* ======================================================================
+       IMAGENES POR LOCAL sigue a los filtros de DETALLE DE LOCALES
+       ----------------------------------------------------------------------
+       No se repite acá la lógica de búsqueda: se le pregunta a DataTables qué
+       códigos quedaron visibles ({search:'applied'} trae TODAS las páginas, no
+       sólo la que se está viendo) y se esconden las tarjetas que no estén en
+       ese conjunto. Así los cuatro filtros —incluido el texto libre, que puede
+       calzar por nombre, dirección o usuario— valen igual para la galería sin
+       tener que reimplementarlos.
+       ====================================================================== */
+    const $cardsGaleria = $('#bloqueImagenesExport .imagen-card');
+    const $contadorGal  = $('#imagenesContador');
+    const $vacioGal     = $('#imagenesSinResultados');
+
+    function hayFiltrosActivos(){
+        return ($('#filtroBusqueda').val() || '').trim() !== ''
+            || ($('#filtroRegion').val() || '') !== ''
+            || ($('#filtroVisita').val() || '') !== ''
+            || ($('#filtroImplementacion').val() || '') !== '';
+    }
+
+    function sincronizarGaleria(){
+        if (!$cardsGaleria.length) return;
+
+        // Sin filtros se muestran todas: hay locales con fotos que podrían no
+        // estar en la matriz, y no tiene sentido esconderlos "por omisión".
+        if (!hayFiltrosActivos()){
+            $cardsGaleria.removeClass('imagen-card-oculta');
+            $contadorGal.prop('hidden', true);
+            $vacioGal.prop('hidden', true);
+            return;
+        }
+
+        const visibles = new Set();
+        tabla.column(0, { search: 'applied' }).data().each(function (valor) {
+            const codigo = $('<div>').html(valor).text().trim();
+            if (codigo !== '') visibles.add(codigo);
+        });
+
+        let mostradas = 0;
+        $cardsGaleria.each(function () {
+            // getAttribute y no .data(): jQuery convierte a número lo que parece
+            // número, y acá se compara contra texto.
+            const codigo = String(this.getAttribute('data-codigo') || '').trim();
+            const calza  = visibles.has(codigo);
+            $(this).toggleClass('imagen-card-oculta', !calza);
+            if (calza) mostradas++;
+        });
+
+        $contadorGal
+            .text(`Mostrando ${mostradas} de ${$cardsGaleria.length} locales con imágenes`)
+            .prop('hidden', false);
+        $vacioGal.prop('hidden', mostradas > 0);
+    }
+
+    // 'draw.dt' cubre los cuatro filtros de una sola vez: cualquiera de ellos
+    // termina llamando a .draw() sobre la tabla. Va sobre el elemento (y no con
+    // la API tabla.on) para no depender de la versión de DataTables.
+    $('#tablaMatrizLocales').on('draw.dt', sincronizarGaleria);
+    sincronizarGaleria();
 });
 </script>
 

@@ -5,6 +5,10 @@ ini_set('display_errors', 1);
 
 require_once __DIR__ . '/_session_guard.php';
 require_once __DIR__ . '/includes/permisos.php';
+// El portal mantiene el ingreso con nombre de usuario, así que ya no muestra el
+// aviso del cambio a RUT (eso quedó sólo en la app). Se limpia la variable por
+// si quedó alguna sesión abierta de antes del cambio.
+unset($_SESSION['aviso_login_rut']);
 // Verificar si el usuario ha iniciado sesi車n
 if (!isset($_SESSION['usuario_id'])) {
     header("Location: index.php");
@@ -1633,6 +1637,12 @@ body.layout-fixed {
                   <p>Adminsitrar cadenas</p>
                 </a>
               </li>
+              <li class="nav-item">
+                <a href="modulos/mod_territorios.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Adminsitrar territorios</p>
+                </a>
+              </li>              
               <li class="nav-item">
                 <a href="modulos/mod_divisiones.php" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>

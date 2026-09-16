@@ -30,7 +30,53 @@ function resolveLocalImportIndexes(array $headers): array|false
             return false;
         }
     }
+
+    $optionalAliases = [
+        'latitud' => ['latitud', 'latitude', 'lat'],
+        'longitud' => ['longitud', 'longitude', 'lng']
+    ];
+    foreach ($optionalAliases as $field => $names) {
+        $indexes[$field] = null;
+        foreach ($normalized as $index => $header) {
+            if (in_array($header, $names, true)) {
+                $indexes[$field] = $index;
+                break;
+            }
+        }
+    }
+
     return $indexes;
+}
+
+function localImportUsesClientCoordinates(array $indexes): bool
+{
+    return $indexes['latitud'] !== null && $indexes['longitud'] !== null;
+}
+
+function localImportHasIncompleteCoordinateColumns(array $indexes): bool
+{
+    return ($indexes['latitud'] === null) !== ($indexes['longitud'] === null);
+}
+
+function localImportParseCoordinate(mixed $value, float $minimum, float $maximum): ?float
+{
+    $normalized = trim((string)$value);
+    $normalized = str_replace(["\xC2\xA0", ' '], '', $normalized);
+    if ($normalized === '' || (str_contains($normalized, ',') && str_contains($normalized, '.'))) {
+        return null;
+    }
+
+    $normalized = str_replace(',', '.', $normalized);
+    if (!is_numeric($normalized)) {
+        return null;
+    }
+
+    $coordinate = (float)$normalized;
+    if (!is_finite($coordinate) || $coordinate < $minimum || $coordinate > $maximum) {
+        return null;
+    }
+
+    return $coordinate;
 }
 
 function localImportAcquireLock(mysqli $conn, int $jobId): bool

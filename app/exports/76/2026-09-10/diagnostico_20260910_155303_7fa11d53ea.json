@@ -1,0 +1,150 @@
+{
+    "exported_at": "2026-09-10T18:53:03.385Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Mobile Safari/537.36",
+    "sw_version": "v7.6.4",
+    "stats": {
+        "today": {
+            "ymd": "2026-09-10",
+            "pending": 0,
+            "running": 0,
+            "success": 3,
+            "error": 0,
+            "blocked": 0,
+            "total": 3
+        },
+        "overall": {
+            "pending": 0,
+            "running": 0,
+            "success": 3,
+            "error": 0,
+            "blocked": 0,
+            "total": 3
+        }
+    },
+    "queue": {
+        "total_records": 3,
+        "last_created_at": 1789046217440,
+        "last_updated_at": 1789046283408
+    },
+    "recent_events": [
+        {
+            "id": "1f2a2e05-9427-4025-8cf0-7cf649bf91be:1789046283393:39ec89177f7078",
+            "job_id": "1f2a2e05-9427-4025-8cf0-7cf649bf91be",
+            "created": 1789046283393,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "1f2a2e05-9427-4025-8cf0-7cf649bf91be:1789046282115:15a00f5fe43f2",
+            "job_id": "1f2a2e05-9427-4025-8cf0-7cf649bf91be",
+            "created": 1789046282115,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "09f45e72-2e00-48b9-965e-99c8a3143c67:1789046282087:a7731e67801b8",
+            "job_id": "09f45e72-2e00-48b9-965e-99c8a3143c67",
+            "created": 1789046282087,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "09f45e72-2e00-48b9-965e-99c8a3143c67:1789046280298:dc9d3da86b346",
+            "job_id": "09f45e72-2e00-48b9-965e-99c8a3143c67",
+            "created": 1789046280298,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "28a16db8-59a6-4e60-a8d2-109700ccca22:1789046280271:eb77458c9adfb8",
+            "job_id": "28a16db8-59a6-4e60-a8d2-109700ccca22",
+            "created": 1789046280271,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "28a16db8-59a6-4e60-a8d2-109700ccca22:1789046277873:4fd41d7de98558",
+            "job_id": "28a16db8-59a6-4e60-a8d2-109700ccca22",
+            "created": 1789046277873,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        }
+    ],
+    "storage_estimate": {
+        "usage": 28406313,
+        "quota": 10765824553,
+        "percent_used": 0
+    },
+    "connection_info": {
+        "effectiveType": "4g",
+        "downlink": 1.399999999999999911182158029987476766109466552734375,
+        "rtt": 150,
+        "saveData": false
+    },
+    "service_worker": {
+        "active": "active",
+        "installing": null,
+        "waiting": null,
+        "scope": "https://visibility.cl/visibility2/app/"
+    },
+    "idb_databases": [
+        {
+            "name": "v2_journal",
+            "version": 9
+        },
+        {
+            "name": "v2_mappings",
+            "version": 1
+        },
+        {
+            "name": "v2_offline",
+            "version": 10
+        },
+        {
+            "name": "v2_route_cache",
+            "version": 1
+        },
+        {
+            "name": "visibility2-v2",
+            "version": 9
+        }
+    ],
+    "recent_errors": [],
+    "client_time": {
+        "local": "Thu Sep 10 2026 15:53:03 GMT-0300 (hora de verano de Chile)",
+        "timezone": "America/Santiago",
+        "offset_minutes": 180
+    },
+    "csrf_token": "34b0ced10ac45fda9e83d0f558c8ebfabec9187e9329eb0463c8ba6582bc3887"
+}

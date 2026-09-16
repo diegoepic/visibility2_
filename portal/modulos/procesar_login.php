@@ -36,6 +36,9 @@ register_shutdown_function(function () {
 });
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/portal/con_.php';
+// Sólo por login_normalizar_rut(): el portal acepta RUT además de usuario y
+// email, pero NO aplica el corte que retira el usuario (eso es de la app).
+require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/lib_login_rut.php';
 
 /* ===================== Config ===================== */
 const LOGIN_URL             = '/index.php';
@@ -420,7 +423,23 @@ try {
         fail_and_back_generic();
     }
 
-    /* ===================== Buscar usuario ===================== */
+    /* ===================== Buscar usuario =====================
+       El portal acepta RUT, nombre de usuario o email, y así se queda: el
+       corte que retira el nombre de usuario (lib_login_rut.php) rige SÓLO en
+       la app, por decisión del negocio. No se llama a login_solo_rut_activo()
+       acá a propósito — si algún día vuelve a activarse en la app, el portal
+       no se entera.
+       El RUT tecleado se normaliza igual que al crearlo en el portal, así que
+       da lo mismo si lo escriben con puntos y guion. */
+    $rutIn  = login_normalizar_rut($usuario);
+    $usaRut = ($rutIn !== '');
+
+    /* Si lo tecleado no deja ni un dígito (un nombre de usuario como "mgomez")
+       el RUT normalizado queda vacío y `u.rut = ''` calzaría con cualquier
+       cuenta sin RUT cargado; por eso esa condición se saca de la consulta. */
+    $where = $usaRut
+        ? '(u.rut = ? OR u.usuario = ? OR u.email = ?)'
+        : '(u.usuario = ? OR u.email = ?)';
 
     $stmt = $conn->prepare("
         SELECT
@@ -443,7 +462,7 @@ try {
         FROM usuario AS u
         INNER JOIN perfil AS p  ON p.id = u.id_perfil
         INNER JOIN empresa AS e ON e.id = u.id_empresa
-        WHERE (u.usuario = ? OR u.email = ?)
+        WHERE {$where}
           AND u.activo = 1
         LIMIT 1
     ");
@@ -452,7 +471,8 @@ try {
         throw new RuntimeException('No se pudo preparar la consulta de login: ' . $conn->error);
     }
 
-    $stmt->bind_param('ss', $usuario, $usuario);
+    if ($usaRut) { $stmt->bind_param('sss', $rutIn, $usuario, $usuario); }
+    else         { $stmt->bind_param('ss', $usuario, $usuario); }
     $stmt->execute();
     $res   = $stmt->get_result();
     $found = $res && $res->num_rows === 1;
@@ -556,6 +576,10 @@ try {
         $_SESSION['error_login'] = 'Perfil sin permisos, ingresa desde la app.';
         safe_redirect(LOGIN_URL);
     }
+
+    /* El aviso "empieza a usar tu RUT" ya no se muestra en el portal: acá el
+       nombre de usuario se mantiene, así que no hay nada que avisar. El aviso
+       sigue vivo en la app (app/procesar_login.php), donde el corte sí rige. */
 
     $secBefore = get_user_security($conn, (int)$u['id']);
 

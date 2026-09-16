@@ -1,0 +1,206 @@
+{
+    "exported_at": "2026-09-09T18:37:07.917Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36",
+    "sw_version": "v7.6.3",
+    "stats": {
+        "today": {
+            "ymd": "2026-09-09",
+            "pending": 2,
+            "running": 0,
+            "success": 1,
+            "error": 0,
+            "blocked": 0,
+            "total": 3
+        },
+        "overall": {
+            "pending": 3,
+            "running": 0,
+            "success": 1,
+            "error": 0,
+            "blocked": 0,
+            "total": 4
+        }
+    },
+    "queue": {
+        "total_records": 4,
+        "last_created_at": 1788974080375,
+        "last_updated_at": 1788974081142
+    },
+    "recent_events": [
+        {
+            "id": "1e19ad55-124e-4c6d-ad37-e8eb21d4741b:1788974081102:9473d49ae0fb5",
+            "job_id": "1e19ad55-124e-4c6d-ad37-e8eb21d4741b",
+            "created": 1788974081102,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Error: Network error calling /visibility2/app/procesar_pregunta_foto_pruebas.php: Failed to fetch",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "1e19ad55-124e-4c6d-ad37-e8eb21d4741b:1788974080935:a12445346fc56",
+            "job_id": "1e19ad55-124e-4c6d-ad37-e8eb21d4741b",
+            "created": 1788974080935,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "da29410e-8a87-4353-a265-1e2ad8754bda:1788971335955:4e680dd707a67",
+            "job_id": "da29410e-8a87-4353-a265-1e2ad8754bda",
+            "created": 1788971335955,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "da29410e-8a87-4353-a265-1e2ad8754bda:1788971335013:ff8adf0020fa6",
+            "job_id": "da29410e-8a87-4353-a265-1e2ad8754bda",
+            "created": 1788971335013,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "da29410e-8a87-4353-a265-1e2ad8754bda:1788971334128:d2567fbdd82ec8",
+            "job_id": "da29410e-8a87-4353-a265-1e2ad8754bda",
+            "created": 1788971334128,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Error: Network error calling /visibility2/app/procesar_pregunta_foto_pruebas.php: Failed to fetch",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "da29410e-8a87-4353-a265-1e2ad8754bda:1788971260175:9019b67a9bfea",
+            "job_id": "da29410e-8a87-4353-a265-1e2ad8754bda",
+            "created": 1788971260175,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "fb86ff3c-38f1-4efb-bf50-bdcbd708a0e7:1788965637002:b91e73ed54c1f",
+            "job_id": "fb86ff3c-38f1-4efb-bf50-bdcbd708a0e7",
+            "created": 1788965637002,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Error: Network error calling /visibility2/app/procesar_pregunta_foto_pruebas.php: Failed to fetch",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "fb86ff3c-38f1-4efb-bf50-bdcbd708a0e7:1788965636951:c8baffd7e729",
+            "job_id": "fb86ff3c-38f1-4efb-bf50-bdcbd708a0e7",
+            "created": 1788965636951,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "fbb2af09-96e8-4960-add9-61f40cecbbde:1788875086655:a55745626afc",
+            "job_id": "fbb2af09-96e8-4960-add9-61f40cecbbde",
+            "created": 1788875086655,
+            "type": "attempt_error",
+            "status": "queued",
+            "http_status": null,
+            "error": "NETWORK",
+            "message": "Error: Network error calling /visibility2/app/procesar_pregunta_foto_pruebas.php: Failed to fetch",
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php",
+            "error_id": null,
+            "responseSnippet": null
+        },
+        {
+            "id": "fbb2af09-96e8-4960-add9-61f40cecbbde:1788875086588:611dcb63f8fd08",
+            "job_id": "fbb2af09-96e8-4960-add9-61f40cecbbde",
+            "created": 1788875086588,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        }
+    ],
+    "storage_estimate": {
+        "usage": 27815969,
+        "quota": 10765234209,
+        "percent_used": 0
+    },
+    "connection_info": {
+        "effectiveType": "4g",
+        "downlink": 3.850000000000000088817841970012523233890533447265625,
+        "rtt": 150,
+        "saveData": false
+    },
+    "service_worker": {
+        "active": "active",
+        "installing": null,
+        "waiting": null,
+        "scope": "https://visibility.cl/visibility2/app/"
+    },
+    "idb_databases": [
+        {
+            "name": "v2_journal",
+            "version": 9
+        },
+        {
+            "name": "v2_mappings",
+            "version": 1
+        },
+        {
+            "name": "v2_offline",
+            "version": 10
+        },
+        {
+            "name": "v2_route_cache",
+            "version": 1
+        },
+        {
+            "name": "visibility2-v2",
+            "version": 9
+        }
+    ],
+    "recent_errors": [],
+    "client_time": {
+        "local": "Wed Sep 09 2026 15:37:08 GMT-0300 (hora de verano de Chile)",
+        "timezone": "America/Santiago",
+        "offset_minutes": 180
+    },
+    "csrf_token": "12dd64cc805e2f573f6f641c58be0ebc1355d60dc73ea035a2114161cb70b5ef"
+}

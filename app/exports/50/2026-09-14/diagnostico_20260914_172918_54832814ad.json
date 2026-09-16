@@ -1,0 +1,53 @@
+{
+    "generado": "2026-09-14T20:29:19.628Z",
+    "usuario": 50,
+    "descartados": [],
+    "version": "v7.6.5",
+    "aviso": "Respaldo de referencia. NO incluye las fotos: sirve para saber qué visitas hay que rehacer.",
+    "total": 1,
+    "trabajos": [
+        {
+            "id": "3282320f-c4cb-4a2a-a71e-5a215b19ae0c",
+            "estado": "error",
+            "tipo": "pregunta_foto",
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php",
+            "creado": "2026-09-14T20:28:07.884Z",
+            "intentos": 1,
+            "dueno": null,
+            "fotos": 1,
+            "campos": {
+                "visita_id": "local-a5026017-a027-4368-b72f-4c22a2e36294",
+                "id_form_question": "59536",
+                "id_local": "20590",
+                "client_guid": "53c03fa6-35ed-429f-8e2e-ae72cbc20a8f",
+                "lat": "-33.434207",
+                "lng": "-70.777557",
+                "exif_datetime": "",
+                "exif_lat": "",
+                "exif_lng": "",
+                "exif_altitude": "",
+                "exif_img_direction": "",
+                "exif_make": "",
+                "exif_model": "",
+                "exif_software": "",
+                "exif_lens_model": "",
+                "exif_fnumber": "",
+                "exif_exposure_time": "",
+                "exif_iso": "",
+                "exif_focal_length": "",
+                "exif_orientation": "",
+                "capture_source": "gallery",
+                "meta_json": "{\"DateTimeOriginal\":null,\"CreateDate\":null,\"SubSecTimeOriginal\":null,\"GPSImgDirectionRef\":null}",
+                "X_Idempotency_Key": "3282320f-c4cb-4a2a-a71e-5a215b19ae0c"
+            },
+            "ultimo_error": {
+                "code": "DUPLICATE_PHOTO",
+                "message": "HTTP 409",
+                "httpStatus": 409,
+                "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php",
+                "responseSnippet": "{\"status\":\"error\",\"message\":\"Foto duplicada: esta misma imagen ya fue cargada en el local JM038 MALL ARAUCO MAIPU. Debes tomar una foto real de este local.\",\"error_code\":\"DUPLICATE_PHOTO\",\"retryable\":false,\"dup_of\":774647,\"dup_local\":\"JM038 MALL ARAUCO MAIPU\"}"
+            }
+        }
+    ],
+    "csrf_token": "6092b6bb355b1c8404429e47f6d64c280e7bb65def40153be9836c03d945336c"
+}

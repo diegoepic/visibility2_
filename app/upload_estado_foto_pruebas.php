@@ -167,6 +167,7 @@ if (!isset($conn) || !($conn instanceof mysqli)) {
 
 /* ---------------- Idempotencia ---------------- */
 require_once __DIR__ . '/lib/idempotency.php';
+require_once __DIR__ . '/lib/dominio/autorizacion.php';
 sanitize_idempotency_key();
 idempo_claim_or_fail($conn, 'upload_estado_foto');
 
@@ -197,17 +198,11 @@ if ((!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK)
   json_fail(400, 'No se recibió la imagen o hubo un error al subirla', ['error_code' => 'UPLOAD_ERROR', 'retryable' => false]);
 }
 
-/* ---------------- Permisos: local/campaña pertenecen a usuario/empresa ---------------- */
-$perm_ok = false;
-if ($st = $conn->prepare("\
-  SELECT f.id\n    FROM formularioQuestion fq\n    JOIN formulario f ON f.id = fq.id_formulario AND f.id_empresa = ?\n   WHERE fq.id_formulario = ? AND fq.id_local = ? AND fq.id_usuario = ?\n   LIMIT 1\n")) {
-  $st->bind_param('iiii', $empresa_id, $idCampana, $idLocal, $usuario_id);
-  if ($st->execute()) {
-    $st->store_result();
-    $perm_ok = ($st->num_rows > 0);
-  }
-  $st->close();
-}
+/* ---------------- Permisos: local/campaña pertenecen a usuario/empresa ----------------
+   Misma regla que procesar_gestion_pruebas.php, en lib/dominio/autorizacion.php.
+   Acá SI se exige la empresa (este endpoint siempre lo hizo); ver la nota sobre la
+   asimetría en el encabezado de esa librería. */
+$perm_ok = puede_usuario_tocar($conn, $usuario_id, $idCampana, $idLocal, $empresa_id);
 if (!$perm_ok) { json_fail(403, 'Sin permiso sobre este local/campaña', ['error_code' => 'FORBIDDEN', 'retryable' => false]); }
 
 /* ---------------- Resolver/crear VISITA si visita_id <= 0 (fallback offline) ---------------- */

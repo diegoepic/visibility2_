@@ -1,191 +1,78 @@
-let mapa;
-let markers = [];
-let glowMarkers = [];
-let ejecutorMarker = null;
-let ejecutorGlowMarker = null;
+let mapa, markers = [];
 window.activeInfoWindow = null;
 
 function initMap() {
-  const darkMapStyle = [
-    { elementType: "geometry", stylers: [{ color: "#071326" }] },
-    { elementType: "labels.text.stroke", stylers: [{ color: "#071326" }] },
-    { elementType: "labels.text.fill", stylers: [{ color: "#6f88b9" }] },
-
-    { featureType: "administrative", elementType: "geometry", stylers: [{ color: "#1c3158" }] },
-    { featureType: "administrative.country", elementType: "geometry.stroke", stylers: [{ color: "#24416d" }] },
-    { featureType: "administrative.land_parcel", stylers: [{ visibility: "off" }] },
-    { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#93b7e6" }] },
-
-    { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#5d79a8" }] },
-    { featureType: "poi.business", stylers: [{ visibility: "off" }] },
-    { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#0d1e34" }] },
-    { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#50729e" }] },
-
-    { featureType: "road", elementType: "geometry", stylers: [{ color: "#112544" }] },
-    { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#112544" }] },
-    { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#6c86b3" }] },
-
-    { featureType: "road.local", elementType: "labels", stylers: [{ visibility: "off" }] },
-
-    { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#16345c" }] },
-    { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1c477f" }] },
-    { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#9cc7ff" }] },
-
-    { featureType: "transit", stylers: [{ visibility: "off" }] },
-
-    { featureType: "water", elementType: "geometry", stylers: [{ color: "#05101f" }] },
-    { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4f78a7" }] },
-    { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#05101f" }] }
-  ];
-
-  const centroDefault = { lat: -33.4489, lng: -70.6693 };
-
   mapa = new google.maps.Map(document.getElementById("map"), {
-    zoom: 10,
-    center: centroDefault,
-    styles: darkMapStyle,
-    disableDefaultUI: true,
-    zoomControl: true,
-    mapTypeControl: false,
+    zoom: 6,
+    center: { lat: -33.4489, lng: -70.6693 },
+    mapTypeId: "roadmap",
+    colorScheme: google.maps.ColorScheme.LIGHT,
     streetViewControl: false,
-    fullscreenControl: false,
-    rotateControl: false,
-    scaleControl: false,
-    gestureHandling: "greedy",
-    clickableIcons: false
+    fullscreenControl: true,
+    mapTypeControl: true,
+    zoomControl: true,
+    gestureHandling: "greedy"
   });
 
+  // Validar que existan coordenadas
   if (typeof coordenadasLocales === "undefined" || !Array.isArray(coordenadasLocales)) {
-    console.error("No se encontró la variable 'coordenadasLocales'");
+    console.error("No se encontr贸 la variable 'coordenadasLocales'");
     return;
   }
 
-  limpiarMarcadores();
-  crearMarcadoresLocales();
-  ajustarVistaMapa();
-  iniciarSeguimientoEjecutor();
-}
-
-function limpiarMarcadores() {
-  markers.forEach(marker => marker.setMap(null));
-  glowMarkers.forEach(marker => marker.setMap(null));
-
-  markers = [];
-  glowMarkers = [];
-}
-
-function obtenerColorMarcador(local) {
-  const estado = String(local.estado || "").trim().toUpperCase();
-
-  // Casos críticos
-  if (["LOCAL NO EXISTE", "LOCAL CERRADO", "NO PERMITIERON", "SIN PRODUCTOS"].includes(estado)) {
-    return {
-      fill: "#ff4d4f",
-      stroke: "#ffd6d6",
-      glow: "rgba(255,77,79,0.22)"
-    };
-  }
-
-  // Gestionado
-  if (estado === "GESTIONADO") {
-    return {
-      fill: "#22c55e",
-      stroke: "#dcfce7",
-      glow: "rgba(34,197,94,0.22)"
-    };
-  }
-
-  // Sin estado o vacío
-  if (estado === "" || estado === "-" || estado === "NULL") {
-    return {
-      fill: "#3b82f6",
-      stroke: "#dbeafe",
-      glow: "rgba(59,130,246,0.22)"
-    };
-  }
-
-  // Cualquier otro estado no contemplado
-  return {
-    fill: "#3b82f6",
-    stroke: "#dbeafe",
-    glow: "rgba(59,130,246,0.22)"
-  };
-}
-
-function crearMarcadoresLocales() {
+  // Crear marcadores
   coordenadasLocales.forEach((local) => {
     if (!local.latitud || !local.longitud) return;
 
-    const lat = parseFloat(local.latitud);
-    const lng = parseFloat(local.longitud);
-
-    if (Number.isNaN(lat) || Number.isNaN(lng)) return;
-
-    const color = obtenerColorMarcador(local);
-    const position = { lat, lng };
-
-    const glowMarker = new google.maps.Marker({
-      position,
-      map: mapa,
-      zIndex: 1,
-      clickable: false,
-      icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 14,
-        fillColor: color.fill,
-        fillOpacity: 0.16,
-        strokeOpacity: 0
-      }
-    });
+    // El backend marca en verde los locales con al menos una gesti贸n completada.
+    const iconUrl = local.markerColor === "green"
+      ? "../../images/icon/gestionadov1.png"
+      : "../../images/icon/nogestionadov1.png";
 
     const marker = new google.maps.Marker({
-      position,
+      position: {
+        lat: parseFloat(local.latitud),
+        lng: parseFloat(local.longitud)
+      },
       map: mapa,
-      zIndex: 2,
-      title: local.nombre_local || local.nombre_campana || "",
+      title: local.nombre_campana || "",
       icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 7,
-        fillColor: color.fill,
-        fillOpacity: 1,
-        strokeColor: color.stroke,
-        strokeWeight: 2
+        url: iconUrl,
+        scaledSize: new google.maps.Size(48, 48),
+        // Apoyar el pie del m谩stil sobre la coordenada del local.
+        anchor: new google.maps.Point(16, 43)
       }
     });
 
     const contenidoInfo = `
-      <div class="map-info-card" style="min-width:240px; font-family:Calibri, sans-serif;">
-        <div style="font-size:15px; font-weight:800; color:#10233d; margin-bottom:6px;">
-          ${escapeHtml(local.nombre_local ?? local.nombre_campana ?? "Local")}
+      <div style="min-width:230px; font-family:Calibri, sans-serif;">
+        <h6 style="margin-bottom:4px; font-weight:bold; color:#2c3e50;">
+          ${local.nombre_campana ?? ""}
+        </h6>
+        <div style="font-size:13px; color:#555;">
+          <div><strong>Direcci贸n:</strong> ${local.direccion_local ?? "-"}</div>
+          <div><strong>Comuna:</strong> ${local.comuna_local ?? "-"}</div>
+          <div><strong>Regi贸n:</strong> ${local.region_local ?? "-"}</div>
+          <hr style="margin:6px 0; border:0; border-top:1px solid #ccc;">
+          <div><strong>Estado:</strong> ${local.estado ?? "-"}</div>
+          <div><strong>Fecha visita:</strong> ${local.fechaVisita ?? "-"}</div>
+          <div><strong>Hora visita:</strong> ${local.horaVisita ?? "-"}</div>
         </div>
-        <div style="font-size:12px; color:#4d678c; margin-bottom:8px;">
-          ${escapeHtml(local.direccion_local ?? "-")}
+        <div style="text-align:left; margin-top:8px;">
+          <button
+            onclick="verDetalleLocal(${local.idLocal})"
+            style="
+              background-color:#2c3e50;
+              color:white;
+              border:none;
+              padding:5px 10px;
+              font-size:13px;
+              border-radius:4px;
+              cursor:pointer;
+            ">
+            Ver detalle
+          </button>
         </div>
-
-        <div style="font-size:12px; color:#5b7396; line-height:1.5; margin-bottom:8px;">
-          <div><strong>Comuna:</strong> ${escapeHtml(local.comuna_local ?? "-")}</div>
-          <div><strong>Region:</strong> ${escapeHtml(local.region_local ?? "-")}</div>
-          <div><strong>Estado:</strong> ${escapeHtml(local.estado ?? "-")}</div>
-          <div><strong>Fecha visita:</strong> ${escapeHtml(local.fechaVisita ?? "-")}</div>
-          <div><strong>Hora visita:</strong> ${escapeHtml(local.horaVisita ?? "-")}</div>
-        </div>
-
-        <button
-          type="button"
-          onclick="verDetalleLocal(${Number(local.idLocal) || 0})"
-          style="
-            background: linear-gradient(90deg, #11c7f3, #1fd6ff);
-            color: #041225;
-            border: none;
-            padding: 7px 12px;
-            font-size: 12px;
-            font-weight: 700;
-            border-radius: 8px;
-            cursor: pointer;
-            box-shadow: 0 6px 14px rgba(17, 199, 243, 0.22);
-          ">
-          Ver detalle
-        </button>
       </div>
     `;
 
@@ -197,190 +84,188 @@ function crearMarcadoresLocales() {
       if (window.activeInfoWindow) {
         window.activeInfoWindow.close();
       }
-
-      infoWindow.open({
-        anchor: marker,
-        map: mapa,
-        shouldFocus: false
-      });
-
+      infoWindow.open(mapa, marker);
       window.activeInfoWindow = infoWindow;
     });
 
     markers.push(marker);
-    glowMarkers.push(glowMarker);
-  });
-}
-
-function ajustarVistaMapa() {
-  if (!markers.length) return;
-
-  const bounds = new google.maps.LatLngBounds();
-
-  markers.forEach((marker) => {
-    const pos = marker.getPosition();
-    if (pos) bounds.extend(pos);
   });
 
-  mapa.fitBounds(bounds, 80);
+  // Ajustar zoom al conjunto de puntos
+  if (markers.length) {
+    const bounds = new google.maps.LatLngBounds();
+    markers.forEach((m) => bounds.extend(m.getPosition()));
+    mapa.fitBounds(bounds);
 
-  google.maps.event.addListenerOnce(mapa, "bounds_changed", function () {
-    if (this.getZoom() > 16) this.setZoom(16);
-    if (this.getZoom() < 6) this.setZoom(6);
-  });
-}
-
-function iniciarSeguimientoEjecutor() {
-  if (typeof idEjecutor === "undefined" || Number(idEjecutor) <= 0) return;
-
-  let pollHandle = null;
-
-  function actualizarUbicacionEjecutor(id) {
-    fetch(`poll_ubicacion.php?id_ejecutor=${encodeURIComponent(id)}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (!data || !data.lat || !data.lng) return;
-
-        const lat = parseFloat(data.lat);
-        const lng = parseFloat(data.lng);
-
-        if (Number.isNaN(lat) || Number.isNaN(lng)) return;
-
-        const latLng = { lat, lng };
-
-        if (!ejecutorGlowMarker) {
-          ejecutorGlowMarker = new google.maps.Marker({
-            position: latLng,
-            map: mapa,
-            zIndex: 998,
-            clickable: false,
-            icon: {
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 16,
-              fillColor: "#ffffff",
-              fillOpacity: 0.18,
-              strokeOpacity: 0
-            }
-          });
-        } else {
-          ejecutorGlowMarker.setPosition(latLng);
-        }
-
-        if (!ejecutorMarker) {
-          ejecutorMarker = new google.maps.Marker({
-            position: latLng,
-            map: mapa,
-            title: "Ubicación actual",
-            zIndex: 999,
-            icon: {
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 8,
-              fillColor: "#ffffff",
-              fillOpacity: 1,
-              strokeColor: "#14d7ff",
-              strokeWeight: 3
-            }
-          });
-        } else {
-          ejecutorMarker.setPosition(latLng);
-        }
-      })
-      .catch((err) => {
-        console.error("Error al obtener ubicación del ejecutor:", err);
-      });
+    google.maps.event.addListenerOnce(mapa, "bounds_changed", function () {
+      if (this.getZoom() > 16) {
+        this.setZoom(16);
+      }
+    });
   }
 
-  actualizarUbicacionEjecutor(idEjecutor);
-  pollHandle = setInterval(() => actualizarUbicacionEjecutor(idEjecutor), 30000);
+  // Seguimiento del ejecutor (solo si existe)
+  if (typeof idEjecutor !== "undefined" && idEjecutor > 0) {
+    let ejecutorMarker = null;
+    let pollHandle = null;
 
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden && pollHandle) {
-      clearInterval(pollHandle);
-      pollHandle = null;
-    } else if (!document.hidden && !pollHandle) {
-      actualizarUbicacionEjecutor(idEjecutor);
-      pollHandle = setInterval(() => actualizarUbicacionEjecutor(idEjecutor), 30000);
+    function pollUbicacionEjecutor(id) {
+      fetch(`poll_ubicacion.php?id_ejecutor=${id}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (!data || !data.lat || !data.lng) return;
+
+          const latLng = {
+            lat: parseFloat(data.lat),
+            lng: parseFloat(data.lng)
+          };
+
+          if (!ejecutorMarker) {
+            ejecutorMarker = new google.maps.Marker({
+              position: latLng,
+              map: mapa,
+              title: "Ubicaci贸n actual",
+              icon: {
+                url: "../../images/icon/marker_user.png",
+                scaledSize: new google.maps.Size(36, 36)
+              },
+              zIndex: 999
+            });
+          } else {
+            ejecutorMarker.setPosition(latLng);
+          }
+        })
+        .catch((err) => {
+          console.error("Error al obtener ubicaci贸n del ejecutor:", err);
+        });
     }
+
+    pollUbicacionEjecutor(idEjecutor);
+    pollHandle = setInterval(() => pollUbicacionEjecutor(idEjecutor), 30000);
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && pollHandle) {
+        clearInterval(pollHandle);
+        pollHandle = null;
+      } else if (!document.hidden && !pollHandle) {
+        pollUbicacionEjecutor(idEjecutor);
+        pollHandle = setInterval(() => pollUbicacionEjecutor(idEjecutor), 30000);
+      }
+    });
+  }
+}
+
+const mapaFiltrosBusqueda = window.location.search;
+let detalleSolicitud = null;
+
+function detalleElemento(tag, clase, texto) {
+  const element = document.createElement(tag);
+  if (clase) element.className = clase;
+  if (texto !== undefined) element.textContent = texto;
+  return element;
+}
+
+function detalleGaleria(body, imagenes) {
+  body.replaceChildren();
+  body.appendChild(detalleElemento('p', 'detalle-ayuda',
+    'Historial fotogr谩fico de las campa帽as y ejecutores incluidos en la b煤squeda. Haz clic en una foto para verla completa.'));
+  const grupos = [
+    ['implementacion', 'Implementaci贸n', 'Material'],
+    ['auditoria', 'Auditor铆a', 'Pregunta'],
+    ['estado_local', 'Estado del local e impedimentos', 'Gesti贸n']
+  ];
+  grupos.forEach(([tipo, titulo, contexto]) => {
+    const fotos = imagenes.filter(foto => foto.tipo === tipo);
+    const section = detalleElemento('section', 'detalle-evidencias');
+    section.appendChild(detalleElemento('h6', 'detalle-seccion-titulo', `${titulo} 路 ${fotos.length} fotos`));
+    if (!fotos.length) {
+      section.appendChild(detalleElemento('p', 'detalle-ayuda', 'Sin fotograf铆as registradas en esta categor铆a.'));
+    } else {
+      const grid = detalleElemento('div', 'detalle-fotos-grid');
+      fotos.forEach(foto => {
+        const figure = detalleElemento('figure', 'detalle-foto');
+        const link = detalleElemento('a', 'detalle-foto-enlace');
+        let url;
+        try { url = new URL(foto.url, window.location.href); } catch (_) { return; }
+        if (!['https:', 'http:'].includes(url.protocol)) return;
+        link.href = url.href;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.setAttribute('aria-label', `Ampliar foto: ${foto.etiqueta}`);
+        const img = detalleElemento('img', 'detalle-foto-imagen');
+        img.alt = foto.etiqueta || contexto;
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.addEventListener('error', () => {
+          link.replaceChildren(detalleElemento('span', 'detalle-foto-error', 'Imagen no disponible. Abrir original.'));
+        }, { once: true });
+        img.src = url.href;
+        link.appendChild(img);
+        figure.appendChild(link);
+        const caption = detalleElemento('figcaption', 'detalle-foto-texto');
+        caption.appendChild(detalleElemento('small', 'detalle-foto-tipo', contexto));
+        caption.appendChild(detalleElemento('strong', 'detalle-foto-etiqueta', foto.etiqueta || 'Sin descripci贸n'));
+        caption.appendChild(detalleElemento('div', 'detalle-foto-meta', foto.campana || 'Sin campa帽a'));
+        caption.appendChild(detalleElemento('div', 'detalle-foto-meta', `Ejecutor: ${foto.usuario || 'Sin registro'}`));
+        const fecha = foto.fecha ? new Date(String(foto.fecha).replace(' ', 'T')) : null;
+        const fechaTexto = fecha && !Number.isNaN(fecha.getTime())
+          ? fecha.toLocaleString('es-CL') : 'Sin fecha registrada';
+        caption.appendChild(detalleElemento('div', 'detalle-foto-meta', fechaTexto));
+        if (foto.visita) caption.appendChild(detalleElemento('div', 'detalle-foto-meta', `Visita #${foto.visita}`));
+        if (foto.observacion) caption.appendChild(detalleElemento('p', 'detalle-foto-observacion', foto.observacion));
+        figure.appendChild(caption);
+        grid.appendChild(figure);
+      });
+      section.appendChild(grid);
+    }
+    body.appendChild(section);
   });
 }
 
-function verDetalleLocal(idLocal) {
-  const local = coordenadasLocales.find(l => Number(l.idLocal) === Number(idLocal));
+async function verDetalleLocal(idLocal) {
+  const local = coordenadasLocales.find(l => String(l.idLocal) === String(idLocal));
   if (!local) return;
-
-  const estadoRaw = String(local.estado || "").trim().toUpperCase();
-  let estadoClass = "modal-status-neutral";
-
-  if (["LOCAL NO EXISTE", "LOCAL CERRADO", "NO PERMITIERON"].includes(estadoRaw)) {
-    estadoClass = "modal-status-bad";
-  } else if (estadoRaw === "GESTIONADO") {
-    estadoClass = "modal-status-ok";
-  }
-
-  document.getElementById("modalTituloLocal").textContent = local.nombre_campana || "-";
-
-  document.getElementById("modalHeaderExtra").innerHTML = `
-    <div><strong>LOCAL:</strong> ${escapeHtml(local.nombre_local ?? "-")}</div>
-    <div><strong>DIRECCION:</strong> ${escapeHtml(local.direccion_local ?? "-")}</div>
-    <div><strong>COMUNA:</strong> ${escapeHtml(local.comuna_local ?? "-")}</div>
-    <div><strong>REGION:</strong> ${escapeHtml(local.region_local ?? "-")}</div>
-  `;
-
-  document.getElementById("modalBodyDetalle").innerHTML = `
-    <div class="container-fluid px-0 mt-1">
-      <div class="row">
-        <div class="col-12 col-md-4 mb-3">
-          <div class="modal-kpi-card text-center">
-            <div class="modal-kpi-label">Ultima visita</div>
-            <div class="modal-kpi-value">${escapeHtml(local.fechaVisita ?? "-")}</div>
-            <div class="modal-kpi-subvalue">${escapeHtml(local.horaVisita ?? "-")}</div>
-          </div>
-        </div>
-
-        <div class="col-12 col-md-4 mb-3">
-          <div class="modal-kpi-card text-center">
-            <div class="modal-kpi-label">Estado</div>
-            <div class="mt-2">
-              <span class="modal-status-pill ${estadoClass}">
-                ${escapeHtml(local.estado ?? "-")}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div class="col-12 col-md-4 mb-3">
-          <div class="modal-kpi-card text-center">
-            <div class="modal-kpi-label">Tipo de gestion</div>
-            <div class="modal-kpi-value" style="font-size:16px;">
-              ${escapeHtml(local.modalidad ?? "-")}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="modal-section-card mt-2">
-        <div class="modal-section-header">Gestion</div>
-        <div class="modal-section-body">
-          <div><strong>Campaña:</strong> ${escapeHtml(local.nombre_campana ?? "-")}</div>
-          <div><strong>Merchan:</strong> ${escapeHtml(local.usuario_local ?? "-")}</div>
-          <div><strong>Observación:</strong> ${escapeHtml(local.observacion ?? "-")}</div>
-        </div>
-      </div>
-    </div>
-  `;
-
+  if (detalleSolicitud) detalleSolicitud.abort();
+  const solicitud = new AbortController();
+  detalleSolicitud = solicitud;
+  if (window.activeInfoWindow) window.activeInfoWindow.close();
+  document.getElementById('modalTituloLocal').textContent = local.nombre_local || 'Detalle del local';
+  const header = document.getElementById('modalHeaderExtra');
+  header.replaceChildren();
+  header.appendChild(detalleElemento('div', '', [local.direccion_local, local.comuna_local, local.region_local].filter(Boolean).join(' 路 ')));
+  header.appendChild(detalleElemento('div', '', `Estado: ${local.estado || '-'} 路 脷ltima visita: ${local.fechaVisita || '-'}`));
+  const body = document.getElementById('modalBodyDetalle');
+  const loading = detalleElemento('p', 'detalle-cargando', 'Cargando fotograf铆as y gestiones鈥�');
+  loading.setAttribute('role', 'status');
+  body.replaceChildren(loading);
   $('#modalDetalle').modal('show');
+  const params = new URLSearchParams(mapaFiltrosBusqueda);
+  params.set('id_local', String(idLocal));
+  try {
+    const response = await fetch(`ajax_mapa_evidencias.php?${params}`, {
+      signal: solicitud.signal, credentials: 'same-origin', headers: { Accept: 'application/json' }
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudieron cargar las evidencias.');
+    if (!Array.isArray(data.imagenes)) throw new Error('La respuesta de evidencias no es v谩lida.');
+    if (detalleSolicitud !== solicitud || solicitud.signal.aborted) return;
+    detalleGaleria(body, data.imagenes);
+  } catch (error) {
+    if (solicitud.signal.aborted || detalleSolicitud !== solicitud) return;
+    const message = detalleElemento('p', 'text-danger', error instanceof SyntaxError
+      ? 'No se pudo cargar el detalle. Revisa la sesi贸n y los archivos del servidor.' : error.message);
+    message.setAttribute('role', 'alert');
+    const retry = detalleElemento('button', 'btn btn-outline-primary btn-sm', 'Reintentar');
+    retry.type = 'button';
+    retry.addEventListener('click', () => verDetalleLocal(idLocal));
+    body.replaceChildren(message, retry);
+  }
 }
+
+$('#modalDetalle').on('hide.bs.modal', () => {
+  if (detalleSolicitud) detalleSolicitud.abort();
+});
 
 function cerrarModalDetalle() {
   $('#modalDetalle').modal('hide');
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }

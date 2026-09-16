@@ -7,6 +7,9 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 
+// El portal sigue aceptando nombre de usuario (además de RUT y email), así que
+// acá no va ningún aviso de corte: ese cambio es sólo de la app (app/login.php).
+
 $error_login = "";
 $error_forgot = "";
 $success_forgot = "";
@@ -72,7 +75,7 @@ if (isset($_SESSION['success_forgot'])) {
   min-height: 100%;
   width: auto;
   height: auto;
-  z-index: -1; /* Para que quede detrás del contenido */
+  z-index: -1; /* Para que quede detr��s del contenido */
   background-size: cover;
 }
 </style>
@@ -91,30 +94,31 @@ if (isset($_SESSION['success_forgot'])) {
         <div class="box-login">
             <h3>Inicia sesi&oacute;n en tu cuenta</h3>
             <p>
-                Por favor, ingrese su nombre y contrase&ntilde;a para iniciar sesi&oacute;n.
+                Ingresa con tu nombre de usuario, RUT o email y tu contrase&ntilde;a.
             </p>
             <form class="form-login" action="modulos/procesar_login.php" method="POST">
-                <!-- Mensaje de Error de Inicio de Sesión -->
+                <!-- Mensaje de Error de Inicio de Sesi��n -->
+
                 <?php if ($error_login != ""): ?>
                     <div class="errorHandler alert alert-danger">
                         <i class="fa fa-remove-sign"></i> <?php echo htmlspecialchars($error_login); ?>
                     </div>
                 <?php endif; ?>
 
-                <!-- Mensaje de Error de Restablecimiento de Contraseña -->
+                <!-- Mensaje de Error de Restablecimiento de Contrase�0�9a -->
                 <?php if ($error_forgot != ""): ?>
                     <div class="errorHandler alert alert-danger">
                         <i class="fa fa-remove-sign"></i> <?php echo htmlspecialchars($error_forgot); ?>
                     </div>
                 <?php endif; ?>
 
-                <!-- Mensaje de Éxito de Restablecimiento de Contraseña -->
+                <!-- Mensaje de �0�7xito de Restablecimiento de Contrase�0�9a -->
                 <?php if ($success_forgot != ""): ?>
                     <div class="errorHandler alert alert-success">
                         <i class="fa fa-check-sign"></i> <?php echo htmlspecialchars($success_forgot); ?>
                     </div>
                 <?php endif; ?>
-                <!-- Mensajes de Error o Éxito -->
+                <!-- Mensajes de Error o �0�7xito -->
                 <?php
                 if (isset($_SESSION['error_solicitud'])) {
                     echo '<div class="errorHandler alert alert-danger">' . htmlspecialchars($_SESSION['error_solicitud']) . '</div>';
@@ -135,7 +139,7 @@ if (isset($_SESSION['success_forgot'])) {
                 <fieldset>
                     <div class="form-group">
                         <span class="input-icon">
-                            <input type="text" class="form-control" name="usuario" placeholder="Usuario" required>
+                            <input type="text" class="form-control" name="usuario" placeholder="Usuario, RUT o email" required>
                             <i class="fa fa-user"></i>
                         </span>
                     </div>
@@ -163,21 +167,21 @@ if (isset($_SESSION['success_forgot'])) {
             </form>
         </div>
 
-        <!-- Formulario de Restablecimiento de Contraseña -->
+        <!-- Formulario de Restablecimiento de Contrase�0�9a -->
         <div class="box-forgot">
             <h3>Olvidaste tu contrase&ntilde;a?</h3>
             <p>
                 Ingrese su direcci&oacuten de correo electr&oacutenico a continuaci&oacuten para restablecer su contrase&ntilde;a.
             </p>
             <form class="form-forgot" action="modulos/restablecer_contrasena.php" method="POST">
-                <!-- Mensaje de Error de Restablecimiento de Contraseña -->
+                <!-- Mensaje de Error de Restablecimiento de Contrase�0�9a -->
                 <?php if ($error_forgot != ""): ?>
                     <div class="errorHandler alert alert-danger">
                         <i class="fa fa-remove-sign"></i> <?php echo htmlspecialchars($error_forgot); ?>
                     </div>
                 <?php endif; ?>
 
-                <!-- Mensaje de Éxito de Restablecimiento de Contraseña -->
+                <!-- Mensaje de �0�7xito de Restablecimiento de Contrase�0�9a -->
                 <?php if ($success_forgot != ""): ?>
                     <div class="errorHandler alert alert-success">
                         <i class="fa fa-check-sign"></i> <?php echo htmlspecialchars($success_forgot); ?>
@@ -249,7 +253,7 @@ if (isset($_SESSION['success_forgot'])) {
                         >
                     </div>
                     
-                    <!-- Campo de Correo Electrónico -->
+                    <!-- Campo de Correo Electr��nico -->
                     <div class="form-group">
                         <span class="input-icon">
                             <input 
@@ -278,6 +282,8 @@ if (isset($_SESSION['success_forgot'])) {
 
         <div class="copyright">
             2024 &copy; Visibility por Mentecreativa.
+            &middot;
+            <a href="/visibility2/portal/legal/politica-privacidad.html" style="color:inherit;text-decoration:underline;">Política de Privacidad</a>
         </div>
     </div>
 

@@ -115,6 +115,8 @@ $sql = "
         UPPER(re.region) AS region,
 
         CASE
+            WHEN UPPER(TRIM(cm.comuna)) IN ('LOS ANGELES', 'LOS ÁNGELES') THEN 'PDQ CONCEPCION'
+            WHEN UPPER(TRIM(cm.comuna)) IN ('CHILLAN', 'CHILLÁN') THEN 'PDQ TALCA'
             WHEN UPPER(TRIM(cm.comuna)) IN ('CALDERA', 'HUASCO', 'COPIAPO', 'DIEGO DE ALMAGRO', 'CHAÑARAL' , 'CHANARAL' , 'VALLENAR') THEN 'PDQ COPIAPO'
             WHEN UPPER(TRIM(cm.comuna)) IN (
                 'ANGOL',
@@ -125,8 +127,6 @@ $sql = "
                 'LA UNIÓN',
                 'LAUTARO',
                 'LONCOCHE',
-                'LOS ANGELES',
-                'LOS ÁNGELES',
                 'NUEVA IMPERIAL',
                 'PADRE LAS CASAS',
                 'PANGUIPULLI',

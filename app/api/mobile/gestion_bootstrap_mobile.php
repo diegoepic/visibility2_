@@ -8,6 +8,7 @@ header('Expires: 0');
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';
 require_once __DIR__ . '/_auth_mobile.php';
+require_once __DIR__ . '/../../lib/dominio/preguntas_cadena.php';
 
 if (!isset($conn) || !($conn instanceof mysqli)) {
     mobile_json_response(500, [
@@ -228,7 +229,13 @@ $sqlMateriales = "
       MAX(fq.observacion) AS observacion,
       MAX(m.ref_image) AS ref_image
     FROM formularioQuestion fq
-    LEFT JOIN material m ON fq.material = m.nombre
+    -- Mismo filtro por division que gestionarPruebas.php: el nombre del material
+    -- se repite entre divisiones y sin esto el MAX(m.ref_image) devuelve la foto
+    -- de otra. La division sale de la campana (formulario.id_division).
+    LEFT JOIN material m
+           ON m.nombre = fq.material
+          AND m.id_division = ?
+          AND m.deleted_at IS NULL
     WHERE fq.id_local = ?
       AND fq.id_formulario = ?
       AND fq.id_usuario = ?
@@ -236,11 +243,13 @@ $sqlMateriales = "
     ORDER BY fq.id ASC
 ";
 
+// El parametro del JOIN va ANTES que los del WHERE.
+$idDivisionCampana = (int)$headerRow['idDivision'];
 $rowsMateriales = dbFetchAllAssocMobile(
     $conn,
     $sqlMateriales,
-    "iii",
-    [$idLocal, $idCampana, $usuarioId]
+    "iiii",
+    [$idDivisionCampana, $idLocal, $idCampana, $usuarioId]
 );
 
 $materiales = [];
@@ -256,6 +265,11 @@ foreach ($rowsMateriales as $mat) {
     ];
 }
 
+/* Sets por cadena: misma regla que el formulario web. Esta API tampoco la aplicaba. */
+$filtroCadena = preguntas_cadena_filtro(
+    $conn, (int)$idCampana, preguntas_cadena_de_local($conn, (int)$idLocal)
+);
+
 $sqlPreguntas = "
     SELECT
       id AS id_form_question,
@@ -265,11 +279,13 @@ $sqlPreguntas = "
       is_valued,
       is_required
     FROM form_questions
-    WHERE id_formulario = ?
+    WHERE id_formulario = ?{$filtroCadena['cond']}
     ORDER BY sort_order ASC
 ";
 
-$rowsPreguntas = dbFetchAllAssocMobile($conn, $sqlPreguntas, "i", [$idCampana]);
+$rowsPreguntas = dbFetchAllAssocMobile(
+    $conn, $sqlPreguntas, $filtroCadena['tipos'], $filtroCadena['params']
+);
 
 $preguntas = [];
 $parentQuestions = [];

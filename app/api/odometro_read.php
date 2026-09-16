@@ -28,6 +28,7 @@ require_once $APP_DIR . '/con_.php';
 require_once $APP_DIR . '/lib/encuesta_vehiculo.php';
 require_once $APP_DIR . '/lib/odometro_ia.php';
 require_once $APP_DIR . '/lib/rate_limiter.php';
+require_once $APP_DIR . '/lib/dominio/autorizacion.php';
 
 /** Respuesta uniforme. Nunca 5xx: el cliente siempre debe poder caer a manual. */
 function odo_out(array $extra, int $http = 200): void {
@@ -118,13 +119,7 @@ if (!$foto
 }
 
 // La visita debe ser del usuario y de la campaña 138.
-$st = $conn->prepare("SELECT id FROM visita WHERE id=? AND id_usuario=? AND id_formulario=? LIMIT 1");
-$formId = EV_FORMULARIO_ID;
-$st->bind_param('iii', $visitaId, $usuario, $formId);
-$st->execute();
-$okVis = (bool)$st->get_result()->fetch_assoc();
-$st->close();
-if (!$okVis) {
+if (auth_visita($conn, $visitaId, $usuario, EV_FORMULARIO_ID) === null) {
     odo_out(['status' => 'error', 'message' => 'Visita no válida'], 403);
 }
 

@@ -85,6 +85,9 @@ function normalizeDateValue($value): array
     }
 }
 
+$modoCarga = trim((string)($_POST['modo'] ?? 'planificacion'));
+$esRutaBase = $modoCarga === 'rutas_base';
+
 if (!isset($_FILES['archivoPlanificacion']) || $_FILES['archivoPlanificacion']['error'] !== UPLOAD_ERR_OK) {
     jsonResponse(['success' => false, 'message' => 'No se recibió un archivo válido.'], 400);
 }
@@ -99,17 +102,18 @@ if (!in_array($extension, ['xlsx', 'xls'], true) || !is_uploaded_file($tmpFile))
 
 try {
     $spreadsheet = IOFactory::load($tmpFile);
-    $sheet = $spreadsheet->sheetNameExists('Planificacion')
-        ? $spreadsheet->getSheetByName('Planificacion')
+    $nombreHojaEsperada = $esRutaBase ? 'Rutas Base' : 'Planificacion';
+    $sheet = $spreadsheet->sheetNameExists($nombreHojaEsperada)
+        ? $spreadsheet->getSheetByName($nombreHojaEsperada)
         : $spreadsheet->getActiveSheet();
 
     if ($sheet === null) {
-        jsonResponse(['success' => false, 'message' => 'No se encontró la hoja Planificacion.'], 400);
+        jsonResponse(['success' => false, 'message' => 'No se encontró la hoja ' . $nombreHojaEsperada . '.'], 400);
     }
 
     $rows = $sheet->toArray(null, true, true, true);
     if (count($rows) < 2) {
-        jsonResponse(['success' => false, 'message' => 'La hoja Planificacion no contiene datos.'], 400);
+        jsonResponse(['success' => false, 'message' => 'La hoja ' . $nombreHojaEsperada . ' no contiene datos.'], 400);
     }
 
     $headerRowNumber = array_key_first($rows);
@@ -131,6 +135,7 @@ try {
         'cantidad' => columnFor($columns, ['Cantidad Objetivo Día', 'Cantidad Objetivo Dia']),
         'dias' => columnFor($columns, ['Días Planificados', 'Dias Planificados']),
         'grupo' => columnFor($columns, ['Grupo Ruta', 'Grupo Ruta Usuario', 'Ruta']),
+        'identificador_ruta' => columnFor($columns, ['Identificador Ruta', 'Ruta ID', 'Id Ruta']),
         'ruta_global' => columnFor($columns, ['Ruta Global']),
         'fecha' => columnFor($columns, ['Fecha Ruta', 'Fecha Planificada', 'Fecha']),
         'usuario_id' => columnFor($columns, ['Usuario ID', 'Id Usuario']),
@@ -156,6 +161,7 @@ try {
     $dataRows = [];
     $ignoredRows = 0;
     $unplannedRows = 0;
+    $baseRouteLocalKeys = [];
 
     foreach ($rows as $rowNumber => $row) {
         if ((int)$rowNumber === (int)$headerRowNumber) {
@@ -174,9 +180,26 @@ try {
             continue;
         }
 
-        $grupo = trim((string)cellValue($row, $map['grupo']));
+        $grupoOriginal = trim((string)cellValue($row, $map['grupo']));
+        $usuarioId = trim((string)cellValue($row, $map['usuario_id']));
+        $usuarioLogin = trim((string)cellValue($row, $map['usuario_login']));
+        $usuarioNombre = trim((string)cellValue($row, $map['usuario_nombre']));
+        $responsableRuta = $usuarioId !== '' ? $usuarioId : ($usuarioLogin !== '' ? $usuarioLogin : ($usuarioNombre !== '' ? $usuarioNombre : 'SIN RESPONSABLE'));
+        $identificadorRuta = trim((string)cellValue($row, $map['identificador_ruta']));
+        $grupo = $esRutaBase && $grupoOriginal !== ''
+            ? ($identificadorRuta !== '' ? $identificadorRuta : $responsableRuta . ' | ' . $grupoOriginal)
+            : $grupoOriginal;
         [$fechaRuta, $fechaRutaSql] = normalizeDateValue(cellValue($row, $map['fecha']));
-        $sinRuta = $grupo === '' || $fechaRutaSql === '';
+        $sinRuta = $grupo === '' || (!$esRutaBase && $fechaRutaSql === '');
+
+        if ($esRutaBase && !$sinRuta) {
+            $baseKey = mb_strtolower($responsableRuta . '|' . $grupoOriginal . '|' . $codigo, 'UTF-8');
+            if (isset($baseRouteLocalKeys[$baseKey])) {
+                $ignoredRows++;
+                continue;
+            }
+            $baseRouteLocalKeys[$baseKey] = true;
+        }
 
         if ($sinRuta) {
             $unplannedRows++;
@@ -193,12 +216,13 @@ try {
             'cantidad_objetivo_dia' => trim((string)cellValue($row, $map['cantidad'])),
             'dias_planificados' => trim((string)cellValue($row, $map['dias'])),
             'grupo_ruta' => $grupo,
-            'ruta_global' => trim((string)cellValue($row, $map['ruta_global'])),
+            'ruta_base_nombre' => $grupoOriginal,
+            'ruta_global' => $esRutaBase ? $grupoOriginal : trim((string)cellValue($row, $map['ruta_global'])),
             'fecha_ruta' => $fechaRuta,
             'fecha_ruta_sql' => $fechaRutaSql,
-            'usuario_id' => trim((string)cellValue($row, $map['usuario_id'])),
-            'usuario_login' => trim((string)cellValue($row, $map['usuario_login'])),
-            'usuario_nombre' => trim((string)cellValue($row, $map['usuario_nombre'])),
+            'usuario_id' => $usuarioId,
+            'usuario_login' => $usuarioLogin,
+            'usuario_nombre' => $usuarioNombre,
             'dia_plan' => trim((string)cellValue($row, $map['dia_plan'])),
             'semana_plan' => trim((string)cellValue($row, $map['semana'])),
             'dia_semana_num' => trim((string)cellValue($row, $map['dia_num'])),
@@ -212,7 +236,7 @@ try {
         ];
     }
 
-    if ($spreadsheet->sheetNameExists('Sin Ruta Asignada')) {
+    if (!$esRutaBase && $spreadsheet->sheetNameExists('Sin Ruta Asignada')) {
         $sinRutaSheet = $spreadsheet->getSheetByName('Sin Ruta Asignada');
         $sinRutaRows = $sinRutaSheet ? $sinRutaSheet->toArray(null, true, true, true) : [];
 
@@ -338,7 +362,7 @@ try {
             );
         }
 
-        $userKey = $row['usuario_id'] ?: $row['usuario_login'];
+        $userKey = $row['usuario_id'] ?: ($row['usuario_login'] ?: $row['usuario_nombre']);
         if ($userKey !== '') {
             $users[$userKey] = [
                 'usuario_id' => $row['usuario_id'],
@@ -361,6 +385,7 @@ try {
     jsonResponse([
         'success' => true,
         'message' => 'Archivo procesado correctamente.',
+        'mode' => $esRutaBase ? 'rutas_base' : 'planificacion',
         'summary' => [
             'archivo' => $originalName,
             'hoja_utilizada' => $sheet->getTitle(),

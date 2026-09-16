@@ -102,6 +102,7 @@ if ($puedeVerFiltroPregunta) {
 <html lang="es">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Galería Campañas Programadas</title>
   <!--<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"> -->
       <!-- Bootstrap 4 desde CDN -->
@@ -113,15 +114,117 @@ if ($puedeVerFiltroPregunta) {
           href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap4.min.css">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <style>
-    
-.select2-container .select2-selection--single {
-    height: 35px!important;
+body.gallery-ipt {
+  --gallery-ink: #1e3c6b;
+  --gallery-muted: #647c9f;
+  --gallery-blue: #456edc;
+  --gallery-border: #d4e1fa;
+  --gallery-shadow: 0 14px 36px rgba(37, 72, 133, .08);
+  background: linear-gradient(180deg, #edf4ff 0, #f5f8fd 480px, #fff 100%);
+  color: var(--gallery-ink);
+  color-scheme: light;
+  min-height: 100vh;
+  font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
 }
-    
+.gallery-ipt > .gallery-page { width: 100%; max-width: 1480px !important; margin: 0 auto; padding: 28px; }
+.gallery-ipt .gallery-shell { background: transparent; }
+.gallery-ipt .gallery-tabs-wrap { margin-bottom: 24px; }
+.gallery-ipt .gallery-tabs { border: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.gallery-ipt .gallery-tabs .nav-link {
+  border: 1px solid var(--gallery-border); border-radius: 13px; padding: 12px 18px;
+  background: #fff; color: var(--gallery-muted); font-size: 12px; font-weight: 600;
+}
+.gallery-ipt .gallery-tabs .nav-link.active { background: var(--gallery-blue); color: #fff; border-color: var(--gallery-blue); box-shadow: 0 8px 20px rgba(71,112,223,.16); }
+.gallery-ipt .gallery-tabs .nav-link:not(.active):hover { background: #edf4ff; color: var(--gallery-ink); }
+.gallery-ipt .gallery-filter-card, .gallery-ipt .gallery-table-card {
+  background: #fff; border: 1px solid var(--gallery-border); border-radius: 24px;
+  box-shadow: var(--gallery-shadow); padding: 26px;
+}
+.gallery-ipt .gallery-filter-card { max-width: 1280px; margin: 0 auto 24px; }
+.gallery-ipt .gallery-filter-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.gallery-ipt .gallery-kicker { color: var(--gallery-blue); font-size: 10px; font-weight: 700; letter-spacing: 1px; margin-bottom: 7px; }
+.gallery-ipt .gallery-title { color: var(--gallery-ink); font-size: 25px; font-weight: 700; letter-spacing: -.4px; margin: 0; }
+.gallery-ipt .gallery-clear-link { color: var(--gallery-blue); font-size: 12px; }
+.gallery-ipt .gallery-filter-subhead { margin-bottom: 18px; }
+.gallery-ipt .gallery-filter-subtitle { color: var(--gallery-muted); font-size: 12px; font-weight: 600; }
+.gallery-ipt .gallery-label { display: block; color: var(--gallery-ink); font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
+.gallery-ipt .gallery-control, .gallery-ipt .dataTables_wrapper input:not([type="checkbox"]):not([type="radio"]), .gallery-ipt .dataTables_wrapper select {
+  height: 44px; background: #fff; border: 1px solid #c8d9f8; border-radius: 13px;
+  color: var(--gallery-ink); padding: 8px 12px; font-size: 12px;
+}
+.gallery-ipt .gallery-control:focus, .gallery-ipt .dataTables_wrapper input:not([type="checkbox"]):not([type="radio"]):focus, .gallery-ipt .dataTables_wrapper select:focus {
+  border-color: #5e87ec; outline: none; box-shadow: 0 0 0 .2rem rgba(78,123,238,.13);
+}
+.gallery-ipt .gallery-control:disabled { background: #f2f5fa; color: #7687a0; border-color: #e0e7f2; }
+.gallery-ipt .select2-container { max-width: 100%; }
+.gallery-ipt .select2-container .select2-selection--single { height: 44px !important; border: 1px solid #c8d9f8; border-radius: 13px; background: #fff; }
+.gallery-ipt .select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 42px; padding-left: 12px; padding-right: 30px; font-size: 12px; color: var(--gallery-ink); }
+.gallery-ipt .select2-container--default .select2-selection--single .select2-selection__arrow { height: 42px; right: 7px; }
+.gallery-ipt .select2-container--default .select2-selection__placeholder { color: var(--gallery-muted); }
+.gallery-ipt .select2-container--open .select2-selection, .gallery-ipt .select2-container--focus .select2-selection { border-color: #5e87ec; box-shadow: 0 0 0 .2rem rgba(78,123,238,.13); }
+.gallery-ipt .select2-dropdown { border: 1px solid var(--gallery-border); border-radius: 12px; overflow: hidden; font-size: 12px; box-shadow: var(--gallery-shadow); }
+.gallery-ipt .select2-search__field { border: 1px solid #c8d9f8 !important; border-radius: 8px; min-height: 36px; }
+.gallery-ipt .select2-container--default .select2-results__option--highlighted[aria-selected] { background: var(--gallery-blue); }
+.gallery-ipt .btn { border-radius: 12px; padding: 10px 14px; font-size: 12px; font-weight: 600; }
+.gallery-ipt .gallery-btn-primary { min-height: 44px; color: #fff; background: linear-gradient(110deg, #4775e3, #456ad8); border: 1px solid #456edc; box-shadow: 0 8px 20px rgba(71,112,223,.16); }
+.gallery-ipt .gallery-btn-primary:hover { background: #365bc1; color: #fff; }
+.gallery-ipt .gallery-btn-secondary { background: #fff; color: var(--gallery-blue); border: 1px solid #c8d9f8; }
+.gallery-ipt .gallery-btn-secondary:hover { background: #edf4ff; border-color: #9bb7f3; }
+.gallery-ipt .btn:focus-visible, .gallery-ipt .nav-link:focus-visible, .gallery-ipt .gallery-clear-link:focus-visible { outline: 3px solid #a9c1fc; outline-offset: 3px; }
+.gallery-ipt .gallery-stats-row, .gallery-ipt .gallery-actions-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+.gallery-ipt .gallery-actions-row { justify-content: flex-end; }
+.gallery-ipt .gallery-actions-row .btn { margin: 0 !important; }
+.gallery-ipt .gallery-stat-pill { background: #fff; color: var(--gallery-muted); border: 1px solid var(--gallery-border); border-radius: 999px; padding: 9px 14px; font-size: 12px; }
+.gallery-ipt .gallery-stat-pill i { color: var(--gallery-blue); }
+.gallery-ipt .gallery-table-placeholder { padding: 42px 16px; text-align: center; color: var(--gallery-muted); }
+.gallery-ipt .table-responsive { margin-top: 0; border: 1px solid var(--gallery-border); border-radius: 16px; }
+.gallery-ipt #galeriaTableContainer { min-width: 0; overflow-x: auto; }
+.gallery-ipt .table { color: var(--gallery-ink); border-color: #e5ecf8; margin-bottom: 0; }
+.gallery-ipt #example thead th, .gallery-ipt .js-dup-table thead th { background: #f0f5ff; color: #365782; border-color: var(--gallery-border); padding: 15px 12px; font-size: 11px; font-weight: 700; }
+.gallery-ipt .table tbody td { background: #fff; border-color: #e5ecf8; padding: 14px 12px; font-size: 12px; vertical-align: middle; }
+.gallery-ipt .table-striped tbody tr:nth-of-type(odd) td { background: #f9fbff; }
+.gallery-ipt .table-hover tbody tr:hover td { background: #edf4ff; }
+.gallery-ipt .dataTables_wrapper { color: var(--gallery-muted); font-size: 12px; }
+.gallery-ipt .dataTables_wrapper > .row { margin-left: 0; margin-right: 0; padding: 10px 0; }
+.gallery-ipt .page-link { color: var(--gallery-blue); border-color: var(--gallery-border); border-radius: 9px; }
+.gallery-ipt .page-item.active .page-link { background: #edf4ff; color: var(--gallery-blue); border-color: #9bb7f3; }
+.gallery-ipt .thumbnail { border-radius: 12px; }
+.gallery-ipt input[type="checkbox"] { width: 16px; height: 16px; padding: 0; accent-color: #456edc; vertical-align: middle; }
+.gallery-ipt #fullSizeModal .modal-content { background: #fff; color: var(--gallery-ink); border: 1px solid var(--gallery-border); border-radius: 22px; overflow: hidden; box-shadow: 0 24px 70px rgba(30,60,107,.18); }
+.gallery-ipt #fullSizeModal .modal-header { background: #f2f6ff; padding: 20px 24px; }
+.gallery-ipt #fullSizeModal .modal-title { font-size: 20px; font-weight: 700; }
+.gallery-ipt #fullSizeModal .close { color: var(--gallery-muted); opacity: 1; text-shadow: none; }
+.gallery-ipt #fullSizeModal .modal-footer { padding: 16px 24px; }
+.gallery-ipt #carouselFotosModal { background: #f0f5fa; }
+.gallery-ipt #carouselFotosModal .carousel-item { height: min(65vh, 680px); }
+.gallery-ipt #carouselFotosModal img { width: 100%; height: 100%; object-fit: contain; }
+.gallery-ipt #carouselFotosModal .carousel-control-prev-icon, .gallery-ipt #carouselFotosModal .carousel-control-next-icon { background-color: #365bc1; background-size: 55%; border-radius: 50%; width: 38px; height: 38px; }
+.gallery-ipt #carouselFotosModal .carousel-indicators li { background-color: #456edc; }
+.gallery-ipt #contadorFotosModal { color: var(--gallery-muted); }
+.gallery-ipt #loadingOverlayGaleria {
+  display: none; position: fixed; top: auto; right: auto; bottom: 24px; left: 50%; transform: translateX(-50%);
+  width: min(460px, calc(100% - 32px)); height: auto; z-index: 1040;
+  flex-direction: row; align-items: center; gap: 16px; padding: 22px 24px;
+  border: 1px solid #b7ccfa; border-radius: 20px; background: #fff; box-shadow: 0 14px 50px rgba(30,60,107,.22);
+}
+.gallery-ipt #loadingOverlayGaleria .spinner-border { color: var(--gallery-blue) !important; flex-shrink: 0; }
+.gallery-ipt #loadingOverlayGaleria .loading-text { color: var(--gallery-ink); font-size: 13px; font-weight: 600; }
+@media (max-width: 767px) {
+  .gallery-ipt > .gallery-page { padding: 18px 12px; }
+  .gallery-ipt .gallery-filter-card, .gallery-ipt .gallery-table-card { padding: 20px 16px; border-radius: 20px; }
+  .gallery-ipt .gallery-title { font-size: 21px; }
+  .gallery-ipt .gallery-tabs .nav-item { flex: 1 1 100%; }
+  .gallery-ipt .gallery-tabs .nav-link { text-align: center; }
+  .gallery-ipt .gallery-actions-row .btn { width: 100%; }
+  .gallery-ipt .gallery-stat-pill { font-size: 11px; }
+  .gallery-ipt #fullSizeModal .modal-header, .gallery-ipt #fullSizeModal .modal-footer { padding: 16px; }
+  .gallery-ipt #fullSizeModal .modal-title { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) { .gallery-ipt .spinner-border { animation: none; } }
 </style>    
 </head>
-<body class="bg-light">
-<div class="container mt-4">
+<body class="gallery-ipt">
+<div class="container gallery-page">
     
 <div class="gallery-shell">
 
@@ -153,7 +256,7 @@ if ($puedeVerFiltroPregunta) {
     <div class="gallery-filter-head">
       <div class="gallery-filter-title-wrap">
         <div class="gallery-kicker">GESTIÓN FOTOGRÁFICA</div>
-        <h2 class="gallery-title">Explorador de Fotos de Implementación</h2>
+        <h2 class="gallery-title"><?= $view === 'encuesta' ? 'Explorador de Fotos de Encuesta' : ($view === 'duplicados' ? 'Fotos Duplicadas y Sospechosas' : 'Explorador de Fotos de Implementación') ?></h2>
       </div>
 
       <a href="?view=<?= urlencode($view) ?>" class="gallery-clear-link">
@@ -329,15 +432,19 @@ if ($puedeVerFiltroPregunta) {
     <button id="btnDownloadSelected" class="btn gallery-btn-secondary">
       Descargar seleccionadas <i class="fas fa-download ml-2"></i>
     </button>
+
+    <button id="btnDownloadAllFiltered" type="button" class="btn gallery-btn-primary ml-2">
+      Descargar todas las filtradas <i class="fas fa-cloud-download-alt ml-2"></i>
+    </button>
+
+    <iframe id="downloadAllFrame" name="downloadAllFrame" title="Descarga de fotos" style="display:none"></iframe>
   </div>
   <?php endif; ?>
 
   <div class="gallery-table-card">
     <div id="galeriaTableContainer">
       <div class="gallery-table-placeholder">
-        <div class="spinner-border text-primary mb-2" role="status">
-          <span class="sr-only">Cargando...</span>
-        </div>
+        <i class="far fa-images mb-3" aria-hidden="true"></i>
         <div class="text-muted">Aplica filtros para cargar resultados</div>
       </div>
     </div>
@@ -349,11 +456,11 @@ if ($puedeVerFiltroPregunta) {
 <!-- Modal visor de fotos -->
 <div class="modal fade" id="fullSizeModal" tabindex="-1" aria-labelledby="fullSizeModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-xl">
-    <div class="modal-content bg-dark border-0">
+    <div class="modal-content">
 
       <div class="modal-header border-0">
-        <h5 class="modal-title text-white" id="fullSizeModalLabel">Vista de fotos</h5>
-        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Cerrar">
+        <h5 class="modal-title" id="fullSizeModalLabel">Vista de fotos</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
           <span aria-hidden="true">&times;</span>
         </button>
       </div>
@@ -377,7 +484,7 @@ if ($puedeVerFiltroPregunta) {
       </div>
 
       <div class="modal-footer border-0 justify-content-between">
-        <small class="text-white-50" id="contadorFotosModal"></small>
+        <small id="contadorFotosModal"></small>
         <button type="button" class="btn btn-light" data-dismiss="modal">Cerrar</button>
       </div>
 
@@ -385,11 +492,11 @@ if ($puedeVerFiltroPregunta) {
   </div>
 </div>
 
-<div id="loadingOverlayGaleria">
+<div id="loadingOverlayGaleria" role="status" aria-live="polite" aria-atomic="true">
   <div class="spinner-border text-primary" role="status">
     <span class="sr-only">Cargando...</span>
   </div>
-  <div class="loading-text">Cargando filtros, por favor espera...</div>
+  <div class="loading-text">Cargando galería… Estamos preparando las fotos y los resultados.</div>
 </div>
 
 <!-- Scripts -->
@@ -940,7 +1047,7 @@ $(document).ready(function () {
     if (!Array.isArray(fotos) || fotos.length === 0) {
       $contenedor.html(`
         <div class="carousel-item active">
-          <div class="d-flex h-100 w-100 align-items-center justify-content-center text-white">
+          <div class="d-flex h-100 w-100 align-items-center justify-content-center text-muted">
             No hay fotos disponibles
           </div>
         </div>
@@ -1054,6 +1161,31 @@ $(document).on('click', '#btnDownloadSelected', function (event) {
   }).fail(function () {
     alert('No fue posible crear el archivo ZIP.');
   });
+});
+
+// Esta descarga se resuelve en el servidor usando los filtros del formulario.
+// Así no queda limitada a las filas (máximo 100) que DataTables muestra en pantalla.
+$(document).on('click', '#btnDownloadAllFiltered', function (event) {
+  event.preventDefault();
+
+  const form = document.getElementById('formFiltrosGaleria');
+  if (!form) return;
+
+  const params = new URLSearchParams(new FormData(form));
+  params.set('action', 'all_ipt');
+
+  const button = this;
+  const originalHtml = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = '<span class="spinner-border spinner-border-sm mr-2" role="status" aria-hidden="true"></span> Preparando ZIP...';
+
+  document.getElementById('downloadAllFrame').src = 'download_zip_ipt.php?' + params.toString();
+
+  // La descarga puede continuar en el iframe aun después de reactivar el botón.
+  window.setTimeout(function () {
+    button.disabled = false;
+    button.innerHTML = originalHtml;
+  }, 5000);
 });
 </script>
 

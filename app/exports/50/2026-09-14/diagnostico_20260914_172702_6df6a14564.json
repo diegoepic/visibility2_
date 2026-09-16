@@ -1,0 +1,279 @@
+{
+    "exported_at": "2026-09-14T20:27:03.606Z",
+    "navigator_onLine": true,
+    "user_agent": "Mozilla/5.0 (Linux; Android 16; SM-A566E Build/BP4A.251205.006; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/151.0.7922.199 Mobile Safari/537.36 VisibilityWrapper/1.0",
+    "sw_version": "v7.6.4",
+    "apk": {
+        "version_name": "1.0",
+        "version_full": null
+    },
+    "stats": {
+        "today": {
+            "ymd": "2026-09-14",
+            "pending": 0,
+            "running": 0,
+            "success": 3,
+            "error": 0,
+            "blocked": 0,
+            "total": 3
+        },
+        "overall": {
+            "pending": 0,
+            "running": 0,
+            "success": 3,
+            "error": 0,
+            "blocked": 0,
+            "total": 3
+        }
+    },
+    "queue": {
+        "total_records": 3,
+        "last_created_at": 1789417576511,
+        "last_updated_at": 1789417583591
+    },
+    "recent_events": [
+        {
+            "id": "cab403f0-8b46-4149-848b-2e694c3fdda5:1789417583569:90e754646c816",
+            "job_id": "cab403f0-8b46-4149-848b-2e694c3fdda5",
+            "created": 1789417583569,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "cab403f0-8b46-4149-848b-2e694c3fdda5:1789417583566:d70732e52583b",
+            "job_id": "cab403f0-8b46-4149-848b-2e694c3fdda5",
+            "created": 1789417583566,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "cab403f0-8b46-4149-848b-2e694c3fdda5:1789417583284:a1c32ac3a5c608",
+            "job_id": "cab403f0-8b46-4149-848b-2e694c3fdda5",
+            "created": 1789417583284,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "cab403f0-8b46-4149-848b-2e694c3fdda5:1789417583284:557580216d0328",
+            "job_id": "cab403f0-8b46-4149-848b-2e694c3fdda5",
+            "created": 1789417583284,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_gestion_pruebas.php"
+        },
+        {
+            "id": "232f8b1b-556a-4121-8df0-9597b78a3d7b:1789417583074:386eafa8bd698",
+            "job_id": "232f8b1b-556a-4121-8df0-9597b78a3d7b",
+            "created": 1789417583074,
+            "type": "attempt_error",
+            "status": "error",
+            "http_status": 409,
+            "error": "DUPLICATE_PHOTO",
+            "message": "HTTP 409",
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"status\":\"error\",\"message\":\"Foto duplicada: esta misma imagen ya fue cargada en el local JM038 MALL ARAUCO MAIPU. Debes tomar una foto real de este local.\",\"error_code\":\"DUPLICATE_PHOTO\",\"retryable\":false,\"dup_of\":774647,\"dup_local\":\"JM038 MALL ARAUCO MAIPU\"}"
+        },
+        {
+            "id": "232f8b1b-556a-4121-8df0-9597b78a3d7b:1789417583073:0a97b7582afe68",
+            "job_id": "232f8b1b-556a-4121-8df0-9597b78a3d7b",
+            "created": 1789417583073,
+            "type": "attempt_error",
+            "status": "error",
+            "http_status": 409,
+            "error": "DUPLICATE_PHOTO",
+            "message": "HTTP 409",
+            "attempts": 1,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php",
+            "error_id": null,
+            "responseSnippet": "{\"status\":\"error\",\"message\":\"Foto duplicada: esta misma imagen ya fue cargada en el local JM038 MALL ARAUCO MAIPU. Debes tomar una foto real de este local.\",\"error_code\":\"DUPLICATE_PHOTO\",\"retryable\":false,\"dup_of\":774647,\"dup_local\":\"JM038 MALL ARAUCO MAIPU\"}"
+        },
+        {
+            "id": "232f8b1b-556a-4121-8df0-9597b78a3d7b:1789417582510:9aa530f2df9f2",
+            "job_id": "232f8b1b-556a-4121-8df0-9597b78a3d7b",
+            "created": 1789417582510,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "232f8b1b-556a-4121-8df0-9597b78a3d7b:1789417582510:0aecb7ad78ce1",
+            "job_id": "232f8b1b-556a-4121-8df0-9597b78a3d7b",
+            "created": 1789417582510,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/procesar_pregunta_foto_pruebas.php"
+        },
+        {
+            "id": "67e3cb5c-0dd6-4d0f-8fb6-355e2329b62c:1789417582489:6eaa01be23da9",
+            "job_id": "67e3cb5c-0dd6-4d0f-8fb6-355e2329b62c",
+            "created": 1789417582489,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/upload_material_foto_pruebas.php"
+        },
+        {
+            "id": "67e3cb5c-0dd6-4d0f-8fb6-355e2329b62c:1789417582489:1263297eac5a88",
+            "job_id": "67e3cb5c-0dd6-4d0f-8fb6-355e2329b62c",
+            "created": 1789417582489,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/upload_material_foto_pruebas.php"
+        },
+        {
+            "id": "67e3cb5c-0dd6-4d0f-8fb6-355e2329b62c:1789417581335:93857e1fe8a8c8",
+            "job_id": "67e3cb5c-0dd6-4d0f-8fb6-355e2329b62c",
+            "created": 1789417581335,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/upload_material_foto_pruebas.php"
+        },
+        {
+            "id": "67e3cb5c-0dd6-4d0f-8fb6-355e2329b62c:1789417581335:492545cffd76b8",
+            "job_id": "67e3cb5c-0dd6-4d0f-8fb6-355e2329b62c",
+            "created": 1789417581335,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/upload_material_foto_pruebas.php"
+        },
+        {
+            "id": "idemp-1789417540292-ea9ab16cf74f38:1789417581318:4fbf6330a47a18",
+            "job_id": "idemp-1789417540292-ea9ab16cf74f38",
+            "created": 1789417581318,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1789417540292-ea9ab16cf74f38:1789417581318:10d512c62857e",
+            "job_id": "idemp-1789417540292-ea9ab16cf74f38",
+            "created": 1789417581318,
+            "type": "attempt_success",
+            "status": "success",
+            "http_status": 200,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1789417540292-ea9ab16cf74f38:1789417580841:fef9087fec2eb8",
+            "job_id": "idemp-1789417540292-ea9ab16cf74f38",
+            "created": 1789417580841,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        },
+        {
+            "id": "idemp-1789417540292-ea9ab16cf74f38:1789417580840:9e848e1d8d7df8",
+            "job_id": "idemp-1789417540292-ea9ab16cf74f38",
+            "created": 1789417580840,
+            "type": "attempt_start",
+            "status": "running",
+            "http_status": null,
+            "error": null,
+            "message": null,
+            "attempts": 0,
+            "url": "/visibility2/app/create_visita_pruebas.php"
+        }
+    ],
+    "storage_estimate": {
+        "usage": 5251719,
+        "quota": 10742669959,
+        "percent_used": 0
+    },
+    "storage_persistido": false,
+    "connection_info": {
+        "effectiveType": "4g",
+        "downlink": 10,
+        "rtt": null,
+        "saveData": false
+    },
+    "service_worker": {
+        "active": "active",
+        "installing": null,
+        "waiting": null,
+        "scope": "https://visibility.cl/visibility2/app/"
+    },
+    "idb_databases": [
+        {
+            "name": "v2_journal",
+            "version": 9
+        },
+        {
+            "name": "v2_mappings",
+            "version": 1
+        },
+        {
+            "name": "v2_offline",
+            "version": 10
+        },
+        {
+            "name": "v2_route_cache",
+            "version": 1
+        },
+        {
+            "name": "visibility2-v2",
+            "version": 9
+        }
+    ],
+    "recent_errors": [],
+    "client_time": {
+        "local": "Mon Sep 14 2026 17:27:03 GMT-0300 (hora de verano de Chile)",
+        "timezone": "America/Santiago",
+        "offset_minutes": 180
+    },
+    "csrf_token": "b857447b79d1122167eb5bf076f81fc12e7fa1e0061a28151af6bfa195f0016c"
+}

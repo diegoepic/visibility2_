@@ -22,10 +22,12 @@
 
     <!-- El premio va grande y arriba: la gente pasa caminando y decide en dos
          segundos sin leer nada. Antes esto era una línea de texto al pie. -->
+    <!-- Texto pedido por el cliente (Javiera Cerda, 18-08-2026): el premio se
+         retira en el stand, ya no es un cupón para una tienda online. -->
     <div class="premio-gancho">
-      <span class="gancho-sobre">Sirve la medida perfecta y gana</span>
-      <span class="gancho-cifra">20% OFF</span>
-      <span class="gancho-bajo">en tienda.puntiferrer.cl</span>
+      <span class="gancho-sobre">Sirve la medida perfecta</span>
+      <span class="gancho-cifra">¡GANA UN PREMIO!</span>
+      <span class="gancho-bajo">y retíralo aquí mismo</span>
     </div>
 
     <!-- La copa se llena y frena en la línea en loop: enseña la mecánica sin
@@ -165,7 +167,7 @@
     <!-- la copa como quedó: muestra la zona ganadora y dónde paró el vino -->
     <div class="copa-resultado"><svg viewBox="0 0 300 470" id="win-copa"></svg></div>
     <div class="precision-caja">Precisión del brindis<br><b id="win-precision">100%</b></div>
-    <p class="resultado-bajada">Te ganaste un <b>20% OFF</b> en tu próxima compra.<br>Déjanos tus datos para entregarte tu código.</p>
+    <p class="resultado-bajada">Te ganaste un <b>premio</b> y lo retiras aquí mismo.<br>Déjanos tus datos para entregártelo.</p>
     <button class="btn-oro" id="btn-reclamar">Reclamar mi premio</button>
   </div>
 </section>
@@ -182,7 +184,7 @@
       <span><i class="ley-meta"></i>la medida perfecta</span>
     </div>
     <div class="precision-caja lose-caja" id="lose-detalle"></div>
-    <p class="resultado-bajada">Lo real también es intentarlo.<br>Encuentra tu vino ideal en <b>tienda.puntiferrer.cl</b></p>
+    <p class="resultado-bajada">Lo real también es intentarlo.<br>Encuentra tu vino ideal en <b>puntiferrer.com</b></p>
     <button class="btn-linea" id="btn-fin-lose">Finalizar</button>
     <div class="auto-volver" id="lose-count">&nbsp;</div>
   </div>
@@ -206,7 +208,7 @@
       <span id="consent-text">Acepto el uso de mis datos.</span>
     </label>
     <div class="form-error" id="datos-error">&nbsp;</div>
-    <button class="btn-oro" id="btn-enviar-datos">Ver mi código</button>
+    <button class="btn-oro" id="btn-enviar-datos">Ver mi premio</button>
   </div>
   <div id="osk"></div>
 </section>
@@ -218,11 +220,49 @@
     <div class="cabecera-linea"></div>
   </header>
   <div class="resultado-tag">TU PREMIO</div>
-  <h2 class="premio-titulo">20% OFF</h2>
-  <p class="premio-bajada" id="premio-bajada">en tu próxima compra en tienda.puntiferrer.cl</p>
-  <div class="premio-qr-marco"><div id="premio-qr"></div></div>
-  <div class="premio-codigo" id="premio-codigo">CODIGO</div>
-  <p class="premio-nota">Escanea el QR con tu teléfono o guarda una foto<br>de esta pantalla. Tu código quedó registrado a tu nombre.</p>
+  <h2 class="premio-titulo">¡RETÍRALO AQUÍ!</h2>
+
+  <!-- BRINDIS — ocupa el lugar que dejaron el QR y el código.
+       No se nombra el premio (en el stand no se sabe cuál toca) ni hace falta
+       repetir la instrucción, que ya está arriba en 60px. Las copas van en el
+       mismo trazo dorado que las del juego, y cierran el claim de la marca:
+       servir la medida perfecta terminaba, justamente, en un brindis. -->
+  <div class="brindis" aria-hidden="true">
+    <svg viewBox="0 0 400 300">
+      <defs>
+        <linearGradient id="brindis-vino" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#e8cf94" stop-opacity=".85"/>
+          <stop offset="1" stop-color="#c9a45c" stop-opacity=".95"/>
+        </linearGradient>
+      </defs>
+
+      <!-- copa izquierda, inclinada hacia el centro -->
+      <g transform="translate(158,96) rotate(21)">
+        <path d="M-27,38 C-29,58 -22,72 0,81 C22,72 29,58 27,38 Z" fill="url(#brindis-vino)"/>
+        <path d="M-32,0 C-36,44 -28,74 0,86 C28,74 36,44 32,0 Z" fill="none" stroke="#c9a45c" stroke-width="2"/>
+        <ellipse cx="0" cy="0" rx="32" ry="6" fill="none" stroke="#c9a45c" stroke-width="1.4" opacity=".55"/>
+        <path d="M0,86 L0,124" stroke="#c9a45c" stroke-width="2.4"/>
+        <ellipse cx="0" cy="128" rx="28" ry="5" fill="none" stroke="#c9a45c" stroke-width="2"/>
+      </g>
+
+      <!-- copa derecha, espejada -->
+      <g transform="translate(242,96) rotate(-21)">
+        <path d="M-27,38 C-29,58 -22,72 0,81 C22,72 29,58 27,38 Z" fill="url(#brindis-vino)"/>
+        <path d="M-32,0 C-36,44 -28,74 0,86 C28,74 36,44 32,0 Z" fill="none" stroke="#c9a45c" stroke-width="2"/>
+        <ellipse cx="0" cy="0" rx="32" ry="6" fill="none" stroke="#c9a45c" stroke-width="1.4" opacity=".55"/>
+        <path d="M0,86 L0,124" stroke="#c9a45c" stroke-width="2.4"/>
+        <ellipse cx="0" cy="128" rx="28" ry="5" fill="none" stroke="#c9a45c" stroke-width="2"/>
+      </g>
+
+      <!-- el choque: cuatro destellos cortos, no una estrella de clipart -->
+      <g stroke="#e8cf94" stroke-width="2.4" stroke-linecap="round" class="brindis-chispa">
+        <path d="M200,58 L200,40"/>
+        <path d="M176,68 L163,56"/>
+        <path d="M224,68 L237,56"/>
+        <path d="M200,74 L200,86" opacity=".45"/>
+      </g>
+    </svg>
+  </div>
   <button class="btn-linea" id="btn-fin-premio">Listo, ¡salud!</button>
   <div class="auto-volver" id="premio-count">&nbsp;</div>
 </section>
@@ -301,6 +341,12 @@
           <label class="admin-campo fila"><input type="checkbox" id="admin-sonido"> Sonido activado</label>
           <label class="admin-campo fila"><input type="checkbox" id="admin-vibra"> Vibración</label>
           <div class="admin-nota" id="admin-vibra-nota"></div>
+
+          <!-- Pantalla completa. Vive acá y no a la vista del público: en el
+               panel nadie del stand lo va a tocar por accidente, y además se
+               puede SALIR, que es lo que hace falta para mantenimiento. -->
+          <button class="btn-linea chico" id="btn-fullscreen">Activar pantalla completa</button>
+          <div class="admin-nota" id="admin-fs-nota"></div>
         </div>
         <div class="admin-bloque">
           <h4>Códigos únicos (modo pool)</h4>
