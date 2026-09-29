@@ -13,17 +13,24 @@ $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 | BYPASS PARA API MOBILE
 |--------------------------------------------------------------------------
 | Todo lo que cuelgue de /visibility2/app/api/mobile/ no debe pasar por la
-| validaci¨®n de sesi¨®n web del portal.
+| validaciï¿½ï¿½n de sesiï¿½ï¿½n web del portal.
 */
 if (
     preg_match('#^/visibility2/app/api/mobile/#i', $uri) ||
     preg_match('#/visibility2/app/api/mobile/#i', $script)
 ) {
-    if (
-        preg_match('#^http://localhost:\d+$#', $origin) ||
-        preg_match('#^http://127\.0\.0\.1:\d+$#', $origin) ||
-        $origin === 'https://visibility.cl'
-    ) {
+    // Los origenes de desarrollo (localhost / 127.0.0.1 en cualquier puerto) solo se
+    // aceptan con V2_TEST_MODE=1. En produccion estaban habilitados de forma permanente:
+    // cualquier pagina servida desde la maquina del usuario podia llamar a la API movil.
+    $esDesarrollo = getenv('V2_TEST_MODE') === '1';
+    $origenPermitido =
+        $origin === 'https://visibility.cl' ||
+        ($esDesarrollo && (
+            preg_match('#^http://localhost:\d+$#', $origin) ||
+            preg_match('#^http://127\.0\.0\.1:\d+$#', $origin)
+        ));
+
+    if ($origenPermitido) {
         header("Access-Control-Allow-Origin: $origin");
         header('Vary: Origin');
     }
@@ -263,8 +270,12 @@ if (!function_exists('assert_session_is_valid')) {
     $uid = (int)$_SESSION['usuario_id'];
     $fpr = session_fingerprint();
 
-    // revocada?
-    $sql = "SELECT revoked_at
+    // Revocada o inactiva. Las dos cosas salen de la MISMA consulta: antes esta solo
+    // traia revoked_at, asi que el bloque de inactividad de mas abajo preguntaba por una
+    // clave que nunca existia y NUNCA llegaba a ejecutarse. El cierre por inactividad
+    // llevaba desde que se escribio sin funcionar.
+    $sql = "SELECT revoked_at, last_seen_at,
+                   TIMESTAMPDIFF(MINUTE, last_seen_at, NOW()) AS idle_min
               FROM user_sessions
              WHERE user_id = ? AND session_fpr = ?
              ORDER BY id DESC
@@ -280,13 +291,15 @@ if (!function_exists('assert_session_is_valid')) {
           $res = $st->get_result();
           $row = $res ? $res->fetch_assoc() : null;
         } else {
-          $st->bind_result($revoked_at);
-          $row = $st->fetch() ? ['revoked_at' => $revoked_at] : null;
+          $st->bind_result($revoked_at, $last_seen_at, $idle_min);
+          $row = $st->fetch()
+            ? ['revoked_at' => $revoked_at, 'last_seen_at' => $last_seen_at, 'idle_min' => $idle_min]
+            : null;
         }
         $st->close();
 
         if ($row && !is_null($row['revoked_at'])) {
-          // Sesi¨®n revocada ¡ª no hay bypass, ni para cola offline
+          // Sesiï¿½ï¿½n revocada ï¿½ï¿½ no hay bypass, ni para cola offline
           session_unset();
           session_destroy();
           if ($wantsJson) {
@@ -295,7 +308,7 @@ if (!function_exists('assert_session_is_valid')) {
             echo json_encode([
               'ok' => false,
               'error_code' => 'SESSION_REVOKED',
-              'message' => 'Sesi¨®n revocada',
+              'message' => 'Sesiï¿½ï¿½n revocada',
               'retryable' => false
             ], JSON_UNESCAPED_UNICODE);
             exit;
@@ -312,37 +325,45 @@ if (!function_exists('assert_session_is_valid')) {
       return;
     }
 
-    // Inactividad: si last_seen_at supera el umbral, cerrar sesi¨®n
-    $inactivityMinutes = (int)(getenv('SESSION_INACTIVITY_MINUTES') ?: 480); // 8h por defecto
-    if ($row && isset($row['last_seen_at'])) {
-      $inactSt = $conn->prepare(
-        "SELECT TIMESTAMPDIFF(MINUTE, last_seen_at, NOW()) AS idle_min FROM user_sessions WHERE user_id = ? AND session_fpr = ? LIMIT 1"
-      );
-      if ($inactSt) {
-        $inactSt->bind_param("is", $uid, $fpr);
-        $inactSt->execute();
-        $inactRow = null;
-        if (method_exists($inactSt, 'get_result')) {
-          $inactRes = $inactSt->get_result();
-          $inactRow = $inactRes ? $inactRes->fetch_assoc() : null;
-        }
-        $inactSt->close();
-        if ($inactRow && (int)$inactRow['idle_min'] > $inactivityMinutes) {
-          $revSt = $conn->prepare("UPDATE user_sessions SET revoked_at = NOW() WHERE user_id = ? AND session_fpr = ?");
-          if ($revSt) { $revSt->bind_param("is", $uid, $fpr); $revSt->execute(); $revSt->close(); }
-          session_unset(); session_destroy();
-          if ($wantsJson) {
-            http_response_code(401);
-            header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(['ok' => false, 'error_code' => 'SESSION_EXPIRED', 'message' => 'Sesi¨®n expirada por inactividad', 'retryable' => false], JSON_UNESCAPED_UNICODE);
-            exit;
-          }
-          header('Location: /visibility2/app/login.php?session_expired=1'); exit;
-        }
+    // Inactividad: si last_seen_at supera el umbral, cerrar sesion.
+    //
+    // OJO AL DESPLEGAR: hasta ahora esto era codigo muerto, asi que ninguna sesion ha
+    // caducado nunca por inactividad. Al arreglarlo empiezan a caducar POR PRIMERA VEZ.
+    // Subirlo al inicio de una jornada, no a media tarde.
+    //
+    // No se pierde trabajo por esto: se redirige a login.php, no a logout.php, asi que la
+    // purga de IndexedDB no corre y la cola queda en 'blocked_auth' hasta que la persona
+    // vuelve a entrar.
+    //
+    // El dato ya viene de la consulta de arriba: la segunda consulta que habia aqui era
+    // una peticion mas a la BD en CADA peticion de la app (este archivo es auto_prepend).
+    // Variable PROPIA de la app, separada del portal a proposito.
+    //
+    // Antes esto leia SESSION_INACTIVITY_MINUTES, que en .env.sample viene con valor 60 y
+    // con el comentario "para el portal". Dos problemas: el portal en realidad usa
+    // PORTAL_IDLE_MINUTES (portal/auth_guard.php:32), y 60 minutos es un umbral de
+    // oficina, no de terreno â€” un ejecutor que conduce 50 minutos entre dos salas no ha
+    // dejado de trabajar. Al activar el cierre por inactividad con esa variable, media
+    // fuerza de terreno se habria encontrado la sesion cerrada a media jornada.
+    //
+    // SESSION_INACTIVITY_MINUTES no se lee ya: como este bloque nunca llegaba a
+    // ejecutarse, esa variable jamas tuvo efecto y no hay nada que preservar.
+    $inactivityMinutes = (int)(getenv('APP_IDLE_MINUTES') ?: 480);   // 8 h por defecto
+    if ($inactivityMinutes < 30) { $inactivityMinutes = 30; }        // suelo de cordura
+    if ($row && !is_null($row['last_seen_at'] ?? null) && (int)($row['idle_min'] ?? 0) > $inactivityMinutes) {
+      $revSt = $conn->prepare("UPDATE user_sessions SET revoked_at = NOW() WHERE user_id = ? AND session_fpr = ?");
+      if ($revSt) { $revSt->bind_param("is", $uid, $fpr); $revSt->execute(); $revSt->close(); }
+      session_unset(); session_destroy();
+      if ($wantsJson) {
+        http_response_code(401);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => false, 'error_code' => 'SESSION_EXPIRED', 'message' => 'Sesion expirada por inactividad', 'retryable' => false], JSON_UNESCAPED_UNICODE);
+        exit;
       }
+      header('Location: /visibility2/app/login.php?session_expired=1'); exit;
     }
 
-    // Heartbeat (no cr¨ªtico)
+    // Heartbeat (no crï¿½ï¿½tico)
     $hb = $conn->prepare("UPDATE user_sessions SET last_seen_at = NOW() WHERE user_id = ? AND session_fpr = ?");
     if ($hb) {
       $hb->bind_param("is", $uid, $fpr);

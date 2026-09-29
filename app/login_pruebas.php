@@ -244,7 +244,9 @@ $session_expired = (isset($_GET['session_expired']) && $_GET['session_expired'] 
     <script src="assets/plugins/jquery-validation/dist/jquery.validate.min.js"></script>
     <script src="assets/js/login.js"></script>
     <script src="assets/js/usuario.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- sweetalert2 local (assets/vendor/, v11.26.25). Antes venia de cdn.jsdelivr.net; se bajo
+         al servidor para poder cerrar cdn.jsdelivr.net en el CSP de lib/security_headers.php. -->
+    <script src="/visibility2/app/assets/vendor/sweetalert2.all.min.js"></script>
 
     <script>
     document.getElementById('loginForm').addEventListener('submit', function () {

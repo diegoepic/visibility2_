@@ -98,23 +98,8 @@ if (json_last_error() !== JSON_ERROR_NONE) {
 }
 
 // ── Verificar permisos ────────────────────────────────────────────────────────
-$perm = $conn->prepare(
-    "SELECT 1 FROM formularioQuestion fq
-     INNER JOIN formulario f ON f.id = fq.id_formulario
-     WHERE fq.id_formulario = ? AND fq.id_local = ? AND fq.id_usuario = ?
-       AND f.id_empresa = ?
-     LIMIT 1"
-);
-if (!$perm) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error_code' => 'DB_PREPARE_ERROR']);
-    exit;
-}
-$perm->bind_param('iiii', $form_id, $local_id, $usuario_id, $empresa_id);
-$perm->execute();
-$perm->store_result();
-if ($perm->num_rows === 0) {
-    $perm->close();
+// La regla vive en lib/dominio/autorizacion.php (llega vía lib/api_helpers.php).
+if (!puede_usuario_tocar($conn, $usuario_id, $form_id, $local_id, $empresa_id)) {
     http_response_code(403);
     echo json_encode(['ok' => false, 'error_code' => 'FORBIDDEN']);
     exit;

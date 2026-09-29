@@ -448,15 +448,26 @@ $tieneHist      = count($historial) > 0;
             return;
         }
 
+        // Una sola clave por carga de página: se reutiliza en cada reintento del usuario.
+        if (!window.__claveRecepcion) {
+          window.__claveRecepcion = (crypto.randomUUID ? crypto.randomUUID() : 'rec-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+        }
+        const claveEnvioRecepcion = window.__claveRecepcion;
+
         btnSub.disabled = true;
         btnSub.textContent = 'Guardando…';
         msgErr.style.display = 'none';
 
         const fd = new FormData(form);
+        // Misma clave en todos los envíos de este formulario. Si el primero llegó a
+        // guardarse y la respuesta se perdió en la red, el segundo devuelve el resultado
+        // del primero en vez de crear una recepción duplicada.
+        fd.append('X_Idempotency_Key', claveEnvioRecepcion);
         try {
             const res = await fetch('guardar_recepcion_materiales.php', {
                 method: 'POST',
-                body: fd
+                body: fd,
+                headers: { 'X-Idempotency-Key': claveEnvioRecepcion }
             });
             const data = await res.json();
             if (data.status === 'success') {

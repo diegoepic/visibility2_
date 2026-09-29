@@ -313,7 +313,15 @@
     });
   }
 
-  // NUEVO: Limpiar jobs antiguos completados/fallidos
+  /**
+   * Limpia el historial de trabajos ya COMPLETADOS.
+   *
+   * 'error' y 'failed_permanent' quedan deliberadamente fuera: no son trabajos
+   * finalizados, son gestiones del ejecutor que nunca llegaron al servidor. Antes
+   * estaban en la lista y el botón "Limpiar" del panel de cola (que llama a
+   * cleanup(0)) las borraba sin dejar rastro. Sólo se descartan de forma explícita,
+   * una por una, desde el centro de recuperación.
+   */
   async function cleanup(maxAgeDays = 7){
     const db = await openDB();
     const cutoff = Date.now() - (maxAgeDays * 24 * 60 * 60 * 1000);
@@ -325,7 +333,7 @@
       req.onsuccess = () => {
         const all = req.result || [];
         all.forEach(job => {
-          const isFinal = ['success', 'done', 'error', 'failed_permanent', 'canceled'].includes(job.status);
+          const isFinal = ['success', 'done', 'canceled'].includes(job.status);
           const finishedAt = job.finishedAt || job.updatedAt || 0;
           if (isFinal && finishedAt && finishedAt < cutoff) {
             os.delete(job.id);

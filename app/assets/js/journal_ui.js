@@ -814,6 +814,140 @@
     return '';
   }
 
+  /* ============================================================================
+     DETALLE DE UNA GESTIÓN (modal "Ver detalle")
+     ----------------------------------------------------------------------------
+     Se ve casi siempre en un teléfono: nada de tablas de 4 columnas ni de fotos
+     con tamaños distintos. Todo se arma con tarjetas que apilan solo, y las
+     miniaturas van en una grilla de cuadrados (object-fit:cover) para que una
+     foto vertical y una horizontal ocupen lo mismo. Los estilos viven en
+     assets/css/journal.css bajo el prefijo .jr-vd-*.
+     ========================================================================== */
+
+  /**
+   * MySQL manda "2026-08-04 08:42:13". `new Date()` con ese string funciona en
+   * Chrome pero NO es estándar (en iOS da Invalid Date), así que se normaliza el
+   * espacio a "T" antes de parsear.
+   */
+  function parseDT(s){
+    if (!s) return null;
+    const d = new Date(String(s).replace(' ', 'T'));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function fmtFechaHora(s){
+    const d = parseDT(s);
+    if (!d) return '';
+    return d.toLocaleDateString('es-CL', { day:'2-digit', month:'2-digit', year:'numeric' })
+         + ' · '
+         + d.toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit' });
+  }
+
+  function fmtHora(s){
+    const d = parseDT(s);
+    if (!d) return '';
+    return d.toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit' });
+  }
+
+  /**
+   * Las URLs de fotoVisita están guardadas de tres formas distintas según la
+   * época ("uploads/x.webp", "/visibility2/app/uploads/x.webp" y absolutas).
+   * Todas se dejan absolutas acá para que el modal no dependa de desde qué
+   * página se abrió.
+   */
+  function fotoUrl(u){
+    const s = String(u || '').trim();
+    if (!s) return '';
+    if (/^(https?:)?\/\//i.test(s) || s.startsWith('data:')) return s;
+    if (s.startsWith('/')) return s;
+    return BASE + '/' + s.replace(/^\.?\//, '');
+  }
+
+  /** estado_gestion → etiqueta legible + color. Ver procesar_gestion_pruebas.php. */
+  function estadoGestionInfo(estado){
+    const e = String(estado || '').toLowerCase().trim();
+    switch (e){
+      case 'implementado_auditado': return { label:'Implementado y auditado', cls:'is-ok'   };
+      case 'implementado':          return { label:'Implementado',            cls:'is-ok'   };
+      case 'retirado':              return { label:'Retirado',                cls:'is-ok'   };
+      case 'solo_auditoria':        return { label:'Sólo auditoría',          cls:'is-info' };
+      case 'armado':                return { label:'Armado',                  cls:'is-info' };
+      case 'entregado':             return { label:'Entregado',               cls:'is-info' };
+      case 'no_implementado':       return { label:'No implementado',         cls:'is-err'  };
+      case 'pendiente':             return { label:'Pendiente',               cls:'is-warn' };
+      case 'cancelado':             return { label:'Cancelado',               cls:'is-mute' };
+      case '':                      return null;
+      default:                      return { label: e.replace(/_/g, ' '), cls:'is-mute' };
+    }
+  }
+
+  /** Tipo de pregunta por id (1 Sí/No … 7 Foto); el nombre queda de respaldo. */
+  function tipoPreguntaLabel(qt){
+    const id = qt && qt.id != null ? Number(qt.id) : null;
+    switch (id){
+      case 1: return 'Sí/No';
+      case 2: return 'Selección única';
+      case 3: return 'Selección múltiple';
+      case 4: return 'Texto';
+      case 5: return 'Numérico';
+      case 6: return 'Fecha';
+      case 7: return 'Foto';
+    }
+    return qt && qt.name ? String(qt.name) : '';
+  }
+
+  function esPreguntaFoto(qt){
+    if (qt && Number(qt.id) === 7) return true;
+    const n = (qt && qt.name ? String(qt.name) : '').toLowerCase();
+    return n === 'photo' || n === 'foto';
+  }
+
+  /** Grilla de miniaturas cuadradas. Abre la foto completa en otra pestaña. */
+  function thumbsHtml(list){
+    const arr = (Array.isArray(list) ? list : []).filter(p => p && p.url);
+    if (!arr.length) return '';
+    const items = arr.map(p => {
+      const u = fotoUrl(p.url);
+      return `
+        <a class="jr-vd-thumb" href="${esc(u)}" target="_blank" rel="noopener" title="Ver foto${p.id ? ' #' + esc(String(p.id)) : ''}">
+          <img src="${esc(u)}" alt="Foto${p.id ? ' ' + esc(String(p.id)) : ''}" loading="lazy">
+        </a>`;
+    }).join('');
+    return `<div class="jr-vd-thumbs">${items}</div>`;
+  }
+
+  function kpiHtml(valor, etiqueta){
+    const v = (valor === null || valor === undefined || valor === '') ? '—' : valor;
+    return `
+      <div class="jr-vd-kpi">
+        <span class="jr-vd-kpi-n">${esc(String(v))}</span>
+        <span class="jr-vd-kpi-l">${esc(etiqueta)}</span>
+      </div>`;
+  }
+
+  function factHtml(etiqueta, valor){
+    const v = String(valor == null ? '' : valor).trim();
+    if (!v) return '';
+    return `
+      <div class="jr-vd-fact">
+        <span class="jr-vd-fact-k">${esc(etiqueta)}</span>
+        <span class="jr-vd-fact-v">${esc(v)}</span>
+      </div>`;
+  }
+
+  /**
+   * Texto de una respuesta. `option_text` (opción elegida) y `answer_text` (lo
+   * tecleado) vienen a veces duplicados: cuando dicen lo mismo se muestra uno.
+   */
+  function textoRespuesta(a, esFoto){
+    const opt = String(a.option_text || '').trim();
+    const txt = String(a.answer_text || '').trim();
+    if (esFoto) return opt || '';
+    if (opt && (!txt || opt === txt)) return opt;
+    if (opt && txt) return opt + ' — ' + txt;
+    return txt || opt || '';
+  }
+
   function renderServerDetail(payload, fromOffline){
     const basic  = payload.basic || {};
     const loc    = basic.local || {};
@@ -831,235 +965,200 @@
 
     // Duración aproximada si tenemos inicio/fin
     let durTxt = '';
-    if (t.fecha_inicio && t.fecha_fin){
-      const start = new Date(String(t.fecha_inicio).replace(' ', 'T'));
-      const end   = new Date(String(t.fecha_fin).replace(' ', 'T'));
-      const diff  = (end.getTime() - start.getTime()) / 1000;
-      if (diff > 0) durTxt = fmtDuration(diff);
+    const dIni = parseDT(t.fecha_inicio);
+    const dFin = parseDT(t.fecha_fin);
+    if (dIni && dFin){
+      const diff = (dFin.getTime() - dIni.getTime()) / 1000;
+      if (diff > 0) durTxt = fmtDuration(Math.round(diff));
     }
 
-    let html = '';
+    const ejecutor = [usr.nombre, usr.apellido].filter(Boolean).join(' ').trim();
 
-    // RESUMEN
+    let html = '<div class="jr-vd">';
+
+    /* ---------------------------- RESUMEN ---------------------------- */
     html += `
-      <div class="jr-detail-section">
-        <h4>Resumen de visita</h4>
-        ${fromOffline ? '<p><span class="label label-warning">Esta visita fue enviada desde modo offline</span></p>' : ''}
-        <table class="table table-condensed">
-          <tbody>
-            <tr><th>Local</th><td>${esc(loc.nombre || '')}${loc.codigo ? ' (' + esc(loc.codigo) + ')' : ''}</td></tr>
-            <tr><th>Dirección</th><td>${esc(loc.direccion || '')}</td></tr>
-            <tr><th>Distrito</th><td>${esc(loc.distrito && loc.distrito.nombre ? loc.distrito.nombre : '')}</td></tr>
-            <tr><th>Campaña</th><td>${esc(form.nombre || '')}</td></tr>
-            <tr><th>Modalidad</th><td>${esc(tipoGestion || modalidad || '—')}</td></tr>
-            <tr><th>Fecha inicio</th><td>${t.fecha_inicio ? esc(fmtDate(t.fecha_inicio) + ' ' + fmtTime(t.fecha_inicio)) : '—'}</td></tr>
-            <tr><th>Fecha fin</th><td>${t.fecha_fin ? esc(fmtDate(t.fecha_fin) + ' ' + fmtTime(t.fecha_fin)) : '—'}</td></tr>
-            ${durTxt ? `<tr><th>Duración aprox.</th><td>${esc(durTxt)}</td></tr>` : ''}
-            <tr><th>Materiales distintos</th><td>${resumen.materials_count != null ? resumen.materials_count : '—'}</td></tr>
-            <tr><th>Preguntas respondidas</th><td>${resumen.questions_answered != null ? resumen.questions_answered : '—'}</td></tr>
-            <tr><th>Fotos totales</th><td>${resumen.photos_total != null ? resumen.photos_total : '—'}</td></tr>
-          </tbody>
-        </table>
-      </div>
-    `;
+      <section class="jr-vd-sec">
+        ${fromOffline ? '<p class="jr-vd-offline"><i class="fa fa-plane"></i> Esta visita se envió desde modo offline</p>' : ''}
+        <div class="jr-vd-kpis">
+          ${kpiHtml(resumen.materials_count, 'Materiales')}
+          ${kpiHtml(resumen.questions_answered, 'Respuestas')}
+          ${kpiHtml(resumen.photos_total, 'Fotos')}
+          ${durTxt ? kpiHtml(durTxt, 'Duración') : ''}
+        </div>
+        <div class="jr-vd-facts">
+          ${factHtml('Local', (loc.nombre || '') + (loc.codigo ? ' (' + loc.codigo + ')' : ''))}
+          ${factHtml('Dirección', loc.direccion)}
+          ${factHtml('Distrito', loc.distrito && loc.distrito.nombre ? loc.distrito.nombre : '')}
+          ${factHtml('Campaña', form.nombre)}
+          ${factHtml('Tipo de gestión', tipoGestion || modalidad)}
+          ${factHtml('Ejecutor', ejecutor)}
+          ${factHtml('Inicio', fmtFechaHora(t.fecha_inicio))}
+          ${factHtml('Término', fmtFechaHora(t.fecha_fin))}
+        </div>
+      </section>`;
 
-    // IMPLEMENTACIÓN
+    /* ------------------------ IMPLEMENTACIÓN ------------------------- */
     if (mats.length){
-      html += `<div class="jr-detail-section"><h4>Implementación de materiales</h4>`;
+      html += `
+        <section class="jr-vd-sec">
+          <h4 class="jr-vd-h">Implementación de materiales <span class="jr-vd-count">${mats.length}</span></h4>`;
+
       mats.forEach(mat => {
         const gsts = Array.isArray(mat.gestiones) ? mat.gestiones : [];
         const phs  = Array.isArray(mat.photos) ? mat.photos : [];
+
+        // El estado que vale es el último registrado; va en la cabecera de la
+        // tarjeta para leerlo sin abrir la lista de movimientos.
+        const ultimo = gsts.length ? gsts[gsts.length - 1] : null;
+        const estUlt = ultimo ? estadoGestionInfo(ultimo.estado_gestion) : null;
+
         html += `
-          <div class="panel panel-default jr-detail-material">
-            <div class="panel-heading">
-              <strong>${esc(mat.material_nombre || 'Sin material')}</strong>
-              ${mat.material_id ? ` <small>(ID ${mat.material_id})</small>` : ''}
-            </div>
-            <div class="panel-body">
-        `;
+          <article class="jr-vd-card">
+            <header class="jr-vd-card-h">
+              <span class="jr-vd-card-t">${esc(mat.material_nombre || 'Sin material')}</span>
+              ${estUlt ? `<span class="jr-vd-badge ${estUlt.cls}">${esc(estUlt.label)}</span>` : ''}
+            </header>
+            <div class="jr-vd-card-b">`;
+
         if (gsts.length){
-          html += `
-            <table class="table table-condensed table-striped">
-              <thead>
-                <tr>
-                  <th>Fecha gestión</th>
-                  <th>Estado</th>
-                  <th>Valor real</th>
-                  <th>Motivo / Observación</th>
-                </tr>
-              </thead>
-              <tbody>
-          `;
+          html += `<ul class="jr-vd-evs">`;
           gsts.forEach(g => {
-            const mot = g.motivo_no_implementacion || '';
-            const obs = g.observacion || '';
-            const mix = [mot, obs].filter(Boolean).join(' · ');
+            const est = estadoGestionInfo(g.estado_gestion);
+            const obs = [g.motivo_no_implementacion, g.observacion]
+              .map(x => String(x || '').trim()).filter(Boolean).join(' · ');
+            const valor = (g.valor_real === null || g.valor_real === undefined || g.valor_real === '')
+              ? '' : String(g.valor_real);
             html += `
-              <tr>
-                <td>${g.fecha_visita ? esc(fmtDate(g.fecha_visita) + ' ' + fmtTime(g.fecha_visita)) : ''}</td>
-                <td>${esc(g.estado_gestion || '')}</td>
-                <td>${g.valor_real != null ? esc(String(g.valor_real)) : ''}</td>
-                <td>${esc(mix)}</td>
-              </tr>
-            `;
-          });
-          html += `</tbody></table>`;
-        } else {
-          html += `<p class="text-muted">Sin registros de gestión.</p>`;
-        }
-
-        if (phs.length){
-          html += `<div class="jr-detail-photos"><strong>Fotos de este material:</strong><br>`;
-          phs.forEach(p => {
-            html += `
-              <a href="${esc(p.url)}" target="_blank" style="display:inline-block;margin:2px;">
-                <img src="${esc(p.url)}" alt="Foto ${p.id}" style="max-width:80px;max-height:80px;border-radius:3px;border:1px solid #ddd;">
-              </a>
-            `;
-          });
-          html += `</div>`;
-        }
-
-        html += `</div></div>`;
-      });
-      html += `</div>`;
-    }
-
-    // ENCUESTA
-    if (qsArr.length){
-      html += `<div class="jr-detail-section"><h4>Encuesta / Auditoría</h4>`;
-      qsArr.forEach(q => {
-        const ans = Array.isArray(q.answers) ? q.answers : [];
-        const qph = Array.isArray(q.photos) ? q.photos : [];
-        const isPhotoQ = q.question_type && (q.question_type.name || '').toLowerCase() === 'photo';
-
-        const typeLabel = (q.question_type && q.question_type.name)
-          ? `<span class="label label-default">${esc(q.question_type.name)}</span>`
-          : '';
-        const reqLabel  = q.is_required ? '<span class="label label-info">Requerida</span>' : '';
-        const valLabel  = q.is_valued   ? '<span class="label label-success">Valorizada</span>' : '';
-
-        html += `
-          <div class="panel panel-default jr-detail-question">
-            <div class="panel-heading jr-q-heading">
-              <div class="jr-q-title">${esc(q.question_text || '')}</div>
-
-              </div>
-            </div>
-            <div class="panel-body">
-        `;
-
-        if (ans.length){
-          html += `<ul class="list-unstyled">`;
-          ans.forEach(a => {
-            const opt     = (a.option_text || '').trim();
-            const ansText = (a.answer_text || '').trim();
-
-            // Texto principal (deduplicando opción/respuesta cuando son iguales)
-            let info = '';
-            if (isPhotoQ){
-              if (opt) {
-                info = `<b>Opción:</b> ${esc(opt)}`;
-              } else {
-                info = '(foto)';
-              }
-            } else {
-              if (opt && (!ansText || opt === ansText)) {
-                info = `<b>Respuesta:</b> ${esc(opt)}`;
-              } else if (ansText) {
-                if (opt) {
-                  info = `<b>Opción:</b> ${esc(opt)} · <b>Respuesta:</b> ${esc(ansText)}`;
-                } else {
-                  info = `<b>Respuesta:</b> ${esc(ansText)}`;
-                }
-              } else if (opt) {
-                info = `<b>Opción:</b> ${esc(opt)}`;
-              } else {
-                info = '(sin texto)';
-              }
-            }
-
-            const pieces = [info];
-
-            if (q.is_valued && a.valor != null){
-              pieces.push(`<span class="label label-success">valor: ${esc(String(a.valor))}</span>`);
-            }
-            const infoLine = pieces.join(' · ');
-
-            // Foto principal (inline)
-            let mainPhoto = null;
-            if (Array.isArray(a.photos) && a.photos.length){
-              mainPhoto = a.photos[0];
-            } else if (isPhotoQ && a.answer_text && /(^\/?uploads\/)/.test(a.answer_text)){
-              mainPhoto = { url: a.answer_text, id: a.foto_visita_id || 0 };
-            }
-
-            let inlinePhoto = '';
-            if (mainPhoto && mainPhoto.url){
-              inlinePhoto = `
-                <div class="jr-detail-photo-inline">
-                  <a href="${esc(mainPhoto.url)}" target="_blank">
-                    <img src="${esc(mainPhoto.url)}" alt="Foto" style="max-width:80px;max-height:80px;border-radius:3px;border:1px solid #ddd;margin-top:4px;">
-                  </a>
-                </div>`;
-            }
-
-            // Más fotos ligadas a esa respuesta (además de la principal)
-            let extraLinks = '';
-            if (Array.isArray(a.photos) && a.photos.length > 1){
-              const links = a.photos.slice(1).map(p =>
-                `<a href="${esc(p.url)}" target="_blank">Foto #${p.id}</a>`
-              ).join(', ');
-              if (links) {
-                extraLinks = ` · <b>Más fotos:</b> ${links}`;
-              }
-            }
-
-            html += `
-              <li style="margin-bottom:6px;">
-                ${infoLine}
-                ${a.created_at ? ` <small class="text-muted">(${esc(a.created_at)})</small>` : ''}
-                ${extraLinks}
-                ${inlinePhoto}
-              </li>
-            `;
+              <li class="jr-vd-ev">
+                <div class="jr-vd-ev-top">
+                  <span class="jr-vd-ev-date">${esc(fmtFechaHora(g.fecha_visita))}</span>
+                  ${est ? `<span class="jr-vd-badge ${est.cls}">${esc(est.label)}</span>` : ''}
+                </div>
+                ${valor !== '' ? `<div class="jr-vd-ev-meta">Valor real: <b>${esc(valor)}</b></div>` : ''}
+                ${obs ? `<p class="jr-vd-ev-obs">${esc(obs)}</p>` : ''}
+              </li>`;
           });
           html += `</ul>`;
         } else {
-          html += `<p class="text-muted">Sin respuestas registradas.</p>`;
+          html += `<p class="jr-vd-empty">Sin registros de gestión.</p>`;
         }
 
-        // Fotos asociadas a la pregunta (por id_form_question)
-        if (qph.length){
-          html += `<div class="jr-detail-photos"><strong>Fotos asociadas a la pregunta:</strong><br>`;
-          qph.forEach(p => {
-            html += `
-              <a href="${esc(p.url)}" target="_blank" style="display:inline-block;margin:2px;">
-                <img src="${esc(p.url)}" alt="Foto ${p.id}" style="max-width:80px;max-height:80px;border-radius:3px;border:1px solid #ddd;">
-              </a>
-            `;
-          });
-          html += `</div>`;
+        if (phs.length){
+          html += `<div class="jr-vd-photos">
+                     <span class="jr-vd-photos-t">Fotos del material (${phs.length})</span>
+                     ${thumbsHtml(phs)}
+                   </div>`;
         }
 
-        html += `</div></div>`;
+        html += `</div></article>`;
       });
-      html += `</div>`;
+
+      html += `</section>`;
     }
 
-    // Fotos sueltas
-    if (photosMisc.length){
-      html += `<div class="jr-detail-section"><h4>Otras fotos de la visita</h4>`;
-      photosMisc.forEach(p => {
+    /* ---------------------------- ENCUESTA --------------------------- */
+    if (qsArr.length){
+      html += `
+        <section class="jr-vd-sec">
+          <h4 class="jr-vd-h">Encuesta / Auditoría <span class="jr-vd-count">${qsArr.length}</span></h4>`;
+
+      qsArr.forEach((q, i) => {
+        const ans    = Array.isArray(q.answers) ? q.answers : [];
+        const qph    = Array.isArray(q.photos) ? q.photos : [];
+        const esFoto = esPreguntaFoto(q.question_type);
+        const tipo   = tipoPreguntaLabel(q.question_type);
+
+        // Fotos: las de cada respuesta + las colgadas de la pregunta, todas en la
+        // misma grilla. Antes la "principal" iba suelta y las demás como enlaces
+        // "Foto #123", que en el teléfono se veía como texto roto.
+        // Se descarta el repetido por id Y por URL ya normalizada: la misma foto
+        // llega a veces como "uploads/x.webp" desde answer_text y como
+        // "/visibility2/app/uploads/x.webp" desde fotoVisita.
+        const fotos = [];
+        const vistosId  = new Set();
+        const vistosUrl = new Set();
+        const pushFoto = p => {
+          if (!p || !p.url) return;
+          const id = p.id ? String(p.id) : '';
+          const u  = fotoUrl(p.url);
+          if ((id && vistosId.has(id)) || vistosUrl.has(u)) return;
+          if (id) vistosId.add(id);
+          vistosUrl.add(u);
+          fotos.push(p);
+        };
+        ans.forEach(a => {
+          (Array.isArray(a.photos) ? a.photos : []).forEach(pushFoto);
+          // Preguntas de foto antiguas guardaban la ruta dentro de answer_text.
+          if (esFoto && a.answer_text && /uploads\//.test(String(a.answer_text))){
+            pushFoto({ url: a.answer_text, id: a.foto_visita_id || 0 });
+          }
+        });
+        qph.forEach(pushFoto);
+
+        // Si todas las respuestas se guardaron en el mismo instante (el caso
+        // normal de una selección múltiple) la hora se muestra UNA vez abajo, en
+        // vez de repetirla en cada opción.
+        const tiempos = Array.from(new Set(ans.map(a => String(a.created_at || '')).filter(Boolean)));
+        const horaUnica = tiempos.length === 1 ? tiempos[0] : '';
+
         html += `
-          <a href="${esc(p.url)}" target="_blank" style="display:inline-block;margin:2px;">
-            <img src="${esc(p.url)}" alt="Foto ${p.id}" style="max-width:80px;max-height:80px;border-radius:3px;border:1px solid #ddd;">
-          </a>
-        `;
+          <article class="jr-vd-card jr-vd-q">
+            <header class="jr-vd-card-h">
+              <span class="jr-vd-q-n">${i + 1}</span>
+              <span class="jr-vd-card-t">${esc(q.question_text || '')}</span>
+              ${tipo ? `<span class="jr-vd-badge is-type">${esc(tipo)}</span>` : ''}
+              ${q.is_required ? '<span class="jr-vd-badge is-info">Requerida</span>' : ''}
+            </header>
+            <div class="jr-vd-card-b">`;
+
+        // Se arma primero la lista y recién después se decide si hay <ul>: en una
+        // pregunta de foto todas las "respuestas" se saltan y quedaría una lista
+        // vacía colgando entre la cabecera y las miniaturas.
+        const items = [];
+        ans.forEach(a => {
+          const txt = textoRespuesta(a, esFoto);
+          const valorizada = (q.is_valued && a.valor != null && a.valor !== '')
+            ? `<span class="jr-vd-ans-val">valor ${esc(String(a.valor))}</span>` : '';
+          const hora = (!horaUnica && a.created_at)
+            ? `<span class="jr-vd-ans-t">${esc(fmtHora(a.created_at))}</span>` : '';
+          if (!txt && !valorizada && esFoto) return; // respuesta que es sólo la foto
+          items.push(`
+              <li class="jr-vd-ans-i">
+                <span class="jr-vd-ans-v">${esc(txt || '—')}</span>
+                ${valorizada}
+                ${hora}
+              </li>`);
+        });
+
+        if (items.length){
+          html += `<ul class="jr-vd-ans">${items.join('')}</ul>`;
+        } else if (!fotos.length){
+          html += `<p class="jr-vd-empty">Sin respuesta registrada.</p>`;
+        }
+
+        if (fotos.length) html += thumbsHtml(fotos);
+
+        if (horaUnica){
+          html += `<div class="jr-vd-when">Respondida ${esc(fmtFechaHora(horaUnica))}</div>`;
+        }
+
+        html += `</div></article>`;
       });
-      html += `</div>`;
+
+      html += `</section>`;
     }
 
+    /* -------------------------- FOTOS SUELTAS ------------------------ */
+    if (photosMisc.length){
+      html += `
+        <section class="jr-vd-sec">
+          <h4 class="jr-vd-h">Otras fotos de la visita <span class="jr-vd-count">${photosMisc.length}</span></h4>
+          ${thumbsHtml(photosMisc)}
+        </section>`;
+    }
+
+    html += '</div>';
     return html;
   }
 

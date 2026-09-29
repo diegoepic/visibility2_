@@ -5,11 +5,9 @@ ini_set('display_errors', 1);
 
 require_once __DIR__ . '/_session_guard.php';
 require_once __DIR__ . '/includes/permisos.php';
-// Aviso del cambio de acceso a RUT. Lo deja modulos/procesar_login.php SÓLO
-// cuando la persona entró con su nombre de usuario, o sea cuando de verdad va
-// a quedar afuera. Se consume acá (una vez por inicio de sesión).
-require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/lib_login_rut.php';
-$avisoRut = $_SESSION['aviso_login_rut'] ?? null;
+// El portal mantiene el ingreso con nombre de usuario, así que ya no muestra el
+// aviso del cambio a RUT (eso quedó sólo en la app). Se limpia la variable por
+// si quedó alguna sesión abierta de antes del cambio.
 unset($_SESSION['aviso_login_rut']);
 // Verificar si el usuario ha iniciado sesi車n
 if (!isset($_SESSION['usuario_id'])) {
@@ -2516,43 +2514,5 @@ if (window.jQuery) {
     });
 }
 </script>
-
-<?php if ($avisoRut): ?>
-<!-- Aviso del cambio de acceso a RUT (sólo a quien entró con nombre de usuario) -->
-<div id="modalAvisoRut" class="modal fade" tabindex="-1" role="dialog" data-backdrop="static">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header" style="background:#f0ad4e;color:#fff;">
-        <h4 class="modal-title"><i class="fa fa-id-card-o"></i> Cambia la forma de ingresar</h4>
-      </div>
-      <div class="modal-body" style="text-align:center;">
-        <p style="font-size:16px;margin-bottom:14px;">
-          <?php if ((int)$avisoRut['dias'] === 0): ?>
-            Desde <b>hoy</b> el ingreso es <b>solo con tu RUT</b> o tu email.
-          <?php elseif ((int)$avisoRut['dias'] === 1): ?>
-            Desde <b>mañana</b> el ingreso será <b>solo con tu RUT</b> o tu email.
-          <?php else: ?>
-            A partir del <b><?php echo htmlspecialchars($avisoRut['corte'], ENT_QUOTES, 'UTF-8'); ?></b>
-            —en <b><?php echo (int)$avisoRut['dias']; ?> días</b>— el ingreso será
-            <b>solo con tu RUT</b> o tu email. El nombre de usuario deja de servir.
-          <?php endif; ?>
-        </p>
-        <div style="font-size:13px;letter-spacing:.12em;color:#777;text-transform:uppercase;">Tu RUT es</div>
-        <div style="font-size:30px;font-weight:700;letter-spacing:2px;color:#2c3e50;margin:6px 0 4px;">
-          <?php echo htmlspecialchars($avisoRut['rut'], ENT_QUOTES, 'UTF-8'); ?>
-        </div>
-        <div style="font-size:13px;color:#888;">sin puntos ni guion</div>
-        <p style="margin-top:16px;color:#555;">Tu contraseña <b>no cambia</b>.</p>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-warning" data-dismiss="modal">Entendido</button>
-      </div>
-    </div>
-  </div>
-</div>
-<script>
-  jQuery(function ($) { setTimeout(function () { $('#modalAvisoRut').modal('show'); }, 700); });
-</script>
-<?php endif; ?>
 </body>
 </html>

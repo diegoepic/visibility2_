@@ -56,6 +56,18 @@ function respond_err(string $msg, int $http = 400, ?string $redirect = null) {
   exit;
 }
 
+/**
+ * Borra del disco las fotos que ya se habían guardado cuando la transacción se cae.
+ * Estaba escrito en línea dentro del catch; ahora hay dos catch y no puede estar duplicado.
+ */
+function limpiar_imagenes_subidas(array $imagenes): void {
+  foreach ($imagenes as $img) {
+    if (!isset($img['url'])) continue;
+    $abs = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/') . normalize_foto_url($img['url']);
+    if (is_string($abs) && $abs !== '' && @file_exists($abs)) @unlink($abs);
+  }
+}
+
 /* ---------------- Seguridad base ---------------- */
 if (!isset($_SESSION['usuario_id'])) { if (wants_json()) respond_err('Sesión expirada',401); header("Location: login.php"); exit; }
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') { if (wants_json()) respond_err('Método inválido',405); header("Location: index.php"); exit; }
@@ -81,6 +93,10 @@ if (!isset($conn) || !($conn instanceof mysqli)) { respond_err('No hay conexión
 require_once __DIR__ . '/lib/api_helpers.php';
 require_once __DIR__ . '/lib/idempotency.php';
 require_once __DIR__ . '/lib/foto_hash.php'; // detección de fotos duplicadas (sha256 + dHash perceptual)
+require_once __DIR__ . '/lib/gestion_errores.php'; // separa rechazo de negocio de fallo transitorio
+require_once __DIR__ . '/lib/dominio/preguntas_cadena.php'; // regla "cadena propia, si no general"
+require_once __DIR__ . '/lib/dominio/observacion.php';      // escapado + largo maximo de la observacion
+require_once __DIR__ . '/lib/dominio/texto_utf8mb3.php';    // quita lo que utf8mb3 no admite (emoji)
 if (function_exists('idempo_claim_or_fail')) { idempo_claim_or_fail($conn, 'procesar_gestion'); }
 
 /* ---------------- Utilidades columnas opcionales ---------------- */
@@ -120,6 +136,12 @@ function insert_fqr(
   mysqli $conn, array $flags, int $visita_id, int $id_form_question, int $id_local, int $id_usuario,
   string $answer_text, int $id_option, float $valor, ?int $foto_visita_id, string $now
 ) {
+  /* form_question_responses.answer_text sigue en utf8mb3. Como la conexion se puso en
+     utf8mb4 mas arriba (linea 90), un emoji aqui aborta la transaccion y se pierde la
+     gestion entera. Esta es la unica puerta por la que entran las respuestas, asi que
+     basta con sanear aca. Ver lib/dominio/texto_utf8mb3.php. */
+  $answer_text = utf8mb3_saneado($answer_text);
+
   $cols  = ['visita_id','id_form_question','id_local','id_usuario','answer_text','id_option'];
   $ph    = ['?','?','?','?','?','?'];
   $types = 'iiiisi';
@@ -138,16 +160,30 @@ function insert_fqr(
   if ($fotoExpr !== null) { $values .= ($fotoExpr==='NULL') ? ',NULL' : ',?'; }
 
   $sql = "INSERT INTO form_question_responses (".implode(',', $cols).") VALUES ($values)";
-  $stmt = $conn->prepare($sql);
-  if (!$stmt) throw new Exception('Prep insert FQR: '.$conn->error);
+
+  /* La sentencia se prepara UNA vez por forma distinta y se reejecuta. Esta funcion se
+     llama una vez por respuesta y la mediana de una gestion son 44 respuestas (p99: 143),
+     asi que preparar en cada llamada era un viaje al servidor por respuesta, con la
+     transaccion abierta.
+
+     El cache es por texto de SQL, no una sola sentencia: la forma depende de $flags —que
+     son fijos en la peticion— y de si foto_visita_id viene nulo, asi que hay como mucho
+     dos variantes. La conexion es la misma durante toda la peticion; si algun dia dejara
+     de serlo, esto hay que revisarlo. */
+  static $cache = [];
+  if (!isset($cache[$sql])) {
+    $st = $conn->prepare($sql);
+    if (!$st) throw new Exception('Prep insert FQR: '.$conn->error);
+    $cache[$sql] = $st;
+  }
+  $stmt = $cache[$sql];
 
   if ($types !== '') {
     $refs = []; $refs[] = $types; foreach ($args as &$v) { $refs[] = &$v; }
-    if (!@$stmt->bind_param(...$refs)) { $stmt->close(); throw new Exception('Bind FQR: '.$conn->error); }
+    if (!@$stmt->bind_param(...$refs)) { throw new Exception('Bind FQR: '.$conn->error); }
   }
-  if (!$stmt->execute()) { $err=$stmt->error; $stmt->close(); throw new Exception('Insert FQR: '.$err); }
-  $id = $stmt->insert_id; $stmt->close();
-  return $id;
+  if (!$stmt->execute()) { throw new Exception('Insert FQR: '.$stmt->error); }
+  return $stmt->insert_id;
 }
 
 /* ---------------- Params ---------------- */
@@ -261,10 +297,15 @@ function foto_already_linked(mysqli $conn, int $visita_id, int $idFQ, string $ur
  * Devuelve true si fue exitosa la conversión.
  */
 function convertirAWebP($sourcePath, $destPath, $quality = 80) {
-    $maxFileSize = 50 * 1024 * 1024; // 50MB
+    // Topes dimensionados al caso real, no al peor caso teórico. El cliente envía ~1MB/1280px
+    // comprimido, y sin conexión (cuando las librerías de compresión no cargan) manda la foto
+    // original de cámara: 12MB y 4000px cubren eso con holgura. Los topes anteriores (50MB,
+    // 8000x8000) obligaban a reservar ~256MB de RAM por imagen en Imagick, así que varias
+    // fotos concurrentes agotaban la memoria de PHP y devolvían un 500 sin explicación.
+    $maxFileSize = 12 * 1024 * 1024;
     $fileSize = @filesize($sourcePath);
     if ($fileSize === false || $fileSize > $maxFileSize) {
-        throw new Exception('Imagen muy grande (máx 50MB).');
+        throw new GestionRechazadaException('La imagen es demasiado grande (máx 12 MB). Vuelve a tomarla desde la app.', 'FOTO_MUY_GRANDE');
     }
 
     $info = @getimagesize($sourcePath);
@@ -274,14 +315,14 @@ function convertirAWebP($sourcePath, $destPath, $quality = 80) {
         $detectedMime = $finfo ? @finfo_file($finfo, $sourcePath) : @mime_content_type($sourcePath);
         if ($finfo) @finfo_close($finfo);
         if (!$detectedMime || strpos($detectedMime, 'image/') !== 0) {
-            throw new Exception('Archivo no es una imagen válida.');
+            throw new GestionRechazadaException('El archivo no es una imagen válida. Vuelve a tomar la foto desde la app.', 'FOTO_INVALIDA');
         }
         // Construir $info mínimo para continuar; dimensiones se verificarán con Imagick si disponible
         $info = [0 => 0, 1 => 0, 'mime' => $detectedMime];
     }
-    $maxWidth = 8000; $maxHeight = 8000;
+    $maxWidth = 4000; $maxHeight = 4000;
     if ($info[0] > $maxWidth || $info[1] > $maxHeight) {
-        throw new Exception('Dimensiones muy grandes (máx 8000x8000).');
+        throw new GestionRechazadaException('La imagen tiene demasiada resolución (máx 4000x4000 px). Vuelve a tomarla desde la app.', 'FOTO_MUY_GRANDE');
     }
 
     $mime = $info['mime'] ?? '';
@@ -320,6 +361,10 @@ function convertirAWebP($sourcePath, $destPath, $quality = 80) {
  * Crea carpetas nuevas con permisos 755 y archivos con permisos 644.
  */
 function guardarFotoUnitaria(array $file, string $subdir, string $prefix, int $idLocal): array {
+    // Exception a secas -> transitoria -> se reintenta. Es deliberado: UPLOAD_ERR_PARTIAL
+    // suele ser un corte de red a mitad de subida, y la cola reenvía el mismo blob desde
+    // IndexedDB. Ante la duda entre "rechazo" y "fallo pasajero", siempre fallo pasajero:
+    // reintentar de más cuesta 8 intentos, clasificar de más pierde la gestión.
     if (!isset($file['tmp_name']) || $file['error'] !== UPLOAD_ERR_OK) throw new Exception("Error de subida de imagen ($prefix).");
 
     $baseDir = __DIR__ . "/uploads/" . trim($subdir, "/") . "/";
@@ -333,12 +378,24 @@ function guardarFotoUnitaria(array $file, string $subdir, string $prefix, int $i
     $mime = @mime_content_type($tmp);
 
     // Determinar nombre destino
-    $extOrig = strtolower(pathinfo($origName, PATHINFO_EXTENSION) ?: 'jpg');
     $baseName = uniqid('foto_', true);
     $destinoWebp = $baseDir . $baseName . '.webp';
 
     // Convertir a WebP o fallback
     if (!convertirAWebP($tmp, $destinoWebp, 80)) {
+        // La extensión NO se toma del nombre que envió el cliente. Antes se usaba tal cual
+        // (con 'jpg' de respaldo), así que un archivo llamado "x.phtml" que la conversión no
+        // pudiera procesar terminaba escrito con esa extensión dentro de uploads/, que es un
+        // directorio servido por web. Sólo se conservan formatos de imagen conocidos.
+        // heic/heif van incluidos a propósito: son lo que manda un iPhone cuando la
+        // conversión del cliente no pudo correr, y convertirAWebP() puede fallar con ellos
+        // si el servidor no tiene Imagick con soporte HEIF. Dejarlos fuera convertía este
+        // respaldo en un rechazo: la foto se perdía en vez de guardarse sin convertir.
+        $EXT_IMAGEN_PERMITIDAS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'];
+        $extOrig = strtolower(pathinfo($origName, PATHINFO_EXTENSION) ?: '');
+        if (!in_array($extOrig, $EXT_IMAGEN_PERMITIDAS, true)) {
+            throw new GestionRechazadaException("Formato de imagen no admitido ($prefix). Vuelve a tomar la foto desde la app.", 'FOTO_FORMATO');
+        }
         $destinoOrig = $baseDir . $baseName . '.' . $extOrig;
         if (!@move_uploaded_file($tmp, $destinoOrig) && !@copy($tmp, $destinoOrig)) {
             throw new Exception("No se pudo guardar archivo '$origName' ($prefix).");
@@ -375,7 +432,89 @@ function reestructurarFiles($filePost) {
   return $files;
 }
 
+/**
+ * Metadatos de las preguntas respondidas (tipo, campana, cadena), en UNA consulta.
+ *
+ * El bucle de $_POST['respuesta'] pedia esto pregunta por pregunta. Se midio sobre el
+ * volcado del 2026-09-03: la mediana de una gestion son 44 respuestas, p90 = 90, p99 = 143
+ * y el maximo 2.104. O sea aca si habia un N+1 de verdad — bastante mas grande que el de
+ * los materiales, cuya mediana es 1.
+ *
+ * @param int[] $ids  ids de form_questions que vienen respondidos
+ * @return array<int,array{tipo:int,formulario:int,cadena:?int}>
+ */
+function mapaPreguntasDeEncuesta(mysqli $conn, array $ids, bool $conCadena): array {
+  $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn($v) => $v > 0)));
+  if (empty($ids)) return [];
+
+  $ph  = implode(',', array_fill(0, count($ids), '?'));
+  $col = $conCadena ? 'id_cadena' : 'NULL AS id_cadena';
+  $sql = "SELECT id, id_question_type, id_formulario, {$col}
+            FROM form_questions WHERE id IN ({$ph})";
+
+  $stmt = $conn->prepare($sql);
+  if (!$stmt) throw new Exception('Prep mapa preguntas: '.$conn->error);
+  $stmt->bind_param(str_repeat('i', count($ids)), ...$ids);
+  if (!$stmt->execute()) { $err = $stmt->error; $stmt->close(); throw new Exception('Mapa preguntas: '.$err); }
+  $stmt->bind_result($qid, $tipo, $form, $cadena);
+
+  $mapa = [];
+  while ($stmt->fetch()) {
+    $mapa[(int)$qid] = [
+      'tipo'       => (int)$tipo,
+      'formulario' => (int)$form,
+      'cadena'     => $cadena === null ? null : (int)$cadena,
+    ];
+  }
+  $stmt->close();
+  return $mapa;
+}
+
 /* ---------------- Historial ---------------- */
+
+/**
+ * Mapa idFormularioQuestion -> id_material, en UNA sola consulta.
+ *
+ * Antes esto se resolvia dentro de los bucles: cuatro sitios distintos preparaban y
+ * ejecutaban
+ *
+ *     SELECT m.id FROM material m JOIN formularioQuestion fq
+ *       ON fq.material = m.nombre AND m.id_division = ? WHERE fq.id = ? LIMIT 1
+ *
+ * una vez por material, con la transaccion abierta. `material` tiene menos de 908 filas y
+ * un UNIQUE sobre (nombre, id_division), asi que cada consulta era barata; lo caro era el
+ * prepare, que es un viaje al servidor por material.
+ *
+ * Se midio antes de escribir esto: la mediana de una gestion es UN material (182.764 de
+ * 203.752 visitas), p90 = 2, p99 = 9, maximo 50. O sea esto no acelera la gestion tipica
+ * —ahi era una consulta de mas— sino que acorta el peor caso, que es justo donde una
+ * transaccion larga hace dano.
+ *
+ * Diferencia deliberada con la version anterior: el mapa se acota a las filas del usuario
+ * en esta campana y este local. La consulta suelta buscaba por `fq.id` sin acotar, asi que
+ * resolvia tambien el material de un idFQ ajeno. Los llamadores ya validan propiedad antes
+ * de escribir, y para un idFQ que no es del usuario guardar 0 es mas correcto que guardar
+ * el id real.
+ *
+ * @return array<int,int> idFQ => id_material (0 si el nombre no esta en el catalogo)
+ */
+function mapaMaterialesDeGestion(
+  mysqli $conn, int $division_id, int $idCampana, int $idLocal, int $usuario_id
+): array {
+  $sql = "SELECT fq.id AS idfq, m.id AS idmat
+            FROM formularioQuestion fq
+            LEFT JOIN material m ON m.nombre = fq.material AND m.id_division = ?
+           WHERE fq.id_formulario = ? AND fq.id_local = ? AND fq.id_usuario = ?";
+  $stmt = $conn->prepare($sql);
+  if (!$stmt) throw new Exception('Prep mapa materiales: '.$conn->error);
+  $stmt->bind_param("iiii", $division_id, $idCampana, $idLocal, $usuario_id);
+  if (!$stmt->execute()) { $err = $stmt->error; $stmt->close(); throw new Exception('Mapa materiales: '.$err); }
+  $stmt->bind_result($idfq, $idmat);
+  $mapa = [];
+  while ($stmt->fetch()) { $mapa[(int)$idfq] = (int)$idmat; }   // NULL -> 0
+  $stmt->close();
+  return $mapa;
+}
 function insertGestionVisita(
   mysqli $conn, int $visita_id, int $usuario_id, int $idCampana, int $idLocal, int $idFQ, int $idMaterial,
   string $fechaVisita, string $estadoGestion, int $valorReal, string $observacion, string $motivoNoImpl,
@@ -385,14 +524,18 @@ function insertGestionVisita(
     (visita_id,id_usuario,id_formulario,id_local,id_formularioQuestion,id_material,fecha_visita,estado_gestion,
      valor_real,observacion,motivo_no_implementacion,foto_url,lat_foto,lng_foto,latitud,longitud)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
-  $stmt = $conn->prepare($sql);
-  if (!$stmt) throw new Exception('Prep gestion_visita: '.$conn->error);
+  /* Misma idea que insert_fqr(): se prepara una vez y se reejecuta. Acá el ahorro es
+     chico —la mediana de una gestión es UN material— pero la cola llega a 50. */
+  static $stmt = null;
+  if ($stmt === null) {
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) throw new Exception('Prep gestion_visita: '.$conn->error);
+  }
   $stmt->bind_param("iiiiiississsdddd",
     $visita_id,$usuario_id,$idCampana,$idLocal,$idFQ,$idMaterial,$fechaVisita,$estadoGestion,
     $valorReal,$observacion,$motivoNoImpl,$fotoUrl,$fotoLat,$fotoLng,$latGestion,$lngGestion
   );
-  if (!$stmt->execute()) { $err=$stmt->error; $stmt->close(); throw new Exception('Insert gestion_visita: '.$err); }
-  $stmt->close();
+  if (!$stmt->execute()) { throw new Exception('Insert gestion_visita: '.$stmt->error); }
 }
 
 /* ========================================================
@@ -400,17 +543,30 @@ function insertGestionVisita(
  * ====================================================== */
 $visita_id = 0;
 if (isset($_POST['visita_id']) && intval($_POST['visita_id']) > 0) {
-  $visita_id = intval($_POST['visita_id']);
-} elseif ($client_guid !== '') {
+  // El visita_id que manda el cliente NO se acepta a ciegas: se comprueba que la visita
+  // sea de este usuario, esta campaña y este local. Sin esto, un ejecutor podía adjuntar
+  // fotos y respuestas a la visita de otro, y cerrársela con el UPDATE del final.
+  // Si no valida no se corta: se sigue por client_guid, que es el camino seguro del modo
+  // offline. Un id que no calza casi siempre es un mapeo local desactualizado, no un ataque.
+  $visita_id = visita_es_del_usuario($conn, intval($_POST['visita_id']), $usuario_id, $idCampana, $idLocal);
+}
+// Aquí SOLO se busca. La creación baja a dentro de la transacción (bloque C bis).
+//
+// Antes se insertaba aquí, 120 líneas antes del begin_transaction(). Si la gestión fallaba
+// después —y entre medias está toda la subida de fotos, que falla a menudo— el rollback
+// deshacía todo MENOS la visita, que quedaba abierta y vacía para siempre. En el volcado
+// del 2026-09-03 hay 20.716 visitas así: el 8% de la tabla.
+if ($visita_id <= 0 && $client_guid !== '') {
   $q = $conn->prepare("SELECT id FROM visita WHERE client_guid=? AND id_usuario=? AND id_formulario=? AND id_local=? ORDER BY id DESC LIMIT 1");
   if ($q) { $q->bind_param("siii",$client_guid,$usuario_id,$idCampana,$idLocal); $q->execute(); $q->bind_result($found_id); if ($q->fetch()) { $visita_id = intval($found_id); } $q->close(); }
-  if ($visita_id <= 0) {
-    $fecha_ini = ($started_at && strtotime($started_at)) ? date('Y-m-d H:i:s', strtotime($started_at)) : $now;
-    $ins = $conn->prepare("INSERT INTO visita (id_usuario,id_formulario,id_local,fecha_inicio,latitud,longitud,client_guid) VALUES (?,?,?,?,?,?,?)");
-    if ($ins) { $ins->bind_param("iiisdds",$usuario_id,$idCampana,$idLocal,$fecha_ini,$latGestion,$lngGestion,$client_guid); if ($ins->execute()) { $visita_id=$ins->insert_id; } $ins->close(); }
-  }
 }
-if ($visita_id <= 0) {
+
+// Fecha de inicio que se usará si hay que crearla más abajo.
+$fecha_ini_visita = ($started_at && strtotime($started_at)) ? date('Y-m-d H:i:s', strtotime($started_at)) : $now;
+
+// Sin visita conocida y sin client_guid no hay nada de donde agarrarse: no se puede ni
+// buscar ni crear. (Con client_guid sí se puede, y se hace dentro de la transacción.)
+if ($visita_id <= 0 && $client_guid === '') {
   respond_err("Falta el identificador de visita.", 422,
     "gestionarPruebas.php?idCampana=$idCampana&nombreCampana=".urlencode($nombreCampana)."&idLocal=$idLocal"
   );
@@ -464,10 +620,15 @@ if (!empty($archivosReestructurados)) {
     $dirMat   = $dirFecha.'material_'.$idMaterial.'/';
     if (!is_dir($dirMat) && !mkdir($dirMat, 0755, true)) { $erroresSubida[] = "No se pudo crear directorio para material=$idMaterial."; continue; }
 
-    $extOrig = strtolower(pathinfo($name, PATHINFO_EXTENSION) ?: 'jpg');
     $baseName = uniqid('foto_', true); $destinoWebp = $dirMat.$baseName.'.webp';
 
     if (!convertirAWebP($tmpName,$destinoWebp,80)) {
+      // Misma regla que en guardarFotoUnitaria(): la extensión del fallback sale de una
+      // lista blanca, no del nombre que envió el cliente.
+      $extOrig = strtolower(pathinfo($name, PATHINFO_EXTENSION) ?: '');
+      if (!in_array($extOrig, ['jpg','jpeg','png','gif','webp'], true)) {
+        $erroresSubida[] = "Formato de imagen no admitido '$name' (material=$idMaterial)."; continue;
+      }
       $destinoOrig = $dirMat.$baseName.'.'.$extOrig;
       if (!@move_uploaded_file($tmpName,$destinoOrig) && !@copy($tmpName,$destinoOrig)) {
         $erroresSubida[] = "Error al guardar imagen (fallback) '$name' (material=$idMaterial)."; continue;
@@ -507,6 +668,8 @@ if ($client_guid !== '' && function_exists('create_gestion_draft')) {
     $idLocal,
     $estadoGestion,
     [
+      // Puede ser 0: la visita se crea dentro de la transacción, más abajo. Se completa
+      // tras el commit. Si la gestión falla, el draft dice la verdad: no hubo visita.
       'visita_id' => $visita_id,
       'expected_photos' => count($archivosReestructurados) + (isset($_POST['fotos']) ? count($_POST['fotos'], COUNT_RECURSIVE) - count($_POST['fotos']) : 0),
       'started_at' => $started_at ?: $now,
@@ -528,12 +691,38 @@ $obsGeneral  = "";
 $metrics = ['updates_fq'=>0,'inserts_gv'=>0,'inserts_fqr'=>0,'inserts_fv'=>0,'skipped_fv_dups'=>0];
 
 try {
-  /* Permisos */
-  $stmtVer = $conn->prepare("SELECT COUNT(*) AS cnt FROM formularioQuestion WHERE id_formulario=? AND id_local=? AND id_usuario=?");
-  if (!$stmtVer) throw new Exception("Error verificación: ".$conn->error);
-  $stmtVer->bind_param("iii",$idCampana,$idLocal,$usuario_id);
-  $stmtVer->execute(); $rowVer = $stmtVer->get_result()->fetch_assoc(); $stmtVer->close();
-  if ((int)$rowVer['cnt'] === 0) throw new Exception("No tienes permisos o no existe la campaña/local.");
+  /* Permisos: la regla vive en lib/dominio/autorizacion.php */
+  if (!puede_usuario_tocar($conn, $usuario_id, $idCampana, $idLocal)) throw new GestionConflictoException("Este local ya no está asignado a ti en esta campaña. Avisa a tu supervisor.", 'ASSIGNMENT_CHANGED');
+
+  /* Mapa idFQ -> id_material para el historial (gestion_visita.id_material). Una consulta
+     acá reemplaza una por material dentro de los bucles. Ver mapaMaterialesDeGestion(). */
+  $mapaMateriales = mapaMaterialesDeGestion($conn, $division_id, $idCampana, $idLocal, $usuario_id);
+
+  /* ----- Crear la visita, ya dentro de la transacción y con los permisos validados -----
+   * Si algo falla más abajo, el rollback se la lleva por delante y no queda basura.
+   * Va DESPUÉS de comprobar permisos a propósito: no se crea una visita para alguien que
+   * no tiene ese local asignado. */
+  if ($visita_id <= 0) {
+    $ins = $conn->prepare("INSERT INTO visita (id_usuario,id_formulario,id_local,fecha_inicio,latitud,longitud,client_guid) VALUES (?,?,?,?,?,?,?)");
+    if (!$ins) throw new Exception('Prep insert visita: '.$conn->error);
+    $ins->bind_param("iiisdds",$usuario_id,$idCampana,$idLocal,$fecha_ini_visita,$latGestion,$lngGestion,$client_guid);
+    if ($ins->execute()) {
+      $visita_id = (int)$ins->insert_id;
+      $ins->close();
+    } else {
+      // `visita` tiene un UNIQUE en client_guid: si dos envíos de la misma gestión llegan a
+      // la vez, el segundo choca aquí. No es un error: la visita existe, hay que usarla.
+      $ins->close();
+      $q2 = $conn->prepare("SELECT id FROM visita WHERE client_guid=? AND id_usuario=? AND id_formulario=? AND id_local=? ORDER BY id DESC LIMIT 1");
+      if ($q2) {
+        $q2->bind_param("siii",$client_guid,$usuario_id,$idCampana,$idLocal);
+        $q2->execute(); $q2->bind_result($otra_id);
+        if ($q2->fetch()) { $visita_id = (int)$otra_id; }
+        $q2->close();
+      }
+      if ($visita_id <= 0) throw new Exception('No se pudo crear ni recuperar la visita.');
+    }
+  }
 
   /* ----- Estados que tocan formularioQuestion / gestion_visita ----- */
 
@@ -547,27 +736,25 @@ try {
     foreach ($valores as $idFQ => $valorImp) {
       $valorImp = trim((string)$valorImp);
       if ($valorImp === '') continue;
-      if (!ctype_digit($valorImp) || intval($valorImp) < 1) { throw new Exception("Valor implementado (ID=$idFQ) debe ser un entero ≥ 1."); }
+      if (!ctype_digit($valorImp) || intval($valorImp) < 1) { throw new GestionRechazadaException("La cantidad implementada debe ser un número entero mayor que 0 (material ID=$idFQ).", 'VALOR_INVALIDO'); }
       $valorNum = intval($valorImp);
 
       // Verificar ownership antes de leer datos del FQ (IDOR fix)
       $stmtVal = $conn->prepare("SELECT valor_propuesto FROM formularioQuestion WHERE id=? AND id_formulario=? AND id_local=? AND id_usuario=? LIMIT 1");
       $stmtVal->bind_param("iiii",$idFQ,$idCampana,$idLocal,$usuario_id); $stmtVal->execute();
       $rowV = $stmtVal->get_result()->fetch_assoc(); $stmtVal->close();
-      if (!$rowV) { throw new Exception("No tienes permisos sobre el material (ID=$idFQ)."); }
-      if ($rowV && $valorNum > intval($rowV['valor_propuesto'])) { throw new Exception("Valor ($valorNum) excede valor_propuesto ({$rowV['valor_propuesto']}) en ID=$idFQ."); }
+      if (!$rowV) { throw new GestionConflictoException("Este material ya no está asignado a ti (ID=$idFQ). Avisa a tu supervisor.", 'ASSIGNMENT_CHANGED'); }
+      if ($rowV && $valorNum > intval($rowV['valor_propuesto'])) { throw new GestionRechazadaException("La cantidad informada ($valorNum) supera la comprometida ({$rowV['valor_propuesto']}) en el material ID=$idFQ.", 'VALOR_EXCEDE'); }
 
-      $obs = isset($observaciones[$idFQ]) ? htmlspecialchars(trim((string)$observaciones[$idFQ]), ENT_QUOTES, 'UTF-8') : '';
+      $obs = observacion_normalizar($observaciones[$idFQ] ?? '');
       $stmtUp = $conn->prepare("UPDATE formularioQuestion SET valor=?, motivo='-', observacion=?, latGestion=?, lngGestion=? WHERE id=? AND id_formulario=? AND id_local=? AND id_usuario=?");
       if (!$stmtUp) throw new Exception("Error preparando actualización de material (ID=$idFQ): ".$conn->error);
       $stmtUp->bind_param("isddiiii",$valorNum,$obs,$latGestion,$lngGestion,$idFQ,$idCampana,$idLocal,$usuario_id);
       if (!$stmtUp->execute()) throw new Exception("Error actualizando material (ID=$idFQ): ".$stmtUp->error);
       $metrics['updates_fq'] += $stmtUp->affected_rows; $stmtUp->close();
 
-      // id material para historial
-      $stmtMatFetch = $conn->prepare("SELECT m.id FROM material m JOIN formularioQuestion fq ON fq.material=m.nombre AND m.id_division=? WHERE fq.id=? LIMIT 1");
-      $stmtMatFetch->bind_param("ii",$division_id,$idFQ); $stmtMatFetch->execute();
-      $resMatFetch = $stmtMatFetch->get_result(); $idMaterial = $resMatFetch->num_rows ? intval($resMatFetch->fetch_assoc()['id']) : 0; $stmtMatFetch->close();
+      // id material para historial: sale del mapa precargado, sin consulta.
+      $idMaterial = $mapaMateriales[$idFQ] ?? 0;
 
       insertGestionVisita($conn,$visita_id,$usuario_id,$idCampana,$idLocal,$idFQ,$idMaterial,$fechaVisita,$estadoGestion,$valorNum,$obs,"",null,0.0,0.0,$latGestion,$lngGestion);
       $metrics['inserts_gv']++;
@@ -580,15 +767,16 @@ try {
           $motNImpl  = isset($motivoNoImpl[$idFQ]) ? trim((string)$motivoNoImpl[$idFQ]) : '';
           $obsConcat = trim($motivoSel . ($motNImpl !== '' ? ' - ' . $motNImpl : ''));
           // Ownership validado via WHERE en el UPDATE — solo afecta al FQ del usuario
-          $stmtNo = $conn->prepare("UPDATE formularioQuestion SET observacion = CONCAT(COALESCE(observacion,''),' ',?) WHERE id=? AND id_formulario=? AND id_local=? AND id_usuario=?");
+          // El CONCAT acumula el motivo de cada visita. Sin tope, la fila acababa llena y ese
+          // material no se podia guardar NUNCA MAS (era la causa de fondo del "Data too long").
+          $stmtNo = $conn->prepare("UPDATE formularioQuestion SET observacion = " . observacion_sql_concat() . " WHERE id=? AND id_formulario=? AND id_local=? AND id_usuario=?");
           if (!$stmtNo) throw new Exception("Error preparando actualización de no implementación (ID=$idFQ): ".$conn->error);
           $stmtNo->bind_param("siiii",$obsConcat,$idFQ,$idCampana,$idLocal,$usuario_id);
           if (!$stmtNo->execute()) throw new Exception("Error actualizando no implementado (ID=$idFQ): ".$stmtNo->error);
           $metrics['updates_fq'] += $stmtNo->affected_rows; $stmtNo->close();
 
-          $stmtMatFetch = $conn->prepare("SELECT m.id FROM material m JOIN formularioQuestion fq ON fq.material=m.nombre AND m.id_division=? WHERE fq.id=? LIMIT 1");
-          $stmtMatFetch->bind_param("ii",$division_id,$idFQ); $stmtMatFetch->execute();
-          $resMatFetch = $stmtMatFetch->get_result(); $idMaterial = $resMatFetch->num_rows ? intval($resMatFetch->fetch_assoc()['id']) : 0; $stmtMatFetch->close();
+          // id material para historial: sale del mapa precargado, sin consulta.
+          $idMaterial = $mapaMateriales[$idFQ] ?? 0;
 
           insertGestionVisita($conn,$visita_id,$usuario_id,$idCampana,$idLocal,$idFQ,$idMaterial,$fechaVisita,'no_implementado',0,$obsConcat,'',null,0.0,0.0,$latGestion,$lngGestion);
           $metrics['inserts_gv']++;
@@ -604,8 +792,11 @@ try {
       $up = guardarFotoUnitaria($_FILES['fotoLocalNoExiste'],'local_no_existe','localnoexiste_',$idLocal); $fotoUrl=$up['url']; $obsGeneral.=" | Foto: ".$fotoUrl;
     } elseif (isset($_FILES['fotoPendienteGenerica']) && $_FILES['fotoPendienteGenerica']['error']===UPLOAD_ERR_OK) {
       $up = guardarFotoUnitaria($_FILES['fotoPendienteGenerica'],'pendiente_generica','pendiente_',$idLocal); $fotoUrl=$up['url']; $obsGeneral.=" | Foto: ".$fotoUrl;
-    } else { throw new Exception("Debe adjuntar al menos una foto para el estado Pendiente."); }
+    } else { throw new GestionRechazadaException("Debes adjuntar al menos una foto para dejar el local como Pendiente.", 'FOTO_REQUERIDA'); }
 
+    /* El motivo, el comentario y la URL de la foto se concatenan; una ruta larga bastaba
+       para pasarse del ancho de la columna. Ver app/lib/dominio/observacion.php. */
+    $obsGeneral = observacion_recortar($obsGeneral, V2_OBSERVACION_MAX);
     $stmtP = $conn->prepare("UPDATE formularioQuestion SET fechaVisita=?, countVisita=countVisita+1, observacion=?, pregunta='en proceso' WHERE id_formulario=? AND id_local=? AND id_usuario=?");
     if (!$stmtP) throw new Exception("Error update pendiente: ".$conn->error);
     $stmtP->bind_param("ssiii",$fechaVisita,$obsGeneral,$idCampana,$idLocal,$usuario_id);
@@ -621,8 +812,11 @@ try {
       $up = guardarFotoUnitaria($_FILES['fotoMuebleNoSala'],'mueble_no_existe','mueble_',$idLocal); $fotoUrl=$up['url']; $obsGeneral.=" | Foto Mueble: ".$fotoUrl;
     } elseif (isset($_FILES['fotoCanceladoGenerica']) && $_FILES['fotoCanceladoGenerica']['error']===UPLOAD_ERR_OK) {
       $up = guardarFotoUnitaria($_FILES['fotoCanceladoGenerica'],'cancelado_generica','cancelado_',$idLocal); $fotoUrl=$up['url']; $obsGeneral.=" | Foto: ".$fotoUrl;
-    } else { throw new Exception("Debe adjuntar al menos una foto para el estado Cancelado."); }
+    } else { throw new GestionRechazadaException("Debes adjuntar al menos una foto para dejar el local como Cancelado.", 'FOTO_REQUERIDA'); }
 
+    /* El motivo, el comentario y la URL de la foto se concatenan; una ruta larga bastaba
+       para pasarse del ancho de la columna. Ver app/lib/dominio/observacion.php. */
+    $obsGeneral = observacion_recortar($obsGeneral, V2_OBSERVACION_MAX);
     $stmtC = $conn->prepare("UPDATE formularioQuestion SET estado=?, fechaVisita=?, countVisita=countVisita+1, observacion=?, pregunta='cancelado' WHERE id_formulario=? AND id_local=? AND id_usuario=?");
     if (!$stmtC) throw new Exception("Error update cancelado: ".$conn->error);
     $stmtC->bind_param("issiii",$estadoNum,$fechaVisita,$obsGeneral,$idCampana,$idLocal,$usuario_id);
@@ -653,14 +847,14 @@ try {
       $etapa = trim((string)$etapa);
       if ($etapa === '') continue;
       if (!in_array($etapa, ['armado','entregado','implementado','retirado'], true)) {
-        throw new Exception("Etapa inválida '$etapa' para material (ID=$idFQ).");
+        throw new GestionRechazadaException("Etapa inválida '$etapa' para el material ID=$idFQ. Vuelve a abrir la gestión.", 'ETAPA_INVALIDA');
       }
 
       // Verificar ownership antes de leer/escribir el FQ (mismo patrón IDOR-safe que arriba)
       $stmtVal = $conn->prepare("SELECT valor_propuesto, etapa_material, valor FROM formularioQuestion WHERE id=? AND id_formulario=? AND id_local=? AND id_usuario=? LIMIT 1");
       $stmtVal->bind_param("iiii",$idFQ,$idCampana,$idLocal,$usuario_id); $stmtVal->execute();
       $rowV = $stmtVal->get_result()->fetch_assoc(); $stmtVal->close();
-      if (!$rowV) { throw new Exception("No tienes permisos sobre el material (ID=$idFQ)."); }
+      if (!$rowV) { throw new GestionConflictoException("Este material ya no está asignado a ti (ID=$idFQ). Avisa a tu supervisor.", 'ASSIGNMENT_CHANGED'); }
 
       $savedEtapa = (string)($rowV['etapa_material'] ?? '');
       $propuesto  = intval($rowV['valor_propuesto']);
@@ -676,13 +870,13 @@ try {
         // cantidad nueva, es un material parcial que el ejecutor dejó intacto → no se toca nada.
         if ($deltaStr === '' && $savedEtapa === 'implementado') { continue; }
         if ($deltaStr === '' || !ctype_digit($deltaStr) || intval($deltaStr) < 1) {
-          throw new Exception("Cantidad implementada (ID=$idFQ) debe ser un entero ≥ 1.");
+          throw new GestionRechazadaException("La cantidad implementada debe ser un número entero mayor que 0 (material ID=$idFQ).", 'VALOR_INVALIDO');
         }
         $delta    = intval($deltaStr);
         $prevImpl = ($savedEtapa === 'implementado') ? intval($rowV['valor']) : 0;
         $nuevoTot = $prevImpl + $delta;
         if ($nuevoTot > $propuesto) {
-          throw new Exception("Acumulado ($nuevoTot) excede valor_propuesto ($propuesto) en ID=$idFQ.");
+          throw new GestionRechazadaException("El acumulado ($nuevoTot) supera lo comprometido ($propuesto) en el material ID=$idFQ.", 'VALOR_EXCEDE');
         }
         $valorNum = $nuevoTot;
         $valorEvt = $delta;
@@ -691,25 +885,25 @@ try {
         if ($nuevoTot < $propuesto) {
           $motivoGV = trim((string)($motivoParcial[$idFQ] ?? ''));
           if (!in_array($motivoGV, $MOTIVOS_PARCIAL_OK, true)) {
-            throw new Exception("Debe indicar un motivo válido de implementación parcial (ID=$idFQ).");
+            throw new GestionRechazadaException("Debes indicar un motivo válido de implementación parcial (material ID=$idFQ).", 'MOTIVO_REQUERIDO');
           }
         }
       } elseif ($etapa === 'retirado') {
         $valorImp = trim((string)($valores[$idFQ] ?? ''));
         if ($valorImp === '' || !ctype_digit($valorImp) || intval($valorImp) < 1) {
-          throw new Exception("Valor retirado (ID=$idFQ) debe ser un entero ≥ 1.");
+          throw new GestionRechazadaException("La cantidad retirada debe ser un número entero mayor que 0 (material ID=$idFQ).", 'VALOR_INVALIDO');
         }
         $valorNum = intval($valorImp);
         $valorEvt = $valorNum;
         if ($valorNum > $propuesto) {
-          throw new Exception("Valor ($valorNum) excede valor_propuesto ($propuesto) en ID=$idFQ.");
+          throw new GestionRechazadaException("La cantidad informada ($valorNum) supera lo comprometido ($propuesto) en el material ID=$idFQ.", 'VALOR_EXCEDE');
         }
       } else {
         // armado / entregado: sin cambio real respecto a lo ya guardado → no se toca nada.
         if ($etapa === $savedEtapa) { continue; }
       }
 
-      $obs = isset($observaciones[$idFQ]) ? htmlspecialchars(trim((string)$observaciones[$idFQ]), ENT_QUOTES, 'UTF-8') : '';
+      $obs = observacion_normalizar($observaciones[$idFQ] ?? '');
 
       $stmtEt = $conn->prepare("UPDATE formularioQuestion SET etapa_material=?, fechaVisita=?, countVisita=countVisita+1, valor=COALESCE(?,valor), observacion=?, latGestion=?, lngGestion=? WHERE id=? AND id_formulario=? AND id_local=? AND id_usuario=?");
       if (!$stmtEt) throw new Exception("Error preparando actualización de etapa (ID=$idFQ): ".$conn->error);
@@ -717,10 +911,8 @@ try {
       if (!$stmtEt->execute()) throw new Exception("Error actualizando etapa de material (ID=$idFQ): ".$stmtEt->error);
       $metrics['updates_fq'] += $stmtEt->affected_rows; $stmtEt->close();
 
-      // id material para historial
-      $stmtMatFetch = $conn->prepare("SELECT m.id FROM material m JOIN formularioQuestion fq ON fq.material=m.nombre AND m.id_division=? WHERE fq.id=? LIMIT 1");
-      $stmtMatFetch->bind_param("ii",$division_id,$idFQ); $stmtMatFetch->execute();
-      $resMatFetch = $stmtMatFetch->get_result(); $idMaterial = $resMatFetch->num_rows ? intval($resMatFetch->fetch_assoc()['id']) : 0; $stmtMatFetch->close();
+      // id material para historial: sale del mapa precargado, sin consulta.
+      $idMaterial = $mapaMateriales[$idFQ] ?? 0;
 
       insertGestionVisita($conn,$visita_id,$usuario_id,$idCampana,$idLocal,$idFQ,$idMaterial,$fechaVisita,$etapa,$valorEvt,$obs,$motivoGV,null,0.0,0.0,$latGestion,$lngGestion);
       $metrics['inserts_gv']++;
@@ -763,50 +955,38 @@ try {
        válida si la pregunta pertenece a esta campaña y es general (id_cadena NULL)
        o de la cadena del local. Las que no cumplen se SALTAN sin abortar la gestión
        (mismo criterio que la variante IW). */
-    $fqTieneCadena = false;
-    $resColCad = @$conn->query("SHOW COLUMNS FROM form_questions LIKE 'id_cadena'");
-    if ($resColCad) { $fqTieneCadena = ($resColCad->num_rows > 0); $resColCad->close(); }
+    $fqTieneCadena    = preguntas_cadena_activa($conn);
+    $idCadenaLocalEnc = preguntas_cadena_de_local($conn, $idLocal);
 
-    $idCadenaLocalEnc = 0;
-    if ($fqTieneCadena) {
-      $stmtCadL = $conn->prepare("SELECT id_cadena FROM local WHERE id=? LIMIT 1");
-      if ($stmtCadL) {
-        $stmtCadL->bind_param("i",$idLocal);
-        $stmtCadL->execute(); $stmtCadL->bind_result($cadLocTmp);
-        if ($stmtCadL->fetch()) { $idCadenaLocalEnc = (int)$cadLocTmp; }
-        $stmtCadL->close();
-      }
-    }
+    /* Tipo, campaña y cadena de TODAS las preguntas respondidas, de una vez. Antes era
+       una consulta por respuesta: con mediana 44 y p99 143, eso son entre 44 y 143 viajes
+       al servidor con la transacción abierta. Ver mapaPreguntasDeEncuesta(). */
+    $mapaPreguntas = mapaPreguntasDeEncuesta($conn, array_keys($_POST['respuesta']), $fqTieneCadena);
 
-    $sqlTipoPreg = $fqTieneCadena
-      ? "SELECT id_question_type, id_formulario, id_cadena FROM form_questions WHERE id=? LIMIT 1"
-      : "SELECT id_question_type, id_formulario, NULL AS id_cadena FROM form_questions WHERE id=? LIMIT 1";
+    /* La consulta del texto de la opción se prepara UNA vez y se reejecuta. La usan las
+       dos ramas de abajo (única y múltiple). */
+    $stmtO = $conn->prepare("SELECT option_text FROM form_question_options WHERE id=? AND id_form_question=? LIMIT 1");
+    if (!$stmtO) throw new Exception("Error option_text: ".$conn->error);
 
     foreach ($_POST['respuesta'] as $id_form_question => $respValue) {
       $id_form_question = (int)$id_form_question;
 
-      $stmtT = $conn->prepare($sqlTipoPreg);
-      if (!$stmtT) throw new Exception("Error tipoPregunta: ".$conn->error);
-      $stmtT->bind_param("i",$id_form_question);
-      $stmtT->execute();
-      $rowQ = $stmtT->get_result()->fetch_assoc();
-      $stmtT->close();
-      if (!$rowQ) { throw new Exception("Pregunta no existe (ID=$id_form_question)."); }
-      $tipoPregunta = (int)$rowQ['id_question_type'];
+      $rowQ = $mapaPreguntas[$id_form_question] ?? null;
+      if (!$rowQ) { $stmtO->close(); throw new GestionConflictoException("Una pregunta de la encuesta ya no existe (ID=$id_form_question). La campaña cambió: vuelve a abrir la gestión.", 'PREGUNTA_NO_EXISTE'); }
+      $tipoPregunta = $rowQ['tipo'];
 
       // Pertenencia a la campaña (antes no se validaba)
-      if ((int)$rowQ['id_formulario'] !== $idCampana) { continue; }
+      if ($rowQ['formulario'] !== $idCampana) { continue; }
       // Scoping por cadena: NULL = general (siempre válida); de otra cadena = se salta
-      if ($rowQ['id_cadena'] !== null && (int)$rowQ['id_cadena'] !== $idCadenaLocalEnc) { continue; }
+      if (!preguntas_cadena_visible($rowQ['cadena'], $idCadenaLocalEnc)) { continue; }
 
       if ($tipoPregunta == 1 || $tipoPregunta == 2) {
         $id_option = intval($respValue); if ($id_option === 0) continue;
-        $stmtO = $conn->prepare("SELECT option_text FROM form_question_options WHERE id=? AND id_form_question=? LIMIT 1");
-        if (!$stmtO) throw new Exception("Error option_text: ".$conn->error);
         $stmtO->bind_param("ii",$id_option,$id_form_question);
         $stmtO->execute(); $stmtO->bind_result($option_text);
-        if (!$stmtO->fetch()) { $stmtO->close(); throw new Exception("Opción inválida ($id_option) para pregunta $id_form_question."); }
-        $stmtO->close();
+        $hayOpcion = $stmtO->fetch();
+        $stmtO->free_result();
+        if (!$hayOpcion) { $stmtO->close(); throw new GestionConflictoException("Una opción de respuesta ya no existe en la campaña (opción $id_option, pregunta $id_form_question). Vuelve a abrir la gestión.", 'OPCION_INVALIDA'); }
         $answer_text = htmlspecialchars((string)$option_text, ENT_QUOTES, 'UTF-8');
         $valor = 0.0;
         if (isset($_POST['valorRespuesta'][$id_form_question][$id_option]) && is_numeric($_POST['valorRespuesta'][$id_form_question][$id_option])) {
@@ -816,16 +996,15 @@ try {
         $metrics['inserts_fqr']++;
 
       } elseif ($tipoPregunta == 3) {
-        if (!is_array($respValue)) throw new Exception("Respuesta inválida (no array) en pregunta $id_form_question.");
+        if (!is_array($respValue)) throw new GestionRechazadaException("Respuesta inválida en la pregunta $id_form_question. Vuelve a abrir la gestión.", 'RESPUESTA_INVALIDA');
         $filtered = array_filter($respValue, fn($v) => intval($v) !== 0); if (empty($filtered)) continue;
         foreach ($filtered as $optVal) {
           $optVal = intval($optVal);
-          $stmtO = $conn->prepare("SELECT option_text FROM form_question_options WHERE id=? AND id_form_question=? LIMIT 1");
-          if (!$stmtO) throw new Exception("Error option_text multiple: ".$conn->error);
           $stmtO->bind_param("ii",$optVal,$id_form_question);
           $stmtO->execute(); $stmtO->bind_result($option_text);
-          if (!$stmtO->fetch()) { $stmtO->close(); throw new Exception("Opción inválida ($optVal) en pregunta $id_form_question."); }
-          $stmtO->close();
+          $hayOpcion = $stmtO->fetch();
+          $stmtO->free_result();
+          if (!$hayOpcion) { $stmtO->close(); throw new GestionConflictoException("Una opción de respuesta ya no existe en la campaña (opción $optVal, pregunta $id_form_question). Vuelve a abrir la gestión.", 'OPCION_INVALIDA'); }
           $answer_text = htmlspecialchars((string)$option_text, ENT_QUOTES, 'UTF-8');
           $valor = 0.0;
           if (isset($_POST['valorRespuesta'][$id_form_question][$optVal]) && is_numeric($_POST['valorRespuesta'][$id_form_question][$optVal])) {
@@ -860,6 +1039,7 @@ try {
         $metrics['inserts_fqr']++;
       }
     }
+    $stmtO->close();
   }
 
   /* ----- Foto material (archivos convertidos en este request) → fotoVisita ----- */
@@ -907,10 +1087,8 @@ try {
     foreach ($_POST['fotos'] as $idFQ => $urls) {
       $idFQ = (int)$idFQ; if (!is_array($urls)) continue;
 
-      $stmtMatFetch = $conn->prepare("SELECT m.id FROM material m JOIN formularioQuestion fq ON fq.material=m.nombre AND m.id_division=? WHERE fq.id=? LIMIT 1");
-      $stmtMatFetch->bind_param("ii",$division_id,$idFQ);
-      $stmtMatFetch->execute(); $resMatFetch = $stmtMatFetch->get_result();
-      $idMaterial = $resMatFetch->num_rows ? (int)$resMatFetch->fetch_assoc()['id'] : 0; $stmtMatFetch->close();
+      // id material para historial: sale del mapa precargado, sin consulta.
+      $idMaterial = $mapaMateriales[$idFQ] ?? 0;
 
       $kindFoto = $etapaMaterial[$idFQ] ?? null;
       $idx=-1;
@@ -951,7 +1129,8 @@ try {
 
   $conn->commit();
 
-  // SAGA: Marcar draft como completado
+  // SAGA: Marcar draft como completado. Aquí es donde el draft se entera del visita_id
+  // definitivo, porque hasta el commit la visita podía no llegar a existir.
   if ($client_guid !== '' && function_exists('update_gestion_draft')) {
     update_gestion_draft($conn, $client_guid, 'completed', [
       'visita_id' => $visita_id,
@@ -968,45 +1147,85 @@ try {
   }
 
 
-} catch (Exception $e) {
+} catch (GestionRechazadaException $e) {
+  // ---- RECHAZO DETERMINISTA (422) o CONFLICTO DE ESTADO (409) ----
+  // La misma entrada siempre produce el mismo rechazo, así que SÍ corresponde guardarlo
+  // como respuesta definitiva de la clave de idempotencia: el reintento debe devolver
+  // exactamente esto, sin volver a ejecutar nada. El cliente no reintenta; lo manda a la
+  // bandeja para que una persona lo resuelva.
   $conn->rollback();
+  limpiar_imagenes_subidas($imagenes);
 
-  foreach ($imagenes as $img) {
-    $abs = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/') . normalize_foto_url($img['url']);
-    if (is_string($abs) && $abs !== '' && @file_exists($abs)) @unlink($abs);
-  }
-
-  // SAGA: Marcar draft como fallido
   $error_id = function_exists('generate_error_id') ? generate_error_id() : 'ERR-' . time();
   if ($client_guid !== '' && function_exists('update_gestion_draft')) {
     update_gestion_draft($conn, $client_guid, 'failed', [
-      'error_code' => 'TRANSACTION_FAILED',
+      'error_code'    => $e->codigo,
       'error_message' => $e->getMessage()
     ]);
   }
-
-  // Log a error_log con ID único
   if (function_exists('log_error_to_db')) {
     log_error_to_db($conn, $error_id, 'procesar_gestion_pruebas.php', [
-      'error_code' => 'TRANSACTION_FAILED',
+      'error_code'    => $e->codigo,
       'error_message' => $e->getMessage(),
-      'client_guid' => $client_guid,
-      'visita_id' => $visita_id
+      'http_status'   => $e->http,
+      'client_guid'   => $client_guid,
+      'visita_id'     => $visita_id
     ]);
   }
-
-  error_log("[{$error_id}] Error en procesar_gestion_pruebas.php: ".$e->getMessage());
+  error_log("[{$error_id}] Gestión rechazada ({$e->codigo}) en procesar_gestion_pruebas.php: ".$e->getMessage());
 
   if (function_exists('idempo_get_key') && idempo_get_key()) {
-    idempo_store_and_reply($conn, 'procesar_gestion', 500, [
-      'status'=>'error',
-      'message'=>"No se pudo procesar la gestión: ".$e->getMessage(),
-      'error_id'=>$error_id
+    idempo_store_and_reply($conn, 'procesar_gestion', $e->http, [
+      'ok'         => false,
+      'status'     => 'error',
+      'error_code' => $e->codigo,
+      'message'    => $e->getMessage(),
+      'error_id'   => $error_id,
+      'retryable'  => false
     ]);
     exit;
   }
 
-  respond_err("No se pudo procesar la gestión: ".$e->getMessage()." (Ref: {$error_id})", 500,
+  respond_err($e->getMessage()." (Ref: {$error_id})", $e->http,
+    "gestionarPruebas.php?idCampana=$idCampana&nombreCampana=".urlencode($nombreCampana)."&idLocal=$idLocal"
+  );
+
+} catch (Throwable $e) {
+  // ---- FALLO DE INFRAESTRUCTURA (500) ----
+  // Deadlock, lock timeout, disco lleno, prepare que falla. Reintentar SÍ puede funcionar.
+  //
+  // Esto era el hallazgo con más impacto en pérdida de datos: antes se llamaba a
+  // idempo_store_and_reply(..., 500, ...), que marca la fila de request_log como
+  // 'completed'. Todos los reintentos posteriores con la misma clave reproducían ese 500
+  // sin ejecutar nada, y la gestión se perdía definitivamente por un fallo pasajero.
+  // idempo_mark_failed() deja la fila en 'failed', y idempo_claim_or_fail() vuelve a
+  // tomarla como 'processing' en el siguiente intento: el reintento se ejecuta de verdad.
+  $conn->rollback();
+  limpiar_imagenes_subidas($imagenes);
+
+  $error_id = function_exists('generate_error_id') ? generate_error_id() : 'ERR-' . time();
+  if ($client_guid !== '' && function_exists('update_gestion_draft')) {
+    update_gestion_draft($conn, $client_guid, 'failed', [
+      'error_code'    => 'TRANSACTION_FAILED',
+      'error_message' => $e->getMessage()
+    ]);
+  }
+  if (function_exists('log_error_to_db')) {
+    log_error_to_db($conn, $error_id, 'procesar_gestion_pruebas.php', [
+      'error_code'    => 'TRANSACTION_FAILED',
+      'error_message' => $e->getMessage(),
+      'client_guid'   => $client_guid,
+      'visita_id'     => $visita_id
+    ]);
+  }
+  error_log("[{$error_id}] Error en procesar_gestion_pruebas.php: ".$e->getMessage());
+
+  // LIBERAR la clave, no persistir el error.
+  if (function_exists('idempo_mark_failed')) {
+    try { idempo_mark_failed($conn, 'procesar_gestion', 'TRANSACTION_FAILED'); } catch (Throwable $_) {}
+  }
+
+  respond_err("No se pudo guardar la gestión. Se reintentará solo. (Ref: {$error_id})", 500,
     "gestionarPruebas.php?idCampana=$idCampana&nombreCampana=".urlencode($nombreCampana)."&idLocal=$idLocal"
   );
 }

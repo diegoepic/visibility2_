@@ -1,16 +1,19 @@
 <?php
 /**
- * Regla de acceso por RUT — compartida por app/ y portal/.
+ * Regla de acceso por RUT — el corte rige SÓLO en la app.
  *
- * Desde LOGIN_SOLO_RUT_DESDE el ingreso deja de aceptar el nombre de usuario:
- *   - app    → sólo RUT
- *   - portal → RUT o email (el email se mantiene por decisión del negocio)
+ * Desde LOGIN_SOLO_RUT_DESDE la app deja de aceptar el nombre de usuario y se
+ * ingresa sólo con RUT. El **portal NO tiene corte**: sigue aceptando nombre de
+ * usuario, RUT o email (decisión del negocio). Por eso portal/index.php ya no
+ * muestra aviso y portal/modulos/procesar_login.php sólo usa de acá
+ * login_normalizar_rut(); si alguna vez el portal tuviera que sumarse al corte,
+ * hay que llamar explícitamente a login_solo_rut_activo() allá.
  *
  * El cambio NO requiere subir nada ese día: el corte lo decide la fecha, así
  * que el código puede quedar publicado desde antes y se activa solo.
  *
- * Vive en la raíz de visibility2/ y no dentro de app/ o portal/ porque los dos
- * lados tienen que coincidir en la fecha. Ojo: portal/con_.php NO carga el
+ * Vive en la raíz de visibility2/ (y no dentro de app/) porque el portal
+ * también necesita login_normalizar_rut(). Ojo: portal/con_.php NO carga el
  * .env (tiene las credenciales fijas), así que la fecha va acá como constante
  * y el .env sólo puede sobrescribirla del lado de la app.
  */

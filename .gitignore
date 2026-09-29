@@ -6,8 +6,12 @@
 /portal/exportaciones/
 /portal/modulos/images
 /portal/modulos/uploads
-/app/uploads/
+# Las fotos no se versionan, pero el .htaccess que impide ejecutar codigo dentro de
+# uploads/ SI. Ojo con el orden: la regla tiene que ser "/app/uploads/*" y no
+# "/app/uploads/", porque si se ignora el directorio git no entra a mirarlo y la
+# excepcion de abajo nunca se evalua.
 /app/uploads/*
+!/app/uploads/.htaccess
 /app/uploads_material/
 /app/uploads_*/*
 /uploads/
@@ -41,6 +45,10 @@ portal/RESTful/cache/
 *.bak
 *.tmp
 *.log
+# cPanel escribe el log de PHP con este nombre exacto, sin extension, asi que *.log
+# no lo cubre. Traia rutas absolutas del servidor y avisos de PHP de produccion.
+error_log
+**/error_log
 
 # Excepcion: las migraciones SI se versionan. La regla *.sql de arriba existe
 # para los volcados completos (el respaldo pesa ~1,6 GB), pero se estaba

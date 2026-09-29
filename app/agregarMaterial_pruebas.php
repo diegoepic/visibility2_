@@ -5,6 +5,7 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/con_.php';
+require_once __DIR__ . '/lib/dominio/autorizacion.php';
 // OJO: la sesión ya la abre _session_guard.php vía .user.ini (auto_prepend_file)
 // NO llamar session_start() aquí para evitar warnings.
 
@@ -67,29 +68,11 @@ if ($valorPropuesto === '' || !preg_match('/^\d$/', $valorPropuesto)) {
 }
 
 // ------- Validar que el ejecutor tiene permisos sobre la campaña/local -------
-$sqlPerm = "
-    SELECT 1
-    FROM formularioQuestion fq
-    INNER JOIN formulario f ON f.id = fq.id_formulario
-    INNER JOIN local      l ON l.id = fq.id_local
-    WHERE fq.id_formulario = ?
-      AND fq.id_local      = ?
-      AND fq.id_usuario    = ?
-      AND f.id_empresa     = ?
-    LIMIT 1
-";
-$stmtPerm = $conn->prepare($sqlPerm);
-if (!$stmtPerm) {
-    json_error('Error preparando validación de permisos: ' . $conn->error);
-}
-$stmtPerm->bind_param('iiii', $idCampana, $idLocal, $usuario_id, $empresa_id);
-$stmtPerm->execute();
-$resPerm = $stmtPerm->get_result();
-if ($resPerm->num_rows === 0) {
-    $stmtPerm->close();
+// El true final conserva el INNER JOIN a `local` que traía esta comprobación: acá
+// el local además debe seguir existiendo. Ver la nota en lib/dominio/autorizacion.php.
+if (!puede_usuario_tocar($conn, $usuario_id, $idCampana, $idLocal, $empresa_id, true)) {
     json_error('Sin permiso sobre este material/local o no existe.', 403);
 }
-$stmtPerm->close();
 
 // ------- Resolver material (tabla material) -------
 $sqlMat = "

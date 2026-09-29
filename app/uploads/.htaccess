@@ -1,0 +1,42 @@
+# uploads/ guarda evidencia fotografica subida por los ejecutores.
+# Aqui NO se ejecuta codigo, nunca. Se sirven imagenes y nada mas.
+#
+# Por que existe este archivo: la ruta de respaldo de guardarFotoUnitaria() escribia el
+# archivo con la extension que venia en el nombre enviado por el cliente cuando la
+# conversion a WebP fallaba. Eso ya se corrigio con una lista blanca, pero esta es la
+# segunda barrera: aunque manana alguien reintroduzca el fallo, el archivo no se ejecuta.
+
+# --- Apache 2.4 con mod_php ---
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+  php_flag engine off
+</IfModule>
+<IfModule mod_php5.c>
+  php_flag engine off
+</IfModule>
+
+# --- Cualquier handler (PHP-FPM / CGI no lee php_flag) ---
+# Se fuerza el handler por defecto y se quitan los tipos que podrian ejecutarse.
+<FilesMatch "\.(?i:php|phtml|phps|php[0-9]|phar|inc|cgi|pl|py|sh|bash|exe|htaccess|htpasswd)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .phar .cgi .pl .py
+RemoveType    .php .phtml .php3 .php4 .php5 .php7 .php8 .phar
+
+<IfModule mod_headers.c>
+  # El navegador no debe adivinar el tipo: si se guardo como imagen, se sirve como imagen.
+  Header set X-Content-Type-Options "nosniff"
+</IfModule>
+
+# Sin listados de directorio: las rutas de las fotos no son secretas, pero el indice
+# completo de la evidencia de una campana no tiene por que estar a un clic.
+Options -Indexes -ExecCGI

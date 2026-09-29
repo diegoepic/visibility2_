@@ -97,6 +97,11 @@ if ($action === 'crear') {
     $latNvaStr = (string)$latNueva;
     $lngNvaStr = (string)$lngNueva;
 
+    // IDEMPOTENCIA: no hace falta clave. Este endpoint es un upsert semántico — busca la
+    // solicitud PENDIENTE de este usuario para este local y la actualiza; sólo inserta si no
+    // hay ninguna. Reenviar el mismo formulario no crea un duplicado, actualiza el mismo
+    // registro. Además se llama con fetch directo, no por la cola offline, así que no hay
+    // reintentos automáticos. Queda anotado para que no vuelva a salir como hallazgo.
     // ¿Existe ya una solicitud pendiente de este usuario para este local?
     $stmtEx = $conn->prepare("SELECT id FROM solicitud_cambio_local WHERE id_local=? AND id_usuario=? AND estado='pendiente' AND deleted_at IS NULL LIMIT 1");
     $stmtEx->bind_param('ii', $idLocal, $usuarioId);

@@ -1,5 +1,5 @@
 //version del service  worker (subir en 0.0.1 para refrescar cache de los archivos estaticos, tambien subir a la misma version el sw en assets/js/v2_cache.js)
-const VERSION        = 'v7.1.7';
+const VERSION        = 'v7.7.1';
 const APP_SCOPE      = '/visibility2/app';
 const STATIC_CACHE   = `static-${VERSION}`;
 const RUNTIME_CACHE  = `runtime-${VERSION}`;
@@ -8,6 +8,9 @@ const RUNTIME_MAX_ITEMS = 80;
 //achivos guardados en la cache
 const STATIC_ASSETS = [
   `${APP_SCOPE}/index_pruebas.php`,
+  // El centro de recuperación se consulta justamente cuando algo falló, que suele ser sin
+  // red. Va precacheado y networkFirst lo busca también en STATIC_CACHE (ver más abajo).
+  `${APP_SCOPE}/recuperacion.php`,
   `${APP_SCOPE}/assets/plugins/bootstrap/css/bootstrap.min.css`,
   `${APP_SCOPE}/assets/plugins/jquery/jquery-3.6.0.min.js`,
   `${APP_SCOPE}/assets/plugins/font-awesome/css/font-awesome.min.css`,
@@ -21,6 +24,31 @@ const STATIC_ASSETS = [
   `${APP_SCOPE}/assets/js/bootstrap_index_cache.js`,
   `${APP_SCOPE}/assets/js/journal_db.js`,
   `${APP_SCOPE}/assets/js/journal_ui.js`,
+  // ---- JavaScript que salio del inline de las dos paginas grandes (T6-6) ----
+  // TODOS estos se piden SIN ?v=. cacheFirst() hace match sin ignoreSearch, asi que la
+  // entrada se guarda sin query string y pedirla con ?v= no la encuentra: se iria a la red
+  // y sin red devolveria 503. Antes eran <script> inline de una pagina precacheada, o sea
+  // que SIEMPRE estaban disponibles offline; esto es lo que mantiene esa propiedad.
+  // El cache-busting lo da el nombre del cache (static-${VERSION}).
+  //
+  // index_pruebas.php: el nucleo de la ruta (mapa, filtros, planificador) y sus dos modales.
+  `${APP_SCOPE}/assets/js/ruta_mapa.js`,
+  `${APP_SCOPE}/assets/js/modal_reportar_direccion.js`,
+  `${APP_SCOPE}/assets/js/modal_cambiar_vendedor.js`,
+  // gestionarPruebas.php, donde el ejecutor pasa la jornada: 121 KB que antes viajaban en
+  // CADA gestion que abria. El orden de aqui no importa; el de la pagina si (geo, offline,
+  // form), porque comparten el ambito lexico global.
+  `${APP_SCOPE}/assets/js/gestion_geo.js`,
+  `${APP_SCOPE}/assets/js/gestion_offline.js`,
+  `${APP_SCOPE}/assets/js/gestion_form.js`,
+  // Librerias de terceros servidas desde el propio servidor. Sin esto, en modo
+  // avion no existen imageCompression/heic2any/exifr y las fotos se encolan sin comprimir
+  // y sin EXIF. Se piden SIN ?v=: la clave de cache incluye el query string, y el
+  // cache-busting ya lo da el nombre del cache (static-${VERSION}).
+  // heic2any pesa ~1,3 MB (lleva libheif dentro); es el precio de convertir HEIC offline.
+  `${APP_SCOPE}/assets/vendor/browser-image-compression.js`,
+  `${APP_SCOPE}/assets/vendor/heic2any.min.js`,
+  `${APP_SCOPE}/assets/vendor/exifr.umd.js`,
 ];
 
 self.addEventListener('install', (event) => {
@@ -138,8 +166,11 @@ async function networkFirst(request, navFallback = `${APP_SCOPE}/index_pruebas.p
     const hit = await cache.match(request);
     if (hit) return hit;
     if (request.mode === 'navigate') {
-      // Intento fallback de navegación a HTML conocido
       const staticCache = await caches.open(STATIC_CACHE);
+      // Primero la propia página, si está precacheada: antes se caía directo al fallback y
+      // recuperacion.php acababa mostrando el index sin que nadie entendiera por qué.
+      const propia = await staticCache.match(request, { ignoreSearch: true });
+      if (propia) return propia;
       const fallback = await staticCache.match(navFallback);
       if (fallback) return fallback;
     }

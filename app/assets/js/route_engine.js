@@ -142,9 +142,24 @@
 
   // Quita HTML/entidades de las instrucciones (el fallback DirectionsService las entrega en HTML)
   // para poder renderizarlas como texto plano sin inyectar markup.
-  function sanitizeInstruction(html){
-    return String(html == null ? '' : html)
-      .replace(/<[^>]*>/g, ' ')
+  /**
+   * Google devuelve la instrucción como HTML, mezclando etiquetas de dos clases:
+   *   inline  <b>Vaitea</b>            -> resaltan un nombre DENTRO de la frase
+   *   bloque  <div>Calle restringida</div>, <br>  -> son una frase APARTE
+   *
+   * Antes se reemplazaban todas por un espacio, y eso separaba la puntuación de su
+   * palabra: "…hacia <b>Río Clarillo</b>.<div>Calle de uso restringido</div>" salía como
+   * "Río Clarillo . Calle de uso restringido" — con el punto suelto en medio.
+   *
+   * Ahora las de bloque se vuelven ". " (que es lo que significan) y las inline
+   * desaparecen sin dejar hueco.
+   */
+  // Etiquetas que abren o cierran un BLOQUE: cada una es un corte de frase.
+  var BLOQUE_RE = /<\s*\/?\s*(?:div|p|li|ol|ul|br)[^>]*>/gi;
+
+  function limpiarTrozo(s){
+    return s
+      .replace(/<[^>]*>/g, '')        // inline (b, i, span, wbr): fuera SIN dejar hueco
       .replace(/&nbsp;/gi, ' ')
       .replace(/&amp;/gi, '&')
       .replace(/&lt;/gi, '<')
@@ -152,7 +167,23 @@
       .replace(/&#39;|&apos;/gi, "'")
       .replace(/&quot;/gi, '"')
       .replace(/\s+/g, ' ')
+      .replace(/\s+([.,;:])/g, '$1')  // "Clarillo ." -> "Clarillo."
       .trim();
+  }
+
+  function sanitizeInstruction(html){
+    var trozos = String(html == null ? '' : html)
+      .split(BLOQUE_RE)
+      .map(limpiarTrozo)
+      .filter(function(s){ return s !== ''; });
+
+    // Se unen con ". " sólo si hace falta: si el trozo anterior YA termina en puntuación,
+    // basta un espacio. Así no se inventa un punto final que Google no puso, ni salen
+    // dos seguidos.
+    return trozos.reduce(function(acc, t){
+      if (acc === '') return t;
+      return acc + (/[.!?,;:]$/.test(acc) ? ' ' : '. ') + t;
+    }, '');
   }
 
   function durationToSeconds(d){

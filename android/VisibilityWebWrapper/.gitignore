@@ -1,0 +1,22 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Firma de release. La llave y sus contraseñas NO viven en el proyecto: están en
+# C:/Users/Diego/.keys/visibility/ (fuera de OneDrive). Estas reglas son la red de
+# seguridad por si alguien vuelve a copiarlas acá.
+*.jks
+*.keystore
+keystore.properties

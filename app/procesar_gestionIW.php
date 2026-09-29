@@ -26,6 +26,7 @@ if (
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/lib/encuesta_vehiculo.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/lib/dominio/autorizacion.php';
 
 $idCampana   = isset($_POST['idCampana']) ? intval($_POST['idCampana']) : 0;
 $id_local    = 0; // Siempre 0 para IW
@@ -53,25 +54,14 @@ if ((int)$c1 === 0) {
     die("Campaña inválida o sin permiso.");
 }
 
-// Validar que la visita existe, pertenece al usuario y a la campaña
-$sqlVis = "SELECT id FROM visita WHERE id=? AND id_usuario=? AND id_formulario=? LIMIT 1";
-$stmt = $conn->prepare($sqlVis);
-$stmt->bind_param("iii", $visita_id, $usuario_id, $idCampana);
-$stmt->execute();
-$stmt->bind_result($vIdFound); $stmt->fetch(); $stmt->close();
-if (!$vIdFound) {
+// Validar que la visita existe, pertenece al usuario y a la campaña, y de paso
+// quedarse con su local. Antes eran DOS consultas idénticas seguidas: una para
+// comprobar y otra para leer id_local.
+$visitaIW = auth_visita($conn, $visita_id, $usuario_id, $idCampana);
+if ($visitaIW === null) {
     die("Visita no encontrada o sin permisos.");
 }
-
-// Después de validar que la visita existe:
-$id_local = 0;
-$stmt = $conn->prepare("SELECT id_local FROM visita WHERE id=? AND id_usuario=? AND id_formulario=? LIMIT 1");
-$stmt->bind_param("iii", $visita_id, $usuario_id, $idCampana);
-$stmt->execute();
-$stmt->bind_result($id_local);
-if (!$stmt->fetch()) { $stmt->close(); die("Visita no encontrada o sin permisos."); }
-$stmt->close();
-$id_local = (int)$id_local;
+$id_local = $visitaIW['id_local'];
 
 
 // Normalizar coordenadas finales (para cierre de visita)

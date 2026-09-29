@@ -6,9 +6,13 @@
   // paradas se dividen en bloques (chunks) que se calculan encadenados.
   const SAFE_CHUNK_WAYPOINTS = 23;
 
-  // Límites de waypoints por enlace al EXPORTAR a Google Maps (distintos del límite de la API):
-  // la app de Maps en móvil acepta pocas paradas por URL; en escritorio admite más.
-  const EXPORT_MAX_WAYPOINTS_MOBILE  = 3; // + destino
+  // Límites de waypoints por enlace al EXPORTAR a Google Maps (distintos del límite de la API).
+  // 9 es el tope que documenta Google para las Maps URLs (/maps/dir/?api=1), así que ninguno de
+  // los dos puede subir más. El móvil estuvo en 3 por precaución (la app de Maps recortaba deep
+  // links largos); se igualó a 9 el 02-09-2026 para que una ruta de 20 locales salga en 2 bloques
+  // y no en 5. Si vuelve a aparecer una ruta a la que la app le come paradas, bajar SÓLO este
+  // valor: el resto del export se acomoda solo y el aviso de index_pruebas.php lo lee de acá.
+  const EXPORT_MAX_WAYPOINTS_MOBILE  = 9; // + destino
   const EXPORT_MAX_WAYPOINTS_DESKTOP = 9; // + destino
 
   // Distancia en metros (haversine). Métrica real para ordenar paradas; sustituye a la antigua
@@ -80,6 +84,29 @@
   /**
    * Divide un array de puntos en bloques de hasta `chunkSize` waypoints + 1 destino (= chunkSize+1
    * puntos por bloque). Cada bloque se calcula con su propio origen encadenado en planFull.
+   *
+   * POR QUE SIGUE SIENDO UN CORTE SECUENCIAL Y NO UN CLUSTERING (hallazgo V-27)
+   * --------------------------------------------------------------------------
+   * El plan de la Tanda 6 pedia reemplazar esto por k-means sobre las coordenadas, con el
+   * argumento de que "la particion en bloques destruye la optimalidad global". Se implemento
+   * y se midio, y resulto ser al reves. Los numeros estan en app/tests/route_clusters.test.mjs:
+   *
+   *     trazado                  corte actual   k-means
+   *     nube uniforme, 60           239,0 km    280,8 km   +17,5%
+   *     3 comunas x 20               68,3 km     76,7 km   +12,4%
+   *     2 comunas lejanas x 30       59,6 km     72,2 km   +21,2%
+   *     4 comunas x 13               97,0 km    142,7 km   +47,2%
+   *
+   * El motivo: lo que se corta aqui NO es una lista cualquiera, es la salida de
+   * nearestNeighbor + twoOpt, o sea un recorrido ya bueno. Partirlo en tramos CONTIGUOS no
+   * cuesta un solo metro —el encadenado reproduce exactamente el mismo camino, y hay una
+   * prueba que lo verifica—, mientras que clusterizar REORDENA los puntos y ahi si se pierde.
+   *
+   * Lo unico que se gana clusterizando es que Google reordene dentro de bloques mas compactos,
+   * y eso no compensa romper el orden global.
+   *
+   * Contexto, sobre 25.925 rutas (usuario x dia) del volcado del 2026-09-03: la mediana es de
+   * 13 locales y el p90 de 23, asi que el 94% de las jornadas ni siquiera llega a partirse.
    */
   function chunkPoints(points, chunkSize){
     chunkSize = chunkSize || SAFE_CHUNK_WAYPOINTS;
@@ -90,6 +117,20 @@
       i += chunkSize + 1;
     }
     return chunks;
+  }
+
+  /**
+   * Distancia total de recorrer una lista de bloques encadenados desde `origin`.
+   * Existe para poder COMPARAR estrategias de particion en las pruebas, que es lo que
+   * decidio activar clusterPoints en vez de darlo por bueno.
+   */
+  function distanciaDeBloques(origin, bloques){
+    let total = 0;
+    let desde = origin;
+    for (const b of (bloques || [])){
+      for (const p of b){ total += haversine(desde, p); desde = p; }
+    }
+    return total;
   }
 
   // Segundos a partir de la duración interna ("123s" | número).
@@ -187,7 +228,17 @@
 
     let ordNormales = nearestNeighbor(origin, normales);
     ordNormales     = twoOpt(origin, ordNormales);
-    const ordered   = [...ordNormales, ...botillerias];
+
+    // Las botillerías van al final por su horario de apertura, pero ENTRE ELLAS también se
+    // ordenan. Antes se concatenaban tal como venían de la consulta, así que en una jornada con
+    // varias botillerías todo ese tramo final quedaba sin optimizar. El origen del tramo es la
+    // última parada normal (o la posición del ejecutor si toda la ruta son botillerías).
+    let ordBotillerias = [];
+    if (botillerias.length) {
+      const origenTramo = ordNormales.length ? ordNormales[ordNormales.length - 1] : origin;
+      ordBotillerias = twoOpt(origenTramo, nearestNeighbor(origenTramo, botillerias));
+    }
+    const ordered = [...ordNormales, ...ordBotillerias];
 
     // 2. Ruta corta (≤ 24 puntos) — una sola llamada a RouteEngine.
     if (ordered.length <= SAFE_CHUNK_WAYPOINTS + 1){
@@ -245,6 +296,7 @@
     nearestNeighbor,
     twoOpt,
     chunkPoints,
+    distanciaDeBloques,
     planFull,
     haversine,
     buildGoogleMapsExportChunks,

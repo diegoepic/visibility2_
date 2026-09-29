@@ -133,8 +133,11 @@ function guardarFotoUnitaria(array $file, string $subdir, string $prefix, int $i
     $mime     = mime_content_type($tmp);
 
     if (in_array($mime, ['image/heic', 'image/heif'])) {
-        $ext      = pathinfo($origName, PATHINFO_EXTENSION) ?: 'heic';
-        $filename = "{$prefix}{$idLocal}_" . uniqid() . ".{$ext}";
+        // Extensión fija: el MIME ya se comprobó por contenido, pero antes el nombre del
+        // archivo destino salía del nombre que enviaba el cliente, así que un archivo cuyo
+        // contenido pasara por HEIC podía escribirse con cualquier extensión dentro de
+        // uploads/. Si el contenido es HEIC, el archivo se llama .heic y punto.
+        $filename = "{$prefix}{$idLocal}_" . uniqid() . ".heic";
         $destino  = $baseDir . $filename;
         if (!move_uploaded_file($tmp, $destino)) {
             throw new Exception("No se pudo guardar archivo HEIC/HEIF ($prefix).");
@@ -355,6 +358,33 @@ if (!isset($_POST['visita_id']) || intval($_POST['visita_id']) <= 0) {
 }
 $visita_id = intval($_POST['visita_id']);
 
+require_once __DIR__ . '/lib/dominio/autorizacion.php';
+require_once __DIR__ . '/lib/dominio/observacion.php'; // mismo bug de largo que la version _pruebas
+// La visita tiene que ser de este usuario, esta campaña y este local. Sin esta
+// comprobación, un ejecutor podía enviar el visita_id de otro y colgarle su gestión.
+// Este formulario no tiene fallback por client_guid, así que acá se rechaza.
+// Desde T6-2 usa la misma auth_visita() que el resto: la regla está en
+// lib/dominio/autorizacion.php y ya no hay una copia por archivo.
+//
+// Se redirige con mensaje en vez de lanzar excepción a propósito: el try/catch de este
+// archivo recién abre en la línea 394, así que un throw acá saldría como error fatal de
+// PHP. Ese es el mismo defecto que ya tiene el "Falta el identificador de visita" de
+// arriba; no se replica.
+// registrar=false: este archivo anota el rechazo con su propio mensaje, abajo.
+$visitaEsSuya = auth_visita(
+    $conn, (int)$visita_id, (int)$usuario_id, (int)$idCampana, (int)$idLocal, false, false
+) !== null;
+if (!$visitaEsSuya) {
+    error_log(sprintf(
+        '[seguridad] visita_id ajeno rechazado en procesar_gestion.php: uid=%d visita=%d form=%d local=%d',
+        $usuario_id, $visita_id, $idCampana, $idLocal
+    ));
+    header("Location: gestionar.php?idCampana=$idCampana"
+         . "&nombreCampana=" . urlencode($nombreCampana)
+         . "&idLocal=$idLocal&status=error&mensaje=" . urlencode('La visita indicada no te corresponde. Vuelve a abrir la gestión.'));
+    exit();
+}
+
 // ---------------------------------------------------
 // 4) Iniciar Transacción y Verificar Permisos
 // ---------------------------------------------------
@@ -366,22 +396,10 @@ $fechaVisita = date('Y-m-d H:i:s');
 $obsGeneral = ""; // para evitar notices
 
 try {
-    $sqlVer = "
-        SELECT COUNT(*) AS cnt
-        FROM formularioQuestion
-        WHERE id_formulario=? 
-          AND id_local=? 
-          AND id_usuario=?
-    ";
-    $stmtVer = $conn->prepare($sqlVer);
-    if (!$stmtVer) throw new Exception("Error verificación: " . $conn->error);
-    $stmtVer->bind_param("iii", $idCampana, $idLocal, $usuario_id);
-    $stmtVer->execute();
-    $rowVer = $stmtVer->get_result()->fetch_assoc();
-    if ((int)$rowVer['cnt'] === 0) {
+    /* Permisos: la regla vive en lib/dominio/autorizacion.php */
+    if (!puede_usuario_tocar($conn, (int)$usuario_id, (int)$idCampana, (int)$idLocal)) {
         throw new Exception("No tienes permisos o no existe la campaña/local.");
     }
-    $stmtVer->close();
 
     // ---------------------------------------------------
     // 5) Actualizar Materiales / Estados
@@ -424,9 +442,7 @@ try {
                 throw new Exception("Valor ($valorNum) excede valor_propuesto ({$rowV['valor_propuesto']}) en ID=$idFQ.");
             }
 
-            $obs = isset($observaciones[$idFQ])
-                 ? htmlspecialchars(trim($observaciones[$idFQ]), ENT_QUOTES, 'UTF-8')
-                 : '';
+            $obs = observacion_normalizar($observaciones[$idFQ] ?? '');
             $sqlUpMat = "
                 UPDATE formularioQuestion
                 SET valor      = ?,
@@ -498,9 +514,11 @@ try {
                 if (!isset($valores[$idFQ]) || trim($valores[$idFQ]) === '') {
                     $motNImpl  = isset($motivoNoImpl[$idFQ]) ? trim($motivoNoImpl[$idFQ]) : '';
                     $obsConcat = $motivoSel . ' - ' . $motNImpl;
+                    // Con tope: sin el, la fila acababa llena y el material no se podia
+                    // volver a guardar. Ver app/lib/dominio/observacion.php.
                     $sqlUpNo = "
                         UPDATE formularioQuestion
-                        SET observacion = CONCAT(COALESCE(observacion, ''), ' ', ?)
+                        SET observacion = " . observacion_sql_concat() . " 
                         WHERE id             = ?
                           AND id_formulario = ?
                           AND id_local      = ?
@@ -586,6 +604,7 @@ try {
             }
         }
 
+        $obsGeneral = observacion_recortar($obsGeneral, V2_OBSERVACION_MAX);
         $sqlPend = "
             UPDATE formularioQuestion
             SET fechaVisita = ?,
@@ -660,6 +679,7 @@ try {
             }
         }
 
+        $obsGeneral = observacion_recortar($obsGeneral, V2_OBSERVACION_MAX);
         $sqlCan = "
             UPDATE formularioQuestion
             SET estado      = ?,

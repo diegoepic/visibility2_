@@ -4,6 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';
+require_once __DIR__ . '/lib/dominio/preguntas_cadena.php';
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
@@ -97,8 +98,15 @@ $encuestaPendiente = true;
 // Obtener las preguntas de la encuesta
 $preguntas = [];
 if ($encuestaPendiente) {
+    /* Sets por cadena. Este archivo NO aplicaba la regla: traia todas las preguntas de
+       la campana, incluidas las de otras cadenas. El ejecutor las respondia y el guardado
+       (procesar_gestion_pruebas.php) las descartaba en silencio. Hoy no tiene efecto
+       -id_cadena es NULL en las 33.259 filas- pero deja de ser una trampa. */
+    $filtroCadena = preguntas_cadena_filtro(
+        $conn, (int)$idCampana, preguntas_cadena_de_local($conn, (int)$idLocal)
+    );
     $sql_encuesta = "
-      SELECT 
+      SELECT
         id AS id_form_question,
         question_text,
         id_question_type,
@@ -106,11 +114,11 @@ if ($encuestaPendiente) {
         is_valued,
         is_required
       FROM form_questions
-      WHERE id_formulario = ?
+      WHERE id_formulario = ?{$filtroCadena['cond']}
       ORDER BY sort_order ASC
     ";
     $stmt_encuesta = $conn->prepare($sql_encuesta);
-    $stmt_encuesta->bind_param("i", $idCampana);
+    $stmt_encuesta->bind_param($filtroCadena['tipos'], ...$filtroCadena['params']);
     $stmt_encuesta->execute();
     $result_encuesta = $stmt_encuesta->get_result();
     while ($rowE = $result_encuesta->fetch_assoc()) {
@@ -215,8 +223,11 @@ function getParentQuestionId($conn, $id_dependency_option) {
     <link rel="stylesheet" href="assets/plugins/font-awesome/css/font-awesome.min.css">
     <link rel="stylesheet" href="assets/css/main.css">
     <link rel="stylesheet" href="assets/css/main-responsive.css">
-    <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@latest/dist/browser-image-compression.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
+    <!-- Librerias de foto servidas desde el propio servidor (assets/vendor/, version fija).
+         Antes venian de cdn.jsdelivr.net y en modo avion no existian: las fotos se encolaban
+         sin comprimir y sin EXIF. Van precacheadas en sw.js. Ver assets/vendor/README.md. -->
+    <script src="/visibility2/app/assets/vendor/browser-image-compression.js"></script>
+    <script src="/visibility2/app/assets/vendor/exifr.umd.js"></script>
 
 <style>
 input[type=file][id^="fotoPregunta_"] {
@@ -514,6 +525,7 @@ input[type=file][id^="fotoPregunta_"] {
                                          <label>Observación {$sectionLabel}:</label>
                                         <textarea class='form-control'
                                                   name='observacion[{$idFQ}]'
+                                                  maxlength='1000'
                                                   placeholder='Observación...'></textarea>
                                       </div>
                                     </div>
@@ -1289,7 +1301,10 @@ function setupFileInput(inputElem) {
       const compressed = await compressFile(rawFile);
 
       const img = document.createElement('img');
-      img.src = URL.createObjectURL(compressed);
+      // El blob mantiene la imagen completa en memoria hasta que se revoque; se suelta más
+      // abajo, apenas la foto queda subida y la miniatura puede apuntar al servidor.
+      const blobUrl = URL.createObjectURL(compressed);
+      img.src = blobUrl;
       img.classList.add('thumbnail');
       previewContainer.appendChild(img);
       const bar = document.createElement('div');
@@ -1305,6 +1320,11 @@ function setupFileInput(inputElem) {
           meta,
           { lat: cachedPhotoCoords.lat || '', lng: cachedPhotoCoords.lng || '' }
         );
+
+        // Subida OK: la miniatura pasa a la copia del servidor y se suelta el blob. Si falla,
+        // el catch de abajo no lo libera a propósito: la foto sigue siendo lo único que hay.
+        img.src = resp.url;
+        try { URL.revokeObjectURL(blobUrl); } catch (_) {}
 
         const hiddenInput = document.createElement('input');
         hiddenInput.type = 'hidden';
@@ -1716,7 +1736,7 @@ function construirBloqueMaterial(material) {
       </div>
       <div class="form-group">
         <label>Observación ${SECTION_LABEL}:</label>
-        <textarea class="form-control" name="observacion[${idFQ}]" placeholder="Observación..."></textarea>
+        <textarea class="form-control" name="observacion[${idFQ}]" maxlength="1000" placeholder="Observación..."></textarea>
       </div>
     </div>`;
 
@@ -1844,7 +1864,7 @@ function agregarBloqueMaterial(idFQ, nombreMat, valorImp){
         </div>
         <div class="form-group">
           <label>Observación Implementación:</label>
-          <textarea class="form-control" name="observacion[${idFQ}]" placeholder="Observación..."></textarea>
+          <textarea class="form-control" name="observacion[${idFQ}]" maxlength="1000" placeholder="Observación..."></textarea>
         </div>
       </div>
     </div>`;

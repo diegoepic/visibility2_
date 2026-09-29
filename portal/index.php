@@ -7,11 +7,8 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 
-// Aviso del cambio de acceso a RUT (ver /visibility2/lib_login_rut.php)
-require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/lib_login_rut.php';
-$rutSoloYa = login_solo_rut_activo();
-$rutDias   = login_dias_para_corte();
-$rutFecha  = date('d/m/Y', strtotime(login_fecha_corte()));
+// El portal sigue aceptando nombre de usuario (además de RUT y email), así que
+// acá no va ningún aviso de corte: ese cambio es sólo de la app (app/login.php).
 
 $error_login = "";
 $error_forgot = "";
@@ -97,24 +94,10 @@ if (isset($_SESSION['success_forgot'])) {
         <div class="box-login">
             <h3>Inicia sesi&oacute;n en tu cuenta</h3>
             <p>
-                Por favor, ingrese su nombre y contrase&ntilde;a para iniciar sesi&oacute;n.
+                Ingresa con tu nombre de usuario, RUT o email y tu contrase&ntilde;a.
             </p>
             <form class="form-login" action="modulos/procesar_login.php" method="POST">
                 <!-- Mensaje de Error de Inicio de Sesi��n -->
-                <?php /* Cambio de acceso a RUT: lo ve todo el mundo, porque quien
-                         entra con nombre de usuario no tiene otra forma de enterarse. */ ?>
-                <div class="alert <?php echo $rutSoloYa ? 'alert-info' : 'alert-warning'; ?>">
-                    <i class="fa fa-id-card-o"></i>
-                    <?php if ($rutSoloYa): ?>
-                        El ingreso es con tu <b>RUT</b> (sin puntos ni guion) o tu <b>email</b>.
-                        El nombre de usuario ya no sirve para entrar.
-                    <?php else: ?>
-                        A partir del <b><?php echo htmlspecialchars($rutFecha); ?></b>
-                        se ingresa con el <b>RUT</b> (sin puntos ni guion) o el <b>email</b>:
-                        el nombre de usuario deja de servir<?php if ($rutDias > 1) { echo ' (faltan ' . (int)$rutDias . ' días)'; } ?>.
-                        Tu contraseña no cambia.
-                    <?php endif; ?>
-                </div>
 
                 <?php if ($error_login != ""): ?>
                     <div class="errorHandler alert alert-danger">
@@ -156,7 +139,7 @@ if (isset($_SESSION['success_forgot'])) {
                 <fieldset>
                     <div class="form-group">
                         <span class="input-icon">
-                            <input type="text" class="form-control" name="usuario" placeholder="Usuario" required>
+                            <input type="text" class="form-control" name="usuario" placeholder="Usuario, RUT o email" required>
                             <i class="fa fa-user"></i>
                         </span>
                     </div>

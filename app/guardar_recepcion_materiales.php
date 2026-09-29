@@ -26,6 +26,16 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 require_once __DIR__ . '/con_.php';
+require_once __DIR__ . '/lib/api_helpers.php';
+require_once __DIR__ . '/lib/idempotency.php';
+
+// Idempotencia: este endpoint hace un INSERT plano de la recepción y su detalle. Si la red
+// se corta después del commit pero antes de que llegue la respuesta, el ejecutor ve un
+// error, vuelve a pulsar "Registrar Recepción" y queda una recepción duplicada que alguien
+// tiene que ir a limpiar a mano. El formulario manda siempre la MISMA clave (se genera una
+// vez al abrir la página), así que el segundo envío devuelve la respuesta del primero.
+// Sin clave en el POST esto no hace nada: los clientes viejos siguen funcionando igual.
+if (function_exists('idempo_claim_or_fail')) { idempo_claim_or_fail($conn, 'recepcion_materiales'); }
 
 date_default_timezone_set('America/Santiago');
 
@@ -293,15 +303,24 @@ try {
 
     $conn->commit();
 
-    echo json_encode([
+    $respuesta = [
         'status'       => 'success',
         'message'      => 'Recepción registrada correctamente',
         'id_recepcion' => $id_recepcion,
-    ]);
+    ];
+    if (function_exists('idempo_get_key') && idempo_get_key()) {
+        idempo_store_and_reply($conn, 'recepcion_materiales', 200, $respuesta);
+        exit();
+    }
+    echo json_encode($respuesta);
 } catch (Throwable $e) {
     $conn->rollback();
     foreach ($savedPaths as $p) @unlink($p);
     error_log('guardar_recepcion_materiales error: ' . $e->getMessage());
+    // Fallo transitorio: se libera la clave para que un segundo intento sí se ejecute.
+    if (function_exists('idempo_mark_failed')) {
+        try { idempo_mark_failed($conn, 'recepcion_materiales', 'TRANSACTION_FAILED'); } catch (Throwable $_) {}
+    }
     echo json_encode(['status' => 'error', 'message' => 'Error interno al guardar. Intenta de nuevo.']);
 }
 exit();

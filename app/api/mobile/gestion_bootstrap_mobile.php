@@ -8,6 +8,7 @@ header('Expires: 0');
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';
 require_once __DIR__ . '/_auth_mobile.php';
+require_once __DIR__ . '/../../lib/dominio/preguntas_cadena.php';
 
 if (!isset($conn) || !($conn instanceof mysqli)) {
     mobile_json_response(500, [
@@ -264,6 +265,11 @@ foreach ($rowsMateriales as $mat) {
     ];
 }
 
+/* Sets por cadena: misma regla que el formulario web. Esta API tampoco la aplicaba. */
+$filtroCadena = preguntas_cadena_filtro(
+    $conn, (int)$idCampana, preguntas_cadena_de_local($conn, (int)$idLocal)
+);
+
 $sqlPreguntas = "
     SELECT
       id AS id_form_question,
@@ -273,11 +279,13 @@ $sqlPreguntas = "
       is_valued,
       is_required
     FROM form_questions
-    WHERE id_formulario = ?
+    WHERE id_formulario = ?{$filtroCadena['cond']}
     ORDER BY sort_order ASC
 ";
 
-$rowsPreguntas = dbFetchAllAssocMobile($conn, $sqlPreguntas, "i", [$idCampana]);
+$rowsPreguntas = dbFetchAllAssocMobile(
+    $conn, $sqlPreguntas, $filtroCadena['tipos'], $filtroCadena['params']
+);
 
 $preguntas = [];
 $parentQuestions = [];

@@ -241,16 +241,29 @@ function convertToWebP($srcPath, $dstPath, $maxDim = 1280, $quality = 80) {
 $dirUpload = __DIR__ . '/uploads/uploads_fotos_pregunta/';
 if (!is_dir($dirUpload)) mkdir($dirUpload, 0755, true);
 
-$unique  = uniqid('q7_', true) . '.webp';
+$base    = uniqid('q7_', true);
+$unique  = $base . '.webp';
 $destino = $dirUpload . $unique;
 
 if (!convertToWebP($tmpName, $destino, 1280, 80)) {
-    $isHeic = preg_match('/\.(heic|heif)$/i', $origName) || preg_match('/heic|heif/i', (string)$mimeType);
-    $msg = $isHeic
-      ? 'No se pudo convertir HEIC a WebP. Instala Imagick con libheif o heif-convert en el servidor.'
-      : 'No se pudo convertir la imagen a WebP.';
-    echo json_encode(['status'=>'error','message'=>$msg]);
-    exit();
+    // RESPALDO: guardar el original en vez de perder la foto. Mismo arreglo que en
+    // procesar_pregunta_foto_pruebas.php; este archivo sigue vivo para los usuarios que no
+    // se han migrado, y gestionar.php ni siquiera carga heic2any, así que aquí SIEMPRE
+    // llegan los HEIC crudos.
+    $extFallback = strtolower(pathinfo($origName, PATHINFO_EXTENSION) ?: '');
+    if (!in_array($extFallback, ['jpg','jpeg','png','gif','webp','bmp','tiff','heic','heif'], true)) {
+        $extFallback = 'jpg';
+    }
+    if (is_file($destino)) @unlink($destino);
+
+    $unique  = $base . '.' . $extFallback;
+    $destino = $dirUpload . $unique;
+
+    if (!@move_uploaded_file($tmpName, $destino) && !@copy($tmpName, $destino)) {
+        echo json_encode(['status'=>'error','message'=>'No se pudo guardar la imagen.']);
+        exit();
+    }
+    error_log('[foto_encuesta_legacy] conversión falló, se guardó el original: ' . $unique);
 }
 @chmod($destino, 0644);
 

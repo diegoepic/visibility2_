@@ -11,11 +11,16 @@ function mobile_json_response(int $code, array $payload): never {
 function mobile_allow_cors(): void {
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 
-    if (
-        preg_match('#^http://localhost:\d+$#', $origin) ||
-        preg_match('#^http://127\.0\.0\.1:\d+$#', $origin) ||
-        preg_match('#^https://([a-z0-9.-]+\.)?visibility\.cl$#i', $origin)
-    ) {
+    // Mismo criterio que en _session_guard.php: localhost solo con V2_TEST_MODE=1.
+    $esDesarrollo = getenv('V2_TEST_MODE') === '1';
+    $origenPermitido =
+        preg_match('#^https://([a-z0-9.-]+\.)?visibility\.cl$#i', $origin) ||
+        ($esDesarrollo && (
+            preg_match('#^http://localhost:\d+$#', $origin) ||
+            preg_match('#^http://127\.0\.0\.1:\d+$#', $origin)
+        ));
+
+    if ($origenPermitido) {
         header("Access-Control-Allow-Origin: $origin");
         header('Vary: Origin');
     }

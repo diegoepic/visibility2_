@@ -29,6 +29,7 @@ if ($qid <= 0 || $visita_id <= 0) {
 }
 
 require_once __DIR__ . '/con_.php';
+require_once __DIR__ . '/lib/dominio/autorizacion.php';
 
 $empresaId = (int)$_SESSION['empresa_id'];
 
@@ -68,12 +69,7 @@ if (!$meta || (int)$meta['tipo'] !== 2 || (int)$meta['id_empresa'] !== $empresaI
 $idCampana = (int)$meta['id_formulario'];
 
 // 2) Validar visita del usuario y de esa campaña
-$sqlV = "SELECT id FROM visita WHERE id=? AND id_usuario=? AND id_formulario=? LIMIT 1";
-$stmt = $conn->prepare($sqlV);
-$stmt->bind_param("iii", $visita_id, $usuario, $idCampana);
-$stmt->execute();
-$stmt->bind_result($vId); $okV = $stmt->fetch(); $stmt->close();
-if (!$okV) {
+if (auth_visita($conn, $visita_id, $usuario, $idCampana) === null) {
   http_response_code(403);
   echo json_encode(['status'=>'error','message'=>'Visita no válida']); exit;
 }

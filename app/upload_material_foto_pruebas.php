@@ -127,6 +127,7 @@ if (!isset($conn) || !($conn instanceof mysqli)) {
 @$conn->set_charset('utf8mb4');
 
 /* ---------------- Idempotencia ---------------- */
+require_once __DIR__ . '/lib/api_helpers.php';  // visita_es_del_usuario()
 require_once __DIR__ . '/lib/idempotency.php';
 require_once __DIR__ . '/lib/foto_hash.php'; // detección de fotos duplicadas (sha256 + dHash perceptual)
 sanitize_idempotency_key();
@@ -201,6 +202,14 @@ if ($m = $conn->prepare("SELECT id FROM material WHERE nombre=? AND id_division=
   } else { $m->close(); }
 }
 if ($idMaterial <= 0) { json_fail(500, 'No se pudo determinar el material'); }
+
+/* ---------------- Validar propiedad del visita_id recibido ---------------- */
+// Igual que en procesar_gestion_pruebas.php: el id que manda el cliente se verifica contra
+// (usuario, campaña, local) antes de colgarle una foto. Si no calza queda en 0 y cae al
+// fallback por client_guid de más abajo, que sí valida propiedad.
+if ($visita_id > 0) {
+  $visita_id = visita_es_del_usuario($conn, $visita_id, $usuario_id, $idCampana, $idLocal);
+}
 
 /* ---------------- Resolver/crear VISITA si visita_id <= 0 (fallback offline) ---------------- */
 if ($visita_id <= 0) {

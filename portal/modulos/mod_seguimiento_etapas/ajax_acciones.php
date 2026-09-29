@@ -259,7 +259,10 @@ try {
             if ($valorIn !== '' && !ctype_digit($valorIn)) jr(['ok' => false, 'message' => 'Valor debe ser numérico.'], 400);
             $valor = ($valorIn === '') ? null : $valorIn;
 
-            $obs = htmlspecialchars(trim((string)($_POST['observacion'] ?? '')), ENT_QUOTES, 'UTF-8');
+            /* Misma regla que la app: la columna es finita y el editor tambien puede
+               desbordarla. La regla vive en app/, que es donde esta el resto del dominio. */
+            require_once __DIR__ . '/../../../app/lib/dominio/observacion.php';
+            $obs = observacion_normalizar($_POST['observacion'] ?? '');
 
             $st = $conn->prepare("UPDATE formularioQuestion SET etapa_material = ?, valor = COALESCE(?, valor), observacion = ? WHERE id = ?");
             $st->bind_param('sssi', $etapa, $valor, $obs, $idFQ);

@@ -19,6 +19,7 @@ if (empty($_POST['csrf_token']) || !isset($_SESSION['csrf_token']) || $_POST['cs
 }
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/con_.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/visibility2/app/lib/dominio/autorizacion.php';
 
 $idCampana = isset($_POST['idCampana']) ? (int)$_POST['idCampana'] : 0;
 if ($idCampana <= 0) { http_response_code(400); echo json_encode(['status'=>'error','message'=>'ID de campaña inválido']); exit; }
@@ -75,10 +76,10 @@ $sessKey = $idCampana . ':' . (int)$id_local;
 
 if (!empty($_SESSION['iw_visitas'][$sessKey])) {
   $visitaIdSess = (int)$_SESSION['iw_visitas'][$sessKey];
-  $q = $conn->prepare("SELECT id FROM visita WHERE id=? AND id_usuario=? AND id_formulario=? AND id_local=? AND fecha_fin IS NULL LIMIT 1");
-  $q->bind_param("iiii", $visitaIdSess, $usuarioId, $idCampana, $id_local);
-  $q->execute(); $q->bind_result($foundId); $okReuse = $q->fetch(); $q->close();
-  if ($okReuse && (int)$foundId > 0) { echo json_encode(['status'=>'success','visita_id'=>$foundId]); exit; }
+  // registrar=false: la visita guardada en $_SESSION puede haber quedado vieja y no
+  // encontrarla es lo normal (se crea una nueva). Anotarlo llenaria el log de ruido.
+  $reuso = auth_visita($conn, $visitaIdSess, $usuarioId, $idCampana, (int)$id_local, true, false);
+  if ($reuso !== null) { echo json_encode(['status'=>'success','visita_id'=>$reuso['id']]); exit; }
   unset($_SESSION['iw_visitas'][$sessKey]);
 }
 

@@ -1,11 +1,12 @@
 -- ============================================================
 -- 23_login_rut.sql
--- Prepara los datos para el ingreso SOLO por RUT (rige 01-09-2026).
+-- Prepara los datos para el ingreso SOLO por RUT en la APP (rige 01-09-2026).
+-- El portal no tiene corte: sigue aceptando usuario, RUT o email.
 --
 -- La app y el portal comparan el RUT tecleado, ya normalizado, contra
 -- usuario.rut TAL CUAL está guardado. Cualquier fila con puntos, guion o
--- espacios deja a esa persona sin poder entrar: no hay error a la vista,
--- simplemente nunca calza.
+-- espacios deja a esa persona sin poder entrar a la app: no hay error a la
+-- vista, simplemente nunca calza.
 --
 -- Revisado contra el respaldo del 20-08-2026 (311 usuarios activos):
 --   sin RUT ............ 0

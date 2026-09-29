@@ -88,6 +88,7 @@ if (!isset($conn) || !($conn instanceof mysqli)) {
 @$conn->set_charset('utf8mb4');
 
 /* ---------------- Idempotencia ---------------- */
+require_once __DIR__ . '/lib/api_helpers.php'; // api_response_error_v2()
 require_once __DIR__ . '/lib/idempotency.php';
 sanitize_idemp_key_mf($J);
 idempo_claim_or_fail($conn, 'material_foto_delete');
@@ -116,10 +117,15 @@ $sql = "
 ";
 $st = $conn->prepare($sql);
 if (!$st) {
-    idempo_store_and_reply($conn, 'material_foto_delete', 500, [
-        'status' => 'error', 'message' => 'Error preparando consulta'
-    ]);
-    exit;
+    // FALLO TRANSITORIO: se LIBERA la clave de idempotencia en vez de persistir el 500.
+    // Antes se llamaba a idempo_store_and_reply(..., 500, ...), que marca la fila de
+    // request_log como 'completed': el reintento de la cola reproducía el 500 sin ejecutar
+    // nada y el borrado se perdía. idempo_mark_failed() deja la fila reutilizable.
+    idempo_mark_failed($conn, 'material_foto_delete', 'TRANSACTION_FAILED');
+    // Los otros respondedores del proyecto (respond_err, idempo_store_and_reply) limpian
+    // el buffer antes de enviar cabeceras; api_response_error_v2 no lo hace.
+    while (ob_get_level()) { ob_end_clean(); }
+    api_response_error_v2(500, 'Error preparando consulta', [], $conn, 'material_foto_delete');
 }
 $st->bind_param('iiii', $empresa_id, $id_foto, $id_formularioQuestion, $usuario_id);
 
@@ -127,10 +133,15 @@ $row = null;
 $use_get_result = method_exists($st, 'get_result');
 if (!$st->execute()) {
     $st->close();
-    idempo_store_and_reply($conn, 'material_foto_delete', 500, [
-        'status' => 'error', 'message' => 'Error al ejecutar consulta'
-    ]);
-    exit;
+    // FALLO TRANSITORIO: se LIBERA la clave de idempotencia en vez de persistir el 500.
+    // Antes se llamaba a idempo_store_and_reply(..., 500, ...), que marca la fila de
+    // request_log como 'completed': el reintento de la cola reproducía el 500 sin ejecutar
+    // nada y el borrado se perdía. idempo_mark_failed() deja la fila reutilizable.
+    idempo_mark_failed($conn, 'material_foto_delete', 'TRANSACTION_FAILED');
+    // Los otros respondedores del proyecto (respond_err, idempo_store_and_reply) limpian
+    // el buffer antes de enviar cabeceras; api_response_error_v2 no lo hace.
+    while (ob_get_level()) { ob_end_clean(); }
+    api_response_error_v2(500, 'Error al ejecutar consulta', [], $conn, 'material_foto_delete');
 }
 if ($use_get_result) {
     $res = $st->get_result();
@@ -192,10 +203,15 @@ try {
     $conn->commit();
 } catch (Throwable $e) {
     $conn->rollback();
-    idempo_store_and_reply($conn, 'material_foto_delete', 500, [
-        'status' => 'error', 'message' => 'No se pudo eliminar el registro'
-    ]);
-    exit;
+    // FALLO TRANSITORIO: se LIBERA la clave de idempotencia en vez de persistir el 500.
+    // Antes se llamaba a idempo_store_and_reply(..., 500, ...), que marca la fila de
+    // request_log como 'completed': el reintento de la cola reproducía el 500 sin ejecutar
+    // nada y el borrado se perdía. idempo_mark_failed() deja la fila reutilizable.
+    idempo_mark_failed($conn, 'material_foto_delete', 'TRANSACTION_FAILED');
+    // Los otros respondedores del proyecto (respond_err, idempo_store_and_reply) limpian
+    // el buffer antes de enviar cabeceras; api_response_error_v2 no lo hace.
+    while (ob_get_level()) { ob_end_clean(); }
+    api_response_error_v2(500, 'No se pudo eliminar el registro', [], $conn, 'material_foto_delete');
 }
 
 /* ---------------- Borrado físico seguro (y sidecar) ---------------- */

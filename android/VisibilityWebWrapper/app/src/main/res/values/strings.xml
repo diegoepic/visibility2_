@@ -1,0 +1,21 @@
+
+<resources>
+    <string name="app_name">Visibility 2 </string>
+    <string name="file_chooser_title">Selecciona una imagen</string>
+    <string name="permission_denied">Permiso denegado para descargar archivos.</string>
+    <string name="download_not_supported">Tipo de descarga no soportada.</string>
+    <string name="confirmar_salida">Presiona atrás otra vez para salir de Visibility</string>
+
+    <!-- Pantalla de sin conexión -->
+    <string name="error_offline_title">Sin conexión</string>
+    <string name="error_offline_message">No se pudo cargar Visibility. Revisa que tengas señal o wifi y vuelve a intentar. Las gestiones que ya guardaste siguen en el teléfono.</string>
+    <string name="error_offline_retry">Reintentar</string>
+
+    <!-- Cámara y galería -->
+    <string name="permission_camera_denied">Sin permiso de cámara. Puedes elegir una foto de la galería.</string>
+    <string name="permission_gallery_denied">Sin permiso de galería. Puedes sacar la foto con la cámara.</string>
+    <string name="permission_photos_denied">Para adjuntar fotos hay que permitir la cámara o la galería desde los ajustes del teléfono.</string>
+
+    <!-- Recuperación del WebView -->
+    <string name="webview_recovered">La vista se reinició por falta de memoria. Tus gestiones guardadas están a salvo.</string>
+</resources>

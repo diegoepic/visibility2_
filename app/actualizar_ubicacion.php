@@ -27,6 +27,9 @@ if ($lat == 0 || $lng == 0) {
 // Guardar en la base de datos
 // Para dejar *solo* la última ubicación, haz UPSERT
 //   si tu motor lo permite, o REPLACE/ON DUPLICATE KEY
+// IDEMPOTENCIA: no hace falta clave. Es un INSERT ... ON DUPLICATE KEY UPDATE sobre
+// (id_ejecutor): reenviar la misma posición deja exactamente el mismo estado. Repetirlo mil
+// veces no crea mil filas. Queda anotado para que no vuelva a salir como hallazgo.
 $sql = "
   INSERT INTO ubicacion_ejecutor (id_ejecutor, lat, lng, fecha_actualizacion)
   VALUES (?, ?, ?, NOW())

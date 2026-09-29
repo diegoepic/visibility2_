@@ -4,6 +4,8 @@ require_once __DIR__ . '/../portal/bootstrap.php';
 require_once __DIR__ . '/lib/remember.php';
 // Regla de ingreso por RUT (se activa sola en la fecha de corte)
 require_once __DIR__ . '/../lib_login_rut.php';
+// Bloqueo temporal por intentos fallidos (tabla user_security)
+require_once __DIR__ . '/lib/login_seguridad.php';
 
 $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
 session_set_cookie_params([
@@ -159,9 +161,35 @@ if ($res->num_rows !== 1) {
 $u = $res->fetch_assoc();
 $stmt->close();
 
+/* ===================== Bloqueo por intentos fallidos =====================
+   El limite de arriba es por (usuario, IP): quien rote direcciones tiene intentos
+   ilimitados contra una cuenta concreta. Este es por CUENTA, venga de donde venga.
+   Se comprueba ANTES de mirar la contrasena: a una cuenta bloqueada no se le prueba
+   la clave, ni bien ni mal. */
+$uid = (int)$u['id'];
+$faltanMin = v2_login_minutos_restantes($conn, $uid);
+if ($faltanMin > 0) {
+  // Se dice el motivo y el tiempo. Un "credenciales incorrectas" generico aqui hace que
+  // la persona siga probando, se bloquee mas y termine llamando a soporte.
+  $_SESSION['error_login'] = $faltanMin === 1
+    ? 'Demasiados intentos fallidos. Vuelve a probar en 1 minuto.'
+    : "Demasiados intentos fallidos. Vuelve a probar en $faltanMin minutos.";
+  header("Location: login.php");
+  exit();
+}
+
 if (!password_verify($clave, $u['clave'] ?? '')) {
   $ins = $conn->prepare("INSERT INTO login_attempts (usuario, ip, intento_at) VALUES (?, INET6_ATON(?), NOW())");
   if ($ins) { $ins->bind_param("ss", $usuario, $ip); $ins->execute(); $ins->close(); }
+
+  $bloqueadoMin = v2_login_registrar_fallo($conn, $uid);
+  if ($bloqueadoMin > 0) {
+    $_SESSION['error_login'] = $bloqueadoMin === 1
+      ? 'Demasiados intentos fallidos. La cuenta queda bloqueada 1 minuto.'
+      : "Demasiados intentos fallidos. La cuenta queda bloqueada $bloqueadoMin minutos.";
+    header("Location: login.php");
+    exit();
+  }
   fail_and_back();
 }
 
@@ -191,6 +219,9 @@ if ($needsRehash) {
     $up->bind_param("si", $newHash, $u['id']); $up->execute(); $up->close();
   }
 }
+
+// Login correcto: se borra el castigo acumulado y queda constancia de desde donde entro.
+v2_login_registrar_exito($conn, (int)$u['id'], ip_addr(), user_agent());
 
 session_regenerate_id(true);
 $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
